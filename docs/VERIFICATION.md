@@ -11,6 +11,8 @@ Checks were run on the Linux server against the user's Windows machine and in is
 - A real GPT-6-Astra turn with low effort and native Plan mode read a unique word from an SSH-staged text attachment and identified a solid-blue image.
 - Guacamole 1.6.0 connected to TightVNC on Windows Home and rendered the 1920×1080 desktop.
 - Built the production image on Linux with Node 24.18.0 and pnpm 11.13.1.
+- Public HTTPS assets and password-enrollment form were checked without enrolling the owner. Unauthenticated data access and invalid setup tokens were rejected.
+- After a hostname-specific Windows DNS correction, normal Windows DNS, HTTPS health and the actual browser login page all loaded successfully.
 
 ## Automated tests
 

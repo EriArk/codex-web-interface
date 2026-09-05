@@ -430,7 +430,10 @@ export function Chat({
           void send();
         }}
       >
-        <ComposerOptions options={options} disabled={!threadId || state.loading || busy || active} />
+        <ComposerOptions
+          options={options}
+          disabled={!threadId || state.loading || busy || active}
+        />
         <AttachmentList
           files={attachments.files}
           disabled={busy || active || attachments.busy}

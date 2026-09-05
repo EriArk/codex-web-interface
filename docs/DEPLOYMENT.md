@@ -96,6 +96,19 @@ Get-NetFirewallRule -Name CodexWeb-Hub-SSH,CodexWeb-Hub-VNC | Get-NetFirewallAdd
 
 ## Diagnostics
 
+The home router initially returned NXDOMAIN for the new hostname even though public DNS was correct. Windows now has an NRPT rule named `Codex Web domain DNS` for the exact hostname `codex.abysstail.art`, using Cloudflare resolvers `1.1.1.1` and `1.0.0.1`. Other domains still use the existing network DNS. Normal Windows resolution, HTTPS health and the browser login page were verified after applying it.
+
+This rule affects only that Windows PC. Devices using the router's DNS may still need a corrected router resolver or their own DNS setting. Once the router resolves the hostname correctly, remove only this rule from an elevated PowerShell:
+
+```powershell
+Get-DnsClientNrptRule | Where-Object {
+  $_.DisplayName -eq 'Codex Web domain DNS' -and
+  $_.Namespace.Count -eq 1 -and
+  $_.Namespace[0] -eq 'codex.abysstail.art'
+} | Remove-DnsClientNrptRule -Force
+Clear-DnsClientCache
+```
+
 ```bash
 docker logs --tail 80 codex-web-hub
 docker logs --tail 40 codex-web-tunnel
