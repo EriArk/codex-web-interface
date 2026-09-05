@@ -223,6 +223,7 @@ export function Chat({
       active ||
       attachments.busy ||
       options.saving ||
+      state.loading ||
       !options.selection
     )
       return;
@@ -429,7 +430,7 @@ export function Chat({
           void send();
         }}
       >
-        <ComposerOptions options={options} disabled={!threadId || busy || active} />
+        <ComposerOptions options={options} disabled={!threadId || state.loading || busy || active} />
         <AttachmentList
           files={attachments.files}
           disabled={busy || active || attachments.busy}
@@ -505,6 +506,7 @@ export function Chat({
                 (!draft.trim() && !attachments.files.length) ||
                 busy ||
                 attachments.busy ||
+                state.loading ||
                 options.loading ||
                 options.saving ||
                 !options.selection ||
