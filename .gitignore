@@ -27,6 +27,7 @@ data/
 *.p12
 
 # Local configuration
+.local/
 config.yaml
 config.local.yaml
 
@@ -44,3 +45,8 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+# TypeScript and browser verification output
+*.tsbuildinfo
+test-results/
+playwright-report/

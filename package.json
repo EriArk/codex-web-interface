@@ -1,0 +1,25 @@
+{
+  "name": "codex-web-interface",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.13.1",
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
+  "scripts": {
+    "build": "tsc -b && pnpm --filter @codex-web/web build",
+    "typecheck": "tsc -b --pretty false && pnpm --filter @codex-web/web exec tsc --noEmit",
+    "test": "pnpm build && node --test tests/*.test.mjs",
+    "lint": "biome check apps packages tests",
+    "format": "biome check --write apps packages tests",
+    "start": "node apps/hub/dist/main.js",
+    "dev": "pnpm build && node --watch apps/hub/dist/main.js"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@types/node": "24.13.3",
+    "@types/ws": "8.18.1",
+    "typescript": "7.0.2",
+    "@playwright/test": "1.62.0"
+  }
+}

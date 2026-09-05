@@ -1,208 +1,66 @@
 # Codex Web Interface
 
-A private, iPad-first web workspace for using Codex on machines that are **not exposed to the Internet**, with a first-class iPhone mobile mode for quick work away from the iPad.
+Private Codex workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine.
 
-The primary target is a **13-inch iPad in landscape**. iPhone is a supported first-class companion client with a dedicated mobile layout rather than a shrunken three-column desktop view. The Linux server is the only public endpoint. It serves the PWA, authenticates the user, keeps workspace state, and bridges Codex/Remote Desktop to execution machines over the trusted LAN (or Tailnet later).
+## Available now
 
-## Core idea
+- Password-only login. The owner chooses the first password through a private, single-use setup link.
+- Project/thread selection, streaming, resume, approvals, questions and interrupt.
+- Live model discovery, native Work/Plan mode and model-specific reasoning effort, saved per thread.
+- File and image attachments with preview/removal before sending. Up to eight files, 25 MiB each, 64 MiB per message.
+- Latest 20 chat messages on open; an explicit button loads 20 more without moving the reading position.
+- Results for file changes, checks, plans and Remote screenshots; detailed commands in Activity.
+- Manual Remote Desktop through Guacamole, with touch/trackpad modes, keyboard helpers and fullscreen.
+- Dedicated single-view phone shell, three-pane wide layout, PWA manifest and three shared themes.
 
-```text
-                         Internet
-                            |
-                     HTTPS / WSS :443
-                            |
-                     +--------------+
-                     |  Linux Hub   |
-                     |              |
-                     | Web/PWA      |
-                     | Auth         |
-                     | Codex bridge |
-                     | Results      |
-                     | Notes/Plan   |
-                     | Remote bridge|
-                     +------+-------+
-                            |
-                    trusted LAN only
-                 +----------+----------+
-                 |                     |
-          +------+-------+      +------+-------+
-          | Windows PC   |      | Linux Server |
-          | primary v1   |      | local mode   |
-          |              |      |              |
-          | Codex        |      | Codex        |
-          | projects     |      | projects     |
-          | build tools  |      | tools        |
-          | desktop      |      | desktop      |
-          +--------------+      +--------------+
-```
+## Deployment
 
-### Non-negotiable network rule
-
-**Only the Hub is Internet-facing.** The Windows PC never exposes Codex, RDP/VNC, a custom web server, or a custom agent directly to the Internet.
-
-For the primary Windows flow, the Hub launches `codex app-server` remotely through OpenSSH and communicates over stdio. No Codex TCP/WebSocket listener is required on the PC.
-
-## What the UI should feel like
-
-The application is a work console, not a browser IDE.
-
-On the 13-inch iPad landscape reference layout:
+The configured site is **https://codex.abysstail.art**. Deployment details, first login, updates, backups and recovery are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ```text
-+----------------+-----------------------------+-----------------------+
-| PROJECTS       |          CODEX CHAT         |       RESULTS         |
-|                |                             |                       |
-| Case Maker     | Human conversation stays   | screenshots           |
-| AltarProject   | clean and readable.         | build/test status     |
-| Reader         |                             | file changes / diff   |
-|                |                             | generated artifacts   |
-| THREADS        |                             | previews               |
-| UI redesign    |                             |                       |
-| MCP            |                             | Results / Files /     |
-| Export         |                             | Activity / Remote     |
-+----------------+-----------------------------+-----------------------+
+Safari / PWA → HTTPS / Cloudflare Tunnel → Linux Hub
+                                              ├─ SSH → Windows bridge → local named pipe → Codex stdio
+                                              └─ guacd → LAN-only VNC / RDP
 ```
 
-- **Left:** projects and threads; later Notes, Plan, Machines, Settings.
-- **Center:** Codex conversation only. Avoid filling the chat with logs and screenshots.
-- **Right:** chronological result feed. It can switch to Files, Activity, or Remote Desktop.
-- **Remote:** an occasional manual-control mode, not the main workflow.
+The current Windows Home machine uses VNC because it cannot host RDP. SSH and VNC inbound rules allow only the Hub's LAN address. No Codex web listener runs on Windows.
 
-On iPhone, the same workspace becomes a deliberate mobile shell:
+A local-only Companion runs in the logged-in Windows session. This is the owner-approved workaround for the installed Codex sandbox runner failing when launched directly in Windows SSH Session 0. It exposes a named pipe, not a network port. See [D17](docs/DECISIONS.md#d17--early-local-only-companion-for-windows-session-0).
 
-```text
-+----------------------------------+
-| [menu] Case Maker       Main PC ●|
-| UI redesign                      |
-+----------------------------------+
-|                                  |
-|          ACTIVE VIEW             |
-|                                  |
-+----------------------------------+
-| Chat       Results       Remote  |
-+----------------------------------+
+## Development on the Linux server
+
+Node 24.18.x, pnpm 11.13.1 and system OpenSSH are required. SQLite is provided by Node. Build and browser-test workloads run on Linux.
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm test
+pnpm typecheck
+pnpm lint
+HUB_CONFIG=/absolute/path/config.yaml pnpm start
 ```
 
-Projects/threads move into a sheet or drawer. Only one primary workspace view is shown at a time. Remote uses the full available mobile workspace rather than being squeezed beside Chat.
+Copy [config.example.yaml](config.example.yaml) outside the repository and fill in the machine/project paths. The optional remote password is supplied through the environment; website passwords are never set in an environment file.
 
-## Client platforms
+For loopback development, use publicBaseUrl `http://127.0.0.1:8780` and secureCookies `false`. Non-loopback deployments require HTTPS.
 
-### Primary reference
+## Repository
 
-- **13-inch iPad, landscape, standalone PWA.**
-- Touch-first. No hover-only functionality.
-- Independent scrolling for navigation, chat, and results.
-- Three-zone workspace with collapsible/resizable panes.
-- Desktop browsers are supported, but the 13-inch iPad layout is the wide-layout design reference.
+| Directory | Purpose |
+| --- | --- |
+| apps/hub | Authentication, SQLite, normalized sessions/results, upload and Remote APIs |
+| apps/web | React mobile/wide PWA with semantic theme tokens |
+| packages/shared | Validated configuration and stable client contracts |
+| packages/codex | App Server JSONL RPC framing, cancellation and timeouts |
+| packages/machines | System SSH/local process transports and attachment staging |
+| ops | Linux container deployment and Windows setup |
+| scripts | Explicit opt-in smoke and isolated browser checks |
+| tests | Automated regression checks |
 
-### First-class mobile companion
+## Verification and remaining scope
 
-- **iPhone portrait** is a supported mobile target, not an afterthought.
-- One main view at a time: `Chat`, `Results`, or `Remote`.
-- Projects/threads use a mobile sheet/drawer.
-- Chat is the default mobile screen.
-- Remote is optimized for brief manual intervention and may use landscape for extra room.
-- Normal Safari and standalone PWA modes are both supported.
-- Software keyboard, safe areas, rotation, background suspension and reconnect must be tested on real iPhone hardware.
+[docs/VERIFICATION.md](docs/VERIFICATION.md) records real Windows checks separately from simulated browser fixtures. Mobile Chromium/WebKit checks do not substitute for testing Safari and standalone mode on a physical iPhone/iPad.
 
-See [`docs/MOBILE.md`](docs/MOBILE.md) for the mobile UX contract.
+Historical threads created outside this app are not automatically imported. Notes, a general file/Git browser, additional machines and automatic collection of arbitrary generated artifacts remain later modules. The local Linux transport is implemented; this deployment has only the authenticated Windows backend configured.
 
-## Primary execution path (v1)
-
-**iPad/iPhone -> Linux Hub -> LAN -> Windows PC -> Codex**
-
-1. User opens a project on the PWA/site.
-2. Hub resolves the project's machine and working directory.
-3. Hub opens/reuses an SSH connection to the Windows PC.
-4. Hub starts `codex app-server` using the Windows user's existing Codex environment.
-5. Hub adapts the Codex protocol into a stable internal API for the frontend.
-6. Browser can disconnect without killing the Hub-owned Codex session.
-7. Results are stored/indexed by the Hub and shown separately from chat.
-8. When manual interaction is needed, Remote Desktop is opened inside the current client layout.
-
-A second backend runs Codex locally on the Linux Hub using the same frontend and internal interfaces.
-
-## Remote Desktop
-
-Preferred path when the Windows edition supports RDP:
-
-```text
-Browser -> Hub -> Guacamole/guacd -> LAN -> Windows RDP
-```
-
-The remote protocol is abstracted so a VNC-compatible fallback can be used where Windows RDP hosting is unavailable.
-
-Important Windows caveat: processes started through OpenSSH do not automatically share the visible interactive desktop session. v1 must **not** assume that a GUI launched from an SSH Codex session will appear in Remote Desktop. A small, local-only Windows companion may be added later specifically for interactive-session launching/capture; it must not expose a network listener.
-
-## Platform direction
-
-The long-term goal is a personal development workspace that can grow around Codex without turning into a full IDE:
-
-- project notes and pinned context;
-- plan/tasks;
-- machine status;
-- files and Git summaries;
-- build/test results;
-- screenshots and generated artifacts;
-- Remote Desktop;
-- activity history;
-- optional additional execution machines over Tailscale.
-
-Projects are the primary object. Machines are infrastructure behind projects.
-
-Every later module should have both a wide workspace presentation and a sensible mobile presentation. Do not create miniature desktop dashboards on iPhone.
-
-## Technology direction
-
-Initial implementation target:
-
-- TypeScript monorepo;
-- React PWA frontend;
-- Node.js + Fastify Hub;
-- WebSocket for live Hub <-> browser events;
-- SQLite for Hub-owned state;
-- system OpenSSH client for remote machine transport;
-- Codex App Server over stdio behind a compatibility adapter;
-- Apache Guacamole/`guacd` for browser Remote Desktop;
-- semantic design tokens for themes;
-- deliberate responsive layout modes for wide workspace, compact tablet, and mobile.
-
-Do not couple the frontend directly to raw Codex App Server messages.
-
-## Themes
-
-The same functional layout supports multiple visual skins:
-
-1. **Digital Organizer** — clean notebook/organizer language, tabs and paper-like hierarchy.
-2. **Green CRT Terminal** — phosphor glow, subtle scanlines and curved-screen effect without sacrificing text clarity.
-3. **Hi-Tech 2000s** — premium early-2000s workstation/device UI, recessed displays and hardware-like panels.
-
-Reference images are in [`references/`](references/).
-
-| Organizer | Green CRT | Hi-Tech 2000s |
-| --- | --- | --- |
-| ![](references/organizer.webp) | ![](references/retro-crt-green.webp) | ![](references/hitech-2000s.webp) |
-
-On iPhone, decorative framing may be reduced to preserve useful space, but the same theme identity/tokens remain.
-
-## Documentation
-
-Start here before implementing:
-
-- [`AGENTS.md`](AGENTS.md) — implementation rules for Codex/agents.
-- [`docs/VISION.md`](docs/VISION.md) — product intent and non-goals.
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — fixed decisions and open deployment choices.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Hub, transports, sessions and storage.
-- [`docs/CODEX_INTEGRATION.md`](docs/CODEX_INTEGRATION.md) — App Server boundary and Windows details.
-- [`docs/REMOTE_DESKTOP.md`](docs/REMOTE_DESKTOP.md) — Remote provider design.
-- [`docs/UX.md`](docs/UX.md) — iPad-first wide workspace behavior.
-- [`docs/MOBILE.md`](docs/MOBILE.md) — first-class iPhone/mobile behavior.
-- [`docs/SECURITY.md`](docs/SECURITY.md) — security invariants.
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — intended Linux/Windows setup and network shape.
-- [`docs/PLATFORM_MODULES.md`](docs/PLATFORM_MODULES.md) — Notes, Plan, Machines, Files/Git and other gradual extensions.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — staged implementation plan and MVP acceptance criteria.
-- [`config.example.yaml`](config.example.yaml) / [`.env.example`](.env.example) — configuration shape with placeholders only.
-
-## Current status
-
-Planning/design baseline is complete and includes both the 13-inch iPad reference workspace and first-class iPhone mobile mode. No production implementation exists yet. The next step is repository scaffolding and the first end-to-end remote Codex connection from the Linux Hub to the Windows PC.
+Read [AGENTS.md](AGENTS.md), [decisions](docs/DECISIONS.md), [architecture](docs/ARCHITECTURE.md), [mobile UX](docs/MOBILE.md) and [security](docs/SECURITY.md) before substantial changes.

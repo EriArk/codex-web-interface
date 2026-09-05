@@ -259,3 +259,11 @@ Then wrap that exact proven path in the Hub abstractions.
 
 - OpenAI Codex repository: https://github.com/openai/codex
 - Current App Server source/docs should be checked from the installed/current Codex version during implementation rather than copying protocol schemas permanently into app logic.
+
+## Implemented compatibility boundary
+
+The current implementation splits byte-level JSONL/RPC lifecycle (packages/codex), OS process and file transport (packages/machines), and Hub domain/event normalization (apps/hub/src/sessions.ts). No App Server payload is forwarded unchanged to the browser.
+
+Initialize negotiates experimentalApi for collaborationMode/list. model/list and config/read supply model-specific effort choices and the Windows effective default; thread preferences live in SQLite. turn/start passes model, effort and collaborationMode.settings with developer_instructions set to null to use Codex's own selected-mode instructions. Native plan items are streamed and saved to Results. Text-only models reject image inputs visibly.
+
+See D17 for the approved Session 0 workaround. The bridge uses raw inherited standard handles and explicit flushing for small JSONL frames; normal buffered Console stdin was insufficient under Windows SSH. The existing Windows Codex authentication stays on Windows. A browser disconnect leaves a Hub-owned turn running. A Hub process restart may stop the turn; unknown commands are never automatically repeated.

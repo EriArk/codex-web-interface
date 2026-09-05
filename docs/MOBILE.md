@@ -247,3 +247,9 @@ Before calling mobile support complete, verify on a real iPhone that the user ca
 8. open Remote and perform a brief manual interaction;
 9. background and reopen the app without losing the workflow;
 10. perform all core actions without hover or a hardware keyboard.
+
+## Initial implementation updates
+
+The owner requested mobile-first implementation. The composer now includes model, Work/Plan mode and reasoning effort, plus file/photo selection, image preview, removal before sending, paste/drop support where available and draft attachment recovery after reload. HEIC selected through Safari is converted when that browser can decode it; otherwise the UI requests JPEG/PNG instead of silently dropping the image.
+
+History initially shows 20 latest messages. Older pages require the explicit button and keep the scroll position stable. The mobile shell and wide view share state and semantic themes. See VERIFICATION.md for browser automation versus outstanding physical-device acceptance.

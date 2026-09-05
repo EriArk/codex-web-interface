@@ -188,3 +188,11 @@ These are post-MVP.
 ## Reference
 
 - Apache Guacamole documentation: https://guacamole.apache.org/doc/gug/
+
+## Current implementation
+
+Windows Home uses the VNC provider through guacd 1.6.0 and signed TightVNC 2.8.88. The browser receives Guacamole protocol only after the Hub authenticates the WebSocket and performs the credential-bearing guacd handshake. Client input is allowlisted; clipboard transfer and SFTP are disabled.
+
+TCP chunks must be buffered into complete Guacamole instructions before sending them to the WebSocket. Otherwise a tunnel keepalive can land inside a partial image/blob instruction. A regression test covers every split point including Unicode. First-frame readiness and screenshots wait for rendered display content.
+
+The phone Remote pane includes trackpad/direct-touch modes, keyboard helpers, screenshot-to-Results and fullscreen. Closing the pane or backgrounding the page releases Remote. It does not interrupt a Codex turn. Physical iOS touch and secure-desktop behavior remain device acceptance checks.

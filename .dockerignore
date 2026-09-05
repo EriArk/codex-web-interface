@@ -1,0 +1,13 @@
+.git
+.local
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+data
+references
+.env
+.env.*
+config.yaml
+config.local.yaml
+test-results
+playwright-report

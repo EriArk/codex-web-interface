@@ -1,0 +1,19 @@
+FROM node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS build
+WORKDIR /source
+RUN npm install --global pnpm@11.13.1
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.base.json ./
+COPY apps/ apps/
+COPY packages/ packages/
+RUN pnpm install --frozen-lockfile
+RUN pnpm build
+RUN pnpm --filter @codex-web/hub deploy --prod --legacy /release
+
+FROM node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build --chown=node:node /release/ /app/
+COPY --from=build --chown=node:node /source/apps/web/dist/ /web/
+ENV NODE_ENV=production HUB_CONFIG=/config/config.json HUB_WEB_ROOT=/web
+USER node
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD node -e "fetch(process.env.HUB_HEALTH_URL || 'http://127.0.0.1:8780/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node","dist/main.js"]

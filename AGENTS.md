@@ -225,3 +225,12 @@ Do not start with a giant dashboard.
 From the iPad, the user can log in, open one configured Windows project, start/resume a Codex thread, send a prompt, watch streaming output, approve/deny requests, disconnect/reconnect the browser, and see a clean result summary — while the Windows PC has no Codex web port exposed.
 
 Before mobile support is considered complete, the same core workflow must also work comfortably from iPhone using the dedicated single-view mobile shell described in `docs/MOBILE.md`.
+
+## Owner-approved implementation updates (2026-09-06)
+
+- Implement and verify the iPhone/mobile workflow first, retaining the 13-inch iPad as the wide-layout reference.
+- Include model selection, native Work/Plan collaboration mode, reasoning-effort selection and file/image attachments in the first working release.
+- Open chats with the latest 20 messages; older history is fetched explicitly in pages of 20.
+- Authentication is password-only. The owner creates the first password via a private one-use enrollment link; no default/test production password.
+- A local-only Windows Companion is approved now because the installed Codex sandbox runner fails when spawned directly in Windows OpenSSH Session 0. SSH carries the bridge's stdio into a named pipe restricted to the local user, and the Companion launches only the configured App Server for allowlisted project directories in the logged-in session. It must not create a network listener or expose arbitrary GUI/command APIs. This is a narrow exception to delaying the Companion until Phase 9.
+- Run backend builds and heavy verification on Linux. Keep the Windows PC as the existing execution environment.

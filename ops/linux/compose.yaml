@@ -1,0 +1,50 @@
+name: codex-web
+services:
+  hub:
+    image: codex-web-hub:local
+    build:
+      context: ../..
+    container_name: codex-web-hub
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.5
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    env_file: ["${CODEX_WEB_STATE}/remote.env"]
+    volumes:
+      - "${CODEX_WEB_STATE}/config.json:/config/config.json:ro"
+      - "${CODEX_WEB_STATE}/ssh:${CODEX_WEB_STATE}/ssh:ro"
+      - "${CODEX_WEB_STATE}/data:${CODEX_WEB_STATE}/data"
+    depends_on: [guacd]
+  guacd:
+    image: guacamole/guacd:1.6.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f
+    container_name: codex-web-guacd
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 1
+    ports: ["127.0.0.1:4822:4822"]
+  tunnel:
+    image: cloudflare/cloudflared:2026.8.3@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339
+    container_name: codex-web-tunnel
+    restart: unless-stopped
+    network_mode: host
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 192m
+    cpus: 0.5
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    command: [tunnel, --no-autoupdate, --config, /etc/cloudflared/config.yml, run]
+    volumes:
+      - "${CODEX_WEB_STATE}/tunnel:/etc/cloudflared:ro"
+    depends_on:
+      hub:
+        condition: service_healthy
