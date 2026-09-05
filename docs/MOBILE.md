@@ -1,0 +1,249 @@
+# Mobile / iPhone UX
+
+The 13-inch iPad remains the primary reference device, but iPhone support is a **first-class product requirement**, not a shrunken desktop fallback.
+
+The expected mobile use case is occasional but real: check a project, message Codex, approve/interrupt work, inspect a screenshot/result, view status, or briefly take control through Remote while away from the iPad.
+
+## Product rule
+
+Use the same Hub, authentication, project/thread model, result feed and themes on iPhone. Do not build a separate mobile product or separate backend.
+
+The information architecture changes with viewport size; the feature model does not.
+
+## Primary iPhone layout
+
+Portrait is the default mobile orientation.
+
+Only one main workspace pane is visible at a time:
+
+```text
++----------------------------------+
+| [menu] Case Maker       Main PC ●|
+| UI redesign                      |
++----------------------------------+
+|                                  |
+|                                  |
+|          ACTIVE VIEW             |
+|                                  |
+|                                  |
++----------------------------------+
+| Chat     Results     Remote      |
++----------------------------------+
+```
+
+Default active view is **Chat**.
+
+Recommended bottom navigation for the project workspace:
+
+- Chat
+- Results
+- Remote
+
+Files and Activity may live behind an overflow/action sheet initially rather than consuming permanent bottom-tab slots.
+
+## Projects and threads
+
+The desktop/iPad left navigation becomes a mobile sheet/drawer.
+
+Opening the project switcher should show:
+
+```text
+Projects
+  Case Maker        Main PC ●
+  AltarProject      Server ●
+  Reader            Main PC ●
+
+Current project threads
+  UI redesign
+  MCP
+  Export STEP
+  + New thread
+```
+
+Requirements:
+
+- large touch targets;
+- fast switching without navigating through multiple pages;
+- project machine/status can appear as a small secondary hint;
+- returning from the sheet preserves Chat/Results scroll state.
+
+A long project/thread list should scroll inside the sheet rather than the whole application page.
+
+## Chat on iPhone
+
+Chat is the most important mobile screen.
+
+Keep the same clean-conversation principle as iPad:
+
+- messages;
+- turn state;
+- approvals;
+- small result/file-change chips;
+- composer;
+- Stop/Interrupt.
+
+Do not inline large screenshots, full diffs or raw command logs into mobile chat.
+
+### Composer and iOS keyboard
+
+The composer must stay attached immediately above the software keyboard.
+
+Test on real iPhone Safari and standalone PWA. Use `visualViewport` where appropriate and do not assume `100vh` remains stable while the keyboard is visible.
+
+The composer should support:
+
+- multiline entry;
+- large Send/Stop control;
+- attachments later;
+- safe-area bottom inset;
+- preserved draft when switching between Chat and Results where practical.
+
+## Results on iPhone
+
+Results becomes a full-width feed.
+
+Cards should favor visual clarity over density:
+
+- screenshots use nearly the available width;
+- build/check state is a compact card;
+- file changes summarize rather than showing a full diff inline;
+- artifacts expose a clear open/download action;
+- important errors are prominent.
+
+Tapping an image opens the same immersive pinch/zoom viewer used on iPad.
+
+Links between turns and results remain bidirectional:
+
+- result chip in Chat -> switch to Results and focus the matching card;
+- `from turn ...` in Results -> switch to Chat and focus the originating turn.
+
+## Remote on iPhone
+
+Do not squeeze Remote beside Chat.
+
+Opening Remote should use the full available workspace viewport, with a compact overlay toolbar:
+
+```text
++----------------------------------+
+| < Codex    Main PC      [keys]   |
++----------------------------------+
+|                                  |
+|                                  |
+|       REMOTE DESKTOP             |
+|                                  |
+|                                  |
++----------------------------------+
+```
+
+Provide easy access to:
+
+- exit/back to Codex;
+- software keyboard;
+- Esc;
+- Ctrl / Alt / Win helpers where supported;
+- fullscreen/orientation behavior;
+- touch vs trackpad-style pointer control if the chosen Remote client supports both reliably.
+
+Remote on iPhone is for brief intervention, not prolonged desktop work. Optimize for being able to click/fix/check something quickly.
+
+Landscape orientation may give Remote extra room, but the rest of the mobile app must remain fully usable in portrait.
+
+## Files and Activity
+
+On narrow mobile widths these are secondary screens.
+
+Possible entry points:
+
+- overflow menu in project header;
+- `More` sheet;
+- links from relevant result cards.
+
+Do not permanently reserve horizontal space for them on iPhone.
+
+## Notes / Plan / Machines later
+
+Future platform modules should also have mobile-native presentations:
+
+- Notes -> full-width list/editor;
+- Plan -> compact task list;
+- Machines -> status cards;
+- project quick notes/status may be reachable from the project sheet.
+
+Do not create miniature desktop dashboards.
+
+## Mobile status
+
+A compact status indicator should remain visible without wasting vertical space:
+
+- Hub reachable;
+- active target machine online/offline;
+- Codex ready/busy/error.
+
+Detailed CPU/RAM/disk information belongs in Machines/details, not the permanent mobile header.
+
+## Navigation and gestures
+
+Core actions must never depend on gestures alone.
+
+Optional conveniences are fine:
+
+- edge swipe to open project drawer if reliable;
+- horizontal swipe between Chat and Results only if it does not fight text/image scrolling;
+- pull-to-refresh is not required because live state uses WebSocket/reconnect.
+
+Always provide explicit controls as the canonical path.
+
+## PWA / Safari
+
+Support both:
+
+- normal Safari tab;
+- Add to Home Screen / standalone PWA.
+
+Requirements:
+
+- safe-area support including Dynamic Island/home indicator areas;
+- reconnect after browser/PWA background suspension;
+- no assumption that WebSockets survive suspension;
+- preserve current project/thread and active view on reconnect;
+- correct viewport handling when rotating the phone;
+- avoid accidental horizontal page scrolling.
+
+## Themes on mobile
+
+Use the same theme system and semantic tokens.
+
+Theme decoration may be simplified on small screens:
+
+- Organizer keeps tabs/material hierarchy without thick decorative margins;
+- CRT keeps the green phosphor identity but may reduce heavy curvature/scanline effects;
+- Hi-Tech 2000s keeps hardware-like panels while avoiding oversized bezels.
+
+Functionality and information priority always beat decorative fidelity on iPhone.
+
+## Responsive strategy
+
+Treat layouts as deliberate modes rather than endlessly shrinking columns.
+
+Suggested semantic modes:
+
+- `wide-workspace`: 13-inch iPad landscape and desktop -> three-zone layout;
+- `compact-workspace`: smaller tablets / portrait iPad -> drawer + one/two visible workspace panes as appropriate;
+- `mobile`: iPhone-class width -> one primary view + project sheet + bottom navigation.
+
+Use container/layout logic and actual available width rather than device-name sniffing.
+
+## Acceptance criteria
+
+Before calling mobile support complete, verify on a real iPhone that the user can:
+
+1. log in;
+2. select a project and thread;
+3. send a prompt;
+4. watch streaming output;
+5. approve/deny or interrupt a turn;
+6. switch to Results and inspect screenshots/artifacts;
+7. jump between a result and its originating chat turn;
+8. open Remote and perform a brief manual interaction;
+9. background and reopen the app without losing the workflow;
+10. perform all core actions without hover or a hardware keyboard.
