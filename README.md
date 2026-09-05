@@ -1,8 +1,8 @@
 # Codex Web Interface
 
-A private, iPad-first web workspace for using Codex on machines that are **not exposed to the Internet**.
+A private, iPad-first web workspace for using Codex on machines that are **not exposed to the Internet**, with a first-class iPhone mobile mode for quick work away from the iPad.
 
-The primary target is a **13-inch iPad in landscape**. The Linux server is the only public endpoint. It serves the PWA, authenticates the user, keeps workspace state, and bridges Codex/Remote Desktop to execution machines over the trusted LAN (or Tailnet later).
+The primary target is a **13-inch iPad in landscape**. iPhone is a supported first-class companion client with a dedicated mobile layout rather than a shrunken three-column desktop view. The Linux server is the only public endpoint. It serves the PWA, authenticates the user, keeps workspace state, and bridges Codex/Remote Desktop to execution machines over the trusted LAN (or Tailnet later).
 
 ## Core idea
 
@@ -46,6 +46,8 @@ For the primary Windows flow, the Hub launches `codex app-server` remotely throu
 
 The application is a work console, not a browser IDE.
 
+On the 13-inch iPad landscape reference layout:
+
 ```text
 +----------------+-----------------------------+-----------------------+
 | PROJECTS       |          CODEX CHAT         |       RESULTS         |
@@ -66,26 +68,57 @@ The application is a work console, not a browser IDE.
 - **Right:** chronological result feed. It can switch to Files, Activity, or Remote Desktop.
 - **Remote:** an occasional manual-control mode, not the main workflow.
 
-## Primary platform
+On iPhone, the same workspace becomes a deliberate mobile shell:
 
-- 13-inch iPad, landscape, installed as a standalone PWA.
+```text
++----------------------------------+
+| [menu] Case Maker       Main PC ●|
+| UI redesign                      |
++----------------------------------+
+|                                  |
+|          ACTIVE VIEW             |
+|                                  |
++----------------------------------+
+| Chat       Results       Remote  |
++----------------------------------+
+```
+
+Projects/threads move into a sheet or drawer. Only one primary workspace view is shown at a time. Remote uses the full available mobile workspace rather than being squeezed beside Chat.
+
+## Client platforms
+
+### Primary reference
+
+- **13-inch iPad, landscape, standalone PWA.**
 - Touch-first. No hover-only functionality.
 - Independent scrolling for navigation, chat, and results.
-- Desktop browsers are supported, but the iPad layout is the design reference.
-- Portrait mode uses tabs instead of forcing three narrow columns.
+- Three-zone workspace with collapsible/resizable panes.
+- Desktop browsers are supported, but the 13-inch iPad layout is the wide-layout design reference.
+
+### First-class mobile companion
+
+- **iPhone portrait** is a supported mobile target, not an afterthought.
+- One main view at a time: `Chat`, `Results`, or `Remote`.
+- Projects/threads use a mobile sheet/drawer.
+- Chat is the default mobile screen.
+- Remote is optimized for brief manual intervention and may use landscape for extra room.
+- Normal Safari and standalone PWA modes are both supported.
+- Software keyboard, safe areas, rotation, background suspension and reconnect must be tested on real iPhone hardware.
+
+See [`docs/MOBILE.md`](docs/MOBILE.md) for the mobile UX contract.
 
 ## Primary execution path (v1)
 
-**iPad -> Linux Hub -> LAN -> Windows PC -> Codex**
+**iPad/iPhone -> Linux Hub -> LAN -> Windows PC -> Codex**
 
-1. User opens a project on the PWA.
+1. User opens a project on the PWA/site.
 2. Hub resolves the project's machine and working directory.
 3. Hub opens/reuses an SSH connection to the Windows PC.
 4. Hub starts `codex app-server` using the Windows user's existing Codex environment.
 5. Hub adapts the Codex protocol into a stable internal API for the frontend.
 6. Browser can disconnect without killing the Hub-owned Codex session.
 7. Results are stored/indexed by the Hub and shown separately from chat.
-8. When manual interaction is needed, the right pane switches to browser Remote Desktop.
+8. When manual interaction is needed, Remote Desktop is opened inside the current client layout.
 
 A second backend runs Codex locally on the Linux Hub using the same frontend and internal interfaces.
 
@@ -117,6 +150,8 @@ The long-term goal is a personal development workspace that can grow around Code
 
 Projects are the primary object. Machines are infrastructure behind projects.
 
+Every later module should have both a wide workspace presentation and a sensible mobile presentation. Do not create miniature desktop dashboards on iPhone.
+
 ## Technology direction
 
 Initial implementation target:
@@ -129,7 +164,8 @@ Initial implementation target:
 - system OpenSSH client for remote machine transport;
 - Codex App Server over stdio behind a compatibility adapter;
 - Apache Guacamole/`guacd` for browser Remote Desktop;
-- semantic design tokens for themes.
+- semantic design tokens for themes;
+- deliberate responsive layout modes for wide workspace, compact tablet, and mobile.
 
 Do not couple the frontend directly to raw Codex App Server messages.
 
@@ -147,6 +183,8 @@ Reference images are in [`references/`](references/).
 | --- | --- | --- |
 | ![](references/organizer.webp) | ![](references/retro-crt-green.webp) | ![](references/hitech-2000s.webp) |
 
+On iPhone, decorative framing may be reduced to preserve useful space, but the same theme identity/tokens remain.
+
 ## Documentation
 
 Start here before implementing:
@@ -157,7 +195,8 @@ Start here before implementing:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Hub, transports, sessions and storage.
 - [`docs/CODEX_INTEGRATION.md`](docs/CODEX_INTEGRATION.md) — App Server boundary and Windows details.
 - [`docs/REMOTE_DESKTOP.md`](docs/REMOTE_DESKTOP.md) — Remote provider design.
-- [`docs/UX.md`](docs/UX.md) — iPad-first layout and behavior.
+- [`docs/UX.md`](docs/UX.md) — iPad-first wide workspace behavior.
+- [`docs/MOBILE.md`](docs/MOBILE.md) — first-class iPhone/mobile behavior.
 - [`docs/SECURITY.md`](docs/SECURITY.md) — security invariants.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — intended Linux/Windows setup and network shape.
 - [`docs/PLATFORM_MODULES.md`](docs/PLATFORM_MODULES.md) — Notes, Plan, Machines, Files/Git and other gradual extensions.
@@ -166,4 +205,4 @@ Start here before implementing:
 
 ## Current status
 
-Planning/design baseline is complete. No production implementation exists yet. The next step is repository scaffolding and the first end-to-end remote Codex connection from the Linux Hub to the Windows PC.
+Planning/design baseline is complete and includes both the 13-inch iPad reference workspace and first-class iPhone mobile mode. No production implementation exists yet. The next step is repository scaffolding and the first end-to-end remote Codex connection from the Linux Hub to the Windows PC.
