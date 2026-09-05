@@ -4,7 +4,7 @@ This repository is intended to be implemented primarily with Codex. Read this fi
 
 ## Product in one sentence
 
-Build a **private, iPad-first PWA** that lets one user work with Codex running either on a Windows PC in the same LAN as the Linux Hub or locally on the Hub, while keeping execution machines off the public Internet.
+Build a **private, iPad-first PWA with first-class iPhone support** that lets one user work with Codex running either on a Windows PC in the same LAN as the Linux Hub or locally on the Hub, while keeping execution machines off the public Internet.
 
 ## Source-of-truth order
 
@@ -13,7 +13,7 @@ When documents disagree, use this order:
 1. `AGENTS.md`
 2. `docs/DECISIONS.md`
 3. `docs/ARCHITECTURE.md`
-4. `docs/UX.md`, `docs/SECURITY.md`, `docs/CODEX_INTEGRATION.md`, `docs/REMOTE_DESKTOP.md`
+4. `docs/UX.md`, `docs/MOBILE.md`, `docs/SECURITY.md`, `docs/CODEX_INTEGRATION.md`, `docs/REMOTE_DESKTOP.md`
 5. `docs/ROADMAP.md`
 6. `README.md`
 7. visual references
@@ -22,7 +22,8 @@ Do not silently change a fixed decision. If a constraint is blocking implementat
 
 ## Fixed constraints
 
-- Primary client: **13-inch iPad in landscape, standalone PWA**.
+- Primary wide client: **13-inch iPad in landscape, standalone PWA**.
+- First-class mobile client: **iPhone**, primarily portrait, with a dedicated mobile shell rather than compressed desktop columns.
 - Primary execution machine for v1: **native Windows PC on the same LAN as the Linux server**.
 - Public machine: **Linux Hub only**.
 - Windows PC must not expose Codex, Remote Desktop, a custom web server, or a custom agent to the Internet.
@@ -33,7 +34,7 @@ Do not silently change a fixed decision. If a constraint is blocking implementat
 - Remote Desktop is secondary/manual. Prefer RDP through Guacamole when available; keep the provider abstract.
 - Single-user product. Authentication is still mandatory.
 - Project is the primary UX entity; machine is infrastructure behind it.
-- One functional UI, multiple themes. Do not create separate implementations per theme.
+- One functional UI, multiple themes. Do not create separate implementations per theme or per device.
 
 ## Important Windows rule
 
@@ -45,7 +46,7 @@ Do **not** assume:
 - a GUI app started by Codex over the SSH-hosted App Server will be visible in an RDP session;
 - desktop screenshots can be captured reliably from the SSH session.
 
-For v1, Codex over SSH is for code/files/build/test/CLI work. Manual GUI inspection is done through the Remote pane.
+For v1, Codex over SSH is for code/files/build/test/CLI work. Manual GUI inspection is done through the Remote pane/view.
 
 A future optional **Windows Companion** may bridge into the logged-in interactive session. If implemented, it must be local-only (for example a user-session process plus named-pipe IPC) and must not listen on a network port.
 
@@ -115,7 +116,7 @@ The frontend should consume a stable Hub contract, not App Server JSON directly.
 
 ## Results behavior
 
-The chat is for conversation. Technical output belongs in the right-side Results feed.
+The chat is for conversation. Technical output belongs in the Results feed/view.
 
 Normalize useful events into result cards such as:
 
@@ -130,9 +131,9 @@ Do not dump raw command logs into chat. Put detailed logs in Activity.
 
 Whenever the Codex protocol provides a structured event, prefer it over parsing assistant prose.
 
-## UX rules
+## UX rules — wide workspace
 
-- Design against a 13-inch iPad landscape viewport first.
+- Design against a 13-inch iPad landscape viewport first for the wide layout.
 - Three zones: navigation / chat / results.
 - Navigation can collapse; right pane can switch among Results, Files, Activity and Remote.
 - Remote can expand to nearly/full screen without losing chat state.
@@ -140,9 +141,31 @@ Whenever the Codex protocol provides a structured event, prefer it over parsing 
 - No hover-only controls.
 - Important touch targets should be approximately 44pt or larger.
 - Support the iPad software keyboard and `visualViewport` changes correctly.
-- Portrait mode becomes a tabbed layout instead of three tiny columns.
+- Portrait/tablet compact mode becomes a tabbed/drawer layout instead of three tiny columns.
 - Use CSS safe-area insets for standalone PWA mode.
 - Keep theme effects readable and performant; CRT effects must not blur actual text.
+
+## UX rules — iPhone/mobile
+
+Read `docs/MOBILE.md` before implementing responsive behavior.
+
+Do **not** obtain mobile support by shrinking the three-column layout.
+
+At iPhone-class widths:
+
+- show one primary workspace view at a time;
+- default to Chat;
+- provide persistent/simple access to `Chat`, `Results`, and `Remote`;
+- move projects/threads into a mobile sheet/drawer;
+- use Remote as a full-width workspace while active;
+- keep Files/Activity secondary if necessary rather than overloading the bottom navigation;
+- preserve project/thread/view/scroll state while switching views;
+- handle iOS software keyboard, safe areas, orientation changes, PWA/browser suspension and WebSocket reconnect;
+- support normal Safari as well as standalone Add-to-Home-Screen PWA;
+- never require hover, pointer, or hardware keyboard for a core action;
+- use actual available layout width/container state rather than device-name/user-agent sniffing.
+
+Core mobile workflow must include login, project/thread selection, send/stream, approvals, interrupt, Results inspection, result<->turn navigation, and brief Remote access.
 
 ## Theme rules
 
@@ -155,6 +178,8 @@ Initial themes:
 - `hitech-2000s`
 
 Visual references live in `references/`.
+
+On narrow mobile layouts, reduce decorative margins/bezels/effects when necessary to preserve working area. Theme identity must remain, but functionality wins over decoration.
 
 ## Security rules
 
@@ -189,11 +214,14 @@ Follow `docs/ROADMAP.md`. In particular:
 3. add thread persistence/reconnect/approvals;
 4. add Results feed;
 5. add Remote Desktop;
-6. polish iPad/PWA/themes;
-7. then add Notes/Plan/Machines/Files/Git and optional Windows Companion.
+6. polish both 13-inch iPad and iPhone PWA/client UX;
+7. add themes;
+8. then add Notes/Plan/Machines/Files/Git and optional Windows Companion.
 
 Do not start with a giant dashboard.
 
 ## Definition of a good first milestone
 
 From the iPad, the user can log in, open one configured Windows project, start/resume a Codex thread, send a prompt, watch streaming output, approve/deny requests, disconnect/reconnect the browser, and see a clean result summary — while the Windows PC has no Codex web port exposed.
+
+Before mobile support is considered complete, the same core workflow must also work comfortably from iPhone using the dedicated single-view mobile shell described in `docs/MOBILE.md`.
