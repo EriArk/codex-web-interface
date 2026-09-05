@@ -1,0 +1,69 @@
+# Example configuration only.
+# Do not commit real passwords, SSH private keys, Codex auth data, or Remote credentials.
+
+hub:
+  # Public URL used for cookie/origin/PWA configuration.
+  publicBaseUrl: "https://codex.example.com"
+
+  # Mutable runtime data should live outside the repository in production.
+  databasePath: "./data/app.db"
+  resultsPath: "./data/results"
+
+  # Example only. Production values should be tuned after real use.
+  codexIdleTimeoutMinutes: 30
+
+# Secrets such as password bootstrap/session keys should come from environment
+# variables or protected secret files rather than this YAML.
+auth:
+  username: "owner"
+
+machines:
+  - id: "main-windows"
+    name: "Main PC"
+    type: "ssh-windows"
+
+    ssh:
+      # Prefer a Host alias from the Linux Hub user's ~/.ssh/config.
+      target: "main-windows"
+
+    codex:
+      # "auto" means probe the remote Windows environment (e.g. where.exe codex).
+      # This may later be replaced with an explicit full command/path if needed.
+      command: "auto"
+      shell: "powershell"
+
+    remote:
+      # Use "rdp" where Windows can host RDP; configure a Guacamole-supported
+      # fallback such as "vnc" when needed.
+      provider: "rdp"
+      host: "192.168.1.50"
+      port: 3389
+      username: "YOUR_WINDOWS_USER"
+      # Password must be supplied from a secret source, not this file.
+      passwordSecret: "REMOTE_MAIN_WINDOWS_PASSWORD"
+
+  - id: "hub-local"
+    name: "Home Server"
+    type: "local-linux"
+
+    codex:
+      command: "codex"
+
+projects:
+  - id: "case-maker"
+    name: "Case Maker"
+    machineId: "main-windows"
+    workingDirectory: "C:\\Users\\YOUR_WINDOWS_USER\\Projects\\CaseMaker"
+
+  - id: "example-server-project"
+    name: "Example Server Project"
+    machineId: "hub-local"
+    workingDirectory: "/srv/projects/example"
+
+ui:
+  defaultTheme: "organizer"
+  defaultDensity: "touch"
+
+  # The primary reference layout is a 13-inch iPad in landscape.
+  navigationWidthPx: 260
+  rightPaneWidthPercent: 36
