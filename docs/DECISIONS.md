@@ -52,15 +52,15 @@ This file records decisions that should be treated as fixed unless the owner exp
 
 ---
 
-## D07 — iPad 13 landscape is the reference UI
+## D07 — iPad 13 landscape is the reference wide UI
 
-**Decision:** Primary client is a 13-inch iPad in landscape, installed as a standalone PWA.
+**Decision:** Primary wide-workspace client is a 13-inch iPad in landscape, preferably installed as a standalone PWA.
 
 **Consequence:** Touch-first behavior, independent pane scrolling, software keyboard handling and safe areas are core requirements, not polish.
 
 ---
 
-## D08 — Three-zone layout
+## D08 — Three-zone layout for wide workspace
 
 **Decision:** Main landscape layout is:
 
@@ -70,11 +70,15 @@ Navigation | Codex Chat | Results / Files / Activity / Remote
 
 Chat remains clean. Results are a separate chronological feed.
 
+This layout is for sufficiently wide workspaces. It must not be blindly compressed onto iPhone.
+
 ---
 
 ## D09 — Remote Desktop is embedded and secondary
 
-**Decision:** Remote appears as a mode of the right pane and can expand fullscreen.
+**Decision:** Remote appears as a mode of the right pane on wide layouts and can expand fullscreen.
+
+On mobile, Remote becomes the primary full-width workspace view while active rather than being placed beside Chat.
 
 Preferred transport is Windows RDP through Apache Guacamole when the Windows edition supports RDP hosting. The provider remains abstract so VNC or another Guacamole-supported transport can be substituted.
 
@@ -116,7 +120,7 @@ Preferred transport is Windows RDP through Apache Guacamole when the Windows edi
 
 **Decision:** Organizer, CRT and Hi-Tech themes are skins of the same component tree and semantic tokens.
 
-**Consequence:** Do not fork page implementations by theme.
+**Consequence:** Do not fork page implementations by theme. Theme decoration may be reduced on narrow mobile screens to protect usable area.
 
 ---
 
@@ -125,6 +129,35 @@ Preferred transport is Windows RDP through Apache Guacamole when the Windows edi
 **Decision:** Notes, Plan, Machines, Files, Git and similar modules are desirable, but the first milestone is the remote Codex workflow.
 
 **Consequence:** Architecture should leave extension points without forcing all modules into the initial implementation.
+
+---
+
+## D16 — iPhone is a first-class mobile client
+
+**Decision:** iPhone support is required. It is not a generic responsive fallback or a later desktop-shrinking exercise.
+
+The phone uses the same Hub/backend, projects, threads, results and authentication, but a dedicated mobile information architecture:
+
+```text
+Project/thread sheet
+        +
+Chat | Results | Remote
+(one primary view at a time)
+```
+
+**Consequences:**
+
+- portrait iPhone must support the full core Codex workflow;
+- projects/threads use a sheet/drawer instead of a permanent left column;
+- Chat is the default mobile workspace;
+- Results is a separate full-width feed;
+- Remote uses the full available workspace while active;
+- Files/Activity may be secondary/overflow screens on narrow widths;
+- Safari and standalone PWA modes must both work;
+- iOS keyboard, safe areas, rotation, suspend/reconnect and touch behavior must be tested on real hardware;
+- responsive behavior should use available layout width, not user-agent/device-name sniffing.
+
+See `docs/MOBILE.md`.
 
 ---
 
