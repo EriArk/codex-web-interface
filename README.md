@@ -159,7 +159,10 @@ Start here before implementing:
 - [`docs/REMOTE_DESKTOP.md`](docs/REMOTE_DESKTOP.md) — Remote provider design.
 - [`docs/UX.md`](docs/UX.md) — iPad-first layout and behavior.
 - [`docs/SECURITY.md`](docs/SECURITY.md) — security invariants.
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — intended Linux/Windows setup and network shape.
+- [`docs/PLATFORM_MODULES.md`](docs/PLATFORM_MODULES.md) — Notes, Plan, Machines, Files/Git and other gradual extensions.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — staged implementation plan and MVP acceptance criteria.
+- [`config.example.yaml`](config.example.yaml) / [`.env.example`](.env.example) — configuration shape with placeholders only.
 
 ## Current status
 
