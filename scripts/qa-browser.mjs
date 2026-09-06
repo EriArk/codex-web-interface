@@ -2,7 +2,7 @@ import {chromium,webkit,expect} from "@playwright/test";
 import {readFile,mkdir,writeFile} from "node:fs/promises";
 import assert from "node:assert/strict";
 const credentials=JSON.parse(await readFile(".local/qa-credentials.json","utf8"));
-await mkdir(".local/qa",{recursive:true});
+await mkdir(".local/qa-current",{recursive:true});
 const summary=[];
 for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
  const browser=await type.launch({headless:true,...(engine==="chromium"?{args:["--no-sandbox"]}:{})});
@@ -46,7 +46,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.getByRole("button",{name:"Удалить mobile-note.txt",exact:true}).waitFor({state:"detached"});
   await page.getByLabel("Выбрать файлы или изображения",{exact:true}).setInputFiles({name:"mobile-note.txt",mimeType:"text/plain",buffer:Buffer.from("Attachment round trip from "+engine)});
   await page.getByRole("button",{name:"Удалить mobile-note.txt",exact:true}).waitFor();
-  await page.screenshot({path:".local/qa/"+engine+"-mobile-chat.png"});
+  await page.screenshot({path:".local/qa-current/"+engine+"-mobile-chat.png"});
   await page.locator(".chat-scroll").evaluate(el=>el.scrollTop=0);
   await page.getByRole("button",{name:"Загрузить предыдущие",exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll(".message").length===40);
@@ -73,8 +73,21 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.getByRole("navigation",{name:"Разделы рабочего пространства"}).getByRole("button",{name:"Remote",exact:true}).click();
   await page.getByRole("button",{name:"Подключиться",exact:true}).click();
   await page.getByText("Подключено",{exact:true}).waitFor({timeout:25000});
+  assert.equal(await page.locator(".remote-pane").getAttribute("data-input-mode"),"trackpad");
+  await page.setViewportSize({width:844,height:390});
+  await page.waitForTimeout(150);
+  const remoteArea=await page.locator(".remote-display").boundingBox();
+  assert(remoteArea.height>=380,"Landscape Remote must use the entire available height");
+  assert.equal(await page.locator(".mobile-tabs").isVisible(),false);
+  await page.screenshot({path:".local/qa-current/"+engine+"-remote-landscape.png"});
+  await page.getByRole("button",{name:"Управление Remote",exact:true}).click();
+  await page.getByRole("button",{name:"Касание",exact:true}).click();
+  await expect(page.locator(".remote-display")).toHaveAttribute("data-ready","true");
+  await page.getByRole("button",{name:"Трекпад",exact:true}).click();
   await page.getByRole("button",{name:"Снимок",exact:true}).click();
   await page.getByText("Снимок сохранён в результатах",{exact:true}).waitFor();
+  await page.getByRole("button",{name:"Назад к чату",exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
   await page.getByRole("navigation",{name:"Разделы рабочего пространства"}).getByRole("button",{name:/Результаты/}).click();
   await page.getByRole("button",{name:"Открыть снимок",exact:true}).first().click();
   await page.getByRole("dialog",{name:"Просмотр снимка"}).waitFor();
@@ -88,9 +101,9 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.getByLabel("Зелёный терминал",{exact:false}).check();
   await page.getByRole("button",{name:"Закрыть настройки",exact:true}).click();
   await page.getByRole("navigation",{name:"Разделы рабочего пространства"}).getByRole("button",{name:"Чат",exact:true}).click();
-  await page.screenshot({path:".local/qa/"+engine+"-mobile-crt.png"});
+  await page.screenshot({path:".local/qa-current/"+engine+"-mobile-crt.png"});
   await page.setViewportSize({width:1366,height:1024});
-  await page.screenshot({path:".local/qa/"+engine+"-ipad.png"});
+  await page.screenshot({path:".local/qa-current/"+engine+"-ipad.png"});
   assert.ok(await page.locator(".desktop-nav").isVisible());
   assert.ok(await page.locator(".chat-pane").isVisible());
   assert.ok(await page.locator(".results-pane").isVisible());
@@ -100,5 +113,5 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await context.close();
  }finally{await browser.close();}
 }
-await writeFile(".local/qa/summary.json",JSON.stringify(summary,null,2));
+await writeFile(".local/qa-current/summary.json",JSON.stringify(summary,null,2));
 console.log(JSON.stringify(summary,null,2));

@@ -28,6 +28,18 @@ Browser Codex replies and approval requests are simulated deliberately. The sepa
 
 Physical iPhone/iPad Safari and standalone PWA installation, real iOS software keyboard/rotation, background suspension and extended touch Remote use. Linux WebKit is a useful regression engine, not a physical iOS device.
 
-The configured deployment uses Windows Codex and VNC. A separately authenticated local Linux Codex, RDP hosting, optional extra projects/machines, general filesystem/Git UI and automatic import of external threads have not been exercised in this installation.
+The configured deployment uses Windows Codex and VNC. A separately authenticated local Linux Codex, RDP hosting, additional machines and general filesystem/Git UI have not been exercised in this installation.
 
 No real website password is created by verification; test enrollment uses random credentials in an isolated, in-memory QA server.
+
+## Native catalog and Remote revision — 2026-09-06
+
+- Native App Server project discovery returned 10 real local Windows projects. Read-only checks opened the 13 then-listed non-archived conversations, covering both paginated and legacy history.
+- Real authenticated Hub API checks discovered those projects, checked every project machine status, fetched non-overlapping 20-message pages and rejected anonymous access and a project creation without CSRF.
+- A unique temporary project and empty Windows folder were created through native APIs. A real turn remembered a random word; after App Server teardown, the same conversation resumed and recalled it. An unsent draft also survived a separate App Server restart. Test threads were archived and verified empty test folders removed.
+- Native project creation was visible through App Server project/list. The running desktop application did not immediately add it to its separate saved-folder sidebar. This is documented; no desktop state-file mutation was used.
+- 19 Node tests passed, including source catalog identity/deletion, command-heavy history paging, native/stream reconciliation, legacy Results navigation, empty drafts, relative/direct pointer coordinates, stylus, cancellation, two-finger scroll/right-click and pinch detection.
+- Chromium and WebKit completed login/history/model/mode/effort/attachment/approval/reconnect scenarios with simulated Codex and real Windows VNC. A rendered desktop screenshot was saved through the authenticated Results API.
+- At 844×390, the connected Remote surface occupied the full 390px viewport height and mobile navigation was hidden. Switching touch modes kept the session connected.
+- All three themes were captured and inspected. The layout suite covered 390×844, 375×667, 844×390, 820×1180 and 1366×1024 in both engines: 30 theme/viewport combinations, with no horizontal overflow or clipped composer. Project creation and the directory picker were also exercised in both browsers.
+- Actual Apple Pencil/iPhone gestures and standalone iOS behavior still require owner hardware verification. Browser engine simulation is recorded separately from the native Windows protocol checks.

@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { probeCodex } from "@codex-web/machines";
 import { type HubConfig, HubError, type HubEvent, turnSettingsSchema } from "@codex-web/shared";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
@@ -158,25 +157,56 @@ export async function createApp(
     closeSession(auth.logout(req, reply));
     return { ok: true };
   });
-  app.get("/api/projects", async () => ({
-    projects: config.projects
-      .filter((p) => p.enabled)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        machineName: config.machines.find((m) => m.id === p.machineId)?.name,
-        remoteAvailable: !!config.machines.find((m) => m.id === p.machineId)?.remote,
-      })),
-  }));
-  app.get("/api/projects/:id/threads", async (req) => ({
-    threads: store.threads(sessions.project(paramId(req)).id),
-  }));
+  app.get("/api/projects", async (req) => {
+    const query = z.object({ refresh: z.enum(["1"]).optional() }).parse(req.query);
+    await sessions.catalog.refresh(query.refresh === "1");
+    return {
+      projects: sessions.catalog.publicProjects(),
+      warnings: [...sessions.catalog.errors.values()],
+    };
+  });
+  app.get("/api/machines", async () => ({ machines: sessions.catalog.machines() }));
+  app.get("/api/machines/:id/directories", async (req) => {
+    const query = z.object({ path: z.string().min(1).max(2048) }).parse(req.query);
+    return sessions.catalog.directories(paramId(req), query.path);
+  });
+  app.post("/api/projects", async (req) => {
+    const body = z
+      .object({
+        machineId: idSchema,
+        name: z.string().trim().min(1).max(120),
+        workingDirectory: z.string().min(1).max(2048),
+        createDirectory: z.boolean().default(false),
+      })
+      .strict()
+      .parse(req.body);
+    const requestKey = key(req);
+    return store.once("project:create", requestKey, body, () =>
+      sessions.catalog.createProject(
+        body.machineId,
+        body.name,
+        body.workingDirectory,
+        body.createDirectory,
+        requestKey,
+      ),
+    );
+  });
+  app.get("/api/projects/:id/threads", async (req) => {
+    const project = sessions.project(paramId(req));
+    let warning: string | undefined;
+    try {
+      await sessions.catalog.syncThreads(project.machineId);
+    } catch {
+      warning = "Компьютер недоступен. Показаны сохранённые диалоги.";
+    }
+    return { threads: store.threads(project.id), warning };
+  });
   app.get("/api/projects/:id/capabilities", async (req) => sessions.capabilities(paramId(req)));
   app.get("/api/projects/:id/status", async (req) => {
     const p = sessions.project(paramId(req)),
       m = config.machines.find((m) => m.id === p.machineId);
     if (!m) throw new HubError(404, "MACHINE_NOT_FOUND", "Машина не настроена");
-    return probeCodex(m, p.workingDirectory);
+    return sessions.status(p.id);
   });
   app.post("/api/projects/:id/threads", async (req) => {
     const id = paramId(req),
@@ -187,13 +217,24 @@ export async function createApp(
   });
   app.get("/api/threads/:id/history", async (req) => {
     const id = paramId(req);
-    sessions.thread(id);
-    const q = z.object({ turnId: idSchema.optional() }).parse(req.query);
+    const thread = sessions.thread(id);
+    const q = z
+      .object({ turnId: idSchema.optional(), before: z.string().max(100).optional() })
+      .parse(req.query);
     return {
-      ...(q.turnId ? store.context(id, q.turnId) : store.history(id, page(req).before)),
+      ...(thread.origin === "desktop" || thread.historyMode
+        ? await sessions.catalog.history(thread, q.before, q.turnId)
+        : q.turnId
+          ? store.context(id, q.turnId)
+          : store.history(id, page(req).before)),
       thread: store.thread(id),
       approvals: sessions.pending(id),
     };
+  });
+  app.get("/api/threads/:id/source", async (req) => {
+    const thread = sessions.thread(paramId(req));
+    if (thread.origin !== "desktop" && !thread.historyMode) return { version: 0 };
+    return sessions.catalog.readThread(thread);
   });
   app.get("/api/threads/:id/results", async (req) => {
     const id = paramId(req);

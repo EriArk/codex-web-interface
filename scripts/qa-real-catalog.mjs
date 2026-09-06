@@ -1,0 +1,41 @@
+
+import assert from "node:assert/strict";
+import {readFile,mkdtemp,rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {randomBytes} from "node:crypto";
+import {Store} from "../apps/hub/dist/store.js";
+import {Sessions} from "../apps/hub/dist/sessions.js";
+import {createApp} from "../apps/hub/dist/app.js";
+import {configSchema} from "../packages/shared/dist/index.js";
+const raw=JSON.parse(await readFile(process.argv[2],"utf8")),root=await mkdtemp(join(tmpdir(),"codex-real-http-"));
+raw.hub={...raw.hub,publicBaseUrl:"https://qa.example.test",databasePath:":memory:",resultsPath:root};
+const config=configSchema.parse(raw),store=new Store(":memory:"),sessions=new Sessions(config,store);
+const token=randomBytes(32).toString("base64url"),password=randomBytes(24).toString("base64url");
+const {app}=await createApp(config,{store,sessions,setupToken:token});
+try {
+ const anonymous=await app.inject({method:"GET",url:"/api/projects"});assert.equal(anonymous.statusCode,401);
+ const enroll=await app.inject({method:"POST",url:"/api/auth/setup",headers:{origin:raw.hub.publicBaseUrl},payload:{password,token}});
+ assert.equal(enroll.statusCode,200,enroll.body);
+ const cookie=enroll.headers["set-cookie"].split(";")[0];
+ const headers={cookie,origin:raw.hub.publicBaseUrl};
+ const projectsResponse=await app.inject({method:"GET",url:"/api/projects",headers});
+ assert.equal(projectsResponse.statusCode,200);
+ const {projects,warnings}=projectsResponse.json();assert.equal(warnings.length,0);assert(projects.length>1);
+ for (const p of projects) assert.equal((await app.inject({method:"GET",url:"/api/projects/"+p.id+"/status",headers})).json().available,true);
+ const project=projects.find(p=>p.workingDirectory.toLowerCase().replaceAll("/","\\")===config.projects[0].workingDirectory.toLowerCase().replaceAll("/","\\"));
+ const threadsResponse=await app.inject({method:"GET",url:"/api/projects/"+project.id+"/threads",headers});
+ assert.equal(threadsResponse.statusCode,200);
+ const thread=threadsResponse.json().threads.find(t=>t.origin==="desktop"&&t.historyMode==="paginated");
+ assert(thread);
+ const pageResponse=await app.inject({method:"GET",url:"/api/threads/"+thread.id+"/history",headers});
+ assert.equal(pageResponse.statusCode,200,pageResponse.body);
+ const page=pageResponse.json();assert.equal(page.messages.length,20);assert(page.hasMore);
+ const previous=await app.inject({method:"GET",url:"/api/threads/"+thread.id+"/history?before="+encodeURIComponent(page.nextBefore),headers});
+ assert.equal(previous.statusCode,200);
+ assert.equal(previous.json().messages.length,20);
+ assert(!previous.json().messages.some(m=>page.messages.some(p=>p.id===m.id)));
+ const denied=await app.inject({method:"POST",url:"/api/projects",headers,payload:{machineId:project.machineId,name:"Denied",workingDirectory:"D:\\Denied"}});
+ assert.equal(denied.statusCode,403);
+ console.log(JSON.stringify({realHubApi:true,projectCount:projects.length,allMachinesOnline:true,initial20:true,previous20:true,anonymousDenied:true,projectCreateCsrfDenied:true}));
+} finally {await app.close();await rm(root,{recursive:true});}

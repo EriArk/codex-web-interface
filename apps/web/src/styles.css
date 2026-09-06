@@ -1401,62 +1401,6 @@ dialog::backdrop {
 .sheet-content .nav-project {
   min-height: 55px;
 }
-:root[data-theme="crt-green"] {
-  --paper: #101911;
-  --canvas: #0c130e;
-  --nav: #141f16;
-  --surface: #132219;
-  --ink: #b8dcae;
-  --muted: #7ea279;
-  --line: #304931;
-  --accent: #8fc77e;
-  --accent-ink: #101c11;
-  --soft: #223323;
-  --gold: #84a665;
-  --danger: #e79479;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  color-scheme: dark;
-}
-.workspace:where(:root[data-theme="crt-green"] *)::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.025;
-  background: repeating-linear-gradient(transparent 0 3px, #000 3px 4px);
-  z-index: 60;
-}
-:root[data-theme="crt-green"] .avatar {
-  border-radius: 3px;
-}
-:root[data-theme="crt-green"] .message.user .message-body {
-  border-radius: 3px;
-  border: 1px solid var(--line);
-}
-:root[data-theme="hitech-2000s"] {
-  --paper: #242d3a;
-  --canvas: #1b232e;
-  --nav: #202937;
-  --surface: #2a3545;
-  --ink: #e0e9f5;
-  --muted: #a3b3c7;
-  --line: #3d4c62;
-  --accent: #8dcbe9;
-  --accent-ink: #142537;
-  --soft: #354960;
-  --gold: #9cbacc;
-  --danger: #f3a69c;
-  color-scheme: dark;
-}
-:root[data-theme="hitech-2000s"] .workspace-header,
-:root[data-theme="hitech-2000s"] .pane-heading {
-  background: linear-gradient(#34415450, transparent);
-}
-:root[data-theme="hitech-2000s"] .primary,
-:root[data-theme="hitech-2000s"] .secondary {
-  border-radius: 5px;
-  box-shadow: inset 0 1px 0 #ffffff25;
-}
 @media (min-width: 1100px) {
   .chat-pane[data-visible="false"] {
     display: flex;

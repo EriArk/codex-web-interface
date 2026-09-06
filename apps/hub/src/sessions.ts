@@ -9,11 +9,11 @@ import {
   HubError,
   type HubEvent,
   type MachineConfig,
-  type ProjectConfig,
   type TurnSettings,
   turnSettingsSchema,
 } from "@codex-web/shared";
 import { Attachments } from "./attachments.js";
+import { Catalog, type CatalogProject } from "./catalog.js";
 import type { Store, ThreadRecord } from "./store.js";
 
 function record(value: unknown): Record<string, unknown> {
@@ -31,6 +31,7 @@ interface Runtime {
   touched: number;
   capabilities?: Capabilities;
   capabilitiesAt?: number;
+  capabilitiesProject?: string;
 }
 interface Approval {
   id: string;
@@ -48,6 +49,7 @@ export class Sessions extends EventEmitter {
   private locks = new Set<string>();
   private approvals = new Map<string, Approval>();
   readonly attachments: Attachments;
+  readonly catalog: Catalog;
   private idleTimer: NodeJS.Timeout;
   constructor(
     readonly config: HubConfig,
@@ -57,11 +59,25 @@ export class Sessions extends EventEmitter {
   ) {
     super();
     this.attachments = new Attachments(join(config.hub.resultsPath, "uploads"), store);
+    this.catalog = new Catalog(config, store, async (machineId) => {
+      const seed =
+        config.projects.find((p) => p.machineId === machineId && p.enabled) ??
+        this.catalog.projects().find((p) => p.machineId === machineId);
+      if (!seed)
+        throw new HubError(
+          503,
+          "MACHINE_WORKSPACE_REQUIRED",
+          "Для компьютера не настроена начальная папка",
+        );
+      const runtime = await this.runtime(seed.id);
+      runtime.touched = Date.now();
+      return runtime.rpc;
+    });
     this.idleTimer = setInterval(() => void this.reap(), 60000);
     this.idleTimer.unref();
   }
-  project(id: string): ProjectConfig {
-    const p = this.config.projects.find((p) => p.id === id && p.enabled);
+  project(id: string): CatalogProject {
+    const p = this.catalog.projects().find((p) => p.id === id && p.enabled);
     if (!p) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект не найден");
     return p;
   }
@@ -86,20 +102,23 @@ export class Sessions extends EventEmitter {
     return event;
   }
   private async runtime(projectId: string): Promise<Runtime> {
-    let existing = this.runtimes.get(projectId);
-    if (existing) return existing;
     const p = this.project(projectId);
+    const runtimeId = p.machineId;
+    let existing = this.runtimes.get(runtimeId);
+    if (existing) return existing;
     const machine = this.config.machines.find((m) => m.id === p.machineId);
     if (!machine) throw new HubError(503, "MACHINE_NOT_FOUND", "Машина не настроена");
     existing = (async () => {
-      const rpc = this.clientFactory(machine, p.workingDirectory);
+      const anchor =
+        this.config.projects.find((seed) => seed.machineId === machine.id && seed.enabled) ?? p;
+      const rpc = this.clientFactory(machine, anchor.workingDirectory);
       const runtime: Runtime = { rpc, loaded: new Set(), active: new Set(), touched: Date.now() };
       rpc.on("notification", (method: string, params: Record<string, unknown>) =>
         this.notification(runtime, method, params),
       );
       rpc.on("request", (request: ServerRequest) => this.request(runtime, request));
       rpc.on("fault", (error: HubError) => {
-        if (this.runtimes.get(projectId) === existing) this.runtimes.delete(projectId);
+        if (this.runtimes.get(runtimeId) === existing) this.runtimes.delete(runtimeId);
         for (const threadId of runtime.active) {
           this.store.setStatus(threadId, "unknown", this.store.thread(threadId).activeTurnId);
           this.emitEvent(threadId, "session.state", {
@@ -124,19 +143,35 @@ export class Sessions extends EventEmitter {
       }
       return runtime;
     })();
-    this.runtimes.set(projectId, existing);
+    this.runtimes.set(runtimeId, existing);
     try {
       return await existing;
     } catch (error) {
-      this.runtimes.delete(projectId);
+      this.runtimes.delete(runtimeId);
       throw error;
+    }
+  }
+
+  async status(projectId: string): Promise<{ available: boolean; code?: string }> {
+    try {
+      const runtime = await this.runtime(projectId);
+      runtime.touched = Date.now();
+      await runtime.rpc.request("account/read", { refreshToken: false });
+      return { available: true };
+    } catch {
+      return { available: false, code: "CODEX_UNAVAILABLE" };
     }
   }
 
   async capabilities(projectId: string): Promise<Capabilities> {
     const r = await this.runtime(projectId);
     r.touched = Date.now();
-    if (r.capabilities && Date.now() - (r.capabilitiesAt ?? 0) < 300000) return r.capabilities;
+    if (
+      r.capabilities &&
+      r.capabilitiesProject === projectId &&
+      Date.now() - (r.capabilitiesAt ?? 0) < 300000
+    )
+      return r.capabilities;
     const models: Capabilities["models"] = [];
     let cursor: unknown;
     for (let page = 0; page < 10; page++) {
@@ -196,6 +231,7 @@ export class Sessions extends EventEmitter {
       modes: [...new Set(modes)],
       defaults: { model: model.id, effort, mode: "default" },
     };
+    r.capabilitiesProject = projectId;
     r.capabilitiesAt = Date.now();
     return r.capabilities;
   }
@@ -247,6 +283,10 @@ export class Sessions extends EventEmitter {
       const r = await this.runtime(projectId);
       const result = await r.rpc.request("thread/start", {
         cwd: this.project(projectId).workingDirectory,
+        ...(this.project(projectId).sourceId
+          ? { projectId: this.project(projectId).sourceId }
+          : {}),
+        historyMode: "paginated",
         approvalPolicy: "on-request",
         sandbox: "workspace-write",
       });
@@ -254,8 +294,18 @@ export class Sessions extends EventEmitter {
       if (!codexId)
         throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не вернул идентификатор диалога");
       const t = this.store.createThread(projectId, codexId, title);
+      if (record(result.thread).historyMode)
+        this.store.db
+          .prepare("UPDATE threads SET historyMode=?,workingDirectory=? WHERE id=?")
+          .run(
+            text(record(result.thread).historyMode, 40),
+            this.project(projectId).workingDirectory,
+            t.id,
+          );
       r.loaded.add(t.id);
       r.touched = Date.now();
+      if (title !== "Новый диалог")
+        await r.rpc.request("thread/name/set", { threadId: codexId, name: title }).catch(() => {});
       this.emitEvent(t.id, "thread.created", { title: t.title });
       return t;
     });
@@ -267,11 +317,21 @@ export class Sessions extends EventEmitter {
       if (r.loaded.has(id)) return this.store.thread(id);
       const result = await r.rpc.request("thread/resume", {
         threadId: t.codexThreadId,
-        cwd: this.project(t.projectId).workingDirectory,
+        cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
+        excludeTurns: true,
         approvalPolicy: "on-request",
         sandbox: "workspace-write",
       });
-      const turns = record(result.thread).turns;
+      const turns =
+        record(result.thread).turns ??
+        (
+          await r.rpc.request("thread/turns/list", {
+            threadId: t.codexThreadId,
+            limit: 1,
+            itemsView: "summary",
+            sortDirection: "desc",
+          })
+        ).data;
       const last = Array.isArray(turns) ? record(turns.at(-1)) : {};
       const status = text(last.status);
       if (t.status === "unknown" && last.id) {
@@ -328,7 +388,7 @@ export class Sessions extends EventEmitter {
     return this.locked(t.projectId, async () => {
       const r = await this.runtime(t.projectId);
       if (
-        r.active.size ||
+        [...r.active].some((activeId) => this.store.thread(activeId).projectId === t.projectId) ||
         ["unknown", "starting", "running", "waiting_approval"].includes(
           this.store.thread(id).status,
         )
@@ -343,21 +403,56 @@ export class Sessions extends EventEmitter {
         this.store.threadSettings(id) ??
         (await this.capabilities(t.projectId)).defaults;
       const model = await this.validateSettings(t.projectId, selection);
+      if (
+        r.loaded.has(id) &&
+        (t.origin === "desktop" ||
+          (t.historyMode &&
+            this.store.db
+              .prepare("SELECT 1 FROM events WHERE threadId=? AND type='turn.completed' LIMIT 1")
+              .get(id)))
+      ) {
+        await r.rpc.request("thread/unsubscribe", { threadId: t.codexThreadId });
+        r.loaded.delete(id);
+      }
+      if (
+        !r.loaded.has(id) &&
+        t.origin !== "desktop" &&
+        !t.sourceUpdatedAt &&
+        !this.store.db.prepare("SELECT 1 FROM messages WHERE threadId=? LIMIT 1").get(id)
+      ) {
+        // An unsent draft may disappear with its App Server. Recreate only that empty draft.
+        const fresh = await r.rpc.request("thread/start", {
+          cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
+          ...(this.project(t.projectId).sourceId
+            ? { projectId: this.project(t.projectId).sourceId }
+            : {}),
+          historyMode: "paginated",
+          approvalPolicy: "on-request",
+          sandbox: "workspace-write",
+        });
+        const sourceId = text(record(fresh.thread).id);
+        if (!sourceId) throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не создал диалог");
+        this.store.db.prepare("UPDATE threads SET codexThreadId=? WHERE id=?").run(sourceId, id);
+        t.codexThreadId = sourceId;
+        r.loaded.add(id);
+      }
       if (!r.loaded.has(id)) {
         await r.rpc.request("thread/resume", {
           threadId: t.codexThreadId,
-          cwd: this.project(t.projectId).workingDirectory,
+          cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
+          excludeTurns: true,
           approvalPolicy: "on-request",
           sandbox: "workspace-write",
         });
         r.loaded.add(id);
       }
       const prepared = await this.attachments.prepare(
-        this.config,
+        { ...this.config, projects: this.catalog.projects() },
         id,
         attachmentIds,
         model.supportsImages,
       );
+      this.catalog.invalidate(id);
       const messageId = randomUUID();
       try {
         this.attachments.bind(id, messageId, prepared.files);
@@ -555,6 +650,7 @@ export class Sessions extends EventEmitter {
         id = text(turn.id),
         status = text(turn.status);
       r.active.delete(t.id);
+      this.catalog.invalidate(t.id);
       for (const [key, a] of this.approvals) if (a.threadId === t.id) this.approvals.delete(key);
       this.store.setStatus(
         t.id,

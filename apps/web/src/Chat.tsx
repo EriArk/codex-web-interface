@@ -17,7 +17,7 @@ const MessageText = memo(function MessageText({ text }: { text: string }) {
   );
 });
 const time = (date: string) =>
-  new Date(date).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+  date ? new Date(date).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }) : "";
 export const statusLabel = (status: string) =>
   ({
     running: "Codex работает",
@@ -265,9 +265,11 @@ export function Chat({
           if (atBottom.current) setNewMessages(false);
         }}
       >
-        {state.contextTurn && (
+        {(state.contextTurn || state.hasNewer) && (
           <div className="history-loader">
-            <span className="small muted">Фрагмент диалога</span>
+            <span className="small muted">
+              {state.contextTurn ? "Фрагмент диалога" : "В Codex появились новые сообщения"}
+            </span>
             <button type="button" className="secondary" onClick={onLatest}>
               К последним сообщениям
             </button>

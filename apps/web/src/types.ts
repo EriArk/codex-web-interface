@@ -8,7 +8,19 @@ export interface Session {
   csrf: string;
   expires: number;
 }
+export interface Machine {
+  id: string;
+  name: string;
+  type: "ssh-windows" | "local-linux";
+  projectsDirectory: string;
+  remoteAvailable: boolean;
+}
 export interface Project {
+  machineId?: string;
+  workingDirectory?: string;
+  roots?: string[];
+  source?: string;
+  threadCount?: number;
   id: string;
   name: string;
   machineName: string;
@@ -21,6 +33,9 @@ export interface Thread {
   status: string;
   activeTurnId: string | null;
   settings?: TurnSettings;
+  origin?: string;
+  historyMode?: string;
+  sourceUpdatedAt?: number;
 }
 export interface Message {
   id: string;
@@ -60,12 +75,13 @@ export interface HubEvent {
   approvals?: Approval[];
 }
 export interface History {
+  sourceVersion?: number;
   contextTurn?: string;
   hasNewer?: boolean;
   messages: Message[];
   thread: Thread;
   approvals: Approval[];
-  nextBefore: number | null;
+  nextBefore: number | string | null;
   hasMore: boolean;
   lastSeq: number;
 }

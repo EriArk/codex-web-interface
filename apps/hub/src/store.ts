@@ -10,6 +10,11 @@ export interface ThreadRecord {
   codexThreadId: string;
   title: string;
   settings?: TurnSettings;
+  origin?: string;
+  workingDirectory?: string;
+  historyMode?: string;
+  sourceUpdatedAt?: number;
+  archived?: number;
   status: string;
   activeTurnId: string | null;
   createdAt: string;
@@ -58,6 +63,22 @@ export class Store {
         "COMMIT",
       ].join(";"),
     );
+    const columns = new Set(
+      this.db
+        .prepare("PRAGMA table_info(threads)")
+        .all()
+        .map((row) => row.name),
+    );
+    for (const [name, definition] of [
+      ["origin", "TEXT NOT NULL DEFAULT 'web'"],
+      ["workingDirectory", "TEXT"],
+      ["historyMode", "TEXT"],
+      ["sourceUpdatedAt", "INTEGER"],
+      ["archived", "INTEGER NOT NULL DEFAULT 0"],
+    ]) {
+      if (name && !columns.has(name))
+        this.db.exec(`ALTER TABLE threads ADD COLUMN ${name} ${definition}`);
+    }
     this.db
       .prepare(
         "UPDATE threads SET status='unknown' WHERE status IN ('starting','running','waiting_approval')",

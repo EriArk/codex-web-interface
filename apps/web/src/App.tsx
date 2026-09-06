@@ -3,11 +3,14 @@ import { api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
 import { Icon } from "./icons";
 import { Login } from "./Login";
+import { ProjectDialog } from "./ProjectDialog";
+import { ProjectNavigation } from "./ProjectNavigation";
 import { Remote } from "./Remote";
 import { ActivityPane, Results } from "./Results";
 import type {
   Activity,
   History,
+  Machine,
   Project,
   Result,
   Session,
@@ -121,10 +124,17 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     [wide, setWide] = useState(window.innerWidth >= 1100);
   const [projects, setProjects] = useState<Project[]>([]),
     [threads, setThreads] = useState<Thread[]>([]);
+  const [machines, setMachines] = useState<Machine[]>([]),
+    [createProject, setCreateProject] = useState(false),
+    [syncing, setSyncing] = useState(false),
+    [remoteImmersive, setRemoteImmersive] = useState(false);
+  const threadRequest = useRef(0);
   const [projectId, setProjectId] = useState(""),
     [threadId, setThreadId] = useState(""),
     [view, setView] = useState<View>("chat"),
     [theme, setTheme] = useState<Theme>(readPreference("theme", "organizer") as Theme);
+  const selectionRef = useRef({ projectId, threadId });
+  selectionRef.current = { projectId, threadId };
   const [drawer, setDrawer] = useState(false),
     [settings, setSettings] = useState(false),
     [navCollapsed, setNavCollapsed] = useState(false),
@@ -158,8 +168,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     }
   };
   const loadThreads = useCallback(async (id: string, selected?: string) => {
-    const data = await api<{ threads: Thread[] }>(`/projects/${id}/threads`);
+    const request = ++threadRequest.current;
+    const data = await api<{ threads: Thread[]; warning?: string }>(`/projects/${id}/threads`);
+    if (request !== threadRequest.current) return;
     setThreads(data.threads);
+    if (data.warning) setNotice(data.warning);
     setThreadId((current) =>
       selected && data.threads.some((t) => t.id === selected)
         ? selected
@@ -171,12 +184,14 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     void (async () => {
       try {
-        const [{ projects: list }, prefs] = await Promise.all([
+        const [{ projects: list }, prefs, machineList] = await Promise.all([
           api<{ projects: Project[] }>("/projects"),
           api<{ projectId?: string; threadId?: string; theme?: Theme; view?: View }>(
             "/preferences",
           ),
+          api<{ machines: Machine[] }>("/machines"),
         ]);
+        setMachines(machineList.machines);
         setProjects(list);
         if (prefs.theme) setTheme(prefs.theme);
         if (prefs.view) setView(prefs.view);
@@ -273,6 +288,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const selectProject = (id: string) => {
     setProjectId(id);
     setThreadId("");
+    setThreads([]);
     setFocusTurn("");
     void loadThreads(id).catch((e) => setNotice(messageOf(e)));
   };
@@ -335,101 +351,61 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     setView("chat");
     requestAnimationFrame(() => setFocusTurn(id));
   };
+  const refreshCatalog = useCallback(
+    async (force = false) => {
+      setSyncing(true);
+      try {
+        const data = await api<{ projects: Project[]; warnings?: string[] }>(
+          force ? "/projects?refresh=1" : "/projects",
+        );
+        setProjects(data.projects);
+        if (data.warnings?.length) setNotice(data.warnings[0] ?? "");
+        const selected = selectionRef.current;
+        if (selected.projectId && data.projects.some((p) => p.id === selected.projectId))
+          await loadThreads(selected.projectId, selected.threadId);
+      } catch (e) {
+        setNotice(messageOf(e));
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [loadThreads],
+  );
+  useEffect(() => {
+    if (!initialized) return;
+    const update = () => {
+      if (document.visibilityState === "visible") void refreshCatalog();
+    };
+    const timer = setInterval(update, 60000);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [initialized, refreshCatalog]);
   const navigation = (
-    <>
-      <div className="nav-brand">
-        <img src="/icon.svg" width="32" height="32" alt="" />
-        <span>
-          codex<span className="small brand-subtitle">личное пространство</span>
-        </span>
-        <button
-          type="button"
-          className="icon-button mobile-only"
-          aria-label="Закрыть проекты"
-          onClick={() => setDrawer(false)}
-        >
-          <Icon name="close" />
-        </button>
-      </div>
-      <div className="nav-scroll">
-        <div className="nav-label">
-          Проекты<span>{projects.length}</span>
-        </div>
-        {projects.map((p) => (
-          <button
-            type="button"
-            key={p.id}
-            className={`nav-project ${projectId === p.id ? "selected" : ""}`}
-            disabled={busy}
-            onClick={() => selectProject(p.id)}
-          >
-            <span className="folder-icon">
-              <Icon name="folder" />
-            </span>
-            <span>
-              {p.name}
-              <small>{p.machineName}</small>
-            </span>
-          </button>
-        ))}
-        <div className="nav-label threads-label">
-          Диалоги
-          <button
-            type="button"
-            className="icon-button"
-            onClick={newThread}
-            disabled={busy || !projectId}
-            aria-label="Новый диалог"
-          >
-            <Icon name="plus" size={18} />
-          </button>
-        </div>
-        {!threads.length && (
-          <p className="nav-empty">
-            Первый диалог начнётся
-            <br />с твоей задачи.
-          </p>
-        )}
-        {threads.map((t) => (
-          <button
-            type="button"
-            className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
-            key={t.id}
-            disabled={busy}
-            onClick={() => selectThread(t.id)}
-          >
-            <Icon name="chat" size={17} />
-            <span>{t.title}</span>
-          </button>
-        ))}
-      </div>
-      <div className="nav-bottom">
-        <div className="machine-indicator">
-          <span className={`status-dot ${machine}`} />
-          <span>
-            {project?.machineName ?? "Компьютер"}
-            <small>
-              {machine === "online"
-                ? "На связи"
-                : machine === "offline"
-                  ? "Нет соединения"
-                  : "Проверяем соединение"}
-            </small>
-          </span>
-        </div>
-        <button
-          type="button"
-          className="nav-settings"
-          onClick={() => {
-            setDrawer(false);
-            setSettings(true);
-          }}
-        >
-          <Icon name="settings" size={18} />
-          Настройки
-        </button>
-      </div>
-    </>
+    <ProjectNavigation
+      projects={projects}
+      threads={threads}
+      projectId={projectId}
+      threadId={threadId}
+      busy={busy}
+      loading={!initialized || syncing}
+      machine={machine}
+      onProject={selectProject}
+      onThread={selectThread}
+      onNewThread={newThread}
+      onNewProject={() => {
+        setDrawer(false);
+        setCreateProject(true);
+      }}
+      onRefresh={() => void refreshCatalog(true)}
+      onClose={() => setDrawer(false)}
+      onSettings={() => {
+        setDrawer(false);
+        setSettings(true);
+      }}
+    />
   );
   const tab = (name: View, label: string, icon: string) => (
     <button
@@ -449,6 +425,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     <div
       className={`workspace ${navCollapsed ? "nav-collapsed" : ""}`}
       data-view={view}
+      data-remote-immersive={remoteImmersive}
       ref={root}
       style={{ "--right-width": `${rightWidth}%` } as CSSProperties}
     >
@@ -626,6 +603,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             threadId={threadId}
             visible={view === "remote"}
             available={!!project?.remoteAvailable}
+            onImmersiveChange={setRemoteImmersive}
+            onBack={() => setView("chat")}
             onSnapshot={() => {
               setNotice("Снимок сохранён в результатах");
               void loadResults();
@@ -638,6 +617,20 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         {tab("results", "Результаты", "results")}
         {tab("remote", "Remote", "remote")}
       </nav>
+      <ProjectDialog
+        open={createProject}
+        machines={machines}
+        onClose={() => setCreateProject(false)}
+        onCreated={async (p) => {
+          const data = await api<{ projects: Project[] }>("/projects?refresh=1");
+          setProjects(data.projects);
+          setProjectId(p.id);
+          setThreads([]);
+          setThreadId("");
+          setView("chat");
+          await loadThreads(p.id);
+        }}
+      />
       <dialog className="project-sheet" ref={drawerDialog} onCancel={() => setDrawer(false)}>
         <div className="sheet-content">{navigation}</div>
       </dialog>

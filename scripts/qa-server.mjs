@@ -13,9 +13,15 @@ raw.hub={...raw.hub,publicBaseUrl:"http://127.0.0.1:8782",host:"127.0.0.1",port:
 const config=configSchema.parse(raw),store=new Store(":memory:");
 class FakeRpc extends EventEmitter {
  closed=false;activeThread="";turn="";
+ projects=[{id:"qa-native-seed",name:config.projects[0].name,roots:[{path:config.projects[0].workingDirectory}]}];
  async initialize(){return {};}
  async request(method,p){
   const capabilities=capabilityReply(method);if(capabilities)return capabilities;
+  if(method==="project/list")return {data:this.projects,nextCursor:null};
+  if(method==="project/create"){const project={id:randomUUID(),name:p.name,roots:p.roots};this.projects.push(project);return {project};}
+  if(method==="thread/list")return {data:[],nextCursor:null};
+  if(method==="fs/getMetadata")return {isDirectory:true};
+  if(method==="fs/readDirectory")return {entries:[{fileName:"Example",isDirectory:true,isFile:false}]};
   if(method==="account/read")return {account:{type:"chatgpt"}};
   if(method==="thread/start")return {thread:{id:randomUUID()}};
   if(method==="thread/resume")return {thread:{turns:[]}};

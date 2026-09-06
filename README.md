@@ -5,12 +5,13 @@ Private Codex workspace for iPhone, iPad and desktop. The browser talks to a Lin
 ## Available now
 
 - Password-only login. The owner chooses the first password through a private, single-use setup link.
-- Project/thread selection, streaming, resume, approvals, questions and interrupt.
+- Automatic discovery of real Windows Codex projects and conversations; create a project or choose an existing folder from the website.
+- Continue the same native thread, with streaming, resume, approvals, questions and interrupt.
 - Live model discovery, native Work/Plan mode and model-specific reasoning effort, saved per thread.
 - File and image attachments with preview/removal before sending. Up to eight files, 25 MiB each, 64 MiB per message.
 - Latest 20 chat messages on open; an explicit button loads 20 more without moving the reading position.
 - Results for file changes, checks, plans and Remote screenshots; detailed commands in Activity.
-- Manual Remote Desktop through Guacamole, with touch/trackpad modes, keyboard helpers and fullscreen.
+- Manual Remote Desktop through Guacamole: phone trackpad, tablet touch/stylus, pinch zoom and controls over the full landscape screen.
 - Dedicated single-view phone shell, three-pane wide layout, PWA manifest and three shared themes.
 
 ## Deployment
@@ -61,6 +62,6 @@ For loopback development, use publicBaseUrl `http://127.0.0.1:8780` and secureCo
 
 [docs/VERIFICATION.md](docs/VERIFICATION.md) records real Windows checks separately from simulated browser fixtures. Mobile Chromium/WebKit checks do not substitute for testing Safari and standalone mode on a physical iPhone/iPad.
 
-Historical threads created outside this app are not automatically imported. Notes, a general file/Git browser, additional machines and automatic collection of arbitrary generated artifacts remain later modules. The local Linux transport is implemented; this deployment has only the authenticated Windows backend configured.
+Native Codex project discovery and bounded external history are implemented. [Sync and Remote behavior](docs/SYNC_AND_REMOTE.md) explains the desktop saved-folder limitation and continuation semantics. Notes, a general file/Git browser, additional machines and automatic collection of arbitrary generated artifacts remain later modules. The local Linux transport is implemented; this deployment has only the authenticated Windows backend configured.
 
 Read [AGENTS.md](AGENTS.md), [decisions](docs/DECISIONS.md), [architecture](docs/ARCHITECTURE.md), [mobile UX](docs/MOBILE.md) and [security](docs/SECURITY.md) before substantial changes.

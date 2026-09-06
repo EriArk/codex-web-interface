@@ -192,3 +192,11 @@ Initial history contains 20 latest messages. The explicit older-history button f
 Model choices, reasoning effort and Work/Plan mode are required in the initial release. Discover supported values from the configured Codex backend and validate them at the Hub. Use the native collaborationMode protocol, including its built-in mode instructions, rather than simulating planning with a user prompt. Save choices per thread.
 
 Files/images are attached to a draft, can be removed before sending, and remain private behind the same auth boundary. Originals live on the Hub, with generated JPEG previews for supported raster images. Transfer files through system SSH to a generated private directory on Windows; use localImage for vision and absolute file references for other formats. The browser never supplies an arbitrary destination path.
+
+## D20 — Native project discovery and continuity
+
+The owner requested automatic access to real desktop projects and conversations plus project creation from the website. This brings native catalog discovery forward from the original roadmap. Use App Server project APIs and metadata-only thread discovery, with stable Hub mappings and bounded native history. Keep one App Server per machine, launched through the existing configured seed directory. No broader Companion API is introduced. See [sync behavior](SYNC_AND_REMOTE.md), including the separate desktop saved-folder list and lack of coordination for concurrent clients editing one thread.
+
+## D21 — Phone trackpad and reference-based themes
+
+The owner requested phone trackpad input, tablet touch/stylus, unobstructed landscape Remote and faithful treatment of the drawn references. Use one Pointer Events controller and floating controls; connected compact Remote removes navigation and decorative frames. Theme identity comes from paper/binding, CRT housing and light silver/cyan hardware, using the same feature markup. Physical iOS checks remain an explicit validation requirement.

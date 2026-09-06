@@ -238,12 +238,53 @@ export function useWorkspace(threadId: string) {
       window.removeEventListener("online", wake);
     };
   }, [threadId, epoch, refresh, update]);
+  useEffect(() => {
+    if (!threadId) return;
+    let disposed = false,
+      checking = false;
+    const check = async () => {
+      const current = cacheRef.current[threadId];
+      if (
+        disposed ||
+        checking ||
+        document.visibilityState !== "visible" ||
+        !current?.sourceVersion ||
+        ["running", "starting", "waiting_approval"].includes(current.thread.status)
+      )
+        return;
+      checking = true;
+      try {
+        const source = await api<{ version: number }>(`/threads/${threadId}/source`);
+        if (!disposed && source.version !== current.sourceVersion) {
+          if (!current.contextTurn && current.messages.length <= 20 && !current.loadingOlder)
+            await refresh(threadId);
+          else update(threadId, (state) => ({ ...state, hasNewer: true }));
+        }
+      } catch {
+        /* The saved conversation stays readable while the computer is offline. */
+      } finally {
+        checking = false;
+      }
+    };
+    const wake = () => void check();
+    const initial = setTimeout(wake, 500);
+    const timer = setInterval(wake, 12000);
+    document.addEventListener("visibilitychange", wake);
+    return () => {
+      disposed = true;
+      clearTimeout(initial);
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", wake);
+    };
+  }, [threadId, refresh, update]);
   const older = useCallback(async () => {
     const state = cacheRef.current[threadId];
     if (!state?.nextBefore || state.loadingOlder) return;
     update(threadId, (s) => ({ ...s, loadingOlder: true }));
     try {
-      const history = await api<History>(`/threads/${threadId}/history?before=${state.nextBefore}`);
+      const history = await api<History>(
+        `/threads/${threadId}/history?before=${encodeURIComponent(state.nextBefore)}`,
+      );
       update(threadId, (s) => {
         const ids = new Set(s.messages.map((m) => m.id));
         return {
