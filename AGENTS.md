@@ -290,5 +290,5 @@ Before mobile support is considered complete, the same core workflow must also w
 
 ## Owner-requested attachment reliability and status cleanup (2026-09-06)
 
-- Remove the redundant upper chat status strip; retain the expandable recent-work control above the composer and compact navigation/header indicators.
+- Remove the redundant upper chat status strip, including the standalone working/spinner row after the messages directly above the expandable progress control. Retain only the expandable recent-work control above the composer and compact navigation/header indicators.
 - Transfer uploaded attachments through the existing system SSH/SFTP connection, with bounded staging and verified file size/hash before native submission. Preserve draft text/files and allow an explicit retry if preparation fails; do not change permissions or restart the desktop to recover an upload.
