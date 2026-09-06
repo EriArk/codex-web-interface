@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import { CollapsibleCode } from "./CollapsibleCode";
 import { Icon } from "./icons";
 import type { Activity, Result } from "./types";
 export function Results({
@@ -56,75 +57,82 @@ export function Results({
             <span className="small muted">Подробности выполнения — в «Активности»</span>
           </div>
         )}
-        {results.map((r) => (
-          <article className={`result-card result-${r.type}`} key={r.id} data-result={r.id}>
-            <div className="result-title">
-              <span className="result-icon">
-                <Icon
-                  name={r.type === "image" ? "image" : r.type === "check" ? "check" : "folder"}
-                />
-              </span>
-              <div>
-                <h3>{r.title}</h3>
-                <time>
-                  {new Date(r.createdAt).toLocaleString("ru", {
-                    day: "numeric",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </time>
-              </div>
-              {r.type === "check" && (
-                <span className={`badge ${r.payload.exitCode === 0 ? "success" : "danger"}`}>
-                  {r.payload.exitCode === 0 ? "Успешно" : "Ошибка"}
+        {results
+          .toSorted((a, b) => Number(b.type === "image") - Number(a.type === "image"))
+          .map((r) => (
+            <article className={`result-card result-${r.type}`} key={r.id} data-result={r.id}>
+              <div className="result-title">
+                <span className="result-icon">
+                  <Icon
+                    name={r.type === "image" ? "image" : r.type === "check" ? "check" : "folder"}
+                  />
                 </span>
-              )}
-            </div>
-            {r.type === "image" && r.payload.url && (
-              <button
-                type="button"
-                className="screenshot-preview"
-                onClick={() => setImage(r)}
-                aria-label="Открыть снимок"
-              >
-                <img
-                  src={r.payload.url}
-                  loading="lazy"
-                  alt={r.title}
-                  width={r.payload.width}
-                  height={r.payload.height}
-                />
-              </button>
-            )}
-            {r.type === "plan" && (
-              <div className="result-plan">
-                <Markdown>{r.payload.text ?? ""}</Markdown>
+                <div>
+                  <h3>{r.title}</h3>
+                  <time>
+                    {new Date(r.createdAt).toLocaleString("ru", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </time>
+                </div>
+                {r.type === "check" && (
+                  <span className={`badge ${r.payload.exitCode === 0 ? "success" : "danger"}`}>
+                    {r.payload.exitCode === 0 ? "Успешно" : "Ошибка"}
+                  </span>
+                )}
               </div>
-            )}
-            {r.payload.command && <code className="command-label">{r.payload.command}</code>}
-            {r.payload.changes?.map((change) => (
-              <details className="file-change" key={change.path}>
-                <summary>
-                  <span>{change.path.split(/[\\/]/).at(-1)}</span>
-                  <span className="small muted">{change.kind}</span>
-                </summary>
-                <small className="file-path">{change.path}</small>
-                <pre>{change.diff || "Сводка изменений без текстового diff"}</pre>
-              </details>
-            ))}
-            {r.turnId && (
-              <button
-                type="button"
-                className="result-origin"
-                onClick={() => onTurn(r.turnId ?? "")}
-              >
-                <Icon name="chat" size={15} />К сообщению
-                <Icon name="chevron" size={14} />
-              </button>
-            )}
-          </article>
-        ))}
+              {r.type === "image" && r.payload.url && (
+                <button
+                  type="button"
+                  className="screenshot-preview"
+                  onClick={() => setImage(r)}
+                  aria-label="Открыть снимок"
+                >
+                  <img
+                    src={r.payload.url}
+                    loading="lazy"
+                    alt={r.title}
+                    width={r.payload.width}
+                    height={r.payload.height}
+                  />
+                </button>
+              )}
+              {r.type === "plan" && (
+                <div className="result-plan">
+                  <Markdown components={{ pre: CollapsibleCode }}>{r.payload.text ?? ""}</Markdown>
+                </div>
+              )}
+              {r.payload.command && (
+                <details className="code-disclosure">
+                  <summary>Команда и код</summary>
+                  <pre>{r.payload.command}</pre>
+                </details>
+              )}
+              {r.payload.changes?.map((change) => (
+                <details className="file-change" key={change.path}>
+                  <summary>
+                    <span>{change.path.split(/[\\/]/).at(-1)}</span>
+                    <span className="small muted">{change.kind}</span>
+                  </summary>
+                  <small className="file-path">{change.path}</small>
+                  <pre>{change.diff || "Сводка изменений без текстового diff"}</pre>
+                </details>
+              ))}
+              {r.turnId && (
+                <button
+                  type="button"
+                  className="result-origin"
+                  onClick={() => onTurn(r.turnId ?? "")}
+                >
+                  <Icon name="chat" size={15} />К сообщению
+                  <Icon name="chevron" size={14} />
+                </button>
+              )}
+            </article>
+          ))}
         {hasMore && (
           <button type="button" className="secondary load-more" disabled={busy} onClick={onOlder}>
             Загрузить ещё результаты

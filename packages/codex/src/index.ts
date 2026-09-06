@@ -139,9 +139,25 @@ export class CodexClient extends EventEmitter {
         if (!entry) continue; // A timed-out response must never trigger an automatic retry.
         this.pending.delete(value.id);
         clearTimeout(entry.timer);
-        if (value.error)
-          entry.reject(new HubError(502, "CODEX_RPC_ERROR", "Codex rejected the request"));
-        else if (value.result && typeof value.result === "object" && !Array.isArray(value.result))
+        if (value.error) {
+          const message =
+            typeof (value.error as RecordValue).message === "string"
+              ? String((value.error as RecordValue).message)
+              : "";
+          entry.reject(
+            message.includes("already has an active writer")
+              ? new HubError(
+                  409,
+                  "THREAD_IN_USE",
+                  "Этот диалог открыт в настольном Codex. Он пока удерживает доступ к записи. Черновик сохранён; повтори отправку после освобождения диалога.",
+                )
+              : new HubError(
+                  502,
+                  "CODEX_RPC_ERROR",
+                  "Codex отклонил запрос. Сообщение не подтверждено; проверь состояние диалога.",
+                ),
+          );
+        } else if (value.result && typeof value.result === "object" && !Array.isArray(value.result))
           entry.resolve(value.result as RecordValue);
         else
           entry.reject(

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, mkdirSync } from "node:fs";
-import { unlink, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stageAttachment } from "@codex-web/machines";
 import { type Attachment, type HubConfig, HubError } from "@codex-web/shared";
@@ -118,6 +118,32 @@ export class Attachments {
       return this.get(id);
     } finally {
       this.processing = false;
+    }
+  }
+  validateCopy(threadId: string, ids: string[]): Attachment[] {
+    if (ids.length > MAX_ATTACHMENTS || new Set(ids).size !== ids.length)
+      throw new HubError(400, "INVALID_ATTACHMENTS", "Проверь список вложений");
+    return ids.map((id) => {
+      const file = this.get(id);
+      if (file.threadId !== threadId || file.messageId || this.protectedIds.has(id))
+        throw new HubError(409, "ATTACHMENT_IN_USE", "Вложение недоступно для копирования");
+      return file;
+    });
+  }
+  async copyPending(sourceId: string, targetId: string, ids: string[]): Promise<void> {
+    const files = this.validateCopy(sourceId, ids),
+      copies: string[] = [];
+    for (const file of files) this.protectedIds.add(file.id);
+    try {
+      for (const file of files) {
+        const copy = await this.put(targetId, file.name, await readFile(this.path(file.id)));
+        copies.push(copy.id);
+      }
+    } catch (error) {
+      for (const id of copies) await this.remove(id);
+      throw error;
+    } finally {
+      for (const file of files) this.protectedIds.delete(file.id);
     }
   }
   async remove(id: string): Promise<void> {

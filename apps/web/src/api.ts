@@ -36,9 +36,21 @@ export async function api<T>(
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "OFFLINE", "Нет связи с сервером. Проверь подключение.");
   }
-  const value = await response.json();
+  if (response.status === 401 && path !== "/auth/login") unauthorized();
+  let value: { error?: { code?: string; message?: string } };
+  try {
+    value = await response.json();
+    if (!value || typeof value !== "object") throw new Error("Unexpected response shape");
+  } catch {
+    throw new ApiError(
+      response.status,
+      "INVALID_RESPONSE",
+      response.status >= 500
+        ? "Сервер не подтвердил действие. Черновик сохранён. Проверь связь и состояние диалога."
+        : "Не удалось прочитать ответ сервера. Обнови страницу; черновик сохранён.",
+    );
+  }
   if (!response.ok) {
-    if (response.status === 401 && path !== "/auth/login") unauthorized();
     throw new ApiError(
       response.status,
       value.error?.code ?? "REQUEST_FAILED",

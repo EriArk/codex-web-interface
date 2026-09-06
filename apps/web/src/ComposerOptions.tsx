@@ -104,58 +104,67 @@ export function ComposerOptions({
   return (
     <>
       <div className="composer-options">
-        <select
-          aria-label="Модель Codex"
-          value={selection.model}
-          disabled={disabled || saving}
-          onChange={(e) => {
-            const model = caps.models.find((m) => m.id === e.target.value);
-            if (model)
-              void change({
-                ...selection,
-                model: model.id,
-                effort: model.efforts.includes(selection.effort)
-                  ? selection.effort
-                  : model.defaultEffort,
-              });
-          }}
-        >
-          {caps.models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="mode-select"
-          aria-label="Режим Codex"
-          value={selection.mode}
-          disabled={disabled || saving}
-          onChange={(e) =>
-            void change({ ...selection, mode: e.target.value as TurnSettings["mode"] })
-          }
-        >
-          {caps.modes.map((mode) => (
-            <option key={mode} value={mode}>
-              {mode === "plan" ? "План" : "Работа"}
-            </option>
-          ))}
-        </select>
-        <select
-          className="effort-select"
-          aria-label="Уровень размышления"
-          value={selection.effort}
-          disabled={disabled || saving}
-          onChange={(e) =>
-            void change({ ...selection, effort: e.target.value as TurnSettings["effort"] })
-          }
-        >
-          {model?.efforts.map((e) => (
-            <option key={e} value={e}>
-              {efforts[e] ?? e}
-            </option>
-          ))}
-        </select>
+        <div className="composer-option model-option">
+          <span aria-hidden="true">{model?.name ?? selection.model}</span>
+          <select
+            aria-label="Модель Codex"
+            value={selection.model}
+            disabled={disabled || saving}
+            onChange={(e) => {
+              const model = caps.models.find((m) => m.id === e.target.value);
+              if (model)
+                void change({
+                  ...selection,
+                  model: model.id,
+                  effort: model.efforts.includes(selection.effort)
+                    ? selection.effort
+                    : model.defaultEffort,
+                });
+            }}
+          >
+            {caps.models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="composer-option mode-option">
+          <span aria-hidden="true">{selection.mode === "plan" ? "План" : "Работа"}</span>
+          <select
+            className="mode-select"
+            aria-label="Режим Codex"
+            value={selection.mode}
+            disabled={disabled || saving}
+            onChange={(e) =>
+              void change({ ...selection, mode: e.target.value as TurnSettings["mode"] })
+            }
+          >
+            {caps.modes.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode === "plan" ? "План" : "Работа"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="composer-option effort-option">
+          <span aria-hidden="true">{efforts[selection.effort] ?? selection.effort}</span>
+          <select
+            className="effort-select"
+            aria-label="Уровень размышления"
+            value={selection.effort}
+            disabled={disabled || saving}
+            onChange={(e) =>
+              void change({ ...selection, effort: e.target.value as TurnSettings["effort"] })
+            }
+          >
+            {model?.efforts.map((e) => (
+              <option key={e} value={e}>
+                {efforts[e] ?? e}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       {selection.mode === "plan" && (
         <div className="composer-mode-hint">Планируем и уточняем задачу перед реализацией.</div>

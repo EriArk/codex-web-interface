@@ -13,6 +13,13 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]) {
  await page.goto("http://127.0.0.1:8782/");
  await page.getByLabel("Пароль",{exact:true}).fill(credentials.password);
  await page.getByRole("button",{name:"Войти",exact:true}).click();
+ await page.locator(".workspace").waitFor();
+ await page.getByRole("button",{name:"Открыть проекты",exact:true}).tap();
+ const sheet=page.locator(".project-sheet");
+ await sheet.getByRole("button",{name:/^Проекты /}).tap();
+ const seed=sheet.locator(".nav-project").filter({hasText:"CodexWeb"}).or(sheet.locator(".nav-project").filter({hasText:"Codex Web Interface"})).first();
+ if(await seed.getAttribute("aria-expanded")!=="true")await seed.tap();
+ await sheet.getByRole("button",{name:"Проверка мобильного интерфейса",exact:true}).tap();
  await page.getByRole("textbox",{name:"Сообщение Codex"}).waitFor();
  await page.getByRole("navigation",{name:"Разделы рабочего пространства"}).getByRole("button",{name:"Чат",exact:true}).click();
  for(const [theme,label] of [["organizer","Органайзер"],["crt-green","Зелёный терминал"],["hitech-2000s","Hi-tech"]]) {
@@ -34,16 +41,17 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]) {
  await page.getByRole("navigation",{name:"Навигация по проектам"}).getByRole("button",{name:/Проекты/}).click();
  await page.screenshot({path:".local/qa-themes/"+engine+"-projects.png"});
  await page.locator(".project-sheet").getByRole("button",{name:"Новый проект",exact:true}).click();
- await page.getByLabel("Название проекта",{exact:true}).fill("Mobile project "+engine);
+ const projectName="Mobile project "+engine+" "+Date.now();
+ await page.getByLabel("Название проекта",{exact:true}).fill(projectName);
  await page.getByRole("button",{name:"Выбрать папку проекта",exact:true}).click();
  await page.getByRole("button",{name:"Выбрать эту папку",exact:true}).waitFor();
  await page.getByRole("button",{name:"Закрыть выбор папки",exact:true}).click();
  await page.screenshot({path:".local/qa-themes/"+engine+"-create-project.png"});
  await page.locator(".project-dialog").getByRole("button",{name:"Создать проект",exact:true}).click();
- await page.waitForFunction(name=>document.querySelector(".header-project")?.textContent.includes(name),"Mobile project "+engine);
+ await page.waitForFunction(name=>document.querySelector(".header-project")?.textContent.includes(name),projectName);
  await page.getByRole("button",{name:"Открыть проекты",exact:true}).click();
  await page.getByRole("navigation",{name:"Навигация по проектам"}).getByRole("button",{name:/Проекты/}).click();
- await expect(page.locator(".project-sheet").getByRole("button",{name:new RegExp("Mobile project "+engine)})).toBeVisible();
+ await expect(page.locator(".project-sheet").getByRole("button",{name:new RegExp(projectName)})).toBeVisible();
  await page.getByRole("button",{name:"Закрыть проекты",exact:true}).click();
  assert.deepEqual(errors,[]);
  await context.close();

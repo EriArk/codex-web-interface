@@ -247,6 +247,14 @@ export async function createApp(
     return store.activity(id, page(req).before);
   });
   app.post("/api/threads/:id/resume", async (req) => sessions.resume(paramId(req)));
+  app.post("/api/threads/:id/fork", async (req) => {
+    const id = paramId(req);
+    const body = z
+      .object({ attachments: z.array(z.string().uuid()).max(8).default([]) })
+      .strict()
+      .parse(req.body ?? {});
+    return store.once(`fork:${id}`, key(req), body, () => sessions.fork(id, body.attachments));
+  });
   app.post("/api/threads/:id/turns", async (req) => {
     const id = paramId(req),
       body = z

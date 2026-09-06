@@ -399,3 +399,54 @@ test("resume reconciles the last interrupted message without replaying a prompt"
     store.close();
   }
 });
+
+test("progress and multi-question requests remain scoped, resolvable and reconnectable", async () => {
+  const store = new Store(":memory:"),
+    rpc = new FakeRpc(),
+    sessions = new Sessions(config, store, () => rpc);
+  try {
+    const t = await sessions.create("project", "Question");
+    await sessions.startTurn(t.id, "Choose");
+    const turnId = store.thread(t.id).activeTurnId;
+    rpc.emit("notification", "item/started", {
+      threadId: t.codexThreadId,
+      turnId,
+      item: { type: "reasoning", id: "reason" },
+    });
+    assert(
+      store
+        .events(t.id, 0)
+        .some((e) => e.type === "turn.progress" && e.payload.label === "Обдумывает задачу"),
+    );
+    rpc.emit("request", {
+      id: 201,
+      method: "item/tool/requestUserInput",
+      params: {
+        threadId: t.codexThreadId,
+        turnId,
+        questions: [
+          { id: "choice", question: "Pick?", options: [{ label: "A" }, { label: "B" }] },
+          { id: "free", question: "Details?", options: [] },
+        ],
+      },
+    });
+    const question = sessions.pending(t.id)[0];
+    assert.equal(store.thread(t.id).status, "waiting_approval");
+    assert.equal(sessions.pending(t.id)[0].id, question.id);
+    await assert.rejects(sessions.answer(question.id, { choice: ["B"] }), {
+      code: "ANSWER_REQUIRED",
+    });
+    await sessions.answer(question.id, { choice: ["B"], free: ["Custom reply"] });
+    assert.deepEqual(rpc.responses.at(-1), {
+      id: 201,
+      result: { answers: { choice: { answers: ["B"] }, free: { answers: ["Custom reply"] } } },
+    });
+    assert.equal(store.thread(t.id).status, "running");
+    await assert.rejects(sessions.answer(question.id, { choice: ["A"] }), {
+      code: "APPROVAL_EXPIRED",
+    });
+  } finally {
+    await sessions.close();
+    store.close();
+  }
+});

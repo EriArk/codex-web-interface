@@ -310,6 +310,72 @@ export class Sessions extends EventEmitter {
       return t;
     });
   }
+  async fork(id: string, attachmentIds: string[] = []): Promise<ThreadRecord> {
+    const original = this.thread(id);
+    this.attachments.validateCopy(id, attachmentIds);
+    return this.locked(original.projectId, async () => {
+      const r = await this.runtime(original.projectId);
+      const page = await r.rpc.request("thread/turns/list", {
+        threadId: original.codexThreadId,
+        limit: 2,
+        itemsView: "summary",
+        sortDirection: "desc",
+      });
+      const completed = (Array.isArray(page.data) ? page.data.map(record) : []).find((turn) =>
+        ["completed", "interrupted", "failed"].includes(text(turn.status)),
+      );
+      if (!completed?.id)
+        throw new HubError(
+          409,
+          "NO_COMPLETED_HISTORY",
+          "Сначала дождись завершения первого ответа в исходном диалоге.",
+        );
+      const response = await r.rpc.request("thread/fork", {
+        threadId: original.codexThreadId,
+        lastTurnId: completed.id,
+        excludeTurns: true,
+        deferGoalContinuation: true,
+        cwd: original.workingDirectory || this.project(original.projectId).workingDirectory,
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+      });
+      const raw = record(response.thread),
+        codexId = text(raw.id);
+      if (!codexId || codexId === original.codexThreadId)
+        throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не подтвердил создание копии");
+      const created = this.store.createThread(
+        original.projectId,
+        codexId,
+        original.title.slice(0, 100) + " · копия",
+      );
+      this.store.db
+        .prepare("UPDATE threads SET workingDirectory=?,historyMode=?,sourceUpdatedAt=? WHERE id=?")
+        .run(
+          original.workingDirectory || this.project(original.projectId).workingDirectory,
+          text(raw.historyMode) || original.historyMode || "paginated",
+          Number(raw.updatedAt) || Date.now() / 1000,
+          created.id,
+        );
+      try {
+        await this.attachments.copyPending(id, created.id, attachmentIds);
+      } catch (error) {
+        await r.rpc.request("thread/archive", { threadId: codexId }).catch(() => {});
+        this.store.db.prepare("DELETE FROM threads WHERE id=?").run(created.id);
+        throw error;
+      }
+      if (original.settings) this.store.setThreadSettings(created.id, original.settings);
+      r.loaded.add(created.id);
+      r.touched = Date.now();
+      await r.rpc
+        .request("thread/name/set", { threadId: codexId, name: created.title })
+        .catch(() => {});
+      this.emitEvent(created.id, "thread.created", {
+        title: created.title,
+        copiedFrom: original.id,
+      });
+      return this.store.thread(created.id);
+    });
+  }
   async resume(id: string): Promise<ThreadRecord> {
     const t = this.thread(id);
     return this.locked(t.projectId, async () => {
@@ -465,6 +531,7 @@ export class Sessions extends EventEmitter {
       r.active.add(id);
       r.touched = Date.now();
       this.store.setStatus(id, "starting");
+      this.emitEvent(id, "session.state", { status: "starting" });
       this.emitEvent(id, "user.message", {
         id: messageId,
         text: prompt,
@@ -661,6 +728,24 @@ export class Sessions extends EventEmitter {
         "turn.completed",
         { id, status, error: turn.error ? text(record(turn.error).message, 2000) : null },
         id,
+      );
+    } else if (method === "item/started") {
+      const kind = text(record(p.item).type);
+      const labels: Record<string, string> = {
+        reasoning: "Обдумывает задачу",
+        commandExecution: "Выполняет команду",
+        fileChange: "Изменяет файлы",
+        webSearch: "Ищет информацию",
+        mcpToolCall: "Работает с инструментом",
+        dynamicToolCall: "Работает с инструментом",
+        agentMessage: "Пишет ответ",
+        plan: "Составляет план",
+      };
+      this.emitEvent(
+        t.id,
+        "turn.progress",
+        { label: labels[kind] ?? "Работает над задачей" },
+        turnId,
       );
     } else if (method === "item/agentMessage/delta" || method === "item/plan/delta") {
       this.emitEvent(

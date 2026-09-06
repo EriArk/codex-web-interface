@@ -237,3 +237,11 @@ Before mobile support is considered complete, the same core workflow must also w
 - Discover actual desktop Codex projects and conversations automatically, and allow creation/connection of project folders from the web. Continue native thread IDs across clients; keep history paged. Do not mutate private desktop state files to force sidebar synchronization.
 - Default phone Remote to trackpad; support tablet direct touch and stylus. Connected phone Remote, especially landscape, must keep its full viewport with floating controls.
 - Revisit all three owner-drawn theme references. Organizer binding/paper, CRT housing/green text and light silver/cyan hitech materials are part of the intended design.
+
+## Owner-requested workflow and density updates (2026-09-06)
+
+- Projects expand their chat lists in place. The separate conversations tab is for chats without a project.
+- Show persistent turn progress and pending questions near the mobile composer; validate native answer-choice requests.
+- Collapse code/commands by default in Results and conversation Markdown; prioritize image result cards.
+- Use a more compact mobile UI, especially the model/mode/effort row. Roboto Condensed is the selected face for organizer and hi-tech; retain CRT monospace and touch target sizes.
+- Inspect screenshots across the main screens, orientations and all three themes; keep one shared functional UI.

@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "./icons";
 import type { Project, Thread } from "./types";
+
 export function ProjectNavigation({
   projects,
-  threads,
+  threadGroups,
   projectId,
   threadId,
   busy,
   loading,
   machine,
-  onProject,
+  onExpand,
   onThread,
   onNewThread,
   onNewProject,
@@ -18,25 +19,100 @@ export function ProjectNavigation({
   onSettings,
 }: {
   projects: Project[];
-  threads: Thread[];
+  threadGroups: Record<string, Thread[]>;
   projectId: string;
   threadId: string;
   busy: boolean;
   loading: boolean;
   machine: string;
-  onProject: (id: string) => void;
-  onThread: (id: string) => void;
-  onNewThread: () => void;
+  onExpand: (id: string) => Promise<void>;
+  onThread: (id: string, projectId: string) => void;
+  onNewThread: (projectId: string) => void;
   onNewProject: () => void;
   onRefresh: () => void;
   onClose: () => void;
   onSettings: () => void;
 }) {
-  const [section, setSection] = useState<"projects" | "threads">("threads"),
-    [query, setQuery] = useState("");
+  const [section, setSection] = useState<"projects" | "threads">("projects");
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [pending, setPending] = useState<Set<string>>(new Set());
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const selected = projects.find((p) => p.id === projectId);
+  const folders = projects.filter((p) => !p.unassigned);
+  const standalone = projects.filter((p) => p.unassigned);
   const matches = (text: string) =>
     text.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+  const load = async (id: string) => {
+    setPending((old) => new Set(old).add(id));
+    setErrors((old) => ({ ...old, [id]: "" }));
+    try {
+      await onExpand(id);
+    } catch {
+      setErrors((old) => ({ ...old, [id]: "Не удалось обновить диалоги." }));
+    } finally {
+      setPending((old) => {
+        const next = new Set(old);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+  useEffect(() => {
+    if (projectId) setExpanded((old) => new Set(old).add(projectId));
+  }, [projectId]);
+  const threadList = (p: Project) => {
+    const list = threadGroups[p.id];
+    return (
+      <section className="project-thread-list" aria-label={`Диалоги: ${p.name}`}>
+        {pending.has(p.id) && !list && (
+          <p className="nav-empty" role="status">
+            Загружаем диалоги…
+          </p>
+        )}
+        {errors[p.id] && (
+          <button type="button" className="nav-empty" onClick={() => void load(p.id)}>
+            {errors[p.id]} Повторить
+          </button>
+        )}
+        {list
+          ?.filter((t) => matches(p.name) || matches(t.title))
+          .map((t) => (
+            <button
+              type="button"
+              className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
+              key={t.id}
+              disabled={busy}
+              onClick={() => onThread(t.id, p.id)}
+              aria-current={threadId === t.id ? "page" : undefined}
+            >
+              <Icon name="chat" size={17} />
+              <span>{t.title}</span>
+              {["running", "starting"].includes(t.status) && (
+                <span className="spinner" role="img" aria-label="Codex работает" />
+              )}
+              {t.status === "waiting_approval" && (
+                <span className="status-dot attention" role="img" aria-label="Нужен ответ" />
+              )}
+            </button>
+          ))}
+        {list?.length === 0 && !pending.has(p.id) && (
+          <p className="nav-empty">
+            {p.unassigned ? "Пока нет чатов без проекта." : "В проекте пока нет диалогов."}
+          </p>
+        )}
+        <button
+          type="button"
+          className="nav-new-thread"
+          disabled={busy}
+          onClick={() => onNewThread(p.id)}
+        >
+          <Icon name="plus" size={16} />
+          Новый диалог
+        </button>
+      </section>
+    );
+  };
   return (
     <div className="navigation-inner" data-section={section}>
       <div className="nav-brand">
@@ -62,7 +138,7 @@ export function ProjectNavigation({
             setQuery("");
           }}
         >
-          Проекты <span>{projects.length}</span>
+          Проекты <span>{folders.length}</span>
         </button>
         <button
           type="button"
@@ -70,9 +146,16 @@ export function ProjectNavigation({
           onClick={() => {
             setSection("threads");
             setQuery("");
+            for (const p of standalone) void load(p.id);
           }}
         >
-          Диалоги <span>{threads.length}</span>
+          Диалоги{" "}
+          <span>
+            {standalone.reduce(
+              (sum, p) => sum + (threadGroups[p.id]?.length ?? p.threadCount ?? 0),
+              0,
+            )}
+          </span>
         </button>
       </nav>
       <div className="nav-search">
@@ -110,89 +193,68 @@ export function ProjectNavigation({
               </button>
             </span>
           </div>
-          {loading && !projects.length && (
+          {loading && !folders.length && (
             <p className="nav-empty" role="status">
               Подключаем твои проекты…
             </p>
           )}
-          {projects
-            .filter((p) => matches(p.name))
-            .map((p, index) => (
-              <button
-                type="button"
-                key={p.id}
-                className={`nav-project ${projectId === p.id ? "selected" : ""}`}
-                disabled={busy}
-                onClick={() => {
-                  onProject(p.id);
-                  setSection("threads");
-                  setQuery("");
-                }}
-              >
-                <span className={`folder-icon folder-${index % 5}`}>
-                  <Icon name="folder" />
-                </span>
-                <span>
-                  {p.name}
-                  <small>{p.machineName}</small>
-                </span>
-              </button>
-            ))}
-          {!loading && query && !projects.some((p) => matches(p.name)) && (
-            <p className="nav-empty">Проект не найден</p>
-          )}
+          {folders
+            .filter((p) => matches(p.name) || threadGroups[p.id]?.some((t) => matches(t.title)))
+            .map((p, index) => {
+              const open = expanded.has(p.id) || !!query.trim();
+              return (
+                <div className="nav-project-group" key={p.id}>
+                  <button
+                    type="button"
+                    className={`nav-project ${projectId === p.id ? "selected" : ""}`}
+                    disabled={busy}
+                    aria-expanded={open}
+                    onClick={() => {
+                      setExpanded((old) => {
+                        const next = new Set(old);
+                        if (next.has(p.id)) next.delete(p.id);
+                        else next.add(p.id);
+                        return next;
+                      });
+                      if (!open) void load(p.id);
+                    }}
+                  >
+                    <span className={`folder-icon folder-${index % 5}`}>
+                      <Icon name="folder" />
+                    </span>
+                    <span>
+                      {p.name}
+                      <small>{p.machineName}</small>
+                    </span>
+                    <span className="project-chevron" data-open={open}>
+                      <Icon name="chevron" size={15} />
+                    </span>
+                  </button>
+                  {open && threadList(p)}
+                </div>
+              );
+            })}
+          {query &&
+            !folders.some(
+              (p) => matches(p.name) || threadGroups[p.id]?.some((t) => matches(t.title)),
+            ) && <p className="nav-empty">Ничего не найдено</p>}
           <button type="button" className="nav-add-project" onClick={onNewProject} disabled={busy}>
             <Icon name="plus" size={16} />
             Новый проект
           </button>
         </section>
         <section className="nav-threads">
-          <button
-            type="button"
-            className="nav-current-project mobile-only"
-            onClick={() => setSection("projects")}
-          >
-            <Icon name="folder" size={17} />
-            <span>{selected?.name ?? "Выбрать проект"}</span>
-            <Icon name="chevron" size={16} />
-          </button>
-          <div className="nav-label threads-label">
-            Диалоги
-            <button
-              type="button"
-              className="icon-button"
-              onClick={onNewThread}
-              disabled={busy || !projectId}
-              aria-label="Новый диалог"
-            >
-              <Icon name="plus" size={18} />
-            </button>
-          </div>
-          {!threads.length && (
-            <p className="nav-empty">
-              {loading ? "Обновляем диалоги…" : "Начни новую задачу в этом проекте."}
-            </p>
-          )}
-          {threads
-            .filter((t) => matches(t.title))
-            .map((t) => (
-              <button
-                type="button"
-                className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
-                key={t.id}
-                disabled={busy}
-                onClick={() => onThread(t.id)}
-              >
-                <Icon name="chat" size={17} />
-                <span>{t.title}</span>
-                {["running", "starting", "waiting_approval"].includes(t.status) && (
-                  <span className="status-dot online" />
-                )}
-              </button>
-            ))}
-          {query && threads.length > 0 && !threads.some((t) => matches(t.title)) && (
-            <p className="nav-empty">Диалог не найден</p>
-          )}
+          <div className="nav-label">Без проекта</div>
+          <p className="nav-section-help">
+            Отдельные чаты. Диалоги проектов раскрываются во вкладке «Проекты».
+          </p>
+          {standalone.map((p) => (
+            <div key={p.id}>
+              {standalone.length > 1 && <div className="nav-label">{p.machineName}</div>}
+              {threadList(p)}
+            </div>
+          ))}
+          {!standalone.length && <p className="nav-empty">Чатов без проекта пока нет.</p>}
         </section>
       </div>
       <div className="nav-bottom">

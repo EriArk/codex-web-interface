@@ -20,7 +20,9 @@ Native and Hub event snapshots reconcile message IDs before taking the stream cu
 
 The Hub resumes the actual native thread ID. Before another idle turn it refreshes a previously loaded conversation so work done in another Codex client is included. It never automatically resends an unacknowledged prompt. Native drafts are not persisted until their first turn: the Hub renders an unsent draft locally and can recreate only that empty draft after App Server loss. Existing conversation IDs are retained.
 
-These checks establish continuation between completed turns. Simultaneous edits to the same conversation from independent desktop and web App Servers are not coordinated by this release; native desktop activity is not a Hub-owned streamed turn.
+Continuation of the same native ID works after its writer is released. Codex 0.153.4 on Windows can retain a paginated thread's writer in the desktop App Server even when its visible turn has finished. A second App Server then rejects thread/resume with "already has an active writer". The installed Windows daemon/proxy route is not available (daemon commands are Unix-only); there is no supported writer-takeover flag. Do not stop the owner's desktop or edit its private state to bypass this lock.
+
+The Hub returns a specific HTTP 409 THREAD_IN_USE, keeps the draft and attachments, and offers an explicit "Продолжить в копии" action. Native thread/fork copies context through the latest completed/interrupted/failed turn into a new native ID; an in-progress turn is excluded. Pending files receive new private Hub IDs; originals stay intact. The copied draft is shown for review and is sent only when the user presses Send. No automatic fork or resend occurs. This is an available fallback, not transparent synchronization of two writers. Native desktop activity and questions are not Hub-owned streamed turns; questions started through this Hub use the native request/response channel.
 
 ## Remote input and layout
 
@@ -45,6 +47,10 @@ All three references in references/ were inspected, and the same functional mark
 - hitech-2000s: light silver housing, screws, beveled panels and cyan button illumination.
 
 Phone decoration is reduced to narrow edges. Connected immersive Remote removes every theme bezel. Screenshots and artifacts retain their actual colors.
+
+Organizer and hi-tech share self-hosted Roboto Condensed (Latin/Cyrillic, weights 400–700, SIL OFL 1.1); CRT retains its sharp monospace face. Compact mobile spacing and a smaller visible composer value row preserve 44px native picker touch areas. Editable inputs/native picker text remain 16px. Font assets are served and cached by the Hub; clients make no font-provider requests.
+
+Projects expand their own thread lists in place and multiple folders may remain expanded. The separate "Диалоги" tab contains unassigned conversations, represented by one virtual Hub bucket per configured machine, retaining the original working directory. A bucket is not a new native project. Results put loaded images first and collapse commands/code until explicitly expanded.
 
 ## Verification
 

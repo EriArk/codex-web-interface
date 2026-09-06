@@ -21,6 +21,7 @@ export type CatalogProject = ProjectConfig & {
   roots?: string[];
   position?: number;
   discovered?: boolean;
+  unassigned?: boolean;
 };
 type Cursor = {
   rpc?: string;
@@ -65,6 +66,19 @@ export class Catalog {
     for (const row of this.store.db.prepare("SELECT value FROM catalog_projects").all()) {
       const p = JSON.parse(String(row.value)) as CatalogProject;
       if (this.config.machines.some((m) => m.id === p.machineId)) projects.set(p.id, p);
+    }
+    for (const machine of this.config.machines) {
+      const seed = this.config.projects.find((p) => p.machineId === machine.id && p.enabled);
+      if (seed)
+        projects.set("unassigned-" + machine.id, {
+          id: "unassigned-" + machine.id,
+          name: "Без проекта",
+          machineId: machine.id,
+          workingDirectory: seed.workingDirectory,
+          enabled: true,
+          unassigned: true,
+          position: 10000,
+        });
     }
     return [...projects.values()].sort(
       (a, b) => (a.position ?? 999) - (b.position ?? 999) || a.name.localeCompare(b.name),
@@ -197,6 +211,7 @@ export class Catalog {
       return {
         id: p.id,
         name: p.name,
+        unassigned: p.unassigned === true,
         machineId: machine.id,
         machineName: machine.name,
         remoteAvailable: !!machine.remote,
@@ -288,7 +303,7 @@ export class Catalog {
     const pending = (async () => {
       const rpc = await this.connect(machineId),
         machine = this.machine(machineId);
-      const projects = this.projects().filter((p) => p.machineId === machineId);
+      const projects = this.projects().filter((p) => p.machineId === machineId && !p.unassigned);
       let cursor: unknown;
       const seen = new Set<string>();
       for (let n = 0; n < 30; n++) {
@@ -317,7 +332,9 @@ export class Catalog {
                 ),
               ),
             );
-          if (project) this.importThread(project, raw);
+          const owner =
+            project ?? this.projects().find((p) => p.machineId === machineId && p.unassigned);
+          if (owner) this.importThread(owner, raw);
         }
         cursor = page.nextCursor;
         if (!cursor) break;

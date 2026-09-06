@@ -1,5 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
-import { api, configureApi, messageOf } from "./api";
+import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
 import { Icon } from "./icons";
 import { Login } from "./Login";
@@ -124,6 +124,12 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     [wide, setWide] = useState(window.innerWidth >= 1100);
   const [projects, setProjects] = useState<Project[]>([]),
     [threads, setThreads] = useState<Thread[]>([]);
+  const [threadGroups, setThreadGroups] = useState<Record<string, Thread[]>>({});
+  const [sending, setSending] = useState(false),
+    [sendError, setSendError] = useState("");
+  const [writeBlocked, setWriteBlocked] = useState(false);
+  const sendingRef = useRef(false);
+  const pendingSend = useRef<{ signature: string; key: string } | undefined>(undefined);
   const [machines, setMachines] = useState<Machine[]>([]),
     [createProject, setCreateProject] = useState(false),
     [syncing, setSyncing] = useState(false),
@@ -172,6 +178,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     const data = await api<{ threads: Thread[]; warning?: string }>(`/projects/${id}/threads`);
     if (request !== threadRequest.current) return;
     setThreads(data.threads);
+    setThreadGroups((groups) => ({ ...groups, [id]: data.threads }));
     if (data.warning) setNotice(data.warning);
     setThreadId((current) =>
       selected && data.threads.some((t) => t.id === selected)
@@ -285,27 +292,29 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     if (drawer) drawerDialog.current?.showModal();
     else drawerDialog.current?.close();
   }, [drawer]);
-  const selectProject = (id: string) => {
-    setProjectId(id);
-    setThreadId("");
-    setThreads([]);
-    setFocusTurn("");
-    void loadThreads(id).catch((e) => setNotice(messageOf(e)));
-  };
-  const selectThread = (id: string) => {
+  const selectThread = (id: string, owner = projectId) => {
+    if (owner !== projectId) {
+      setProjectId(owner);
+      setThreads(threadGroups[owner] ?? []);
+      void loadThreads(owner, id).catch((e) => setNotice(messageOf(e)));
+    }
     setThreadId(id);
     setView("chat");
     setFocusTurn("");
     setDrawer(false);
   };
-  const newThread = () =>
+  const newThread = (owner = projectId) =>
     void action(async () => {
-      const thread = await api<Thread>(`/projects/${projectId}/threads`, {
+      const thread = await api<Thread>(`/projects/${owner}/threads`, {
         method: "POST",
         key: crypto.randomUUID(),
         body: { title: "Новый диалог" },
       });
-      await loadThreads(projectId, thread.id);
+      setProjectId(owner);
+      setThreadId(thread.id);
+      setThreads((list) => [thread, ...list.filter((item) => item.projectId === owner)]);
+      setThreadGroups((groups) => ({ ...groups, [owner]: [thread, ...(groups[owner] ?? [])] }));
+      void loadThreads(owner, thread.id).catch(() => {});
       setView("chat");
       setDrawer(false);
     });
@@ -314,17 +323,86 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     settings: TurnSettings,
     attachments: string[],
   ): Promise<boolean> => {
-    const response = await action(async () => {
+    if (busy || sendingRef.current) return false;
+    sendingRef.current = true;
+    setBusy(true);
+    setSending(true);
+    setSendError("");
+    setWriteBlocked(false);
+    setNotice("");
+    const signature = JSON.stringify({ threadId, text, settings, attachments });
+    if (pendingSend.current?.signature !== signature)
+      pendingSend.current = { signature, key: crypto.randomUUID() };
+    try {
       await api(`/threads/${threadId}/turns`, {
         method: "POST",
-        key: crypto.randomUUID(),
+        key: pendingSend.current.key,
         body: { text, settings, attachments },
       });
-      await loadThreads(projectId, threadId);
+      pendingSend.current = undefined;
+      // Metadata refresh cannot turn an acknowledged send into a failed send.
+      void loadThreads(projectId, threadId).catch(() => {});
       return true;
-    });
-    return response === true;
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        ["THREAD_IN_USE", "PROJECT_BUSY", "INVALID_REQUEST"].includes(error.code)
+      )
+        pendingSend.current = undefined;
+      setWriteBlocked(error instanceof ApiError && error.code === "THREAD_IN_USE");
+      setSendError(messageOf(error));
+      return false;
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+      setBusy(false);
+    }
   };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A different chat needs a fresh composer error.
+  useEffect(() => {
+    setSendError("");
+    setWriteBlocked(false);
+  }, [threadId]);
+  useEffect(() => {
+    if (!state.thread.id) return;
+    const update = (list: Thread[]) =>
+      list.map((t) =>
+        t.id === state.thread.id
+          ? { ...t, status: state.thread.status, activeTurnId: state.thread.activeTurnId }
+          : t,
+      );
+    setThreads(update);
+    setThreadGroups((groups) => ({
+      ...groups,
+      [state.thread.projectId]: update(groups[state.thread.projectId] ?? []),
+    }));
+  }, [state.thread.id, state.thread.projectId, state.thread.status, state.thread.activeTurnId]);
+  const expandProject = useCallback(async (id: string) => {
+    const data = await api<{ threads: Thread[]; warning?: string }>(`/projects/${id}/threads`);
+    setThreadGroups((groups) => ({ ...groups, [id]: data.threads }));
+    if (data.warning) setNotice(data.warning);
+  }, []);
+  const forkThread = (draft: string, attachments: string[]) =>
+    void action(async () => {
+      const copy = await api<Thread>(`/threads/${threadId}/fork`, {
+        method: "POST",
+        key: crypto.randomUUID(),
+        body: { attachments },
+      });
+      try {
+        sessionStorage.setItem(`codex-draft-${copy.id}`, draft);
+      } catch {}
+      setThreadId(copy.id);
+      setThreads((list) => [copy, ...list]);
+      setThreadGroups((groups) => ({
+        ...groups,
+        [projectId]: [copy, ...(groups[projectId] ?? [])],
+      }));
+      void loadThreads(projectId, copy.id).catch(() => {});
+      setSendError("");
+      setWriteBlocked(false);
+      setNotice("Копия создана с завершённой перепиской. Проверь черновик и отправь сообщение.");
+    });
   const resume = () =>
     void action(async () => {
       await api(`/threads/${threadId}/resume`, { method: "POST" });
@@ -386,13 +464,13 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const navigation = (
     <ProjectNavigation
       projects={projects}
-      threads={threads}
+      threadGroups={threadGroups}
       projectId={projectId}
       threadId={threadId}
       busy={busy}
       loading={!initialized || syncing}
       machine={machine}
-      onProject={selectProject}
+      onExpand={expandProject}
       onThread={selectThread}
       onNewThread={newThread}
       onNewProject={() => {
@@ -450,7 +528,21 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           <small>{selectedThread?.title ?? "Выбери диалог"}</small>
         </div>
         <div className="header-connection">
-          <span className={`status-dot ${state.connection === "connected" ? "online" : ""}`} />
+          <span
+            className={
+              sending || ["running", "starting"].includes(state.thread.status)
+                ? "spinner"
+                : `status-dot ${state.thread.status === "waiting_approval" ? "attention" : state.connection === "connected" ? "online" : ""}`
+            }
+            role="img"
+            aria-label={
+              state.thread.status === "waiting_approval"
+                ? "Codex ждёт ответа"
+                : sending || ["running", "starting"].includes(state.thread.status)
+                  ? "Codex работает"
+                  : "Соединение"
+            }
+          />
           <span>
             {threadId
               ? state.connection === "connected"
@@ -462,7 +554,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         <button
           type="button"
           className="icon-button"
-          onClick={newThread}
+          onClick={() => newThread()}
           disabled={busy || !projectId}
           aria-label="Создать диалог"
         >
@@ -495,6 +587,10 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           projectId={projectId}
           threadId={threadId}
           state={state}
+          sending={sending}
+          sendError={sendError}
+          writeBlocked={writeBlocked}
+          onFork={forkThread}
           visible={wide || view === "chat"}
           busy={busy}
           results={results}
@@ -504,7 +600,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             void action(() => api(`/threads/${threadId}/interrupt`, { method: "POST" }))
           }
           onOlder={older}
-          onCreate={newThread}
+          onCreate={() => newThread()}
           onDecision={(id, decision) =>
             void action(() =>
               api(`/approvals/${id}`, {

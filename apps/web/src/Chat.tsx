@@ -1,6 +1,7 @@
 import { type FormEvent, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
+import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { Icon } from "./icons";
 import type { Approval, Result, TurnSettings } from "./types";
@@ -10,7 +11,10 @@ const positions = new Map<string, number>();
 const MessageText = memo(function MessageText({ text }: { text: string }) {
   return (
     <Markdown
-      components={{ a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}
+      components={{
+        pre: CollapsibleCode,
+        a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+      }}
     >
       {text}
     </Markdown>
@@ -41,6 +45,7 @@ function ApprovalCard({
   onAnswer: (id: string, answers: Record<string, string[]>) => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [custom, setCustom] = useState<Record<string, boolean>>({});
   return (
     <section className="approval" aria-label="Запрос Codex">
       <div className="eyebrow">Твоё решение</div>
@@ -62,8 +67,11 @@ function ApprovalCard({
                   <input
                     type="radio"
                     name={q.id}
-                    checked={answers[q.id] === option.label}
-                    onChange={() => setAnswers((v) => ({ ...v, [q.id]: option.label }))}
+                    checked={!custom[q.id] && answers[q.id] === option.label}
+                    onChange={() => {
+                      setCustom((v) => ({ ...v, [q.id]: false }));
+                      setAnswers((v) => ({ ...v, [q.id]: option.label }));
+                    }}
                   />
                   <span>
                     {option.label}
@@ -71,18 +79,39 @@ function ApprovalCard({
                   </span>
                 </label>
               ))}
-              <input
-                aria-label={`Свой ответ: ${q.question}`}
-                type={q.isSecret ? "password" : "text"}
-                value={answers[q.id] ?? ""}
-                onChange={(e) => setAnswers((v) => ({ ...v, [q.id]: e.target.value }))}
-                placeholder="Можно написать свой ответ"
-                required
-                maxLength={8000}
-              />
+              {q.options.length > 0 && (
+                <label className="choice">
+                  <input
+                    type="radio"
+                    name={q.id}
+                    checked={custom[q.id] === true}
+                    onChange={() => {
+                      setCustom((v) => ({ ...v, [q.id]: true }));
+                      setAnswers((v) => ({ ...v, [q.id]: "" }));
+                    }}
+                  />
+                  <span>Свой вариант</span>
+                </label>
+              )}
+              {(!q.options.length || custom[q.id]) && (
+                <input
+                  autoComplete="off"
+                  aria-label={`Свой ответ: ${q.question}`}
+                  type={q.isSecret ? "password" : "text"}
+                  value={answers[q.id] ?? ""}
+                  onChange={(e) => setAnswers((v) => ({ ...v, [q.id]: e.target.value }))}
+                  placeholder="Можно написать свой ответ"
+                  required
+                  maxLength={8000}
+                />
+              )}
             </fieldset>
           ))}
-          <button type="submit" className="primary" disabled={busy}>
+          <button
+            type="submit"
+            className="primary"
+            disabled={busy || !(approval.questions ?? []).every((q) => answers[q.id]?.trim())}
+          >
             Ответить
             <Icon name="send" />
           </button>
@@ -128,6 +157,10 @@ export function Chat({
   projectId,
   threadId,
   state,
+  sending,
+  sendError,
+  writeBlocked,
+  onFork,
   visible,
   busy,
   results,
@@ -145,6 +178,10 @@ export function Chat({
   projectId: string;
   threadId: string;
   state: ChatState;
+  sending: boolean;
+  sendError: string;
+  writeBlocked: boolean;
+  onFork: (draft: string, attachments: string[]) => void;
   visible: boolean;
   busy: boolean;
   results: Result[];
@@ -418,6 +455,53 @@ export function Chat({
           Восстановить диалог
         </button>
       )}
+      {(sending || active) && (
+        <div
+          className={`turn-status ${state.approvals.length ? "needs-answer" : ""}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className={state.approvals.length ? "status-dot attention" : "spinner"} />
+          <span>
+            {sending
+              ? "Отправляем сообщение…"
+              : state.approvals.length
+                ? "Codex ждёт твоего ответа"
+                : state.progress || statusLabel(state.thread.status)}
+          </span>
+          {state.approvals.length > 0 && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() =>
+                scroller.current?.querySelector(".approval")?.scrollIntoView({ block: "center" })
+              }
+            >
+              К вопросу ↑
+            </button>
+          )}
+        </div>
+      )}
+      {sendError && (
+        <div className="send-error" role="alert">
+          <span>{sendError}</span>
+          {writeBlocked && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || attachments.busy}
+              onClick={() =>
+                onFork(
+                  draft,
+                  attachments.files.map((file) => file.id),
+                )
+              }
+            >
+              Продолжить в копии
+            </button>
+          )}
+        </div>
+      )}
       <form
         className="composer"
         onDragOver={(e) => {
@@ -519,7 +603,7 @@ export function Chat({
               }
               aria-label="Отправить сообщение"
             >
-              <Icon name="send" />
+              {sending ? <span className="spinner" /> : <Icon name="send" />}
             </button>
           )}
         </div>

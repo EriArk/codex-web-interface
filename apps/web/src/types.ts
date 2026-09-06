@@ -16,6 +16,7 @@ export interface Machine {
   remoteAvailable: boolean;
 }
 export interface Project {
+  unassigned?: boolean;
   machineId?: string;
   workingDirectory?: string;
   roots?: string[];

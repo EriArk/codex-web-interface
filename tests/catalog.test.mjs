@@ -112,7 +112,7 @@ test("native catalog reuses configured roots, imports metadata only, tracks addi
       roots: [{ path: "D:\\Projects\\Seed" }],
     });
     await f.catalog.refresh(true);
-    assert.equal(f.catalog.projects().length, 3);
+    assert.equal(f.catalog.projects().filter((p) => !p.unassigned).length, 3);
     assert.notEqual(f.catalog.projects().find((p) => p.sourceId === "same-root").id, "seed");
     f.removeProject("other");
     await f.catalog.refresh(true);
@@ -191,6 +191,25 @@ test("reload during an active native turn keeps optimistic IDs and a consistent 
     assert.equal(page.messages.at(-1).id, "m133");
     assert.equal(page.messages.at(-1).text, "Live full response");
     assert.equal(page.lastSeq, f.store.lastSeq(thread.id));
+  } finally {
+    f.store.close();
+  }
+});
+
+test("unmatched native chats belong to the unassigned bucket and retain their actual cwd", async () => {
+  const f = fixture();
+  try {
+    await f.catalog.refresh();
+    f.raw.cwd = "D:/Scratch/Independent";
+    await f.catalog.syncThreads("pc", true);
+    const thread = f.store.threadByCodex("real-thread");
+    assert.equal(thread.projectId, "unassigned-pc");
+    assert.equal(thread.workingDirectory, "D:\\Scratch\\Independent");
+    assert.equal(
+      f.catalog.publicProjects().find((p) => p.id === thread.projectId).unassigned,
+      true,
+    );
+    assert.equal(f.store.history(thread.id).messages.length, 0);
   } finally {
     f.store.close();
   }

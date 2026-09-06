@@ -140,6 +140,8 @@ export function Remote({
   useEffect(() => {
     if (!requested || !visible || !host.current) return;
     let disposed = false,
+      renderStage: HTMLElement | undefined,
+      keyboardSink: HTMLTextAreaElement | undefined,
       client: Client | undefined,
       resize: ResizeObserver | undefined,
       keyboard: Keyboard | undefined,
@@ -176,6 +178,7 @@ export function Remote({
           display = client.getDisplay(),
           element = display.getElement(),
           stage = document.createElement("div");
+        renderStage = stage;
         stage.className = "remote-canvas";
         stage.append(element);
         surface.replaceChildren(stage);
@@ -350,6 +353,7 @@ export function Remote({
         };
         // Keep focus inside the user gesture: InputSink.focus() defers it and iOS can reject it.
         const sinkElement = document.createElement("textarea");
+        keyboardSink = sinkElement;
         sinkRef.current = sinkElement;
         sinkElement.className = "remote-keyboard-input";
         sinkElement.rows = 1;
@@ -448,8 +452,8 @@ export function Remote({
       clientRef.current = undefined;
       sinkRef.current = undefined;
       inputRef.current = undefined;
-      host.current?.replaceChildren();
-      inputHost.current?.replaceChildren();
+      renderStage?.remove();
+      keyboardSink?.remove();
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", visibility);
     };
@@ -511,7 +515,7 @@ export function Remote({
       ref={pane}
     >
       {!requested ? (
-        <div className="empty-state remote-empty">
+        <div key="remote-empty" className="empty-state remote-empty">
           <div className="empty-symbol">
             <Icon name="remote" size={32} />
           </div>
@@ -535,7 +539,7 @@ export function Remote({
         </div>
       ) : (
         <>
-          <div className="remote-screen">
+          <div key="remote-screen" className="remote-screen">
             <div
               className="remote-display"
               data-ready={connected}

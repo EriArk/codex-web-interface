@@ -7,6 +7,7 @@ export interface ChatState extends History {
   error: string;
   connection: string;
   revision: number;
+  progress?: string;
 }
 const empty: ChatState = {
   messages: [],
@@ -122,6 +123,10 @@ export function useWorkspace(threadId: string) {
           let messages = s.messages,
             thread = s.thread,
             approvals = s.approvals;
+          let progress = s.progress;
+          if (event.type === "turn.progress") progress = String(p.label ?? "");
+          if (event.type === "turn.started") progress = "Обдумывает задачу";
+          if (event.type === "turn.completed") progress = "";
           if (
             !s.contextTurn &&
             ["user.message", "assistant.delta", "assistant.completed"].includes(event.type)
@@ -185,6 +190,7 @@ export function useWorkspace(threadId: string) {
             messages,
             thread,
             approvals,
+            progress,
             lastSeq: seq,
             error,
             revision:

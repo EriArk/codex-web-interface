@@ -200,3 +200,15 @@ The owner requested automatic access to real desktop projects and conversations 
 ## D21 — Phone trackpad and reference-based themes
 
 The owner requested phone trackpad input, tablet touch/stylus, unobstructed landscape Remote and faithful treatment of the drawn references. Use one Pointer Events controller and floating controls; connected compact Remote removes navigation and decorative frames. Theme identity comes from paper/binding, CRT housing and light silver/cyan hardware, using the same feature markup. Physical iOS checks remain an explicit validation requirement.
+
+## D22 — Native writer conflicts are explicit
+
+A real Codex 0.153.4 Windows probe established that the desktop App Server can retain a paginated conversation writer while idle. The separately launched Hub App Server cannot resume that thread until the writer is released. Unix daemon proxy transport is unavailable on this installation, and the configured Companion remains limited to App Server stdio.
+
+Return HTTP 409 with a readable message, preserve the draft, and offer an optional explicit fork of completed native context. Use a new native thread ID, retain pending attachments on the original, copy them privately to the fork, and require the user to press Send for the new draft. Never auto-fork, auto-retry an uncertain send, stop the desktop or modify private desktop state to fake same-thread continuity. See SYNC_AND_REMOTE.md for the concrete limitation.
+
+## D23 — Project trees, useful results and compact typography
+
+The owner requested expandable project/thread trees and a separate list of projectless conversations. Use virtual per-machine Hub buckets for unmatched native conversations, preserving their actual cwd; never create native projects just for navigation.
+
+Show turn progress and pending choices next to the composer. Keep code and commands behind disclosures; show loaded image results first. Use locally bundled Roboto Condensed in organizer/hi-tech, sharp monospace in CRT, shared mobile spacing and 44px touch targets. Small visible parameter captions overlay full-size native selects so the selector text can be compact while keeping native picker/accessibility behavior.
