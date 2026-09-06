@@ -8,14 +8,15 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
  try{
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
   const page=await context.newPage(),errors=[];page.on("pageerror",e=>errors.push(e.message));
-  let active=0,known=true,restarts=0,forces=0,client="web",operation=null,finish=false;
+  let active=0,known=true,restarts=0,forces=0,client="web",operation=null,finish=false,running=true,returning=false,handoffs=0,returns=0,finishReturn=false;
   await page.route("**/api/machines",async route=>{
    const response=await route.fetch(),data=await response.json();data.machines[0].desktopRestartAvailable=true;
    await route.fulfill({response,json:data});
   });
   await page.route("**/api/machines/*/desktop",async route=>{
-   if(finish && operation)operation={...operation,state:"completed",code:"DESKTOP_RESTARTED"};
-   await route.fulfill({json:{available:true,running:true,activityKnown:known,activeTasks:active,operation,client}});
+   if(finish && operation?.kind==="restart")operation={...operation,state:"completed",code:"DESKTOP_RESTARTED"};
+   if(finishReturn && returning){returning=false;running=false;client="web";operation={...operation,state:"completed",code:"DESKTOP_RELEASED"};}
+   await route.fulfill({json:{available:true,running,returning,activityKnown:known,activeTasks:active,webActiveTasks:active,operation,client}});
   });
   await page.route("**/api/machines/*/desktop/restart",async route=>{
    assert.equal(route.request().method(),"POST");assert.equal(route.request().postDataJSON().confirm,true);
@@ -23,7 +24,12 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
    operation={id:route.request().headers()["idempotency-key"],kind:"restart",state:"restarting",code:"",requestedAt:Date.now()/1000};
    await route.fulfill({json:{available:true,running:true,activityKnown:true,activeTasks:0,operation}});
   });
-  await page.route("**/api/machines/*/client",async route=>{assert(route.request().headers()["x-csrf-token"]);client=route.request().postDataJSON().client;await route.fulfill({json:{client}});});
+  await page.route("**/api/machines/*/client",async route=>{
+   assert(route.request().headers()["x-csrf-token"]);const body=route.request().postDataJSON();
+   if(body.client==="desktop"){if(active)assert.equal(body.confirmInterrupt,true);handoffs++;client="desktop";active=0;}
+   else {assert.equal(body.releaseDesktop,true);assert.equal(body.confirmStopTasks,true);returns++;returning=true;operation={id:route.request().headers()["idempotency-key"],kind:"forcerelease",state:"queued",code:""};}
+   await route.fulfill({json:{client,returning,running,operation}});
+  });
   await page.route("**/api/machines/*/desktop/force-restart",async route=>{assert.equal(route.request().postDataJSON().confirmStopTasks,true);forces++;client="desktop";operation={id:route.request().headers()["idempotency-key"],kind:"forcerestart",state:"completed",code:"DESKTOP_RESTARTED",requestedAt:Date.now()/1000};await route.fulfill({json:{available:true,running:true,activityKnown:false,activeTasks:0,operation,client}});});
   const setup=(await(await context.request.get(origin+"/api/auth/status")).json()).requiresSetup;
   await page.goto(origin+(setup?"/#setup="+credentials.setupToken:"/"));
@@ -58,11 +64,27 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   known=true;await expect(restart).toBeEnabled({timeout:10000});
   await page.setViewportSize({width:1366,height:1024});await page.screenshot({path:".local/qa-desktop/"+engine+"-tablet.png"});
   assert.equal(await dialog.evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
+  active=2;await expect(dialog.locator(".desktop-control")).toContainText("Активных задач: 2",{timeout:10000});
+  await page.setViewportSize({width:390,height:844});
   await dialog.getByRole("button",{name:"Работать с компьютера",exact:true}).tap();
-  await expect(dialog.getByRole("button",{name:"Продолжить на сайте",exact:true})).toBeVisible();
+  await dialog.getByRole("button",{name:"Отмена",exact:true}).tap();assert.equal(handoffs,0);
+  await dialog.getByRole("button",{name:"Работать с компьютера",exact:true}).tap();
+  await page.screenshot({path:".local/qa-desktop/"+engine+"-handoff-confirm.png"});
+  await dialog.getByRole("button",{name:"Остановить и передать",exact:true}).tap();
+  await expect(dialog.getByRole("button",{name:"Продолжить на сайте",exact:true})).toBeVisible();assert.equal(handoffs,1);
   await page.reload();await page.locator(".workspace").waitFor();await open();
   await dialog.getByRole("button",{name:"Продолжить на сайте",exact:true}).tap();
-  await expect(dialog.getByRole("button",{name:"Работать с компьютера",exact:true})).toBeVisible();
+  await dialog.getByRole("button",{name:"Отмена",exact:true}).tap();assert.equal(returns,0);
+  await dialog.getByRole("button",{name:"Продолжить на сайте",exact:true}).tap();
+  await page.screenshot({path:".local/qa-desktop/"+engine+"-return-confirm.png"});
+  await dialog.getByRole("button",{name:"Закрыть и вернуть",exact:true}).tap();
+  await expect(dialog.getByRole("status")).toContainText("Возвращаю управление");
+  await page.reload();await page.locator(".workspace").waitFor();await open();
+  await expect(dialog.getByRole("status")).toContainText("Возвращаю управление");
+  assert.equal(returns,1);finishReturn=true;
+  await expect(dialog.getByRole("button",{name:"Работать с компьютера",exact:true})).toBeVisible({timeout:10000});
+  await expect(dialog.getByRole("status")).toContainText("Управление возвращено сайту");
+  await page.screenshot({path:".local/qa-desktop/"+engine+"-returned.png"});
   known=false;active=2;await expect(restart).toBeDisabled({timeout:10000});
   const hard=dialog.getByRole("button",{name:"Жёстко перезапустить Codex",exact:true});
   await expect(hard).toBeEnabled();await hard.tap();

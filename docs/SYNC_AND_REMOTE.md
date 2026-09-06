@@ -59,3 +59,11 @@ Projects expand their own thread lists in place and multiple folders may remain 
 ## Verification
 
 Build and browser workloads run on Linux. See VERIFICATION.md for native tests, browser fixtures and remaining physical iOS checks. Private screenshots and QA credentials stay in ignored .local directories.
+
+## Switching between website and native desktop
+
+Settings → «Работать с компьютера» releases the machine's web writers. If web tasks are active, «Остановить и передать» interrupts them and waits for native acknowledgement. In desktop Codex press Retry in the same chat. Retry reloads saved context; send «продолжай» if the interrupted task should continue. Pending queue entries remain native, and no task is resent automatically.
+
+Settings → «Продолжить на сайте» returns the machine. If desktop Codex is still running, «Закрыть и вернуть» closes it and stops its current tasks. The independent Companion stays running. Wait for the completion notice, then send in the same website chat. If the desktop is already fully closed, no close confirmation is needed. Opening the website for reading does not take a desktop writer; external messages are synchronized through bounded read-only history refreshes.
+
+Ordinary chats in the official mobile ChatGPT app are independent and can be used alongside the website. Connecting to this computer through official «Удалённо» participates in native Codex ownership and can compete for the same conversation.

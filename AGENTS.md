@@ -271,3 +271,11 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Show native Codex usage windows in Settings, including the weekly remaining percentage and reset time. Determine windows by their duration rather than assuming primary/secondary order; do not expose billing credentials or credit balances.
 - Add a clearly visible end-of-task separator in conversation history. Do not insert one inside an active turn or between Steer messages belonging to the same turn.
+
+## Owner-approved active client handoff (2026-09-06)
+
+- The owner explicitly approved interrupting a current turn to switch between the website and native desktop Codex, preserving the same native conversation. This supersedes the earlier finish-before-migration restriction for this explicit Settings action only.
+- Confirm before interrupting Hub-owned work, wait for native interruption/completion, then release the machine's loaded writers. Block concurrent sends and queue mutations during handoff. Preserve pending native queue items; never replay a prompt or fork automatically.
+- Desktop Retry opens the existing conversation after release; continuation may require a new message. Do not imply transfer of an in-memory running turn.
+- Returning from native desktop can explicitly close its app through the existing fixed user-session Scheduled Task, after confirming that its active tasks will stop. Keep Companion and its independent App Servers running. Enable web writes only after verified desktop closure.
+- Verify ownership switching using disposable native conversations and simulated Windows process effects. Do not interrupt or close the owner's desktop tasks during development checks.

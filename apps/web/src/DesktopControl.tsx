@@ -9,10 +9,19 @@ interface State {
   activityKnown: boolean;
   activeTasks: number;
   client?: "web" | "desktop";
+  returning?: boolean;
+  webActiveTasks?: number;
   operation: null | { id: string; kind: string; state: string; code: string; requestedAt: number };
 }
 const operationText = (state: State) => {
+  if (state.returning) return "Возвращаю управление сайту…";
   const op = state.operation;
+  if (op?.kind === "forcerelease") {
+    if (op.state === "completed")
+      return state.client === "web" ? "Управление возвращено сайту." : "";
+    if (["queued", "restarting"].includes(op.state)) return "Закрываю Codex на компьютере…";
+    return "Не удалось подтвердить передачу. Проверь Codex в Remote.";
+  }
   if (!op || !["restart", "forcerestart"].includes(op.kind)) return "";
   if (["queued", "restarting"].includes(op.state)) return "Перезапускаю Codex…";
   if (op.state === "completed") return "Codex снова открыт на компьютере.";
@@ -27,8 +36,9 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
   const [state, setState] = useState<State>(),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [confirm, setConfirm] = useState<false | "restart" | "force">(false),
-    [sending, setSending] = useState(false);
+    [confirm, setConfirm] = useState<false | "restart" | "force" | "handoff" | "return">(false),
+    [sending, setSending] = useState(false),
+    [action, setAction] = useState<string>();
   const alive = useRef(true),
     sendingRef = useRef(false);
   const base = "/machines/" + encodeURIComponent(machine.id),
@@ -50,7 +60,10 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
       pending = true;
       try {
         const value = await api<State>(path);
-        if (!disposed) setState(value);
+        if (!disposed) {
+          setState(value);
+          setError("");
+        }
       } catch (e) {
         if (!disposed) {
           setState(undefined);
@@ -71,25 +84,42 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
     };
   }, [open, path]);
   const restarting =
-    !!state?.operation &&
-    ["restart", "forcerestart"].includes(state.operation.kind) &&
-    ["queued", "restarting"].includes(state.operation.state);
+    !!state?.returning ||
+    (!!state?.operation &&
+      ["restart", "forcerestart", "forcerelease"].includes(state.operation.kind) &&
+      ["queued", "restarting"].includes(state.operation.state));
   const unavailable =
     !state || !state.activityKnown || state.activeTasks > 0 || restarting || sending;
-  const run = async (kind: "restart" | "force" | "client") => {
+  const run = async (kind: "restart" | "force" | "client" | "handoff" | "return") => {
     if (sendingRef.current || restarting || (kind === "restart" && unavailable)) return;
     sendingRef.current = true;
     setSending(true);
+    setAction(kind);
     setConfirm(false);
     setError("");
     setNotice("");
     try {
-      if (kind === "client") {
-        const client = state?.client === "desktop" ? "web" : "desktop";
-        await api(base + "/client", { method: "POST", key: crypto.randomUUID(), body: { client } });
+      if (["client", "handoff", "return"].includes(kind)) {
+        const client =
+          kind === "return"
+            ? "web"
+            : kind === "handoff"
+              ? "desktop"
+              : state?.client === "desktop"
+                ? "web"
+                : "desktop";
+        const result = await api<Partial<State>>(base + "/client", {
+          method: "POST",
+          key: crypto.randomUUID(),
+          body: {
+            client,
+            ...(kind === "handoff" ? { confirmInterrupt: true } : {}),
+            ...(kind === "return" ? { releaseDesktop: true, confirmStopTasks: true } : {}),
+          },
+        });
         if (alive.current) {
-          setState((v) => (v ? { ...v, client } : v));
-          setNotice(client === "desktop" ? "Компьютер освобождён." : "Можно продолжать на сайте.");
+          setState((v) => (v ? { ...v, ...result } : v));
+          setNotice(client === "desktop" ? "Компьютер освобождён. Нажми Retry в Codex." : "");
         }
       } else {
         const value = await api<State>(path + (kind === "force" ? "/force-restart" : "/restart"), {
@@ -108,7 +138,10 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
       }
     } finally {
       sendingRef.current = false;
-      if (alive.current) setSending(false);
+      if (alive.current) {
+        setSending(false);
+        setAction(undefined);
+      }
     }
   };
   return (
@@ -127,10 +160,24 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
         <button
           type="button"
           className="secondary"
-          disabled={sending || restarting}
-          onClick={() => void run("client")}
+          disabled={!state || sending || restarting}
+          onClick={() => {
+            if (state?.client === "desktop" && state.running) setConfirm("return");
+            else if (
+              state?.client !== "desktop" &&
+              ((state?.webActiveTasks ?? state?.activeTasks ?? 0) > 0 || !state?.activityKnown)
+            )
+              setConfirm("handoff");
+            else void run("client");
+          }}
         >
-          {state?.client === "desktop" ? "Продолжить на сайте" : "Работать с компьютера"}
+          {state?.returning
+            ? "Возвращаю…"
+            : sending && ["client", "handoff", "return"].includes(action ?? "")
+              ? "Передаю…"
+              : state?.client === "desktop"
+                ? "Продолжить на сайте"
+                : "Работать с компьютера"}
         </button>
       </div>
       <p className="muted">
@@ -145,9 +192,13 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
       {confirm ? (
         <div className="desktop-restart-confirm">
           <p>
-            {confirm === "force"
-              ? "Остановить задачи и жёстко перезапустить Codex?"
-              : "Перезапустить Codex на «" + machine.name + "»?"}
+            {confirm === "handoff"
+              ? "Остановить работу на сайте и освободить компьютер? Диалоги сохранятся."
+              : confirm === "return"
+                ? "Закрыть настольный Codex и вернуть управление сайту? Его текущие задачи будут остановлены."
+                : confirm === "force"
+                  ? "Остановить задачи и жёстко перезапустить Codex?"
+                  : "Перезапустить Codex на «" + machine.name + "»?"}
           </p>
           <div className="desktop-control-actions">
             <button type="button" className="secondary" onClick={() => setConfirm(false)}>
@@ -158,7 +209,13 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
               disabled={confirm === "restart" ? unavailable : sending || restarting}
               onClick={() => void run(confirm)}
             >
-              {confirm === "force" ? "Остановить и перезапустить" : "Да, перезапустить"}
+              {confirm === "handoff"
+                ? "Остановить и передать"
+                : confirm === "return"
+                  ? "Закрыть и вернуть"
+                  : confirm === "force"
+                    ? "Остановить и перезапустить"
+                    : "Да, перезапустить"}
             </button>
           </div>
         </div>
@@ -171,7 +228,10 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
             onClick={() => setConfirm("restart")}
           >
             <Icon name="refresh" />
-            {sending || restarting ? "Перезапускаю…" : "Перезапустить Codex"}
+            {(sending && ["restart", "force"].includes(action ?? "")) ||
+            (restarting && ["restart", "forcerestart"].includes(state?.operation?.kind ?? ""))
+              ? "Перезапускаю…"
+              : "Перезапустить Codex"}
           </button>
           <button
             type="button"

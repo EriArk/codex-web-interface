@@ -259,3 +259,105 @@ test("compact turn details expose only bounded native summaries and actions, nev
     store.close();
   }
 });
+
+test("confirmed active handoff waits for native completion, gates new writes and preserves the thread and queue", async () => {
+  const store = new Store(":memory:"),
+    rpc = new Rpc(),
+    sessions = new Sessions(config, store, () => rpc);
+  try {
+    const t = await sessions.create("p", "Handoff");
+    await sessions.startTurn(t.id, "Work");
+    const turnId = store.thread(t.id).activeTurnId;
+    let release;
+    const interrupted = new Promise((resolve) => {
+      release = resolve;
+    });
+    const original = rpc.request.bind(rpc);
+    rpc.request = async (method, params) => {
+      const result = await original(method, params);
+      if (method === "turn/interrupt") {
+        release();
+      }
+      return result;
+    };
+    await assert.rejects(sessions.handoffToDesktop("pc"), { code: "DESKTOP_BUSY" });
+    const handoff = sessions.handoffToDesktop("pc", true);
+    await interrupted;
+    assert.equal(rpc.closed, false);
+    assert.equal(sessions.machineClient("pc"), "web");
+    await assert.rejects(sessions.startTurn(t.id, "Race"), { code: "HANDOFF_PENDING" });
+    await assert.rejects(sessions.handoffToDesktop("pc", true), { code: "HANDOFF_PENDING" });
+    rpc.emit("notification", "turn/completed", {
+      threadId: t.codexThreadId,
+      turn: { id: turnId, status: "interrupted" },
+    });
+    await handoff;
+    assert.equal(rpc.closed, true);
+    assert.equal(sessions.machineClient("pc"), "desktop");
+    assert.equal(store.thread(t.id).codexThreadId, t.codexThreadId);
+    assert.equal(rpc.calls.filter((c) => c.method === "turn/interrupt").length, 1);
+    assert.equal(
+      rpc.calls.filter((c) => c.method.startsWith("thread/queue/") || c.method === "thread/fork")
+        .length,
+      0,
+    );
+    assert.equal(rpc.calls.filter((c) => c.method === "turn/start").length, 1);
+  } finally {
+    await sessions.close();
+    store.close();
+  }
+});
+
+test("handoff refuses unknown ownership and in-flight writes, but accepts an interrupted event after a lost acknowledgement", async () => {
+  const store = new Store(":memory:"),
+    rpc = new Rpc(),
+    sessions = new Sessions(config, store, () => rpc);
+  try {
+    const t = await sessions.create("p", "Handoff");
+    store.setStatus(t.id, "unknown", "unknown-turn");
+    await assert.rejects(sessions.handoffToDesktop("pc", true), { code: "HANDOFF_STATE_UNKNOWN" });
+    store.setStatus(t.id, "idle", null);
+    await sessions.withThreadWrite(t.id, async () => {
+      await assert.rejects(sessions.handoffToDesktop("pc", true), { code: "PROJECT_BUSY" });
+    });
+    await sessions.startTurn(t.id, "Work");
+    const turnId = store.thread(t.id).activeTurnId;
+    const original = rpc.request.bind(rpc);
+    rpc.request = async (method, params) => {
+      const result = await original(method, params);
+      if (method === "turn/interrupt") {
+        rpc.emit("notification", "turn/completed", {
+          threadId: t.codexThreadId,
+          turn: { id: turnId, status: "interrupted" },
+        });
+        throw new HubError(504, "CODEX_REQUEST_TIMEOUT", "Lost ack");
+      }
+      return result;
+    };
+    await sessions.handoffToDesktop("pc", true);
+    assert.equal(rpc.closed, true);
+    assert.equal(sessions.machineClient("pc"), "desktop");
+  } finally {
+    await sessions.close();
+    store.close();
+  }
+});
+
+test("persisted return operation blocks conversation writes until native ownership is released", async () => {
+  const store = new Store(":memory:"),
+    rpc = new Rpc(),
+    sessions = new Sessions(config, store, () => rpc);
+  try {
+    const t = await sessions.create("p", "Return");
+    store.setPreferences({ desktopReturns: { pc: { id: randomUUID(), requestedAt: Date.now() } } });
+    await assert.rejects(sessions.startTurn(t.id, "Wait"), { code: "HANDOFF_PENDING" });
+    await assert.rejects(
+      sessions.withThreadWrite(t.id, async () => {}),
+      { code: "HANDOFF_PENDING" },
+    );
+    assert.equal(rpc.calls.filter((c) => c.method === "turn/start").length, 0);
+  } finally {
+    await sessions.close();
+    store.close();
+  }
+});

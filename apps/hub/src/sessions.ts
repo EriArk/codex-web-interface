@@ -179,6 +179,11 @@ export class Sessions extends EventEmitter {
   }
   assertWritable(projectId: string): void {
     const machineId = this.project(projectId).machineId;
+    if (
+      this.handingOff.has(machineId) ||
+      record(this.store.preferences().desktopReturns)[machineId]
+    )
+      throw new HubError(409, "HANDOFF_PENDING", "Передаём управление…");
     if (this.machineClient(machineId) === "desktop")
       throw new HubError(
         409,
@@ -187,6 +192,64 @@ export class Sessions extends EventEmitter {
       );
   }
   private machineWrites = new Map<string, number>();
+  private handingOff = new Set<string>();
+
+  async handoffToDesktop(machineId: string, confirmInterrupt = false): Promise<void> {
+    if (!confirmInterrupt) return this.setMachineClient(machineId, "desktop");
+    if (
+      this.handingOff.has(machineId) ||
+      record(this.store.preferences().desktopReturns)[machineId]
+    )
+      throw new HubError(409, "HANDOFF_PENDING", "Передача управления уже выполняется.");
+    const projects = this.catalog.projects().filter((p) => p.machineId === machineId);
+    if (this.machineWrites.get(machineId) || projects.some((p) => this.locks.has(p.id)))
+      throw new HubError(409, "PROJECT_BUSY", "Дождись завершения отправки сообщения.");
+    const threads = projects.flatMap((p) => this.store.threads(p.id));
+    if (threads.some((t) => t.activitySource !== "external" && t.status === "unknown"))
+      throw new HubError(
+        409,
+        "HANDOFF_STATE_UNKNOWN",
+        "Сначала проверь состояние задач. Для зависшего Codex есть жёсткий перезапуск.",
+      );
+    this.handingOff.add(machineId);
+    try {
+      const existing = this.runtimes.get(machineId);
+      const runtime = existing ? await existing : undefined;
+      const active = threads.filter(
+        (t) =>
+          t.activitySource !== "external" &&
+          ["running", "starting", "waiting_approval"].includes(t.status),
+      );
+      if (active.some((t) => !runtime?.loaded.has(t.id) || !t.activeTurnId))
+        throw new HubError(
+          409,
+          "HANDOFF_STATE_UNKNOWN",
+          "Не удалось подтвердить текущий ход. Проверь состояние задачи.",
+        );
+      await Promise.all(
+        active.map(async (t) => {
+          try {
+            await this.interrupt(t.id);
+          } catch (error) {
+            if (this.store.thread(t.id).activeTurnId === t.activeTurnId) throw error;
+          }
+        }),
+      );
+      const deadline = Date.now() + 15000;
+      while (runtime?.active.size) {
+        if (Date.now() >= deadline)
+          throw new HubError(
+            409,
+            "HANDOFF_STOP_PENDING",
+            "Codex ещё останавливается. Повтори передачу после остановки.",
+          );
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      await this.setMachineClient(machineId, "desktop");
+    } finally {
+      this.handingOff.delete(machineId);
+    }
+  }
   async withThreadWrite<T>(id: string, fn: () => Promise<T>): Promise<T> {
     const projectId = this.thread(id).projectId;
     this.assertWritable(projectId);

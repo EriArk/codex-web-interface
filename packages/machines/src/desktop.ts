@@ -9,7 +9,7 @@ export interface DesktopState {
   activeTasks: number;
   operation: null | {
     id: string;
-    kind: "restart" | "forcerestart" | "probe";
+    kind: "restart" | "forcerestart" | "forcerelease" | "probe";
     state: "queued" | "restarting" | "completed" | "failed" | "unknown";
     code: string;
     requestedAt: number;
@@ -19,8 +19,8 @@ const messages: Record<string, string> = {
   DESKTOP_BUSY: "Codex ещё работает. Дождись завершения задач перед перезапуском.",
   DESKTOP_ACTIVITY_UNAVAILABLE: "Не удалось проверить активные задачи. Перезапуск пока недоступен.",
   DESKTOP_PACKAGE_UNAVAILABLE: "Приложение Codex не найдено на компьютере.",
-  DESKTOP_RESTART_PENDING: "Перезапуск уже выполняется.",
-  DESKTOP_RESTART_COOLDOWN: "Подожди минуту перед следующим перезапуском.",
+  DESKTOP_RESTART_PENDING: "Действие с Codex уже выполняется.",
+  DESKTOP_RESTART_COOLDOWN: "Подожди минуту перед следующим действием с Codex.",
   DESKTOP_INTERACTIVE_SESSION_REQUIRED: "Войди в Windows на компьютере, чтобы открыть Codex.",
 };
 export function desktopError(code: string): HubError {
@@ -29,7 +29,7 @@ export function desktopError(code: string): HubError {
       ? 409
       : 503,
     code,
-    messages[code] ?? "Не удалось выполнить перезапуск. Проверь состояние приложения в Remote.",
+    messages[code] ?? "Не удалось выполнить действие. Проверь Codex в Remote.",
   );
 }
 export function parseDesktopReply(output: string): DesktopState {
@@ -54,7 +54,7 @@ export function parseDesktopReply(output: string): DesktopState {
     (operation !== null &&
       (!operation ||
         !/^[a-f0-9-]{36}$/i.test(operation.id) ||
-        !["restart", "forcerestart", "probe"].includes(operation.kind) ||
+        !["restart", "forcerestart", "forcerelease", "probe"].includes(operation.kind) ||
         !["queued", "restarting", "completed", "failed", "unknown"].includes(operation.state) ||
         !/^(?:DESKTOP_[A-Z_]{1,70})?$/.test(operation.code) ||
         !Number.isFinite(operation.requestedAt)))
@@ -79,7 +79,7 @@ export function parseDesktopReply(output: string): DesktopState {
 }
 export async function controlDesktop(
   machine: MachineConfig,
-  action: "Status" | "Restart" | "ForceRestart",
+  action: "Status" | "Restart" | "ForceRestart" | "ForceRelease",
   id?: string,
 ): Promise<DesktopState> {
   if (machine.type !== "ssh-windows" || !machine.codex.desktopControl || !machine.ssh)
