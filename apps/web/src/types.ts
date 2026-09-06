@@ -101,6 +101,7 @@ export interface Result {
     url?: string;
     width?: number;
     height?: number;
+    sourcePath?: string;
     command?: string;
     exitCode?: number;
     status?: string;

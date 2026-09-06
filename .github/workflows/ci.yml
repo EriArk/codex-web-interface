@@ -28,6 +28,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test
+      - name: Check optional GPT connector syntax
+        run: for file in ops/gpt/*.mjs ops/gpt/connect-client.js; do node --check "$file"; done
       - run: pnpm typecheck
       - run: pnpm lint
       - name: Build must not change tracked files

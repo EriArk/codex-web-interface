@@ -64,6 +64,26 @@ export const configSchema = z
       codexIdleTimeoutMinutes: z.number().int().min(1).max(1440).default(30),
       secureCookies: z.boolean().default(true),
     }),
+    gpt: z
+      .object({
+        endpoint: z.url().refine((value) => {
+          const url = new URL(value);
+          return (
+            url.protocol === "http:" &&
+            ["127.0.0.1", "localhost", "gpt", "codex-web-gpt-connect"].includes(url.hostname) &&
+            !url.username &&
+            !url.password &&
+            url.pathname === "/" &&
+            !url.search &&
+            !url.hash
+          );
+        }),
+        tokenSecret: z
+          .string()
+          .regex(/^[A-Z][A-Z0-9_]*$/)
+          .default("GPT_SERVICE_TOKEN"),
+      })
+      .optional(),
     auth: z.object({ username: z.string().min(1).max(80).default("owner") }),
     machines: z.array(machine).max(20),
     projects: z
@@ -235,3 +255,5 @@ export interface Attachment {
   messageId: string | null;
   createdAt: string;
 }
+
+export type { GptConversation, GptFile, GptJob, GptMessage, GptModels, GptProject } from "./gpt.js";

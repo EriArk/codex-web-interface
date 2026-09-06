@@ -308,3 +308,17 @@ A real 1 MiB attachment reproduced UPLOAD_TRANSFER_TIMEOUT in the previous Power
 The SFTP batch contains quoted absolute local/Windows paths, with control characters rejected. Upload into a generated temporary file, verify native byte length and SHA-256, then move to the generated final name. Validate the acknowledgement before adding a native localImage or file reference. The whole attachment preparation shares a 40-second deadline; failed partial transfers get bounded cleanup. Preparation failures return a specific 503 JSON response before the former 60-second gateway timeout, release protected files/idempotency state and leave text/files available for an explicit retry. No prompt is automatically replayed.
 
 Remove the duplicate chat-pane heading/status and keep the top connection label about connectivity. The existing composer progress control remains expandable and shows attachment transfer while sending files.
+
+## 2026-09-06 — Optional real-account ChatGPT browser backend
+
+The owner requested a complete GPT mode with existing chats, files, image generation and actual model selection, and approved a ready browser integration. Consumer ChatGPT does not provide the Codex App Server transport used by the Windows execution backend. GPT therefore uses an isolated, persistent Linux Chromium profile with owner-performed login. The Codex/Companion path remains independent.
+
+The optional connector runs the MIT-licensed chatgpt-bridge extension/runtime pinned at 96802cc0d2ea0b7449cf465f8adb3c228decd297. This revision precedes an unavailable optional ZIP dependency. Only the browser bridge, file store and HTTP adapter are loaded. Compatibility patches require successful attachment preparation and support the current native model/power menu. Canonical readback confirms completed image-only turns and supplies protected image bytes.
+
+The browser profile and connector secrets stay on the Linux host. Public clients use the authenticated Hub API and a protected Guacamole connection page. Jobs are durable and serialized; browser disconnects do not cancel them. Uncertain native submissions require explicit review and are never automatically replayed. Public output is whitelisted; hidden reasoning and adapter diagnostics are discarded.
+
+The shared web shell provides native chat history, send/progress, file/image input, model/power selection and image results. The protected original ChatGPT interface remains available for account controls and other native workflows. Consumer UI changes can require adapter updates; exact UI parity is not assumed.
+
+## Interactive self-contained HTML Results (2026-09-06)
+
+The owner requested the interactive design studies used in TrainerOs. Support them as authenticated, bounded HTML artifacts with an opaque-origin sandbox, sourced from structured HTML resources/file changes or explicit assistant HTML blocks/local file links. Keep Windows private and fetch only within the selected project. This is an artifact viewer, not a general reverse proxy to development servers. Native chat order is authoritative; the live Hub supplement inserts only unpersisted messages at matching sequence anchors and must not promote older-page records to the tail.

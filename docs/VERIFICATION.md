@@ -150,3 +150,15 @@ The previous SSH/PowerShell stdin implementation reproduced a 60-second timeout 
 
 
 Standalone progress duplicate correction: the extra working/spinner row after the messages is removed, leaving the single expandable composer progress control. Targeted Chromium/WebKit screenshots at 390x844 and 1366x1024 verify an active turn, absence of the extra row, one composer progress control and expand/collapse without page errors. Production build passed.
+
+## GPT, multi-device chronology and HTML demos (2026-09-07)
+
+The optional private Linux browser backend was verified against the owner's signed-in ChatGPT account using disposable conversations: real catalog/projects/history, native model and power changes with restoration, a new conversation, text plus a TXT file and an image in one send, streamed output, and image generation. The generated PNG was downloaded through the authenticated Hub asset route and visually checked. A send accepted through the custom web form completed after that browser was closed and appeared on a second WebKit client. The isolated browser retained its login after moving to the persistent Compose service; the protected gateway is a persistent user service.
+
+Tests cover serialized/idempotent GPT jobs, ambiguous submission and restart without replay, hidden-output filtering, native active-branch history and old outbox entries. Chromium and WebKit inspect real GPT history/images on phone and tablet across four themes. Screenshots were visually reviewed. This does not imply exact parity for every ChatGPT control: the original protected interface remains available.
+
+The chronology regression is reproduced with a long active turn where older Hub users fall outside the newest native page, and with bound photo attachment envelopes. Latest pages and older pagination preserve all unique messages in order. A read-only copy of the actual affected native conversation and Hub messages passed three independent fresh-client history reconstructions, without changing production data.
+
+Actual TrainerOs HTML was fetched from Windows through the bounded SSH reader and its hash checked. Chromium mouse and WebKit touch verify native demo tabs, material controls, phone fit/960px sizing, close/return to chat, and authenticated access. The sandbox blocks parent DOM, cookies, storage and network fetch. Browser screenshots on phone/tablet were inspected. Chromium's CDP touch path double-subtracts sandboxed cross-process iframe offsets, so touch acceptance uses WebKit; no compensating coordinate code is applied to the app. Playwright service-worker blocking is disabled for this fixture because its injected hook tries to access sandbox-denied navigator.serviceWorker.
+
+Final portable suite: 92 tests; production build, TypeScript, Biome (no errors), repository content guard and optional connector syntax checks. Physical iPhone/iPad Safari/PWA acceptance remains with the owner.

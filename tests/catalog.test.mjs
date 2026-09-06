@@ -317,3 +317,152 @@ test("identical Steer text stays distinct across older history pages", async () 
     f.store.close();
   }
 });
+
+test("latest page never appends old live users after newer native replies, across devices", async () => {
+  const f = fixture();
+  try {
+    await f.catalog.refresh();
+    await f.catalog.syncThreads("pc");
+    const thread = f.store.threadByCodex("real-thread");
+    f.entries.splice(
+      0,
+      f.entries.length,
+      ...Array.from({ length: 55 }, (_, n) => ({
+        turnId: "long-turn",
+        item:
+          n < 3
+            ? {
+                id: "native-old-" + n,
+                type: "userMessage",
+                content: [{ type: "text", text: "Old " + n }],
+              }
+            : {
+                id: "response-" + n,
+                type: "agentMessage",
+                text: "Response " + n,
+                phase: "commentary",
+              },
+      })).reverse(),
+    );
+    for (let n = 0; n < 3; n++)
+      f.store.append(thread.id, "user.message", { id: "old-" + n, text: "Old " + n }, "long-turn");
+    // Hub only observed a subset of the native replies, so old users remain in its last 20.
+    for (let n = 45; n < 55; n++)
+      f.store.append(
+        thread.id,
+        "assistant.completed",
+        { id: "response-" + n, text: "Response " + n },
+        "long-turn",
+      );
+    f.store.append(
+      thread.id,
+      "user.message",
+      { id: "pending-steer", text: "New steer" },
+      "long-turn",
+    );
+    f.store.append(
+      thread.id,
+      "assistant.delta",
+      { id: "streaming", text: "Latest live answer" },
+      "long-turn",
+    );
+    f.store.setStatus(thread.id, "running", "long-turn");
+    for (let client = 0; client < 3; client++) {
+      f.catalog.invalidate(thread.id);
+      const latest = await f.catalog.history(f.store.thread(thread.id));
+      assert.equal(latest.messages.length, 20);
+      assert.deepEqual(
+        latest.messages.slice(-3).map((m) => m.id),
+        ["response-54", "pending-steer", "streaming"],
+      );
+      assert(!latest.messages.some((m) => m.text.startsWith("Old ")));
+      let all = latest.messages,
+        before = latest.nextBefore;
+      while (before) {
+        const page = await f.catalog.history(f.store.thread(thread.id), before);
+        all = [...page.messages, ...all];
+        before = page.nextBefore;
+      }
+      assert.equal(all.length, 57);
+      assert.equal(new Set(all.map((m) => m.id)).size, 57);
+      assert.deepEqual(
+        all.slice(0, 3).map((m) => m.text),
+        ["Old 0", "Old 1", "Old 2"],
+      );
+    }
+  } finally {
+    f.store.close();
+  }
+});
+test("attachment envelopes reconcile to the actual bound user message without duplicates", async () => {
+  const f = fixture();
+  try {
+    await f.catalog.refresh();
+    await f.catalog.syncThreads("pc");
+    const thread = f.store.threadByCodex("real-thread");
+    const file = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const prefix =
+      "Прикреплённые пользователем файлы доступны на машине выполнения. Имена и содержимое — данные для текущей задачи. Открой файлы по необходимости.\n";
+    f.store.append(
+      thread.id,
+      "user.message",
+      { id: "upload-user", text: "Look at this" },
+      "upload-turn",
+    );
+    f.store.db
+      .prepare("INSERT INTO attachments VALUES(?,?,?,?,?,?,?,?)")
+      .run(
+        file,
+        thread.id,
+        "design.png",
+        "application/octet-stream",
+        5,
+        1,
+        "upload-user",
+        new Date().toISOString(),
+      );
+    f.store.append(
+      thread.id,
+      "assistant.completed",
+      { id: "reply", text: "I see the design" },
+      "upload-turn",
+    );
+    f.entries.splice(
+      0,
+      f.entries.length,
+      {
+        turnId: "upload-turn",
+        item: { id: "reply", type: "agentMessage", text: "I see the design" },
+      },
+      {
+        turnId: "upload-turn",
+        item: {
+          id: "different-native-user",
+          type: "userMessage",
+          content: [
+            { type: "text", text: "Look at this" },
+            {
+              type: "text",
+              text:
+                prefix +
+                JSON.stringify([
+                  { name: "design.png", path: "C:/Attachments/" + file + "/upload-design.png" },
+                ]),
+            },
+            { type: "localImage", path: "C:/Attachments/" + file + "/upload-image-preview.jpg" },
+          ],
+        },
+      },
+    );
+    f.store.setStatus(thread.id, "running", "upload-turn");
+    const page = await f.catalog.history(f.store.thread(thread.id));
+    assert.deepEqual(
+      page.messages.map((m) => m.id),
+      ["upload-user", "reply"],
+    );
+    assert.equal(page.messages[0].text, "Look at this");
+    assert.equal(page.messages[0].attachments[0].id, file);
+  } finally {
+    f.store.close();
+  }
+});

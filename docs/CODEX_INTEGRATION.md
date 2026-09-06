@@ -267,3 +267,13 @@ The current implementation splits byte-level JSONL/RPC lifecycle (packages/codex
 Initialize negotiates experimentalApi for collaborationMode/list. model/list and config/read supply model-specific effort choices and the Windows effective default; thread preferences live in SQLite. turn/start passes model, effort and collaborationMode.settings with developer_instructions set to null to use Codex's own selected-mode instructions. Native plan items are streamed and saved to Results. Text-only models reject image inputs visibly.
 
 See D17 for the approved Session 0 workaround. The bridge uses raw inherited standard handles and explicit flushing for small JSONL frames; normal buffered Console stdin was insufficient under Windows SSH. The existing Windows Codex authentication stays on Windows. A browser disconnect leaves a Hub-owned turn running. A Hub process restart may stop the turn; unknown commands are never automatically repeated.
+
+## Interactive HTML result contract
+
+Codex can present a self-contained HTML/CSS/JavaScript design as an HTML fenced block, a Markdown link to a project .html/.htm file, a structured HTML file change, or an explicit MCP text/html embedded resource. These create an idempotent preview Result. Streaming creates a card when the item completes; historical items are recognized as their pages are opened.
+
+Project files are fetched on the first explicit preview open through system SSH (Windows) or a bounded local file read (Linux), and then snapshotted on the Hub. Paths must stay inside the conversation's project directory; Windows reparse points and Linux escaping symlinks are rejected. A new result item gets its own snapshot. Each document is limited to 2 MiB, with at most eight candidates per item and 2,000 saved preview records.
+
+The viewer supports ordinary self-contained HTML fragments/documents and the Tweak select/slider/toggle controls used in the owner's TrainerOs studies. It offers fit-to-width and a 960 CSS-pixel canvas with horizontal scrolling. Closing restores the workspace and focus. Separate JavaScript/CSS bundles, CDN libraries, backend endpoints and arbitrary localhost URLs are outside this self-contained format.
+
+Both the iframe sandbox and the response CSP deny same-origin privileges, network requests, frames, forms, popups and top navigation. Inline scripts/styles and embedded data images/fonts may run only inside the preview. The document and readiness routes require the normal authenticated Hub session. Raw reasoning and unstructured tool logs are never preview sources.

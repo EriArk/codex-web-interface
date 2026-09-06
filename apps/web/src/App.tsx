@@ -1,7 +1,16 @@
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
 import { DesktopControl } from "./DesktopControl";
+
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { ProjectDialog } from "./ProjectDialog";
@@ -25,6 +34,10 @@ import { UsageLimits } from "./UsageLimits";
 import { useNavigation } from "./useNavigation";
 import { useProjectSwipe } from "./useProjectSwipe";
 import { useWorkspace } from "./useWorkspace";
+
+const GptWorkspace = lazy(() =>
+  import("./GptWorkspace").then((module) => ({ default: module.GptWorkspace })),
+);
 
 const readPreference = (name: string, fallback: string) => {
   try {
@@ -119,12 +132,21 @@ export default function App() {
       onLogout={() => {
         setSession(null);
         for (const key of Object.keys(sessionStorage))
-          if (key.startsWith("codex-draft-")) sessionStorage.removeItem(key);
+          if (key.startsWith("codex-draft-") || key.startsWith("gpt-draft-"))
+            sessionStorage.removeItem(key);
       }}
     />
   );
 }
 function Workspace({ onLogout }: { onLogout: () => void }) {
+  const [client, setClient] = useState<"codex" | "gpt">(
+    readPreference("client", "codex") === "gpt" ? "gpt" : "codex",
+  );
+  useEffect(() => {
+    try {
+      localStorage.setItem("codex-client", client);
+    } catch {}
+  }, [client]);
   const navigationState = useNavigation();
   const [initialized, setInitialized] = useState(false),
     [wide, setWide] = useState(window.innerWidth >= 1100);
@@ -497,6 +519,10 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   }, [initialized, refreshCatalog]);
   const navigation = (
     <ProjectNavigation
+      onClient={(value) => {
+        setDrawer(false);
+        setClient(value);
+      }}
       projects={projects}
       activity={navigationState.state}
       activityConnected={navigationState.connected}
@@ -538,6 +564,18 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       )}
     </button>
   );
+  if (client === "gpt")
+    return (
+      <Suspense
+        fallback={
+          <div className="boot-screen">
+            <span className="spinner" />
+          </div>
+        }
+      >
+        <GptWorkspace onCodex={() => setClient("codex")} theme={theme} onTheme={setTheme} />
+      </Suspense>
+    );
   return (
     <div
       className={`workspace ${navCollapsed ? "nav-collapsed" : ""}`}

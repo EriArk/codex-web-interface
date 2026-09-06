@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 const paths: Record<string, string[]> = {
+  file: ["M6 2h8l4 4v16H6zM14 2v5h5M9 11h6M9 15h6"],
   search: ["M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15ZM16 16l5 5"],
   "arrow-up": ["m6 10 6-6 6 6M12 4v16"],
   trackpad: ["M3 5h18v14H3zM3 15h18M12 15v4"],

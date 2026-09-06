@@ -291,3 +291,7 @@ During a turn, Send becomes Add to queue. An independently scrolling compact que
 At widths of 1100 CSS pixels and above, the header provides Remote and right-pane visibility controls. Collapsing the pane gives its width to chat and preserves the selected support view. The local visibility preference survives reload; compact layouts ignore it and retain Chat / Results / Remote navigation. Opening a result or Remote explicitly reveals the pane.
 
 History restoration must not replace newer WebSocket messages. A fresh second client receives persisted public replies and the native public summary panel while the task continues.
+
+### Interactive design previews
+
+HTML demo cards open a single large viewer over the workspace. The close action stays in its top toolbar; mobile fills the viewport and respects safe areas. Fit-to-width is the default, with an optional 960px canvas for designs meant for a wider display. Navigation and chat state remain mounted underneath. The demo receives no access to the surrounding app or its credentials.

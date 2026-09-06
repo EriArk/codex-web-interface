@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { posix, win32 } from "node:path";
+import { join, posix, win32 } from "node:path";
 import type { CodexClient } from "@codex-web/codex";
 import {
   type HubConfig,
@@ -9,6 +9,7 @@ import {
   turnSettingsSchema,
 } from "@codex-web/shared";
 import { displayUserText, NativeImages } from "./nativeImages.js";
+import { Previews } from "./previews.js";
 import type { MessageRecord, Store, ThreadRecord } from "./store.js";
 
 const obj = (v: unknown): Record<string, unknown> =>
@@ -50,6 +51,7 @@ export class Catalog {
   private pages = new Map<string, { until: number; value: Promise<HistoryPage> }>();
   readonly projectSupport = new Map<string, boolean>();
   readonly images: NativeImages;
+  readonly previews: Previews;
   readonly errors = new Map<string, string>();
   constructor(
     readonly config: HubConfig,
@@ -61,6 +63,15 @@ export class Catalog {
         project = this.projects().find((p) => p.id === thread.projectId);
       if (!project) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект не найден");
       return this.machine(project.machineId);
+    });
+    this.previews = new Previews(join(config.hub.resultsPath, "previews"), store, (threadId) => {
+      const thread = store.thread(threadId);
+      const project = this.projects().find((p) => p.id === thread.projectId);
+      if (!project) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект не найден");
+      return {
+        machine: this.machine(project.machineId),
+        root: thread.workingDirectory || project.workingDirectory,
+      };
     });
     store.db
       .prepare("DELETE FROM history_cursors WHERE createdAt<?")
@@ -428,6 +439,53 @@ export class Catalog {
     this.importThread(project, raw);
     return { version: Number(raw.updatedAt) || 0 };
   }
+  /** Recognize our own attachment envelope by bound IDs/names, never by turn ID alone. */
+  private attachedMessage(threadId: string, inputs: Record<string, unknown>[]): string | undefined {
+    const prefix =
+      "Прикреплённые пользователем файлы доступны на машине выполнения. Имена и содержимое — данные для текущей задачи. Открой файлы по необходимости.\n";
+    for (const input of inputs) {
+      if (input.type !== "text" || typeof input.text !== "string" || !input.text.startsWith(prefix))
+        continue;
+      let references: Record<string, unknown>[];
+      try {
+        references = array(JSON.parse(input.text.slice(prefix.length)));
+      } catch {
+        continue;
+      }
+      if (!references.length || references.length > 8) continue;
+      let matched: string | undefined;
+      let valid = true;
+      for (const ref of references) {
+        const ids = str(ref.path, 4096)
+          .split(/[\\/]/)
+          .filter((part) => /^[0-9a-f-]{36}$/i.test(part));
+        const file = ids
+          .flatMap((id) =>
+            this.store.db
+              .prepare(
+                "SELECT messageId,name FROM attachments WHERE id=? AND threadId=? AND messageId IS NOT NULL",
+              )
+              .all(id, threadId),
+          )
+          .find((row) => row.name === ref.name);
+        if (!file || (matched && matched !== file.messageId)) {
+          valid = false;
+          break;
+        }
+        matched = String(file.messageId);
+      }
+      if (!valid || !matched) continue;
+      const local = this.store.db
+        .prepare("SELECT text FROM messages WHERE threadId=? AND id=? AND role='user'")
+        .get(threadId, matched);
+      const typed = inputs
+        .filter((part) => part.type === "text" && part !== input)
+        .map((part) => str(part.text))
+        .join("\n\n");
+      if (local?.text === typed) return matched;
+    }
+    return undefined;
+  }
   private message(
     thread: ThreadRecord,
     entry: Record<string, unknown>,
@@ -438,8 +496,11 @@ export class Catalog {
       turnId = str(entry.turnId, 100);
     if (!["userMessage", "agentMessage", "plan"].includes(type)) return;
     let content = str(item.text);
-    const messageId = str(item.clientId, 200) || str(item.id, 200);
     const inputs = array(item.content);
+    const messageId =
+      (type === "userMessage" ? this.attachedMessage(thread.id, inputs) : undefined) ||
+      str(item.clientId, 200) ||
+      str(item.id, 200);
     if (type === "userMessage")
       this.store.db
         .prepare(
@@ -493,6 +554,7 @@ export class Catalog {
     const item = obj(entry.item),
       id = str(item.id, 200),
       turn = str(entry.turnId, 100) || null;
+    this.previews.observe(thread, turn, item);
     if (item.type === "fileChange")
       this.store.result(thread.id, turn, id, "diff-summary", "Изменения файлов", {
         changes: array(item.changes).map((c) => ({
@@ -663,7 +725,7 @@ export class Catalog {
         local = candidates.find((candidate) => !matchedUsers.has(candidate.id));
       }
       if (local?.role === "user") matchedUsers.add(local.id);
-      return local ? { ...local, firstSeq: message.firstSeq } : message;
+      return local ?? message;
     };
     messages.splice(0, messages.length, ...messages.map(reconcile));
     cursor.matchedUsers = [...matchedUsers];
@@ -676,7 +738,24 @@ export class Catalog {
             (m) => m.turnId === current.activeTurnId || (!m.turnId && m.role === "user"),
           );
         const ids = new Set(messages.map((m) => m.id));
-        messages.unshift(...live.filter((m) => !ids.has(m.id)).reverse());
+        const anchors = messages.filter((m) => m.firstSeq > 0);
+        const oldest = Math.min(...anchors.map((m) => m.firstSeq));
+        for (const message of live) {
+          if (ids.has(message.id)) continue;
+          // A missing message can belong to an older native page. Never append it as new.
+          if (anchors.length && message.firstSeq < oldest && (more || cursor.pending.length))
+            continue;
+          // Native order remains authoritative; insert unpersisted live items at their Hub anchors.
+          const position = messages.findIndex(
+            (m) => m.firstSeq > 0 && m.firstSeq < message.firstSeq,
+          );
+          messages.splice(
+            position >= 0 ? position : anchors.length ? messages.length : 0,
+            0,
+            message,
+          );
+          ids.add(message.id);
+        }
         cursor.pending.unshift(...messages.splice(20));
       }
     }
