@@ -247,3 +247,19 @@ Before calling mobile support complete, verify on a real iPhone that the user ca
 8. open Remote and perform a brief manual interaction;
 9. background and reopen the app without losing the workflow;
 10. perform all core actions without hover or a hardware keyboard.
+
+## Initial implementation updates
+
+The owner requested mobile-first implementation. The composer now includes model, Work/Plan mode and reasoning effort, plus file/photo selection, image preview, removal before sending, paste/drop support where available and draft attachment recovery after reload. HEIC selected through Safari is converted when that browser can decode it; otherwise the UI requests JPEG/PNG instead of silently dropping the image.
+
+History initially shows 20 latest messages. Older pages require the explicit button and keep the scroll position stable. The mobile shell and wide view share state and semantic themes. See VERIFICATION.md for browser automation versus outstanding physical-device acceptance.
+
+## Workflow and visual revision — 2026-09-06
+
+Project folders now reveal their chats in the same drawer; multiple projects can remain expanded. "Диалоги" lists only unassigned chats. Sending has immediate feedback and a persistent progress/waiting strip above the composer, with a direct jump to unanswered native questions. Choice questions accept an option or an explicit custom answer; questions without options use a text field. Reopening the page restores the pending request.
+
+An occupied desktop conversation produces a specific error rather than a Safari JSON parsing message. The draft stays in place. An explicit copy action can move completed context, draft and pending files into a new conversation; original same-ID continuation still depends on native writer release (SYNC_AND_REMOTE.md).
+
+Roboto Condensed is bundled with Latin/Cyrillic coverage for organizer and hi-tech. CRT keeps monospace. The parameter row has smaller visible labels, native 16px pickers and at least 44px touch areas. Shared spacing reduces the header, footer and composer footprint; phone Chat omits its redundant heading. Input text stays 16px.
+
+The screenshot audit includes login, project and standalone lists, creation/folder forms, settings, chat, Results/image viewer, Activity and Remote connection/controls in portrait, landscape and the wide workspace. Remote teardown removes only its owned canvas/input nodes and keyed branches prevent an old display from leaking onto its empty state. Detailed browser and physical-device validation boundaries are in VERIFICATION.md.

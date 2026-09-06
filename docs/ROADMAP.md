@@ -340,3 +340,9 @@ The MVP is successful when the user can:
 - optionally use a server-local Codex project through the same UI;
 - do all of this with only the Linux Hub exposed publicly;
 - perform the same core Codex/Results/brief-Remote workflow from iPhone using the dedicated mobile layout.
+
+## Initial implementation checkpoint (2026-09-06)
+
+Scaffold, authentication, real Windows Codex conversation, persistence/reconnect/approvals, basic Results, VNC Remote, mobile/wide shells and three themes are implemented. Model/mode/effort controls and file/image attachments were added to the first release at the owner's request. The local-only Companion was brought forward under D17 to resolve the real Windows Session 0 failure.
+
+Automated Chromium/WebKit and real Windows checks are recorded in VERIFICATION.md. Physical iPhone/iPad acceptance is still required. Native Windows project and conversation discovery, legacy history import and web project creation are also implemented. Arbitrary generated-artifact collection, Notes, a general Files/Git browser and additional machines are later work. The local Linux transport exists but no separate authenticated Linux Codex is configured in the current deployment.

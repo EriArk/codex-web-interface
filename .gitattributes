@@ -1,0 +1,2 @@
+# Preserve upstream Guacamole distribution/license bytes and keep review focused on our code.
+apps/web/public/vendor/** linguist-vendored -whitespace

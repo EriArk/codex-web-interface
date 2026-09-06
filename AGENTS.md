@@ -225,3 +225,29 @@ Do not start with a giant dashboard.
 From the iPad, the user can log in, open one configured Windows project, start/resume a Codex thread, send a prompt, watch streaming output, approve/deny requests, disconnect/reconnect the browser, and see a clean result summary — while the Windows PC has no Codex web port exposed.
 
 Before mobile support is considered complete, the same core workflow must also work comfortably from iPhone using the dedicated single-view mobile shell described in `docs/MOBILE.md`.
+
+## Owner-approved implementation updates (2026-09-06)
+
+- Implement and verify the iPhone/mobile workflow first, retaining the 13-inch iPad as the wide-layout reference.
+- Include model selection, native Work/Plan collaboration mode, reasoning-effort selection and file/image attachments in the first working release.
+- Open chats with the latest 20 messages; older history is fetched explicitly in pages of 20.
+- Authentication is password-only. The owner creates the first password via a private one-use enrollment link; no default/test production password.
+- A local-only Windows Companion is approved now because the installed Codex sandbox runner fails when spawned directly in Windows OpenSSH Session 0. SSH carries the bridge's stdio into a named pipe restricted to the local user, and the Companion launches only the configured App Server for allowlisted project directories in the logged-in session. It must not create a network listener or expose arbitrary GUI/command APIs. This is a narrow exception to delaying the Companion until Phase 9.
+- Run backend builds and heavy verification on Linux. Keep the Windows PC as the existing execution environment.
+- Discover actual desktop Codex projects and conversations automatically, and allow creation/connection of project folders from the web. Continue native thread IDs across clients; keep history paged. Do not mutate private desktop state files to force sidebar synchronization.
+- Default phone Remote to trackpad; support tablet direct touch and stylus. Connected phone Remote, especially landscape, must keep its full viewport with floating controls.
+- Revisit all three owner-drawn theme references. Organizer binding/paper, CRT housing/green text and light silver/cyan hitech materials are part of the intended design.
+
+## Owner-requested primary client update (2026-09-06)
+
+- The completed website is the owner's primary and intended sole client. Keep Windows execution independent of the desktop ChatGPT/Codex UI through the existing Companion.
+- Continue existing native conversations after their desktop writer is released. Do not make copies or a desktop relay the ordinary solution for sending.
+- Do not stop a running desktop task to migrate a writer. Finish the work, then explain the one-time full desktop exit if its writer is still held.
+
+## Owner-requested workflow and density updates (2026-09-06)
+
+- Projects expand their chat lists in place. The separate conversations tab is for chats without a project.
+- Show persistent turn progress and pending questions near the mobile composer; validate native answer-choice requests.
+- Collapse code/commands by default in Results and conversation Markdown; prioritize image result cards.
+- Use a more compact mobile UI, especially the model/mode/effort row. Roboto Condensed is the selected face for organizer and hi-tech; retain CRT monospace and touch target sizes.
+- Inspect screenshots across the main screens, orientations and all three themes; keep one shared functional UI.

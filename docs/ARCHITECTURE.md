@@ -394,3 +394,11 @@ A failure on one project/machine must not crash the Hub.
 - Microsoft OpenSSH for Windows: https://learn.microsoft.com/windows-server/administration/openssh/openssh_install_firstuse
 - Microsoft interactive process/session guidance: https://learn.microsoft.com/windows/win32/services/interactive-services
 - Apache Guacamole: https://guacamole.apache.org/
+
+## Implemented release notes (2026-09-06)
+
+The first release uses the proposed TypeScript workspace, Fastify, React, SQLite and filesystem storage. Deployment is a Hub container plus guacd and an independent Cloudflare tunnel. See DEPLOYMENT.md for the actual bindings and state locations.
+
+The owner-approved early Companion (D17) resolves the observed Windows Session 0 sandbox failure through local named-pipe IPC. The public and machine boundaries remain unchanged. HTTP file uploads terminate at the Hub and are staged on Windows through SSH only when a turn is sent.
+
+SQLite owns settings, messages aggregated from events, cursor-based history, thread mappings, sessions, idempotency keys and attachment metadata. Remote sessions are manual and independent from the Hub's long-lived Codex runtimes. The UI implements one mobile/wide component tree with shared theme tokens.
