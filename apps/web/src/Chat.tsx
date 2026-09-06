@@ -568,12 +568,6 @@ export function Chat({
                   onAnswer={onAnswer}
                 />
               ))}
-              {active && !state.approvals.length && (
-                <div className="working">
-                  <span className="spinner" role="img" aria-label="Codex работает" />
-                  {statusLabel(state.thread.status)}
-                </div>
-              )}
             </>
           )}
         </div>
