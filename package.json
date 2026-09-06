@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -b && pnpm --filter @codex-web/web build",
     "typecheck": "tsc -b --pretty false && pnpm --filter @codex-web/web exec tsc --noEmit",
-    "test": "pnpm build && node --test tests/*.test.mjs",
+    "test": "pnpm build && node --test --test-timeout=30000 tests/*.test.mjs",
     "lint": "biome check apps packages tests",
     "format": "biome check --write apps packages tests",
     "start": "node apps/hub/dist/main.js",

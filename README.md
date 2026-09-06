@@ -16,7 +16,7 @@ Private Codex workspace for iPhone, iPad and desktop. The browser talks to a Lin
 
 ## Deployment
 
-The configured site is **https://codex.abysstail.art**. Deployment details, first login, updates, backups and recovery are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Choose your own hostname and Linux runtime directory. Supported deployment, first login and updates are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md); snapshot/restore and diagnostics are in [docs/MAINTENANCE.md](docs/MAINTENANCE.md). The default branch contains the working product; [RELEASES.md](docs/RELEASES.md) records verified source/image baselines.
 
 ```text
 Safari / PWA → HTTPS / Cloudflare Tunnel → Linux Hub
@@ -24,7 +24,7 @@ Safari / PWA → HTTPS / Cloudflare Tunnel → Linux Hub
                                               └─ guacd → LAN-only VNC / RDP
 ```
 
-The current Windows Home machine uses VNC because it cannot host RDP. SSH and VNC inbound rules allow only the Hub's LAN address. No Codex web listener runs on Windows.
+Use RDP where the Windows edition supports hosting it, or a configured VNC provider. Restrict SSH and Remote inbound rules to the Hub's LAN/Tailnet address. No Codex web listener runs on Windows.
 
 A local-only Companion runs in the logged-in Windows session. This is the owner-approved workaround for the installed Codex sandbox runner failing when launched directly in Windows SSH Session 0. It exposes a named pipe, not a network port. See [D17](docs/DECISIONS.md#d17--early-local-only-companion-for-windows-session-0).
 

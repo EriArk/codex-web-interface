@@ -4,6 +4,8 @@ services:
     image: codex-web-hub:local
     build:
       context: ../..
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
     container_name: codex-web-hub
     restart: unless-stopped
     init: true

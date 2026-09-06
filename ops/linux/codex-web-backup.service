@@ -1,0 +1,8 @@
+[Unit]
+Description=Codex Web private state snapshot
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/codex-web/backup.env
+UMask=0077
+TimeoutStartSec=15min
+ExecStart=/usr/bin/docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user ${CODEX_WEB_UID}:${CODEX_WEB_GID} --memory 256m --cpus 0.5 --mount type=bind,src=${CODEX_WEB_STATE},dst=${CODEX_WEB_STATE},readonly --mount type=bind,src=${CODEX_WEB_BACKUPS},dst=/snapshots ${CODEX_WEB_IMAGE} node dist/maintenance.js backup --config ${CODEX_WEB_CONFIG} --destination /snapshots --keep 7 --revision ${CODEX_WEB_REVISION} --private-file config.yaml=${CODEX_WEB_CONFIG}

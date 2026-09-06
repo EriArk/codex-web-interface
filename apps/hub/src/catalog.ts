@@ -52,9 +52,6 @@ export class Catalog {
     readonly store: Store,
     private connect: (machineId: string) => Promise<CodexClient>,
   ) {
-    store.db.exec(
-      "CREATE TABLE IF NOT EXISTS catalog_projects(id TEXT PRIMARY KEY,machineId TEXT NOT NULL,sourceId TEXT NOT NULL,value TEXT NOT NULL,UNIQUE(machineId,sourceId)); CREATE TABLE IF NOT EXISTS history_cursors(id TEXT PRIMARY KEY,threadId TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL)",
-    );
     store.db
       .prepare("DELETE FROM history_cursors WHERE createdAt<?")
       .run(Date.now() - 7 * 86400000);
