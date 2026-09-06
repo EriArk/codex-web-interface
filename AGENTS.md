@@ -292,3 +292,8 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Remove the redundant upper chat status strip, including the standalone working/spinner row after the messages directly above the expandable progress control. Retain only the expandable recent-work control above the composer and compact navigation/header indicators.
 - Transfer uploaded attachments through the existing system SSH/SFTP connection, with bounded staging and verified file size/hash before native submission. Preserve draft text/files and allow an explicit retry if preparation fails; do not change permissions or restart the desktop to recover an upload.
+
+## Owner-requested tablet continuity controls (2026-09-06)
+
+- Opening another client or restoring history during a live turn must preserve all public assistant messages and summaries. A turn can contain multiple Steer messages; never reconcile user messages by turn ID alone.
+- On the wide tablet layout, allow the right pane to collapse and remember that choice locally. Keep an accessible Remote shortcut and the pane toggle in the top bar. Explicit result/Remote navigation reveals the pane without losing chat state; compact layouts retain their existing bottom tabs.

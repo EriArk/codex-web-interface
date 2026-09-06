@@ -285,3 +285,9 @@ During a turn, Send becomes Add to queue. An independently scrolling compact que
 - The composer has a 44 px normal/full access picker with short labels. No extra explanation of future-turn timing is displayed.
 - The turn-status row opens and collapses an eight-item recent-work panel with independent scroll and a maximum 28dvh/240px height. Keep Stop reachable while composing or transferring attachments. Accepted Steer receipts remain visible until inserted into the conversation.
 - Settings offers manual desktop handoff/return and a separately confirmed hard restart. Read-only navigation never silently returns a released machine to web control.
+
+### Collapsible wide support pane
+
+At widths of 1100 CSS pixels and above, the header provides Remote and right-pane visibility controls. Collapsing the pane gives its width to chat and preserves the selected support view. The local visibility preference survives reload; compact layouts ignore it and retain Chat / Results / Remote navigation. Opening a result or Remote explicitly reveals the pane.
+
+History restoration must not replace newer WebSocket messages. A fresh second client receives persisted public replies and the native public summary panel while the task continues.

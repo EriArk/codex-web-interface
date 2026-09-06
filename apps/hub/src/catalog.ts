@@ -25,6 +25,7 @@ export type CatalogProject = ProjectConfig & {
   unassigned?: boolean;
 };
 type Cursor = {
+  matchedUsers?: string[];
   rpc?: string;
   pending: MessageRecord[];
   offset: number;
@@ -647,17 +648,25 @@ export class Catalog {
     }
     // Reconcile the native snapshot with Hub events synchronously, before taking its stream cursor.
     // Native user IDs differ from the optimistic Hub ID; keep the Hub ID and attachment metadata.
+    const matchedUsers = new Set(cursor.matchedUsers ?? []);
     const reconcile = (message: MessageRecord): MessageRecord => {
-      const local = this.store.db
-        .prepare(
-          "SELECT * FROM messages WHERE threadId=? AND (id=? OR (role='user' AND ?='user' AND turnId=?)) ORDER BY firstSeq DESC LIMIT 1",
-        )
-        .get(thread.id, message.id, message.role, message.turnId) as unknown as
-        | MessageRecord
-        | undefined;
+      let local = this.store.db
+        .prepare("SELECT * FROM messages WHERE threadId=? AND id=?")
+        .get(thread.id, message.id) as unknown as MessageRecord | undefined;
+      if (!local && message.role === "user" && message.turnId) {
+        // A turn may contain many Steers. The turn ID alone never identifies its user message.
+        const candidates = this.store.db
+          .prepare(
+            "SELECT * FROM messages WHERE threadId=? AND role='user' AND turnId=? AND text=? ORDER BY firstSeq DESC",
+          )
+          .all(thread.id, message.turnId, message.text) as unknown as MessageRecord[];
+        local = candidates.find((candidate) => !matchedUsers.has(candidate.id));
+      }
+      if (local?.role === "user") matchedUsers.add(local.id);
       return local ? { ...local, firstSeq: message.firstSeq } : message;
     };
     messages.splice(0, messages.length, ...messages.map(reconcile));
+    cursor.matchedUsers = [...matchedUsers];
     if (!before && !turnId) {
       const current = this.store.thread(thread.id);
       if (["starting", "running", "waiting_approval"].includes(current.status)) {
