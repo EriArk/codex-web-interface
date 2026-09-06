@@ -14,6 +14,12 @@ Checks were run on the Linux server against the user's Windows machine and in is
 - Public HTTPS assets and password-enrollment form were checked without enrolling the owner. Unauthenticated data access and invalid setup tokens were rejected.
 - After a hostname-specific Windows DNS correction, normal Windows DNS, HTTPS health and the actual browser login page all loaded successfully.
 
+## Repository CI
+
+GitHub Actions runs the portable build, Node tests, typecheck and lint on pull requests and main using the pinned Node and pnpm versions and frozen lockfile. A tracked-file guard rejects runtime/build directories, private configuration and recognizable key/token formats without printing their contents. This is a focused guard, not a guarantee that arbitrary secret formats can be identified. No production credentials, Windows host, Codex account or live Remote connection is required.
+
+Private integration scripts and physical iOS acceptance remain separate opt-in evidence.
+
 ## Automated tests
 
 Node tests cover bounded 20-message history, delta aggregation, cursor non-overlap, idempotency, unknown outcomes on restart, approval/question scoping, password enrollment, Argon2id storage, cookies, Origin/CSRF enforcement, unauthenticated API/WebSocket rejection and logout revocation.
