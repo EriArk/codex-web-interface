@@ -8,6 +8,7 @@ import {
   type ProjectConfig,
   turnSettingsSchema,
 } from "@codex-web/shared";
+import { displayUserText, NativeImages } from "./nativeImages.js";
 import type { MessageRecord, Store, ThreadRecord } from "./store.js";
 
 const obj = (v: unknown): Record<string, unknown> =>
@@ -46,12 +47,20 @@ export class Catalog {
   private refreshing?: Promise<void>;
   private threadRefresh = new Map<string, { at: number; pending?: Promise<void> }>();
   private pages = new Map<string, { until: number; value: Promise<HistoryPage> }>();
+  readonly projectSupport = new Map<string, boolean>();
+  readonly images: NativeImages;
   readonly errors = new Map<string, string>();
   constructor(
     readonly config: HubConfig,
     readonly store: Store,
     private connect: (machineId: string) => Promise<CodexClient>,
   ) {
+    this.images = new NativeImages(config, store, (threadId) => {
+      const thread = store.thread(threadId),
+        project = this.projects().find((p) => p.id === thread.projectId);
+      if (!project) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект не найден");
+      return this.machine(project.machineId);
+    });
     store.db
       .prepare("DELETE FROM history_cursors WHERE createdAt<?")
       .run(Date.now() - 7 * 86400000);
@@ -188,8 +197,17 @@ export class Catalog {
                   .prepare("DELETE FROM catalog_projects WHERE id=?")
                   .run(String(row.id));
             }
+          this.projectSupport.set(machine.id, true);
           this.errors.delete(machine.id);
-        } catch {
+        } catch (error) {
+          if (error instanceof HubError && error.code === "CODEX_METHOD_UNSUPPORTED") {
+            this.projectSupport.set(machine.id, false);
+            this.errors.set(
+              machine.id,
+              "Установленный Codex не поддерживает управление проектами. Настроенные проекты остаются доступны.",
+            );
+            continue;
+          }
           this.errors.set(
             machine.id,
             "Не удалось обновить проекты с компьютера. Сохранённый список доступен.",
@@ -238,6 +256,7 @@ export class Catalog {
         name: m.name,
         type: m.type,
         projectsDirectory: root,
+        canCreateProjects: this.projectSupport.get(m.id) !== false,
         remoteAvailable: !!m.remote,
       };
     });
@@ -277,6 +296,13 @@ export class Catalog {
   ) {
     const machine = this.machine(machineId),
       cwd = this.absolute(machine, path);
+    await this.refresh();
+    if (this.projectSupport.get(machineId) === false)
+      throw new HubError(
+        501,
+        "CODEX_METHOD_UNSUPPORTED",
+        "Установленный Codex не поддерживает создание проектов",
+      );
     const rpc = await this.connect(machineId);
     if (createDirectory) await rpc.request("fs/createDirectory", { path: cwd, recursive: true });
     const metadata = await rpc.request("fs/getMetadata", { path: cwd });
@@ -410,21 +436,48 @@ export class Catalog {
       turnId = str(entry.turnId, 100);
     if (!["userMessage", "agentMessage", "plan"].includes(type)) return;
     let content = str(item.text);
+    const messageId = str(item.clientId, 200) || str(item.id, 200);
+    const inputs = array(item.content);
+    if (type === "userMessage")
+      this.store.db
+        .prepare(
+          "DELETE FROM queue_transfers WHERE threadId=? AND id=? AND state IN ('enqueue_pending','enqueue_unknown')",
+        )
+        .run(thread.id, messageId);
+    const images =
+      type === "userMessage"
+        ? inputs.flatMap((c) => {
+            const source =
+              c.type === "localImage"
+                ? str(c.path, 2048)
+                : c.type === "image"
+                  ? str(c.url, 12 * 1024 * 1024)
+                  : "";
+            const image = source ? this.images.register(thread.id, messageId, source) : undefined;
+            return image ? [image] : [];
+          })
+        : [];
     if (type === "userMessage")
       content = array(item.content)
         .map((c) =>
           c.type === "text"
             ? str(c.text)
-            : c.type === "localImage" || c.type === "image"
+            : (c.type === "localImage" || c.type === "image") && !images.length
               ? "🖼 Изображение"
               : "",
         )
         .filter(Boolean)
         .join("\n\n");
-    if (!content) return;
+    if (images.length)
+      content = displayUserText(
+        content,
+        inputs.filter((c) => c.type === "localImage").map((c) => str(c.path, 2048)),
+      );
+    if (!content && !images.length) return;
     return {
       threadId: thread.id,
-      id: str(item.id, 200),
+      id: messageId,
+      ...(images.length ? { images } : {}),
       turnId: turnId || null,
       role: type === "userMessage" ? "user" : "assistant",
       phase: type === "plan" ? "plan" : str(item.phase, 50),
@@ -545,9 +598,9 @@ export class Catalog {
           cursor.kind === "items" &&
           !cursor.rpc &&
           !before &&
-          thread.historyMode !== "paginated" &&
           error instanceof HubError &&
-          error.code === "CODEX_RPC_ERROR"
+          (error.code === "CODEX_METHOD_UNSUPPORTED" ||
+            (thread.historyMode !== "paginated" && error.code === "CODEX_RPC_ERROR"))
         ) {
           cursor.kind = "turns";
           continue;

@@ -271,3 +271,9 @@ An occupied desktop conversation produces a specific error rather than a Safari 
 Roboto Condensed is bundled with Latin/Cyrillic coverage for organizer and hi-tech. CRT keeps monospace. The parameter row has smaller visible labels, native 16px pickers and at least 44px touch areas. Shared spacing reduces the header, footer and composer footprint; phone Chat omits its redundant heading. Input text stays 16px.
 
 The screenshot audit includes login, project and standalone lists, creation/folder forms, settings, chat, Results/image viewer, Activity and Remote connection/controls in portrait, landscape and the wide workspace. Remote teardown removes only its owned canvas/input nodes and keyed branches prevent an old display from leaking onto its empty state. Detailed browser and physical-device validation boundaries are in VERIFICATION.md.
+
+## Native activity and queued messages
+
+Project/thread spinners now also observe desktop-owned work through D25's read-only metadata adapter. External updates arrive within the polling interval while the site is open; a browser reconnect refreshes the snapshot. Unavailable observation is visible in navigation, and uncertain work never appears as a completed success.
+
+During a turn, Send becomes Add to queue. An independently scrolling compact queue above the composer shows pending text/files, edit, delete and Steer. Clearing the draft exposes Stop; Stop remains accessible while typing. Queue edits capture the revision opened by the editor so another device's edit cannot be silently overwritten. Each action is touch-accessible. A queued message starts automatically after the current native turn, even with the browser closed. Model/mode settings remain those of the current native conversation. Steer is available for web-owned turns; an external desktop turn can receive queued follow-ups.

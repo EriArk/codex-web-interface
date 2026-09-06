@@ -235,9 +235,24 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     if (!projectId) return;
     let disposed = false;
     setMachine("checking");
-    void api<{ available: boolean }>(`/projects/${projectId}/status`)
+    void api<{ available: boolean; code?: string }>(`/projects/${projectId}/status`)
       .then((s) => {
-        if (!disposed) setMachine(s.available ? "online" : "offline");
+        if (!disposed) {
+          setMachine(s.available ? "online" : "offline");
+          if (!s.available && s.code === "CODEX_LOGIN_REQUIRED")
+            setNotice("На машине выполнения нужен вход в Codex.");
+          if (
+            !s.available &&
+            [
+              "CODEX_METHOD_UNSUPPORTED",
+              "INVALID_CODEX_PROTOCOL",
+              "INVALID_CODEX_RESPONSE",
+            ].includes(s.code ?? "")
+          )
+            setNotice(
+              "Установленный Codex несовместим с этим подключением. Проверь диагностику сервера.",
+            );
+        }
       })
       .catch(() => {
         if (!disposed) setMachine("offline");

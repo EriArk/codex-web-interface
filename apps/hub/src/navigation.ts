@@ -12,7 +12,10 @@ export function registerNavigation(
   auth: Auth,
   sockets: Map<WebSocket, string>,
 ): void {
-  const snapshot = () => store.navigation(sessions.catalog.projects().map((p) => p.id));
+  const snapshot = () => ({
+    ...store.navigation(sessions.catalog.projects().map((p) => p.id)),
+    warnings: [...(sessions.externalActivity?.errors?.values() ?? [])],
+  });
   app.get("/api/navigation", async () => snapshot());
   app.post("/api/threads/:id/seen", async (req) => {
     const { id } = z.object({ id: z.string().min(1).max(100) }).parse(req.params);
@@ -36,6 +39,7 @@ export function registerNavigation(
     (socket, req) => {
       const session = auth.session(req);
       sockets.set(socket, session.tokenHash);
+      const unwatch = sessions.externalActivity?.watch();
       let pending: ReturnType<typeof setTimeout> | undefined;
       let previous = "";
       const send = () => {
@@ -69,6 +73,7 @@ export function registerNavigation(
       }, 25000);
       timer.unref();
       socket.once("close", () => {
+        unwatch?.();
         clearInterval(timer);
         clearTimeout(pending);
         store.changes.off("navigation", schedule);

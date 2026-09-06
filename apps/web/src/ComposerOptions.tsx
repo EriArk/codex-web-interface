@@ -169,6 +169,14 @@ export function ComposerOptions({
       {selection.mode === "plan" && (
         <div className="composer-mode-hint">Планируем и уточняем задачу перед реализацией.</div>
       )}
+      {!!caps.warnings?.length && (
+        <details className="composer-mode-hint">
+          <summary>Совместимость Codex</summary>
+          {caps.warnings.map((w) => (
+            <p key={w}>{w}</p>
+          ))}
+        </details>
+      )}
       {error && (
         <div className="composer-error" role="alert">
           {error}

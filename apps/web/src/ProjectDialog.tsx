@@ -64,7 +64,7 @@ export function ProjectDialog({
     }
   };
   const submit = async () => {
-    if (!machine || busy) return;
+    if (!machine || busy || machine.canCreateProjects === false) return;
     setBusy(true);
     setError("");
     const body = {
@@ -263,6 +263,12 @@ export function ProjectDialog({
             ? "Папка будет создана на компьютере. Работай здесь или открой её в настольном Codex."
             : "Файлы останутся на своём месте. Диалоги в этой папке будут доступны здесь."}
         </p>
+        {machine?.canCreateProjects === false && (
+          <p className="form-error">
+            Установленный Codex не поддерживает создание проектов. Существующие настроенные проекты
+            доступны.
+          </p>
+        )}
         {error && (
           <p className="form-error" role="alert">
             {error}
@@ -275,7 +281,9 @@ export function ProjectDialog({
           <button
             type="submit"
             className="primary"
-            disabled={busy || !machine || !name.trim() || !path}
+            disabled={
+              busy || !machine || machine.canCreateProjects === false || !name.trim() || !path
+            }
           >
             {busy ? "Создаём…" : mode === "new" ? "Создать проект" : "Подключить проект"}
             <Icon name="plus" size={17} />

@@ -62,6 +62,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 4,
+    name: "external-activity-and-queue-recovery",
+    up(db) {
+      db.exec(
+        "ALTER TABLE threads ADD COLUMN activitySource TEXT NOT NULL DEFAULT 'hub'; ALTER TABLE threads ADD COLUMN nativeObservedTurn TEXT; ALTER TABLE threads ADD COLUMN nativeObservedStatus TEXT; ALTER TABLE threads ADD COLUMN nativeObservedAt INTEGER; CREATE TABLE native_images(id TEXT PRIMARY KEY,threadId TEXT NOT NULL REFERENCES threads(id),messageId TEXT NOT NULL,sourceKey TEXT NOT NULL,source TEXT NOT NULL,name TEXT NOT NULL,artifactId TEXT REFERENCES artifacts(id),UNIQUE(threadId,messageId,sourceKey)); CREATE TABLE queue_transfers(threadId TEXT NOT NULL REFERENCES threads(id),id TEXT NOT NULL,value TEXT NOT NULL,state TEXT NOT NULL,PRIMARY KEY(threadId,id));",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

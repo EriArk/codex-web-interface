@@ -28,6 +28,10 @@ export interface ThreadRecord {
   workingDirectory?: string;
   historyMode?: string;
   sourceUpdatedAt?: number;
+  activitySource?: string;
+  nativeObservedTurn?: string;
+  nativeObservedStatus?: string;
+  nativeObservedAt?: number;
   archived?: number;
   status: string;
   activeTurnId: string | null;
@@ -45,6 +49,7 @@ export interface MessageRecord {
   lastSeq: number;
   createdAt: string;
   attachments?: Attachment[];
+  images?: { id: string; name: string; url: string }[];
 }
 export class Store {
   readonly changes = new EventEmitter();
@@ -118,6 +123,16 @@ export class Store {
   withAttachments(messages: MessageRecord[]): MessageRecord[] {
     return messages.map((message) => ({
       ...message,
+      images:
+        message.images ??
+        this.db
+          .prepare("SELECT id,name FROM native_images WHERE threadId=? AND messageId=?")
+          .all(message.threadId, message.id)
+          .map((row) => ({
+            id: String(row.id),
+            name: String(row.name),
+            url: `/api/native-images/${row.id}`,
+          })),
       attachments: this.db
         .prepare("SELECT * FROM attachments WHERE threadId=? AND messageId=? ORDER BY createdAt")
         .all(message.threadId, message.id)
@@ -150,7 +165,7 @@ export class Store {
     );
     const rows = this.db
       .prepare(
-        "SELECT id,projectId,title,status,activeTurnId,updatedAt,activityAt,completedSeq,seenSeq,completedTurnId,completedStatus FROM threads WHERE archived=0",
+        "SELECT id,projectId,title,status,activeTurnId,updatedAt,activityAt,completedSeq,seenSeq,completedTurnId,completedStatus,activitySource FROM threads WHERE archived=0",
       )
       .all() as unknown as ThreadActivity[];
     const groups = new Map<string, ThreadActivity[]>();

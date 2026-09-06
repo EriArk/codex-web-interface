@@ -6,6 +6,7 @@ import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { Icon } from "./icons";
+import { MessageQueue, useMessageQueue } from "./MessageQueue";
 import type { Approval, Result, TurnSettings } from "./types";
 import { UpdateNotice } from "./UpdateNotice";
 import type { ChatState } from "./useWorkspace";
@@ -201,6 +202,7 @@ export function Chat({
   onReconnect: () => void;
   onLatest: () => void;
 }) {
+  const queue = useMessageQueue(threadId);
   const options = useTurnSettings(projectId, threadId, state.thread.settings);
   const attachments = useAttachments(threadId),
     fileInput = useRef<HTMLInputElement>(null);
@@ -337,7 +339,8 @@ export function Chat({
     if (
       (!draft.trim() && !attachments.files.length) ||
       busy ||
-      active ||
+      queue.busy ||
+      (active && !queue.state.available) ||
       attachments.busy ||
       options.saving ||
       state.loading ||
@@ -346,11 +349,16 @@ export function Chat({
       return;
     const value = draft;
     if (
-      await onSend(
-        value,
-        options.selection,
-        attachments.files.map((f) => f.id),
-      )
+      await (active
+        ? queue.add(
+            value,
+            attachments.files.map((f) => f.id),
+          )
+        : onSend(
+            value,
+            options.selection,
+            attachments.files.map((f) => f.id),
+          ))
     ) {
       saveDraft("");
       attachments.clear();
@@ -469,7 +477,21 @@ export function Chat({
                     {!message.text && !message.attachments?.length && (
                       <span className="typing">•••</span>
                     )}
-                    <AttachmentList files={message.attachments ?? []} />
+                    <AttachmentList
+                      files={[
+                        ...(message.attachments ?? []),
+                        ...(message.images ?? []).map((image) => ({
+                          ...image,
+                          threadId,
+                          messageId: message.id,
+                          mime: "image/png",
+                          bytes: 0,
+                          image: true,
+                          previewUrl: image.url,
+                          createdAt: "",
+                        })),
+                      ]}
+                    />
                   </div>
                   {message.role === "assistant" &&
                     message.phase !== "commentary" &&
@@ -556,7 +578,9 @@ export function Chat({
               ? "Отправляем сообщение…"
               : state.approvals.length
                 ? "Codex ждёт твоего ответа"
-                : state.progress || statusLabel(state.thread.status)}
+                : state.thread.activitySource === "external"
+                  ? "Codex работает в другом клиенте"
+                  : state.progress || statusLabel(state.thread.status)}
           </span>
           {state.approvals.length > 0 && (
             <button
@@ -586,6 +610,7 @@ export function Chat({
           )}
         </div>
       )}
+      <MessageQueue key={threadId} queue={queue} turnId={state.thread.activeTurnId} />
       <form
         className="composer"
         onDragOver={(e) => {
@@ -593,7 +618,7 @@ export function Chat({
         }}
         onDrop={(e) => {
           e.preventDefault();
-          if (!busy && !active) void attachments.add(e.dataTransfer.files);
+          if (!busy && !queue.busy) void attachments.add(e.dataTransfer.files);
         }}
         onSubmit={(e) => {
           e.preventDefault();
@@ -606,7 +631,7 @@ export function Chat({
         />
         <AttachmentList
           files={attachments.files}
-          disabled={busy || active || attachments.busy}
+          disabled={busy || queue.busy || attachments.busy}
           onRemove={(id) => void attachments.remove(id)}
         />
         {(attachments.error || attachments.busy) && (
@@ -621,7 +646,7 @@ export function Chat({
             type="file"
             multiple
             aria-label="Выбрать файлы или изображения"
-            disabled={!threadId || busy || active || attachments.busy}
+            disabled={!threadId || busy || queue.busy || attachments.busy}
             onChange={(e) => {
               if (e.target.files) void attachments.add(e.target.files);
               e.target.value = "";
@@ -632,7 +657,7 @@ export function Chat({
             className="icon-button attach-button"
             aria-label="Добавить файлы или изображения"
             disabled={
-              !threadId || busy || active || attachments.busy || attachments.files.length >= 8
+              !threadId || busy || queue.busy || attachments.busy || attachments.files.length >= 8
             }
             onClick={() => fileInput.current?.click()}
           >
@@ -643,7 +668,7 @@ export function Chat({
             onPaste={(e) => {
               if (e.clipboardData.files.length) {
                 e.preventDefault();
-                if (!busy && !active) void attachments.add(e.clipboardData.files);
+                if (!busy && !queue.busy) void attachments.add(e.clipboardData.files);
               }
             }}
             rows={2}
@@ -660,12 +685,12 @@ export function Chat({
               }
             }}
           />
-          {active ? (
+          {active && !draft.trim() && !attachments.files.length ? (
             <button
               type="button"
               className="stop-button"
               onClick={onStop}
-              disabled={busy}
+              disabled={busy || state.thread.activitySource === "external"}
               aria-label="Остановить Codex"
             >
               <Icon name="stop" />
@@ -678,6 +703,8 @@ export function Chat({
                 !threadId ||
                 (!draft.trim() && !attachments.files.length) ||
                 busy ||
+                queue.busy ||
+                (active && !queue.state.available) ||
                 attachments.busy ||
                 state.loading ||
                 options.loading ||
@@ -685,14 +712,34 @@ export function Chat({
                 !options.selection ||
                 state.thread.status === "unknown"
               }
-              aria-label="Отправить сообщение"
+              aria-label={active ? "Добавить в очередь" : "Отправить сообщение"}
             >
-              {sending ? <span className="spinner" /> : <Icon name="send" />}
+              {sending || queue.busy ? (
+                <span className="spinner" />
+              ) : (
+                <Icon name={active ? "plus" : "send"} />
+              )}
             </button>
           )}
         </div>
         <div className="composer-hint">
-          <span>Enter — новая строка</span>
+          <span>
+            {active
+              ? queue.state.available
+                ? "Отправить → в очередь"
+                : queue.state.message || "Очередь загружается…"
+              : "Enter — новая строка"}
+          </span>
+          {active && (draft.trim() || attachments.files.length > 0) && (
+            <button
+              type="button"
+              className="text-button"
+              disabled={busy || state.thread.activitySource === "external"}
+              onClick={onStop}
+            >
+              Остановить
+            </button>
+          )}
           <span>⌘ / Ctrl + Enter — отправить</span>
         </div>
       </form>

@@ -17,6 +17,7 @@ const machine = z
         command: z.string().min(1).max(1024).default("codex"),
         shell: z.enum(["powershell", "pwsh"]).default("powershell"),
         launcher: z.string().min(1).max(1024).optional(),
+        activityNode: z.string().min(1).max(1024).optional(),
       })
       .default({ command: "codex", shell: "powershell" }),
     remote: z
@@ -111,6 +112,7 @@ export interface ThreadActivity {
   seenSeq: number;
   completedTurnId: string | null;
   completedStatus: string | null;
+  activitySource?: string;
 }
 export interface ProjectActivity {
   id: string;
@@ -121,6 +123,7 @@ export interface ProjectActivity {
   activityAt: string;
 }
 export interface NavigationState {
+  warnings?: string[];
   threads: ThreadActivity[];
   projects: ProjectActivity[];
 }
@@ -186,6 +189,8 @@ export interface ModelOption {
   supportsImages: boolean;
 }
 export interface Capabilities {
+  serverVersion?: string;
+  warnings?: string[];
   models: ModelOption[];
   modes: TurnSettings["mode"][];
   defaults: TurnSettings;

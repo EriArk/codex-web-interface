@@ -5,6 +5,8 @@ import "./styles.css";
 import "./workspace.css";
 import "./themes.css";
 import "./compact.css";
+import "./queue.css";
+import "./messageImages.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing root");

@@ -238,6 +238,11 @@ export function ProjectNavigation({
           Обновляем состояние…
         </p>
       )}
+      {activity.warnings?.map((w) => (
+        <p className="nav-sync-state" role="status" key={w}>
+          {w}
+        </p>
+      ))}
       <div className="nav-scroll">
         <section className="nav-projects">
           <div className="nav-label">
