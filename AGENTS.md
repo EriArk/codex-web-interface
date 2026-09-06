@@ -287,3 +287,8 @@ Before mobile support is considered complete, the same core workflow must also w
 - Themes remain semantic tokens and decorative CSS over one functional UI. Images and Remote retain original colors. Persist the fourth theme through Hub preferences and apply the cached theme and browser chrome color before rendering login/workspace.
 
 - Revisit organizer and especially Hi-Tech 2000s against the owner-drawn references in the same theme update. Hi-tech should emphasize a silver equipment chassis, dark joins, recessed light screens and cyan highlights. Organizer should retain clean paper, binding and pastel tabs. Keep all phone decoration compact.
+
+## Owner-requested attachment reliability and status cleanup (2026-09-06)
+
+- Remove the redundant upper chat status strip; retain the expandable recent-work control above the composer and compact navigation/header indicators.
+- Transfer uploaded attachments through the existing system SSH/SFTP connection, with bounded staging and verified file size/hash before native submission. Preserve draft text/files and allow an explicit retry if preparation fails; do not change permissions or restart the desktop to recover an upload.

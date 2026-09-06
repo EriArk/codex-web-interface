@@ -135,10 +135,11 @@ export async function stageAttachment(
   id: string,
   name: string,
   sourcePath: string,
+  deadline = Date.now() + 40_000,
 ): Promise<string> {
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(projectId) || !/^[0-9a-f-]{36}$/.test(id))
     throw new HubError(400, "INVALID_ATTACHMENT", "Invalid attachment identifier");
-  const { readFile, mkdir, copyFile, chmod } = await import("node:fs/promises");
+  const { mkdir, copyFile, chmod } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const safeName =
     name
@@ -156,97 +157,6 @@ export async function stageAttachment(
     return path;
   }
   if (!machine.ssh) throw new HubError(503, "SSH_NOT_CONFIGURED", "SSH target is not configured");
-  const bytes = await readFile(sourcePath);
-  const encoded = bytes.toString("base64");
-  const script = [
-    "$ErrorActionPreference='Stop'",
-    "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
-    "$dir=Join-Path $env:LOCALAPPDATA " +
-      quotePowerShell(`CodexWeb\\attachments\\${projectId}\\${id}`),
-    "[IO.Directory]::CreateDirectory($dir) | Out-Null",
-    `$path=Join-Path $dir ${quotePowerShell(`upload-${safeName}`)}`,
-    // Windows OpenSSH may keep stdin open after the client sends EOF. Frame the payload explicitly.
-    "$encoded=[Console]::In.ReadLine()",
-    `if ($null -eq $encoded -or $encoded.Length -ne ${encoded.length}) { throw 'INCOMPLETE_UPLOAD' }`,
-    "$bytes=[Convert]::FromBase64String($encoded)",
-    "[IO.File]::WriteAllBytes($path,$bytes)",
-    "[Console]::Out.Write($path)",
-  ].join("; ");
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      "ssh",
-      [
-        ...(machine.ssh?.configFile ? ["-F", machine.ssh.configFile] : []),
-        "-T",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "StrictHostKeyChecking=yes",
-        "-o",
-        "ConnectTimeout=8",
-        machine.ssh?.target ?? "",
-        "powershell.exe",
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-EncodedCommand",
-        Buffer.from(script, "utf16le").toString("base64"),
-      ],
-      { stdio: "pipe", detached: process.platform !== "win32", windowsHide: true },
-    );
-    let output = "",
-      done = false;
-    const finish = (error?: HubError) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      if (error) {
-        stopProcess(child);
-        reject(error);
-      } else resolve(output.trim());
-    };
-    const timer = setTimeout(
-      () =>
-        finish(
-          new HubError(
-            504,
-            "UPLOAD_TRANSFER_TIMEOUT",
-            "Не удалось передать вложение на компьютер вовремя",
-          ),
-        ),
-      60000,
-    );
-    child.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-      if (output.length > 4096)
-        finish(
-          new HubError(502, "INVALID_TRANSFER_RESPONSE", "Некорректный ответ при передаче файла"),
-        );
-    });
-    child.stderr.on("data", () => {});
-    child.once("error", () =>
-      finish(
-        new HubError(
-          503,
-          "UPLOAD_TRANSFER_FAILED",
-          "Не удалось подключиться к компьютеру для передачи файла",
-        ),
-      ),
-    );
-    child.stdin.on("error", () =>
-      finish(new HubError(503, "UPLOAD_TRANSFER_FAILED", "Передача файла прервалась")),
-    );
-    child.once("close", (code) =>
-      finish(
-        code === 0 && /^[A-Za-z]:\\/.test(output.trim())
-          ? undefined
-          : new HubError(
-              503,
-              "UPLOAD_TRANSFER_FAILED",
-              "Не удалось сохранить вложение на компьютере",
-            ),
-      ),
-    );
-    child.stdin.end(encoded + "\n");
-  });
+  const { transferWindowsAttachment } = await import("./attachment.js");
+  return transferWindowsAttachment(machine, projectId, id, safeName, sourcePath, deadline);
 }

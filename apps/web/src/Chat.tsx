@@ -402,15 +402,6 @@ export function Chat({
   };
   return (
     <section className="chat-pane pane" aria-label="Чат" data-visible={visible}>
-      <div className="pane-heading">
-        <span>
-          <Icon name="chat" />
-          Чат
-        </span>
-        <span className="small muted">
-          {threadId ? statusLabel(state.thread.status) : "Начни с диалога"}
-        </span>
-      </div>
       <div
         className="chat-scroll"
         ref={scroller}
@@ -630,7 +621,9 @@ export function Chat({
               {queue.busy
                 ? "Передаём сообщение…"
                 : sending
-                  ? "Отправляем сообщение…"
+                  ? attachments.files.length
+                    ? "Передаём вложения…"
+                    : "Отправляем сообщение…"
                   : state.approvals.length
                     ? "Codex ждёт твоего ответа"
                     : state.thread.activitySource === "external"
