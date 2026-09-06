@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$CodexCommand,
-    [string[]]$WorkingDirectories = @('D:\Projects\CodexWeb')
+    [Parameter(Mandatory=$true)][string[]]$WorkingDirectories
 )
 $ErrorActionPreference = 'Stop'
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path

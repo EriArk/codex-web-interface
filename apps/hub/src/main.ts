@@ -35,4 +35,5 @@ const shutdown = async () => {
 };
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());
+app.log.info({ schemaVersion: store.schemaVersion }, "Hub storage ready");
 await app.listen({ host: config.hub.host, port: config.hub.port });

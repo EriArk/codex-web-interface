@@ -26,7 +26,7 @@ machines:
       # launcher: 'C:\Users\YOUR_USER\AppData\Local\CodexWeb\companion\CodexWebBridge.exe'
     remote:
       provider: rdp
-      host: 192.168.1.50
+      host: 192.0.2.20 # Documentation address; replace with your PC's LAN/Tailnet address.
       port: 3389
       username: YOUR_USER
       passwordSecret: REMOTE_MAIN_WINDOWS_PASSWORD

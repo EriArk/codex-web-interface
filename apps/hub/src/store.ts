@@ -4,6 +4,8 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { type Attachment, HubError, type HubEvent, type TurnSettings } from "@codex-web/shared";
 
+import { migrateDatabase } from "./migrations.js";
+
 export interface ThreadRecord {
   id: string;
   projectId: string;
@@ -33,51 +35,18 @@ export interface MessageRecord {
   attachments?: Attachment[];
 }
 export class Store {
+  readonly schemaVersion: number;
   readonly db: DatabaseSync;
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = new DatabaseSync(path);
-    this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
-    this.db.exec(
-      [
-        "BEGIN IMMEDIATE",
-        "CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY)",
-        "CREATE TABLE IF NOT EXISTS users(username TEXT PRIMARY KEY,passwordHash TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS bootstrap(id INTEGER PRIMARY KEY CHECK(id=1),tokenHash TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS sessions(tokenHash TEXT PRIMARY KEY,csrf TEXT NOT NULL,expires INTEGER NOT NULL)",
-        "CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires)",
-        "CREATE TABLE IF NOT EXISTS threads(id TEXT PRIMARY KEY,projectId TEXT NOT NULL,codexThreadId TEXT UNIQUE NOT NULL,title TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'idle',activeTurnId TEXT,createdAt TEXT NOT NULL,updatedAt TEXT NOT NULL)",
-        "CREATE INDEX IF NOT EXISTS threads_project ON threads(projectId,updatedAt)",
-        "CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,threadId TEXT NOT NULL REFERENCES threads(id),turnId TEXT,type TEXT NOT NULL,payload TEXT NOT NULL,createdAt TEXT NOT NULL)",
-        "CREATE INDEX IF NOT EXISTS events_thread ON events(threadId,seq)",
-        "CREATE TABLE IF NOT EXISTS messages(threadId TEXT NOT NULL REFERENCES threads(id),id TEXT NOT NULL,turnId TEXT,role TEXT NOT NULL,phase TEXT NOT NULL,text TEXT NOT NULL,firstSeq INTEGER NOT NULL,lastSeq INTEGER NOT NULL,createdAt TEXT NOT NULL,PRIMARY KEY(threadId,id))",
-        "CREATE INDEX IF NOT EXISTS messages_page ON messages(threadId,firstSeq DESC)",
-        "CREATE TABLE IF NOT EXISTS results(id TEXT PRIMARY KEY,threadId TEXT NOT NULL REFERENCES threads(id),turnId TEXT,sourceKey TEXT NOT NULL,type TEXT NOT NULL,title TEXT NOT NULL,payload TEXT NOT NULL,createdAt TEXT NOT NULL,UNIQUE(threadId,sourceKey))",
-        "CREATE TABLE IF NOT EXISTS commands(scope TEXT NOT NULL,key TEXT NOT NULL,digest TEXT NOT NULL,state TEXT NOT NULL,response TEXT,createdAt TEXT NOT NULL,PRIMARY KEY(scope,key))",
-        "CREATE TABLE IF NOT EXISTS preferences(id INTEGER PRIMARY KEY CHECK(id=1),value TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS artifacts(id TEXT PRIMARY KEY,threadId TEXT NOT NULL REFERENCES threads(id),mime TEXT NOT NULL,bytes INTEGER NOT NULL,createdAt TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS thread_settings(threadId TEXT PRIMARY KEY REFERENCES threads(id),value TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,threadId TEXT NOT NULL REFERENCES threads(id),name TEXT NOT NULL,mime TEXT NOT NULL,bytes INTEGER NOT NULL,image INTEGER NOT NULL,messageId TEXT,createdAt TEXT NOT NULL)",
-        "CREATE INDEX IF NOT EXISTS attachments_message ON attachments(threadId,messageId)",
-        "INSERT OR IGNORE INTO schema_migrations(version) VALUES(1)",
-        "COMMIT",
-      ].join(";"),
-    );
-    const columns = new Set(
-      this.db
-        .prepare("PRAGMA table_info(threads)")
-        .all()
-        .map((row) => row.name),
-    );
-    for (const [name, definition] of [
-      ["origin", "TEXT NOT NULL DEFAULT 'web'"],
-      ["workingDirectory", "TEXT"],
-      ["historyMode", "TEXT"],
-      ["sourceUpdatedAt", "INTEGER"],
-      ["archived", "INTEGER NOT NULL DEFAULT 0"],
-    ]) {
-      if (name && !columns.has(name))
-        this.db.exec(`ALTER TABLE threads ADD COLUMN ${name} ${definition}`);
+    try {
+      this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
+      this.schemaVersion = migrateDatabase(this.db, path);
+      this.db.exec("PRAGMA journal_mode=WAL;");
+    } catch (error) {
+      this.db.close();
+      throw error;
     }
     this.db
       .prepare(

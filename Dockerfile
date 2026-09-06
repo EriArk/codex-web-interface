@@ -13,7 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-client 
 WORKDIR /app
 COPY --from=build --chown=node:node /release/ /app/
 COPY --from=build --chown=node:node /source/apps/web/dist/ /web/
-ENV NODE_ENV=production HUB_CONFIG=/config/config.json HUB_WEB_ROOT=/web
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
+ENV NODE_ENV=production HUB_CONFIG=/config/config.json HUB_WEB_ROOT=/web HUB_REVISION=$SOURCE_REVISION
 USER node
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD node -e "fetch(process.env.HUB_HEALTH_URL || 'http://127.0.0.1:8780/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node","dist/main.js"]

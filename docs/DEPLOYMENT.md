@@ -1,118 +1,96 @@
 # Deployment and operations
 
-## Current installation
+Examples use /srv/codex-web for private runtime state, /opt/codex-web for source and codex.example.com for the public origin. Replace them with your own values. Machine addresses in config.example.yaml are documentation examples, not defaults for your network.
 
-- Public URL: https://codex.abysstail.art
-- Linux source: /home/abysscloud/codex-web-interface
-- Private runtime directory: /home/abysscloud/services/codex-web (0700)
-- Hub binds 127.0.0.1:8780. guacd binds 127.0.0.1:4822.
-- Docker Compose runs codex-web-hub, codex-web-guacd and codex-web-tunnel.
-- Cloudflare tunnel: codex-web, f90dae12-4045-4dd9-8df3-d7af991b3b61.
-- Windows project: D:\\Projects\\CodexWeb, via the main-windows SSH alias.
-- Windows Companion scheduled task: CodexWebCompanion, interactive logon, limited token.
-- Windows services: sshd and tvnserver, automatic startup.
-- Windows firewall rules: CodexWeb-Hub-SSH and CodexWeb-Hub-VNC allow only 192.168.50.122.
+## Supported layout
 
-Other services and Cloudflare tunnels on the server are independent. Do not stop or reconfigure them when updating this app. No router forwarding is needed.
+The browser connects only to the Linux Hub through HTTPS. Use your own reverse proxy or the optional Cloudflare tunnel service in ops/linux/compose.yaml. Only port 443 of the Hub/ingress should be public. Do not expose Windows Codex, SSH, VNC/RDP or guacd to the Internet.
 
-The PC must be powered on and the owner must have logged into Windows for the Companion to be available. Locking the session does not create a public Windows endpoint. Remote behavior at the Windows secure desktop may differ from the normal desktop.
+The configured Windows machine stays in the trusted LAN/Tailnet. The Hub uses system SSH and pinned host keys. The user-session Companion carries App Server stdio over a local-only named pipe; Windows must be running with the user logged in. Desktop ChatGPT/Codex does not need to stay open. After finishing a desktop-owned conversation, fully quit that client once to release its writer for the website.
 
-## First login
+Windows Pro may host RDP. Windows Home generally needs a configured VNC provider. Both are carried through Guacamole. Restrict Windows inbound SSH and Remote ports to the Hub address, and use encrypted LAN/Tailnet transport if the underlying LAN is not trusted.
 
-On first startup the Hub writes a private link to:
+## Private state
+
+Create a directory owned by the service user, mode 0700:
 
 ```text
-/home/abysscloud/services/codex-web/data/setup-link.txt
+/srv/codex-web/
+  config.json        # Based on config.example.yaml; YAML or JSON accepted
+  deploy.env         # CODEX_WEB_STATE=/srv/codex-web
+  remote.env         # Only configured Remote secret variables, mode 0600
+  ssh/config         # System SSH configuration with IdentityFile and pinned host keys
+  ssh/windows_key    # Dedicated private key, mode 0600
+  ssh/known_hosts
+  data/app.db
+  data/results/
+  backups/           # Private snapshots; never serve over HTTP
+  tunnel/config.yml  # Optional ingress configuration
+  tunnel/TUNNEL.json # Only this tunnel's credential, mode 0600
 ```
 
-Open that link, choose a password of at least 12 characters and confirm it. There is no username field. The link fragment is sent only to the setup endpoint and consumed atomically; it stops working after enrollment. This prevents a stranger who reaches the public domain first from claiming the installation.
+Keep SSH keys, Remote passwords, ingress credentials and the website database out of Git. Do not copy native Codex auth.json or source repositories into Hub state. The tunnel container needs only its tunnel credential, not an account-wide Cloudflare certificate. Use your ingress provider's supported setup for your hostname and certificate.
 
-SQLite stores an Argon2id hash, never the password. Further visits use the normal website URL and that password. A session lasts seven days; logout also closes its event and Remote sockets. There is no default or temporary website password.
+## Windows setup
 
-Keep the setup link private. A protected local copy may be supplied to the owner for first access. Once enrollment has completed, the setup link file can be removed; the Hub removes its copy on the next start. Losing the password currently requires administrator recovery; do not delete the entire database.
+Use elevated PowerShell for service/firewall installation. Supply your actual Hub IPv4 address and Windows account explicitly; the scripts have no owner-specific defaults:
 
-## Runtime files
-
-```text
-config.json          # Non-secret machine/project configuration
-remote.env           # VNC/RDP password; 0600
-deploy.env           # CODEX_WEB_STATE=/home/abysscloud/services/codex-web
-ssh/config           # System SSH aliases; explicit identity and pinned host keys
-ssh/windows_ed25519  # Private key; never move into Git
-ssh/known_hosts
-data/app.db          # SQLite metadata, sessions, thread mappings, history
-data/results/        # Private screenshots and uploads
-tunnel/config.yml
-tunnel/<id>.json     # Credentials for this tunnel only; 0600
+```powershell
+.\ops\windows\Enable-CodexHubSsh.ps1 -HubAddress HUB_LAN_IP -WindowsUser YOUR_USER -PublicKeyFile C:\Private\hub.pub
+.\ops\windows\Install-Companion.ps1 -CodexCommand C:\Path\To\codex.exe -WorkingDirectories C:\Projects
+.\ops\windows\Install-RemoteDesktop.ps1 -HubAddress HUB_LAN_IP -Installer C:\Private\tightvnc.msi -SecretFile C:\Private\remote.env
 ```
 
-The tunnel container receives only its tunnel credential, not the account-wide Cloudflare certificate. Containers run with bounded resources and dropped capabilities. The Hub image includes system OpenSSH but no copied Codex authentication.
+Inspect each script's parameters before installation. The Companion runs with the user's limited interactive token. The VNC installer script checks the official package signature and refuses to silently overwrite an existing server. After a Codex update, verify its configured executable still exists.
 
-Uploaded originals remain private on the Hub. Images are validated and a JPEG preview, bounded to 2048 pixels per side, is used for vision. Originals and previews are copied over SSH into the Windows user's LocalAppData/CodexWeb/attachments directory. Generic files are referenced by absolute path; they are not executed during upload. Unsent Hub uploads expire after 24 hours and are cleaned on the next upload. Sent files remain available for thread resume. The initial Hub upload quota is 2 GiB. Server backups containing uploads are sensitive.
+## Start and first login
 
-## Update
-
-Run these commands on Linux, after source review and when no live Codex turn needs to survive a Hub restart:
+Use the pinned Node 24.18.x and pnpm 11.13.1 for builds. The repository's Dockerfile contains the same pinned versions. Build on Linux:
 
 ```bash
-cd /home/abysscloud/codex-web-interface
+cd /opt/codex-web
 pnpm install --frozen-lockfile
 pnpm test
 pnpm typecheck
 pnpm lint
-docker compose --env-file /home/abysscloud/services/codex-web/deploy.env -f ops/linux/compose.yaml build hub
-docker compose --env-file /home/abysscloud/services/codex-web/deploy.env -f ops/linux/compose.yaml up -d
-docker compose --env-file /home/abysscloud/services/codex-web/deploy.env -f ops/linux/compose.yaml ps
-curl --fail http://127.0.0.1:8780/api/health
+SOURCE_REVISION=$(git rev-parse HEAD) docker compose --env-file /srv/codex-web/deploy.env -f ops/linux/compose.yaml build hub
+docker compose --env-file /srv/codex-web/deploy.env -f ops/linux/compose.yaml up -d hub
 ```
 
-Image and package versions are pinned. pnpm 11.12.0 was deprecated upstream as broken; use 11.13.1.
+Configure/start the optional tunnel separately if you use it. When another reverse proxy terminates HTTPS, the Hub still uses its canonical HTTPS publicBaseUrl and secureCookies=true.
 
-Before replacing an existing release, tag the current Hub image as a rollback image and take a consistent backup. A browser disconnect is safe for a running turn; restarting the Hub terminates its App Servers. The UI marks interrupted transport outcomes as unknown and does not resend them automatically.
+At first start, the Hub writes data/setup-link.txt with a private single-use enrollment link. Open it and choose a password of at least 12 characters. There is no username or default password. Enrollment consumes the token atomically. Later visits use the normal site URL. SQLite stores an Argon2id password hash and opaque session digests, not plaintext passwords.
 
-## Backups and recovery
+The setup link is not a forgotten-password backdoor. Password recovery/change/global revocation is tracked separately in issue #8; never delete the database to reset access.
 
-For a simple consistent manual backup, stop only codex-web-hub, copy the private runtime directory into protected backup storage, then start the Hub again. Include SQLite, results/uploads, SSH configuration, tunnel credential and Remote secret; protect the backup at least as strictly as the original. Never commit it.
+## Upgrade and rollback
 
-A database-only online backup should use SQLite's backup API or VACUUM INTO, not copy just app.db while WAL writes are active. The source repositories remain on their execution machines and need their own backups.
+Wait for active web turns to finish before restarting the Hub. Closing the browser alone does not stop a turn. A Hub restart closes its App Servers and preserves uncertain outcomes for explicit recovery without automatically replaying prompts.
 
-## Windows maintenance
+1. Select a reviewed commit with green CI and record the current image digest/revision.
+2. Create and verify a snapshot with [the maintenance command](MAINTENANCE.md).
+3. Build the selected source with SOURCE_REVISION set as above.
+4. Restart only the Hub with compose up --detach --no-deps --wait hub. Do not stop unrelated services, Guacamole or ingress.
+5. Run doctor and check HTTPS login/health.
 
-The scripts in ops/windows require an elevated PowerShell for service/firewall/task setup. Normal Companion execution is not elevated.
+The storage layer owns ordered migrations. Existing schema 1 upgrades to schema 2 at startup in one transaction; the compatible prototype columns/catalog are preserved. Before upgrading an existing DB, the Hub creates a private consistent database checkpoint in data/migration-backups. Startup refuses a newer schema. A failed migration rolls back the schema and its version together.
 
-- Enable-CodexHubSsh.ps1 configures key-only access, pins allowed source IP in authorized_keys, restricts inbound SSH and preserves a timestamped sshd configuration backup.
-- Install-Companion.ps1 builds the small named-pipe bridge with the Windows .NET Framework compiler, writes its allowlisted working directories and installs the interactive task.
-- Install-RemoteDesktop.ps1 verifies the official TightVNC installer signature and configures VNC without a public HTTP viewer. It refuses to overwrite an existing installation silently.
+The database checkpoint is not a full file/config backup. The full snapshot command remains required before operational upgrades. Do not perform downgrade SQL: validate an older full snapshot in a fresh private target, then stop only the Hub and deliberately switch its configuration to the restored paths. Restore revokes all saved sessions, keeps the password hash and marks pending work unknown.
 
-After a Codex desktop update, check that the configured codex.exe path still exists. To change the Companion binary/configuration, first finish web turns and stop only CodexWebCompanion, then rerun its installer with the intended CodexCommand and WorkingDirectories. Do not copy auth.json to Linux.
+Image/source baselines are recorded in [RELEASES.md](RELEASES.md). Keep the prior image and pre-upgrade snapshot until the new deployment has been accepted.
 
-Useful read-only checks:
+## Troubleshooting
 
-```powershell
-Get-Service sshd,tvnserver
-Get-ScheduledTask -TaskName CodexWebCompanion
-Get-NetFirewallRule -Name CodexWeb-Hub-SSH,CodexWeb-Hub-VNC | Get-NetFirewallAddressFilter
-```
+Run doctor first; its default report is safe to share and contains bounded status codes rather than prompts, environment dumps or credentials. See [MAINTENANCE.md](MAINTENANCE.md).
 
-## Diagnostics
+- SSH_HOST_KEY_FAILED: verify the Windows host identity locally before updating only its pinned key.
+- SSH_AUTH_FAILED: inspect the intended account and dedicated key permissions.
+- COMPANION_STDIO_UNAVAILABLE: verify interactive login, the Companion task and configured Codex executable.
+- CODEX_LOGIN_REQUIRED: sign into native Codex on its execution machine.
+- THREAD_IN_USE: finish work in the client holding that conversation and fully exit it once; retry the original chat on the website.
+- MIGRATION_PENDING: run the supported backup/upgrade path.
+- PROJECT_ROOTS_UNRESTRICTED: the coarse per-machine project-root boundary remains issue #6.
+- NXDOMAIN on one device: compare its resolver with authoritative/public DNS, check the hostname and stale router cache. Correct DNS locally; do not weaken HTTPS or replace hostname validation.
+- Remote TCP failure: verify the configured LAN target and firewall source restriction. Do not open a public Remote port.
 
-The home router initially returned NXDOMAIN for the new hostname even though public DNS was correct. Windows now has an NRPT rule named `Codex Web domain DNS` for the exact hostname `codex.abysstail.art`, using Cloudflare resolvers `1.1.1.1` and `1.0.0.1`. Other domains still use the existing network DNS. Normal Windows resolution, HTTPS health and the browser login page were verified after applying it.
-
-This rule affects only that Windows PC. Devices using the router's DNS may still need a corrected router resolver or their own DNS setting. Once the router resolves the hostname correctly, remove only this rule from an elevated PowerShell:
-
-```powershell
-Get-DnsClientNrptRule | Where-Object {
-  $_.DisplayName -eq 'Codex Web domain DNS' -and
-  $_.Namespace.Count -eq 1 -and
-  $_.Namespace[0] -eq 'codex.abysstail.art'
-} | Remove-DnsClientNrptRule -Force
-Clear-DnsClientCache
-```
-
-```bash
-docker logs --tail 80 codex-web-hub
-docker logs --tail 40 codex-web-tunnel
-ssh -F /home/abysscloud/services/codex-web/ssh/config main-windows whoami
-```
-
-Do not publish raw credentials, complete environment dumps or private conversation files with a bug report. Smoke scripts are opt-in: some consume a small amount of Codex usage and create disposable verification conversations. Browser tests use an isolated loopback server with an in-memory database, simulated Codex and the real Remote provider.
+Raw Docker/SSH logs may contain installation-specific details; review them before sharing. Native integration scripts create disposable test conversations and may consume small Codex usage. Portable CI and the isolated browser fixtures need no production secrets.

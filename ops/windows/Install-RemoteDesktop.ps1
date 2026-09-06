@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 [CmdletBinding()]
 param(
-    [string]$HubAddress = '192.168.50.122',
+    [Parameter(Mandatory=$true)][string]$HubAddress,
     [string]$Installer,
     [string]$SecretFile
 )
