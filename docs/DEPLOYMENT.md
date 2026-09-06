@@ -94,3 +94,9 @@ Run doctor first; its default report is safe to share and contains bounded statu
 - Remote TCP failure: verify the configured LAN target and firewall source restriction. Do not open a public Remote port.
 
 Raw Docker/SSH logs may contain installation-specific details; review them before sharing. Native integration scripts create disposable test conversations and may consume small Codex usage. Portable CI and the isolated browser fixtures need no production secrets.
+
+## Observing desktop activity
+
+For the tested Codex 0.153.4 layout, optionally set `machines[].codex.activityNode` to the absolute path of Node 24+ on the execution machine. On Windows this is commonly `C:/Program Files/nodejs/node.exe`; verify the actual path. This setting only enables the fixed read-only metadata reader described in DECISIONS D25. It uses the existing SSH target and does not require a Companion restart or a listener. The machine must have node:sqlite and the native database layout expected by the reader. Unsupported or unreachable observation appears as unavailable, without writing to native files.
+
+Schema 4 stores observation baselines and only uncertain queue-to-Steer transfer records. Pin the backup image to the deployed revision when upgrading. Restore rehearsal and old-image rollback require the matching pre-migration snapshot; never start a schema-3 image against schema 4.

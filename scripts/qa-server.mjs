@@ -12,9 +12,9 @@ const raw=JSON.parse(readFileSync(process.argv[2],"utf8"));
 raw.hub={...raw.hub,publicBaseUrl:"http://127.0.0.1:8782",host:"127.0.0.1",port:8782,secureCookies:false,databasePath:":memory:",resultsPath:resolve(".local/qa-results")};
 const config=configSchema.parse(raw),store=new Store(":memory:");
 class FakeRpc extends EventEmitter {
- closed=false;activeThread="";turn="";forks=new Map();
+ closed=false;activeThread="";turn="";forks=new Map();queue=[];
  projects=[{id:"qa-native-seed",name:config.projects[0].name,roots:[{path:config.projects[0].workingDirectory}]}];
- async initialize(){return {};}
+ async initialize(){return {userAgent:"codex/0.153.4"};}
  async request(method,p){
   const capabilities=capabilityReply(method);if(capabilities)return capabilities;
   if(method==="project/list")return {data:this.projects,nextCursor:null};
@@ -32,8 +32,29 @@ class FakeRpc extends EventEmitter {
   }
   if(method==="thread/read")return {thread:this.forks.get(p.threadId)};
   if(method==="thread/items/list")return {data:[],nextCursor:null};
+  if(method==="thread/queue/list")return {data:this.queue.filter(q=>q.threadId===p.threadId)};
+  if(method==="thread/queue/add"){const queuedSubmission={id:randomUUID(),clientUserMessageId:p.clientUserMessageId,input:p.input,threadId:p.threadId};this.queue.push(queuedSubmission);return {queuedSubmission};}
+  if(method==="thread/queue/update"){const q=this.queue.find(q=>q.id===p.queuedSubmissionId);q.input=p.input;return {queuedSubmission:q};}
+  if(method==="thread/queue/delete"){const before=this.queue.length;this.queue=this.queue.filter(q=>q.id!==p.queuedSubmissionId);return {deleted:this.queue.length!==before};}
+  if(method==="turn/steer"){
+    this.emit("notification","item/completed",{threadId:p.threadId,turnId:p.expectedTurnId,item:{id:randomUUID(),clientId:p.clientUserMessageId,type:"userMessage",content:p.input}});
+    return {turnId:p.expectedTurnId};
+  }
   if(method==="turn/start"){
    this.activeThread=p.threadId;this.turn=randomUUID();
+   if(p.input.some(item=>item.text?.includes("Queue QA"))) {
+    const turn=this.turn,thread=p.threadId,id=randomUUID();
+    this.emit("notification","turn/started",{threadId:thread,turn:{id:turn}});
+    this.emit("notification","item/completed",{threadId:thread,turnId:turn,item:{id:randomUUID(),clientId:p.clientUserMessageId,type:"userMessage",content:p.input}});
+    setTimeout(()=>this.emit("notification","item/agentMessage/delta",{threadId:thread,turnId:turn,itemId:id,delta:"Проверяю очередь…"}),200);
+    setTimeout(()=>{
+      this.emit("notification","item/completed",{threadId:thread,turnId:turn,item:{id,type:"agentMessage",text:"Очередь проверена.",phase:"final_answer"}});
+      this.emit("notification","turn/completed",{threadId:thread,turn:{id:turn,status:"completed"}});
+      const q=this.queue.find(q=>q.threadId===thread);
+      if(q){this.queue=this.queue.filter(v=>v.id!==q.id);void this.request("turn/start",{threadId:thread,input:q.input,clientUserMessageId:q.clientUserMessageId});}
+    },p.input.some(v=>v.text?.includes("initial"))?25000:1500);
+    return {turn:{id:turn}};
+   }
    if(p.input.some(item=>item.text?.includes("Realtime QA"))) {
     const turn=this.turn,thread=p.threadId,id=randomUUID();
     this.emit("notification","turn/started",{threadId:thread,turn:{id:turn}});

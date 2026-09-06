@@ -13,6 +13,7 @@ import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { registerNavigation } from "./navigation.js";
+import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
 import { Store } from "./store.js";
@@ -131,6 +132,7 @@ export async function createApp(
     });
   });
   registerNavigation(app, store, sessions, auth, sockets);
+  registerQueue(app, sessions, store);
   app.get("/api/health", async () => ({ ok: true }));
   app.post(
     "/api/auth/login",
@@ -175,7 +177,10 @@ export async function createApp(
       warnings: [...sessions.catalog.errors.values()],
     };
   });
-  app.get("/api/machines", async () => ({ machines: sessions.catalog.machines() }));
+  app.get("/api/machines", async () => {
+    await sessions.catalog.refresh();
+    return { machines: sessions.catalog.machines() };
+  });
   app.get("/api/machines/:id/directories", async (req) => {
     const query = z.object({ path: z.string().min(1).max(2048) }).parse(req.query);
     return sessions.catalog.directories(paramId(req), query.path);
@@ -353,6 +358,16 @@ export async function createApp(
         })
         .parse(req.body);
     return store.once(`answer:${id}`, key(req), body, () => sessions.answer(id, body.answers));
+  });
+  app.get("/api/native-images/:id", async (req, reply) => {
+    const id = z.string().uuid().parse(paramId(req));
+    sessions.thread(sessions.catalog.images.thread(id));
+    const image = await sessions.catalog.images.get(id);
+    return reply
+      .type(image.mime)
+      .header("X-Content-Type-Options", "nosniff")
+      .header("Content-Disposition", 'inline; filename="image.png"')
+      .send(image.data);
   });
   app.get("/api/artifacts/:id", async (req, reply) => {
     const id = z.string().uuid().parse(paramId(req)),

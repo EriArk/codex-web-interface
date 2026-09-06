@@ -117,6 +117,8 @@ export function AttachmentList({
   disabled?: boolean;
   onRemove?: (id: string) => void;
 }) {
+  const [unavailable, setUnavailable] = useState<Record<string, boolean>>({});
+  const [attempt, setAttempt] = useState<Record<string, number>>({});
   const [preview, setPreview] = useState<Attachment | null>(null),
     dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -127,22 +129,38 @@ export function AttachmentList({
   return (
     <>
       <fieldset
-        className="attachment-list"
+        className={`attachment-list ${onRemove ? "" : "message-attachments"}`}
         aria-label={onRemove ? "Вложения к сообщению" : "Прикреплённые файлы"}
       >
         {files.map((file) => (
-          <div className="attachment" key={file.id}>
+          <div className={`attachment ${file.image ? "has-image" : ""}`} key={file.id}>
             {file.image ? (
               <button
                 type="button"
                 className="attachment-open"
-                onClick={() => setPreview(file)}
-                aria-label={`Посмотреть ${file.name}`}
+                onClick={() => {
+                  if (unavailable[file.id]) {
+                    setUnavailable((v) => ({ ...v, [file.id]: false }));
+                    setAttempt((v) => ({ ...v, [file.id]: (v[file.id] ?? 0) + 1 }));
+                  } else setPreview(file);
+                }}
+                aria-label={`${unavailable[file.id] ? "Повторить загрузку" : "Посмотреть"} ${file.name}`}
               >
-                <img src={file.previewUrl} alt="" loading="lazy" />
+                {unavailable[file.id] ? (
+                  <span className="image-unavailable">
+                    Изображение пока недоступно. Нажми, чтобы повторить.
+                  </span>
+                ) : (
+                  <img
+                    src={file.previewUrl + (attempt[file.id] ? `?retry=${attempt[file.id]}` : "")}
+                    alt=""
+                    loading="lazy"
+                    onError={() => setUnavailable((v) => ({ ...v, [file.id]: true }))}
+                  />
+                )}
                 <span>
                   {file.name}
-                  <small>{fileSize(file.bytes)}</small>
+                  {file.bytes > 0 && <small>{fileSize(file.bytes)}</small>}
                 </span>
               </button>
             ) : (
@@ -150,7 +168,7 @@ export function AttachmentList({
                 <Icon name="folder" />
                 <span>
                   {file.name}
-                  <small>{fileSize(file.bytes)}</small>
+                  {file.bytes > 0 && <small>{fileSize(file.bytes)}</small>}
                 </span>
               </a>
             )}

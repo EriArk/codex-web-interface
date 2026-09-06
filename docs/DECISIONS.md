@@ -218,3 +218,28 @@ Show turn progress and pending choices next to the composer. Keep code and comma
 The owner clarified that the completed website will be the only primary client. Windows runs Codex through the independently scheduled local-only Companion; keeping desktop ChatGPT/Codex open is not a dependency. This supersedes D22's copy-first UI fallback: preserve native IDs and drafts, explain the one-time desktop exit needed to release an existing writer, and expose a same-thread access retry. Do not forcibly quit an active desktop task. The Hub retains loaded writers between turns, with existing idle teardown and restart recovery.
 
 A version manifest tied to the built JavaScript and stylesheet assets lets a long-lived mobile page offer an explicit update. Never auto-reload an in-progress draft or upload. The HTML, service worker and manifest use no-store headers; private API responses remain outside service-worker caches.
+
+## D25 — Read-only activity across App Server processes
+
+Windows Codex 0.153.4 returns runtime `notLoaded` and maps an externally running persisted turn to `interrupted` in `thread/turns/list`. A native read probe compared this with the desktop's active state and the raw persisted `inProgress` value. Consequently Hub turn notifications alone cannot describe desktop activity.
+
+An optional administrator-configured `machines[].codex.activityNode` enables one fixed metadata query via the existing system SSH transport (or a local process on Linux). Node must support node:sqlite. The home comes from App Server initialize, IDs from the Hub catalog, queries open state_5.sqlite and thread_history_1.sqlite read-only/query-only, and output contains only latest turn IDs/status/timestamps. No private desktop state is mutated, no prompts/items/auth data are copied, and no Companion API or network listener is added. This is a narrow read-only compatibility adapter, verified against 0.153.4; unsupported schemas report unavailable observation.
+
+The shared poll runs every four seconds while navigation clients are connected, with one in-flight request per Hub and at most 3000 known threads per machine. Native catalog refresh has its own cache. Hub-owned loaded writers retain structured event priority. Ten-minute-stale unfinished metadata becomes unknown; failure never fabricates completion. First observed historical completions start read. Subsequent terminal changes create the same durable unread receipts as web turns. Cached observations survive browser/Hub restarts. Native completed context is read/resumed before web work; known external activity is rejected before turn/start.
+
+## D26 — Native message queue and explicit Steer
+
+Use App Server thread/queue APIs for the durable queue, including cross-client list/add/update/delete and automatic continuation. Hub does not duplicate normal queue execution. Queued messages inherit the native thread's current model/mode settings. The web composer accepts text and attachments during a turn; queue entries expose edit/delete/Steer and survive page closure.
+
+Steer requires a Hub-owned loaded writer and the exact expected turn ID. Native turn/steer does not consume its queued entry. Before transferring, keep a durable Hub recovery record, delete the native queued item only if deletion is confirmed, then steer. A completion/dequeue race never steers the next turn. Unknown outcomes retain the text for inspection/manual recovery, with no automatic resend. While another App Server owns the turn, native queue operations remain available; steering and interrupting that process are not supported. Native queued user messages are normalized into the live chat, including attachment identity.
+
+Core protocol failures, unsupported methods, offline transport and expired native login stay distinct. Optional Plan/config reads degrade only on explicit method-not-supported; no silent Work substitution for a selected Plan request. Runtime identity/version is included in capabilities; unverified versions display a compatibility note.
+
+
+## D27 — Render structured native image attachments
+
+The owner requested images in place of desktop attachment paths. Register only structured native localImage references or bounded inline raster image data from the paged history, returning opaque authenticated Hub image URLs. The browser cannot submit arbitrary filesystem paths or remote URLs. A fixed system-SSH read copies a raster source of at most 8 MiB; decoding/resizing runs on Linux, one image at a time. Cached normalized PNGs use the existing ResultStore artifact files and backup contract. Never rewrite native messages.
+
+The displayed text removes only the known desktop file wrapper corresponding to its structured image references. Other text and unrelated file references are preserved. Both native and web-uploaded images display useful-sized previews in the message and open in a touch-accessible viewer. Missing sources have a retry action. Image fetching is lazy and does not load older chat pages.
+
+Unconfirmed native queue additions also retain a Hub recovery record and bound attachment metadata. Observing the matching native queued item/user message reconciles that record; it does not resend the message.

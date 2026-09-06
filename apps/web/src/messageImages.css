@@ -1,0 +1,33 @@
+.message-attachments {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.message-attachments .attachment.has-image {
+  width: min(100%, 300px);
+  max-width: 100%;
+  overflow: hidden;
+}
+.message-attachments .has-image .attachment-open {
+  flex-direction: column;
+  padding: 5px;
+  gap: 5px;
+  width: 100%;
+  align-items: stretch;
+}
+.message-attachments .has-image .attachment-open img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 300px;
+  object-fit: contain;
+  background: var(--paper);
+  border-radius: 5px;
+}
+.message-attachments .has-image .attachment-open span {
+  max-width: 100%;
+  padding: 2px 5px;
+  white-space: nowrap;
+}
+.message-attachments .has-image small {
+  display: none;
+}

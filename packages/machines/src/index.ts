@@ -1,6 +1,9 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 
+export { type NativeActivity, readNativeActivity } from "./activity.js";
+export { readMachineImage } from "./image.js";
+
 export function quotePowerShell(value: string): string {
   if (Array.from(value).some((c) => [0, 10, 13].includes(c.charCodeAt(0))))
     throw new HubError(

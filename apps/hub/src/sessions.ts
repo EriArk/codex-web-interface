@@ -14,6 +14,7 @@ import {
 } from "@codex-web/shared";
 import { Attachments } from "./attachments.js";
 import { Catalog, type CatalogProject } from "./catalog.js";
+import { ExternalActivity } from "./externalActivity.js";
 import type { Store, ThreadRecord } from "./store.js";
 
 function record(value: unknown): Record<string, unknown> {
@@ -29,6 +30,9 @@ interface Runtime {
   loaded: Set<string>;
   active: Set<string>;
   touched: number;
+  codexHome?: string;
+  version?: string;
+  nativeModes?: boolean;
   capabilities?: Capabilities;
   capabilitiesAt?: number;
   capabilitiesProject?: string;
@@ -50,6 +54,7 @@ export class Sessions extends EventEmitter {
   private approvals = new Map<string, Approval>();
   readonly attachments: Attachments;
   readonly catalog: Catalog;
+  readonly externalActivity: ExternalActivity;
   private idleTimer: NodeJS.Timeout;
   constructor(
     readonly config: HubConfig,
@@ -73,6 +78,17 @@ export class Sessions extends EventEmitter {
       runtime.touched = Date.now();
       return runtime.rpc;
     });
+    this.externalActivity = new ExternalActivity(
+      config,
+      store,
+      this.catalog,
+      async (machineId) => {
+        const p = this.catalog.projects().find((p) => p.machineId === machineId);
+        return p ? ((await this.runtime(p.id)).codexHome ?? "") : "";
+      },
+      (id) => this.owns(id),
+      (event) => this.emit("event", event),
+    );
     this.idleTimer = setInterval(() => void this.reap(), 60000);
     this.idleTimer.unref();
   }
@@ -131,7 +147,9 @@ export class Sessions extends EventEmitter {
       });
       let account: Record<string, unknown>;
       try {
-        await rpc.initialize();
+        const identity = await rpc.initialize();
+        runtime.codexHome = text(identity.codexHome, 2048);
+        runtime.version = text(identity.userAgent, 300).match(/\/(\d+\.\d+\.\d+)/)?.[1];
         account = await rpc.request("account/read", { refreshToken: false });
       } catch (error) {
         rpc.close();
@@ -152,14 +170,41 @@ export class Sessions extends EventEmitter {
     }
   }
 
-  async status(projectId: string): Promise<{ available: boolean; code?: string }> {
+  async owns(id: string): Promise<boolean> {
+    const t = this.thread(id),
+      p = this.project(t.projectId),
+      promise = this.runtimes.get(p.machineId);
+    if (!promise) return false;
+    try {
+      return (await promise).loaded.has(id);
+    } catch {
+      return false;
+    }
+  }
+  async queueClient(id: string): Promise<CodexClient> {
+    const r = await this.runtime(this.thread(id).projectId);
+    r.touched = Date.now();
+    return r.rpc;
+  }
+  async status(
+    projectId: string,
+  ): Promise<{ available: boolean; code?: string; serverVersion?: string }> {
     try {
       const runtime = await this.runtime(projectId);
       runtime.touched = Date.now();
-      await runtime.rpc.request("account/read", { refreshToken: false });
-      return { available: true };
-    } catch {
-      return { available: false, code: "CODEX_UNAVAILABLE" };
+      const account = await runtime.rpc.request("account/read", { refreshToken: false });
+      if (account.requiresOpenaiAuth && !account.account)
+        throw new HubError(
+          503,
+          "CODEX_LOGIN_REQUIRED",
+          "Выполни вход в Codex на машине выполнения",
+        );
+      return { available: true, serverVersion: runtime.version };
+    } catch (error) {
+      return {
+        available: false,
+        code: error instanceof HubError ? error.code : "CODEX_UNAVAILABLE",
+      };
     }
   }
 
@@ -209,13 +254,32 @@ export class Sessions extends EventEmitter {
     }
     if (!models.length)
       throw new HubError(503, "MODELS_UNAVAILABLE", "Codex не вернул доступные модели");
+    const warnings: string[] = [];
+    if (r.version !== "0.153.4")
+      warnings.push(
+        `Codex ${r.version ?? "неизвестной версии"}: эта версия ещё не прошла проверку совместимости.`,
+      );
+    const optional = async (method: string, params: Record<string, unknown>, label: string) => {
+      try {
+        return await r.rpc.request(method, params);
+      } catch (error) {
+        if (!(error instanceof HubError) || error.code !== "CODEX_METHOD_UNSUPPORTED") throw error;
+        warnings.push(label + " недоступно в установленном Codex.");
+        return {};
+      }
+    };
     const [presets, configuration] = await Promise.all([
-      r.rpc.request("collaborationMode/list", {}),
-      r.rpc.request("config/read", {
-        includeLayers: false,
-        cwd: this.project(projectId).workingDirectory,
-      }),
+      optional("collaborationMode/list", {}, "Планирование"),
+      optional(
+        "config/read",
+        {
+          includeLayers: false,
+          cwd: this.project(projectId).workingDirectory,
+        },
+        "Чтение настроек модели",
+      ),
     ]);
+    r.nativeModes = Array.isArray(presets.data);
     const modes = (Array.isArray(presets.data) ? presets.data : [])
       .map((raw) => record(raw).mode)
       .filter((v): v is TurnSettings["mode"] => v === "default" || v === "plan");
@@ -227,6 +291,8 @@ export class Sessions extends EventEmitter {
       ? (config.model_reasoning_effort as TurnSettings["effort"])
       : model.defaultEffort;
     r.capabilities = {
+      serverVersion: r.version,
+      warnings,
       models,
       modes: [...new Set(modes)],
       defaults: { model: model.id, effort, mode: "default" },
@@ -440,6 +506,7 @@ export class Sessions extends EventEmitter {
         });
       }
       r.loaded.add(id);
+      this.store.db.prepare("UPDATE threads SET activitySource='hub' WHERE id=?").run(id);
       r.touched = Date.now();
       return this.store.thread(id);
     });
@@ -450,7 +517,15 @@ export class Sessions extends EventEmitter {
     settings?: TurnSettings,
     attachmentIds: string[] = [],
   ): Promise<Record<string, unknown>> {
-    const t = this.thread(id);
+    let t = this.thread(id);
+    if (!(await this.owns(id))) await this.externalActivity.refresh();
+    t = this.thread(id);
+    if (t.activitySource === "external" && ["running", "waiting_approval"].includes(t.status))
+      throw new HubError(
+        409,
+        "THREAD_IN_USE",
+        "Codex работает в другом клиенте. Можно добавить сообщение в очередь; оно продолжит работу после текущего ответа.",
+      );
     return this.locked(t.projectId, async () => {
       const r = await this.runtime(t.projectId);
       if (
@@ -521,6 +596,7 @@ export class Sessions extends EventEmitter {
       this.emitEvent(id, "thread.settings", { settings: selection });
       r.active.add(id);
       r.touched = Date.now();
+      this.store.db.prepare("UPDATE threads SET activitySource='hub' WHERE id=?").run(id);
       this.store.setStatus(id, "starting");
       this.emitEvent(id, "session.state", { status: "starting" });
       this.emitEvent(id, "user.message", {
@@ -542,16 +618,21 @@ export class Sessions extends EventEmitter {
         const response = await r.rpc.request("turn/start", {
           threadId: t.codexThreadId,
           input: [...(prompt ? [{ type: "text", text: prompt }] : []), ...prepared.input],
+          clientUserMessageId: messageId,
           model: selection.model,
           effort: selection.effort,
-          collaborationMode: {
-            mode: selection.mode,
-            settings: {
-              model: selection.model,
-              reasoning_effort: selection.effort,
-              developer_instructions: null,
-            },
-          },
+          ...(r.nativeModes
+            ? {
+                collaborationMode: {
+                  mode: selection.mode,
+                  settings: {
+                    model: selection.model,
+                    reasoning_effort: selection.effort,
+                    developer_instructions: null,
+                  },
+                },
+              }
+            : {}),
         });
         const turnId = text(record(response.turn).id);
         if (!turnId)
@@ -701,6 +782,7 @@ export class Sessions extends EventEmitter {
     } else if (method === "turn/started") {
       const id = text(record(p.turn).id);
       r.active.add(t.id);
+      this.store.db.prepare("UPDATE threads SET activitySource='hub' WHERE id=?").run(t.id);
       this.store.setStatus(t.id, "running", id);
       this.emitEvent(t.id, "turn.started", { id }, id);
     } else if (method === "turn/completed") {
@@ -720,6 +802,46 @@ export class Sessions extends EventEmitter {
         { id, status, error: turn.error ? text(record(turn.error).message, 2000) : null },
         id,
       );
+    } else if (method === "thread/queue/changed") {
+      this.emitEvent(t.id, "queue.changed", {});
+    } else if (
+      (method === "item/started" || method === "item/completed") &&
+      record(p.item).type === "userMessage"
+    ) {
+      const item = record(p.item),
+        content = Array.isArray(item.content) ? item.content.map(record) : [];
+      const messageId = text(item.clientId) || text(item.id);
+      this.store.db
+        .prepare(
+          "DELETE FROM queue_transfers WHERE threadId=? AND id=? AND state IN ('enqueue_pending','enqueue_unknown')",
+        )
+        .run(t.id, messageId);
+      const value = content
+        .filter((c) => c.type === "text")
+        .map((c) => text(c.text))
+        .join("\n\n");
+      // Normal sends already have an optimistic user event. Queued/steered messages arrive here.
+      const existing = this.store.db
+        .prepare(
+          "SELECT id FROM messages WHERE threadId=? AND (id=? OR (turnId=? AND role='user' AND text=?)) LIMIT 1",
+        )
+        .get(t.id, messageId, turnId, value);
+      if (!existing) {
+        const files = this.store.db
+          .prepare("SELECT * FROM attachments WHERE threadId=? AND messageId=?")
+          .all(t.id, messageId)
+          .map((v) => this.store.attachmentPublic(v));
+        this.emitEvent(
+          t.id,
+          "user.message",
+          {
+            id: messageId,
+            text: files.length ? text(content[0]?.text) : value,
+            attachments: files,
+          },
+          turnId,
+        );
+      }
     } else if (method === "item/started") {
       const kind = text(record(p.item).type);
       const labels: Record<string, string> = {
@@ -858,6 +980,7 @@ export class Sessions extends EventEmitter {
   }
   async close(): Promise<void> {
     clearInterval(this.idleTimer);
+    await this.externalActivity.close();
     for (const p of [...this.runtimes.values()]) {
       try {
         (await p).rpc.close();

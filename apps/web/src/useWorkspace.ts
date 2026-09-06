@@ -112,8 +112,21 @@ export function useWorkspace(threadId: string) {
           }));
           return;
         }
+        if (event.type === "queue.changed")
+          window.dispatchEvent(new CustomEvent("codex-queue-changed", { detail: threadId }));
         if (!event.seq || event.seq <= cursor) return;
         cursor = event.seq;
+        if (event.type === "source.changed") {
+          const current = cacheRef.current[threadId];
+          if (
+            current &&
+            !current.contextTurn &&
+            current.messages.length <= 20 &&
+            !current.loadingOlder
+          )
+            void refresh(threadId).catch(() => {});
+          else update(threadId, (s) => ({ ...s, hasNewer: true }));
+        }
         update(threadId, (s) => {
           if ((event.seq ?? 0) <= s.lastSeq) return s;
           const p = event.payload ?? {},
@@ -154,7 +167,7 @@ export function useWorkspace(threadId: string) {
           if (event.type === "thread.settings")
             thread = { ...thread, settings: p.settings as TurnSettings };
           if (event.type === "turn.started") {
-            thread = { ...thread, status: "running", activeTurnId: turnId };
+            thread = { ...thread, status: "running", activeTurnId: turnId, activitySource: "hub" };
             const index = messages.findLastIndex((m) => m.role === "user" && !m.turnId);
             if (index >= 0) messages = messages.map((m, i) => (i === index ? { ...m, turnId } : m));
           }
@@ -163,7 +176,16 @@ export function useWorkspace(threadId: string) {
             approvals = [];
           }
           if (event.type === "session.state")
-            thread = { ...thread, status: String(p.status ?? "unknown") };
+            thread = {
+              ...thread,
+              status: String(p.status ?? "unknown"),
+              ...(p.activitySource
+                ? {
+                    activitySource: String(p.activitySource),
+                    activeTurnId: typeof p.activeTurnId === "string" ? p.activeTurnId : null,
+                  }
+                : {}),
+            };
           if (event.type === "approval.requested") {
             approvals = [
               ...approvals,
@@ -255,7 +277,8 @@ export function useWorkspace(threadId: string) {
         checking ||
         document.visibilityState !== "visible" ||
         !current?.sourceVersion ||
-        ["running", "starting", "waiting_approval"].includes(current.thread.status)
+        (current.thread.activitySource !== "external" &&
+          ["running", "starting", "waiting_approval"].includes(current.thread.status))
       )
         return;
       checking = true;

@@ -13,6 +13,7 @@ export interface Machine {
   name: string;
   type: "ssh-windows" | "local-linux";
   projectsDirectory: string;
+  canCreateProjects?: boolean;
   remoteAvailable: boolean;
 }
 export interface Project {
@@ -35,6 +36,7 @@ export interface Thread {
   activeTurnId: string | null;
   settings?: TurnSettings;
   origin?: string;
+  activitySource?: string;
   historyMode?: string;
   sourceUpdatedAt?: number;
 }
@@ -48,6 +50,7 @@ export interface Message {
   lastSeq: number;
   createdAt: string;
   attachments?: Attachment[];
+  images?: { id: string; name: string; url: string }[];
 }
 export interface Question {
   id: string;
