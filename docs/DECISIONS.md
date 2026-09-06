@@ -280,3 +280,13 @@ The status row toggles a small scrollable recent-work panel. The Hub contract re
 Settings reads account/rateLimits/read through the existing machine transport. The stable Hub response contains only group labels, bounded window durations, remaining percentages and reset timestamps. Weekly means 10080 minutes and can occur in either the primary or secondary slot. Prefer the main codex bucket and retain additional named buckets in collapsed sections; do not infer unavailable values or expose credit/billing fields. Read-only usage checks remain possible after desktop handoff and do not acquire a thread writer.
 
 Conversation separators mark the end of a finished turn, including interrupted/failed boundaries without describing them as successful. Do not split multiple messages or accepted Steer input within the same active turn. Native thread/turn IDs and pagination remain unchanged.
+
+## D33 — Confirmed active handoff and verified return
+
+The owner approved stopping an active turn before transferring the same native conversation. This extends D30: the ordinary idle handoff still refuses active work; an explicit confirmInterrupt=true requests native turn/interrupt for each known Hub-owned active thread. New writes are gated before interruption. Hub waits for native completion events before closing its App Server connection. Unknown ownership or in-flight input refuses handoff; a stop timeout retains the writer and reports pending rather than forcing teardown. Queue entries are preserved.
+
+Retry corresponds to thread/resume, which loads the existing conversation but does not start a new turn. Explicit user input continues from saved context. Installed Windows Codex 0.153.4 has no supported live writer transfer. Ordinary mobile ChatGPT chats do not participate in this native writer connection; official Remote does.
+
+Returning to web while the desktop is running requires releaseDesktop=true and confirmStopTasks=true. The fixed Scheduled Task accepts ForceRelease: attempt graceful desktop close, then stop only captured package/session/owner-matching processes and their direct native children if needed, without relaunch. Companion-owned processes are excluded. No generic command or PID endpoint is introduced.
+
+Hub persists the operation ID before dispatch, blocks writes while returning, and enables web mode only after a matching completed DESKTOP_RELEASED result and running=false. Bounded background status polling completes an accepted return even if the browser disconnects or Hub restarts; uncertain requests are never replayed. Failed or expired operations leave desktop mode in place. Hard restart invalidates an old pending return. The website still acquires a conversation writer only on an explicit write/resume operation.

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Status','Restart','ForceRestart','Probe','Run')][string]$Action='Status',
+    [ValidateSet('Status','Restart','ForceRestart','ForceRelease','Probe','Run')][string]$Action='Status',
     [string]$RequestId
 )
 $ErrorActionPreference='Stop'
@@ -59,7 +59,8 @@ function Run-Operation {
         if ($session -eq 0) { throw 'DESKTOP_INTERACTIVE_SESSION_REQUIRED' }
         $desktop=Get-Desktop
         if (@($desktop.processes | Where-Object SessionId -NE $session).Count) { throw 'DESKTOP_OTHER_SESSION' }
-        $force=$operation.kind -eq 'forcerestart'
+        $force=$operation.kind -in @('forcerestart','forcerelease')
+        $release=$operation.kind -eq 'forcerelease'
         $activity=if ($force) { @{active=0} } else { Get-Activity }
         if ($operation.kind -eq 'probe') {
             Complete-Operation $operation 'completed' 'DESKTOP_INTERACTIVE_PROBE_OK'; return
@@ -72,7 +73,7 @@ function Run-Operation {
         $children=@(Get-CimInstance Win32_Process -Filter "Name = 'codex.exe'" | Where-Object {
             $_.ParentProcessId -in $uiIds -and $_.SessionId -eq $session
         })
-        if (-not $force) {
+        if (-not $force -or $release) {
         foreach ($item in $desktop.processes) {
             $p=Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
             if ($p -and $p.MainWindowHandle -ne 0) { $null=$p.CloseMainWindow() }
@@ -83,7 +84,7 @@ function Run-Operation {
             $remaining=@((Get-Desktop).processes)
         } while ($remaining.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline)
         # Recheck just before forced exit in case work began during the graceful-close window.
-        if ((Get-Activity).active -gt 0) { throw 'DESKTOP_BUSY' }
+        if (-not $force -and (Get-Activity).active -gt 0) { throw 'DESKTOP_BUSY' }
         }
         foreach ($item in @($desktop.processes)+$children) {
             $p=Get-CimInstance Win32_Process -Filter ("ProcessId = " + $item.ProcessId)
@@ -92,6 +93,9 @@ function Run-Operation {
             }
         }
         if ((Get-Desktop).processes.Count -gt 0) { throw 'DESKTOP_EXIT_FAILED' }
+        if ($release) {
+            Complete-Operation $operation 'completed' 'DESKTOP_RELEASED'; return
+        }
         # The user explicitly requested a visible desktop application via the web control.
         # Scheduled Task runs in that user's interactive session, never SSH Session 0.
         Start-Process -FilePath $desktop.exe -WorkingDirectory (Split-Path -Parent $desktop.exe) | Out-Null
@@ -119,15 +123,15 @@ try {
         $task=Get-ScheduledTask -TaskName $taskName
         if ($task.State -eq 'Running') { throw 'DESKTOP_RESTART_PENDING' }
         if ($operation -and [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()-$operation.requestedAt -lt 60) { throw 'DESKTOP_RESTART_COOLDOWN' }
-        $state=Get-State -SkipActivity:($Action -eq 'ForceRestart')
-        if ($Action -ne 'ForceRestart' -and -not $state.activityKnown) { throw 'DESKTOP_ACTIVITY_UNAVAILABLE' }
+        $state=Get-State -SkipActivity:($Action -in @('ForceRestart','ForceRelease'))
+        if ($Action -notin @('ForceRestart','ForceRelease') -and -not $state.activityKnown) { throw 'DESKTOP_ACTIVITY_UNAVAILABLE' }
         if ($Action -eq 'Restart' -and $state.activeTasks -gt 0) { throw 'DESKTOP_BUSY' }
         $operation=[pscustomobject]@{id=$RequestId;kind=$Action.ToLowerInvariant();state='queued';code='';requestedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
         Save-Operation $operation
         try { Start-ScheduledTask -TaskName $taskName } catch {
             Complete-Operation $operation 'failed' 'DESKTOP_TASK_START_FAILED'; throw 'DESKTOP_TASK_START_FAILED'
         }
-        Get-State -SkipActivity:($Action -eq 'ForceRestart') | ConvertTo-Json -Compress -Depth 4
+        Get-State -SkipActivity:($Action -in @('ForceRestart','ForceRelease')) | ConvertTo-Json -Compress -Depth 4
     } finally { $lock.Dispose() }
 } catch {
     $code=[string]$_.Exception.Message

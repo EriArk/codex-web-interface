@@ -9,7 +9,7 @@ import { createApp } from "../apps/hub/dist/app.js";
 import { Store } from "../apps/hub/dist/store.js";
 import activity from "../ops/windows/desktop-activity.cjs";
 import { parseDesktopReply } from "../packages/machines/dist/desktop.js";
-import { configSchema } from "../packages/shared/dist/index.js";
+import { configSchema, HubError } from "../packages/shared/dist/index.js";
 
 const origin = "https://example.test";
 const config = configSchema.parse({
@@ -44,18 +44,18 @@ async function fixture() {
     failure = false;
   const transport = async (_m, action, id) => {
     calls.push({ action, id });
-    if (action === "Restart") {
+    if (["Restart", "ForceRelease"].includes(action)) {
       state = {
         ...state,
         operation: {
           id,
-          kind: "restart",
+          kind: action === "ForceRelease" ? "forcerelease" : "restart",
           state: "queued",
           code: "",
           requestedAt: Date.now() / 1000,
         },
       };
-      if (failure) throw Error("lost acknowledgement");
+      if (failure) throw failure === true ? Error("lost acknowledgement") : failure;
     }
     return state;
   };
@@ -84,7 +84,7 @@ async function fixture() {
     headers,
     post,
     set: (v) => (state = { ...state, ...v }),
-    fail: () => (failure = true),
+    fail: (error = true) => (failure = error),
     close: () => app.close(),
   };
 }
@@ -262,6 +262,7 @@ test("handoff endpoint is authenticated, rejects unrelated fields and requires e
       ).statusCode,
       401,
     );
+    f.set({ running: false });
     for (const client of ["desktop", "web"]) {
       const r = await f.app.inject({
         method: "POST",
@@ -272,7 +273,141 @@ test("handoff endpoint is authenticated, rejects unrelated fields and requires e
       assert.equal(r.statusCode, 200, r.body);
       assert.equal(f.store.preferences().machineClients.pc, client);
     }
-    assert.equal(f.calls.length, 0);
+    assert.deepEqual(
+      f.calls.map((c) => c.action),
+      ["Status"],
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+async function clientRequest(f, body, id = randomUUID(), extra = {}) {
+  return f.app.inject({
+    method: "POST",
+    url: "/api/machines/pc/client",
+    headers: { ...f.headers, "idempotency-key": id, ...extra },
+    payload: body,
+  });
+}
+test("return requires explicit desktop-close confirmation and leaves ownership unchanged until verified completion", async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await clientRequest(f, { client: "desktop" })).statusCode, 200);
+    assert.equal(
+      (await clientRequest(f, { client: "web" })).json().error.code,
+      "DESKTOP_RELEASE_REQUIRED",
+    );
+    for (const body of [
+      { client: "web", releaseDesktop: true },
+      { client: "web", confirmStopTasks: true },
+      { client: "desktop", releaseDesktop: true },
+    ])
+      assert.equal((await clientRequest(f, body)).statusCode, 400);
+    const body = { client: "web", releaseDesktop: true, confirmStopTasks: true },
+      key = randomUUID();
+    assert.equal((await clientRequest(f, body, key, { "x-csrf-token": "wrong" })).statusCode, 403);
+    assert.equal(f.calls.filter((c) => c.action === "ForceRelease").length, 0);
+    f.set({ activeTasks: 3, activityKnown: false });
+    for (let n = 0; n < 2; n++) {
+      const r = await clientRequest(f, body, key);
+      assert.equal(r.statusCode, 200, r.body);
+      assert.equal(r.json().returning, true);
+      assert.equal(r.json().client, "desktop");
+    }
+    assert.equal(f.calls.filter((c) => c.action === "ForceRelease").length, 1);
+    assert.equal(
+      (await clientRequest(f, { client: "desktop" })).json().error.code,
+      "HANDOFF_PENDING",
+    );
+    const status = () => f.app.inject({ url: "/api/machines/pc/desktop", headers: f.headers });
+    const operation = {
+      id: key,
+      kind: "forcerelease",
+      state: "completed",
+      code: "DESKTOP_RELEASED",
+    };
+    f.set({ operation });
+    assert.equal(
+      (await status()).json().client,
+      "desktop",
+      "a completed reply cannot hide a still-running desktop",
+    );
+    f.set({ running: false });
+    const done = (await status()).json();
+    assert.equal(done.client, "web");
+    assert.equal(done.returning, false);
+    assert.deepEqual(f.store.preferences().desktopReturns, {});
+  } finally {
+    await f.close();
+  }
+});
+
+test("lost native close acknowledgement is recovered by background polling without another browser request or replay", async () => {
+  const f = await fixture();
+  try {
+    await clientRequest(f, { client: "desktop" });
+    f.fail();
+    const key = randomUUID(),
+      body = { client: "web", releaseDesktop: true, confirmStopTasks: true };
+    assert.equal((await clientRequest(f, body, key)).statusCode, 500);
+    assert.equal(f.store.preferences().machineClients.pc, "desktop");
+    f.set({
+      running: false,
+      operation: { id: key, kind: "forcerelease", state: "completed", code: "DESKTOP_RELEASED" },
+    });
+    const deadline = Date.now() + 7000;
+    while (f.store.preferences().machineClients.pc !== "web" && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(f.store.preferences().machineClients.pc, "web");
+    assert.equal((await clientRequest(f, body, key)).statusCode, 409);
+    assert.equal(f.calls.filter((c) => c.action === "ForceRelease").length, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("failed or unrelated native close never returns the writer and pending state survives browser loss", async () => {
+  const f = await fixture();
+  try {
+    await clientRequest(f, { client: "desktop" });
+    const key = randomUUID();
+    await clientRequest(f, { client: "web", releaseDesktop: true, confirmStopTasks: true }, key);
+    const status = () => f.app.inject({ url: "/api/machines/pc/desktop", headers: f.headers });
+    f.set({
+      running: false,
+      operation: {
+        id: randomUUID(),
+        kind: "restart",
+        state: "completed",
+        code: "DESKTOP_RESTARTED",
+      },
+    });
+    assert.equal((await status()).json().returning, true);
+    f.set({
+      operation: { id: key, kind: "forcerelease", state: "failed", code: "DESKTOP_STOP_FAILED" },
+    });
+    const failed = (await status()).json();
+    assert.equal(failed.client, "desktop");
+    assert.equal(failed.returning, false);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a definite native cooldown rejection clears pending return immediately", async () => {
+  const f = await fixture();
+  try {
+    await clientRequest(f, { client: "desktop" });
+    f.fail(new HubError(409, "DESKTOP_RESTART_COOLDOWN", "Cooldown"));
+    const r = await clientRequest(f, {
+      client: "web",
+      releaseDesktop: true,
+      confirmStopTasks: true,
+    });
+    assert.equal(r.statusCode, 409);
+    assert.deepEqual(f.store.preferences().desktopReturns, {});
+    assert.equal(f.store.preferences().machineClients.pc, "desktop");
   } finally {
     await f.close();
   }

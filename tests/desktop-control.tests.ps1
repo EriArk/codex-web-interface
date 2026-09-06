@@ -62,4 +62,9 @@ Assert ($operation.code -eq 'DESKTOP_RESTARTED' -and $started -eq 1 -and $closed
 Assert ($stopped.Count -eq 2 -and $stopped -contains 10 -and $stopped -contains 11 -and $processes.ContainsKey(12)) 'Hard restart touched an unrelated App Server'
 Reset-Test;$operation.kind='forcerestart';$script:session=0;Run-Operation
 Assert ($operation.code -eq 'DESKTOP_INTERACTIVE_SESSION_REQUIRED' -and $stopped.Count -eq 0) 'Hard restart escaped the interactive-session boundary'
-Write-Output '9 desktop maintenance checks passed; all process effects were simulated.'
+Reset-Test;$operation.kind='forcerelease';$script:active=5;$script:failure=$true;Run-Operation
+Assert ($operation.code -eq 'DESKTOP_RELEASED' -and $closed -eq 1 -and $started -eq 0) 'Return did not close the desktop without relaunching'
+Assert ($stopped.Count -eq 1 -and $stopped[0] -eq 11 -and $processes.ContainsKey(12)) 'Return touched a Companion-owned App Server'
+Reset-Test;$operation.kind='forcerelease';$script:session=0;Run-Operation
+Assert ($operation.code -eq 'DESKTOP_INTERACTIVE_SESSION_REQUIRED' -and $closed -eq 0 -and $stopped.Count -eq 0) 'Return escaped the interactive-session boundary'
+Write-Output '11 desktop maintenance checks passed; all process effects were simulated.'
