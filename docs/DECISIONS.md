@@ -252,3 +252,31 @@ The owner requested a Codex restart button. Optional machines[].codex.desktopCon
 The task resolves the installed OpenAI.Codex package for the pinned family and current owner. It closes only that package's UI and captured direct native App Server children, checking creation identity before forced exit. Companion-owned native processes remain separate. Relaunch occurs in the same nonzero interactive session. State is queued/restarting/completed/failed/unknown; completion requires observing the new desktop process. Stale requests never execute after a later login; uncertain outcomes are read back, never replayed automatically.
 
 Hub checks its own active turns. Windows independently queries all non-archived native latest-turn metadata read-only (bounded to 10000 threads), applying D25's ten-minute freshness rule. Active or unreadable state blocks restart. The task repeats this check immediately before close and before forced exit. A desktop task beginning during the narrow close window cannot be coordinated atomically through the current protocol; use this explicit maintenance action between tasks. No automatic restart on errors or writer conflicts is introduced.
+
+
+## D29 — Per-conversation access
+
+Normal access uses workspace-write/on-request; explicit full access uses the native :danger-full-access profile and never approval policy. Hub checks permissionProfile/list and configRequirements/read before accepting full access. Missing/denied capabilities fail closed. The choice is stored with thread settings, applied on native start/resume/turn start and changed for future turns through thread/settings/update when the Hub owns the loaded thread. A native settings notification reconciles accepted changes if the request acknowledgement is lost. An active external writer cannot have its defaults changed. Forks start with normal access. Global configuration and already-pending approvals are never rewritten or automatically accepted.
+
+The composer exposes only “Обычный доступ / Полный доступ”, with a distinct full-access state. This is the owner's requested opt-in native policy control, not an application authentication bypass.
+
+## D30 — Explicit desktop handoff and hard recovery
+
+The owner extended D28 with a separate hard restart and manual client handoff. A persisted per-machine desktop/web selection belongs to Hub preferences, writable only through the authenticated dedicated client endpoint. Desktop handoff refuses active/unknown Hub tasks and in-flight writes, closes the selected machine's loaded App Server connection and blocks create/resume/send/settings/queue mutations until explicit return. Read-only discovery may reconnect without loading a writer. No desktop state files are edited and native thread IDs remain unchanged.
+
+The hard restart endpoint requires confirmStopTasks=true, CSRF/Origin, a UUID and bounded request rate. It first puts the machine in desktop mode and disconnects its Hub App Server; the existing Companion job object tears down that process tree when the pipe closes. The fixed Windows Scheduled Task accepts ForceRestart in addition to ordinary Restart. Only this explicit hard action skips activity checks and the graceful-close wait; process/package/owner/session identity checks, expiration, cooldown and duplicate protection still apply. It closes only the configured desktop package and its captured direct App Server children. Companion and unrelated Codex processes remain intact. The user explicitly returns control to the website afterwards. No generic PID/command API is exposed.
+
+## D31 — Resilient attachments, visible Steer and compact progress
+
+Windows attachment staging now uses a newline-framed base64 payload with an exact expected length. Windows OpenSSH can keep standard input open after client EOF, so ReadToEnd is not a valid completion signal. A staging failure occurs before user input reaches Codex; it preserves unbound attachments and releases the idempotency key for an explicit retry. Unknown outcomes after native submission remain protected from replay.
+
+A confirmed Steer retains a “Принято” card in the queue until the matching native user message is observed. It cannot be edited/deleted/resubmitted as a queued item after acceptance. Matching native events reconcile the receipt, including the event-before-ack race. Lost acknowledgements retain the existing explicit recovery behavior.
+
+The status row toggles a small scrollable recent-work panel. The Hub contract returns at most eight recent steps from bounded event queries, scoped to the selected turn. Commands start collapsed. Only item/reasoning/summaryTextDelta and completed reasoning.summary enter this view; raw reasoning text/content is ignored. Summary snapshots are bounded and throttled, and the panel polls only while open and visible. The newer-message navigation button stays inside the chat viewport so it does not cover queue controls.
+
+
+## D32 — Native usage and task boundaries
+
+Settings reads account/rateLimits/read through the existing machine transport. The stable Hub response contains only group labels, bounded window durations, remaining percentages and reset timestamps. Weekly means 10080 minutes and can occur in either the primary or secondary slot. Prefer the main codex bucket and retain additional named buckets in collapsed sections; do not infer unavailable values or expose credit/billing fields. Read-only usage checks remain possible after desktop handoff and do not acquire a thread writer.
+
+Conversation separators mark the end of a finished turn, including interrupted/failed boundaries without describing them as successful. Do not split multiple messages or accepted Steer input within the same active turn. Native thread/turn IDs and pagination remain unchanged.

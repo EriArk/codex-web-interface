@@ -57,4 +57,9 @@ Reset-Test;$operation.kind='probe';$script:active=1;Run-Operation
 Assert ($operation.code -eq 'DESKTOP_INTERACTIVE_PROBE_OK' -and $closed -eq 0 -and $started -eq 0) 'Probe had effects'
 Reset-Test;$operation.state='completed';Run-Operation
 Assert ($closed -eq 0 -and $started -eq 0) 'Completed operation was replayed'
-Write-Output '7 desktop maintenance checks passed; all process effects were simulated.'
+Reset-Test;$operation.kind='forcerestart';$script:active=5;$script:failure=$true;Run-Operation
+Assert ($operation.code -eq 'DESKTOP_RESTARTED' -and $started -eq 1 -and $closed -eq 0) 'Hard restart depended on graceful close or activity observation'
+Assert ($stopped.Count -eq 2 -and $stopped -contains 10 -and $stopped -contains 11 -and $processes.ContainsKey(12)) 'Hard restart touched an unrelated App Server'
+Reset-Test;$operation.kind='forcerestart';$script:session=0;Run-Operation
+Assert ($operation.code -eq 'DESKTOP_INTERACTIVE_SESSION_REQUIRED' -and $stopped.Count -eq 0) 'Hard restart escaped the interactive-session boundary'
+Write-Output '9 desktop maintenance checks passed; all process effects were simulated.'

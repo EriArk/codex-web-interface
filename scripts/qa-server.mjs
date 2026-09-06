@@ -17,11 +17,15 @@ class FakeRpc extends EventEmitter {
  async initialize(){return {userAgent:"codex/0.153.4"};}
  async request(method,p){
   const capabilities=capabilityReply(method);if(capabilities)return capabilities;
+  if(method==="permissionProfile/list")return {data:[{id:":danger-full-access",allowed:true}],nextCursor:null};
+  if(method==="configRequirements/read")return {requirements:null};
+  if(method==="thread/settings/update")return {};
   if(method==="project/list")return {data:this.projects,nextCursor:null};
   if(method==="project/create"){const project={id:randomUUID(),name:p.name,roots:p.roots};this.projects.push(project);return {project};}
   if(method==="thread/list")return {data:[],nextCursor:null};
   if(method==="fs/getMetadata")return {isDirectory:true};
   if(method==="fs/readDirectory")return {entries:[{fileName:"Example",isDirectory:true,isFile:false}]};
+  if(method==="account/rateLimits/read")return {rateLimits:{limitId:"codex",primary:{usedPercent:25,windowDurationMins:10080,resetsAt:Math.floor(Date.now()/1000)+86400},secondary:{usedPercent:10,windowDurationMins:300,resetsAt:Math.floor(Date.now()/1000)+7200}}};
   if(method==="account/read")return {account:{type:"chatgpt"}};
   if(method==="thread/start")return {thread:{id:randomUUID()}};
   if(method==="thread/resume")return {thread:{turns:[]}};
@@ -37,7 +41,7 @@ class FakeRpc extends EventEmitter {
   if(method==="thread/queue/update"){const q=this.queue.find(q=>q.id===p.queuedSubmissionId);q.input=p.input;return {queuedSubmission:q};}
   if(method==="thread/queue/delete"){const before=this.queue.length;this.queue=this.queue.filter(q=>q.id!==p.queuedSubmissionId);return {deleted:this.queue.length!==before};}
   if(method==="turn/steer"){
-    this.emit("notification","item/completed",{threadId:p.threadId,turnId:p.expectedTurnId,item:{id:randomUUID(),clientId:p.clientUserMessageId,type:"userMessage",content:p.input}});
+    setTimeout(()=>this.emit("notification","item/completed",{threadId:p.threadId,turnId:p.expectedTurnId,item:{id:randomUUID(),clientId:p.clientUserMessageId,type:"userMessage",content:p.input}}),1800);
     return {turnId:p.expectedTurnId};
   }
   if(method==="turn/start"){
@@ -47,7 +51,10 @@ class FakeRpc extends EventEmitter {
     this.emit("notification","turn/started",{threadId:thread,turn:{id:turn}});
     this.emit("notification","item/completed",{threadId:thread,turnId:turn,item:{id:randomUUID(),clientId:p.clientUserMessageId,type:"userMessage",content:p.input}});
     setTimeout(()=>this.emit("notification","item/agentMessage/delta",{threadId:thread,turnId:turn,itemId:id,delta:"Проверяю очередь…"}),200);
+    setTimeout(()=>this.emit("notification","item/reasoning/summaryTextDelta",{threadId:thread,turnId:turn,itemId:"summary-"+turn,summaryIndex:0,delta:"Проверяю входные данные."}),300);
+    setTimeout(()=>this.emit("notification","item/started",{threadId:thread,turnId:turn,item:{id:"command-"+turn,type:"commandExecution",command:"echo QA"}}),500);
     setTimeout(()=>{
+      if(this.turn!==turn || this.activeThread!==thread)return;
       this.emit("notification","item/completed",{threadId:thread,turnId:turn,item:{id,type:"agentMessage",text:"Очередь проверена.",phase:"final_answer"}});
       this.emit("notification","turn/completed",{threadId:thread,turn:{id:turn,status:"completed"}});
       const q=this.queue.find(q=>q.threadId===thread);
@@ -91,7 +98,7 @@ class FakeRpc extends EventEmitter {
   this.complete("completed");
  }
  rejectRequest(){}
- complete(status){this.emit("notification","turn/completed",{threadId:this.activeThread,turn:{id:this.turn,status}});}
+ complete(status){this.emit("notification","turn/completed",{threadId:this.activeThread,turn:{id:this.turn,status}});this.turn="";}
  close(){this.closed=true;}
 }
 const sessions=new Sessions(config,store,()=>new FakeRpc());

@@ -111,7 +111,23 @@ test("native queue edits preserve images, survives service recreation and steers
     const steer = rpc.calls.find((c) => c.method === "turn/steer");
     assert.equal(steer.p.expectedTurnId, turn);
     assert.equal(steer.p.input[1].type, "localImage");
+    assert.equal((await queue.list(t.id)).items[0].state, "steered");
+    await assert.rejects(queue.change(t.id, q.id, q.revision, "delete"), {
+      code: "MESSAGE_ACCEPTED",
+    });
+    const clientId = rpc.calls.find((c) => c.method === "turn/steer").p.clientUserMessageId;
+    rpc.emit("notification", "item/completed", {
+      threadId: t.codexThreadId,
+      turnId: turn,
+      item: {
+        id: randomUUID(),
+        clientId,
+        type: "userMessage",
+        content: [{ type: "text", text: "Edited" }],
+      },
+    });
     assert.equal((await queue.list(t.id)).items.length, 0);
+    assert(store.history(t.id).messages.some((m) => m.id === clientId));
     await assert.rejects(queue.change(t.id, q.id, q.revision, "steer", undefined, turn), {
       code: "QUEUE_CHANGED",
     });
@@ -207,6 +223,40 @@ test("queue attachment metadata exists before native auto-start; a lost enqueue 
     assert.equal(list.items[0].state, "queued");
     assert.equal(list.items[0].attachments[0].id, file.id);
     assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM queue_transfers").get().n, 0);
+    assert.equal(f.rpc.calls.filter((c) => c.method === "thread/queue/add").length, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("failed attachment staging preserves draft and releases both the queue and idempotency key", async () => {
+  const f = await setup();
+  try {
+    const file = await f.sessions.attachments.put(
+      f.t.id,
+      "test.txt",
+      Buffer.from("staging recovery"),
+    );
+    const { unlink } = await import("node:fs/promises");
+    await unlink(join(f.sessions.attachments.root, file.id + ".bin"));
+    const key = randomUUID(),
+      body = { text: "Keep this", attachments: [file.id] };
+    await assert.rejects(
+      f.store.once("queue:" + f.t.id, key, body, () =>
+        f.queue.add(f.t.id, body.text, body.attachments, key),
+      ),
+    );
+    assert.equal(f.rpc.calls.filter((c) => c.method === "thread/queue/add").length, 0);
+    assert.equal(f.sessions.attachments.pending(f.t.id)[0].messageId, null);
+    assert.equal(f.store.db.prepare("SELECT COUNT(*) n FROM commands WHERE key=?").get(key).n, 0);
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(join(f.sessions.attachments.root, file.id + ".bin"), "staging recovery");
+    await f.store.once("queue:" + f.t.id, key, body, () =>
+      f.queue.add(f.t.id, body.text, body.attachments, key),
+    );
+    await f.store.once("queue:" + f.t.id, key, body, () =>
+      f.queue.add(f.t.id, body.text, body.attachments, key),
+    );
     assert.equal(f.rpc.calls.filter((c) => c.method === "thread/queue/add").length, 1);
   } finally {
     await f.close();

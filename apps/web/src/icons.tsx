@@ -33,6 +33,7 @@ const paths: Record<string, string[]> = {
   expand: ["M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"],
   logout: ["M9 5H4v14h5m5-14 5 7-5 7M9 12h10"],
   lock: ["M6 10h12v11H6zM8 10V6a4 4 0 0 1 8 0v4"],
+  unlock: ["M6 10h12v11H6zM8 10V6a4 4 0 0 1 8 0"],
   pointer: ["m5 3 14 9-7 1-3 7-4-17Z"],
   moon: ["M20 15A8 8 0 0 1 9 4a8 8 0 1 0 11 11Z"],
 };

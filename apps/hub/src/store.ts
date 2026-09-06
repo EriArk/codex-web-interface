@@ -11,6 +11,7 @@ import {
   hasUnreadCompletion,
   isActiveThread,
   type NavigationState,
+  NotSubmittedError,
   type ProjectActivity,
   type ThreadActivity,
   type TurnSettings,
@@ -320,6 +321,47 @@ export class Store {
     const items = rows.slice(0, 20).map((r) => ({ ...r, payload: JSON.parse(String(r.payload)) }));
     return { items, nextBefore: rows.length > 20 ? rows[19]?.seq : null };
   }
+  progressDetails(
+    threadId: string,
+    turnId: string | null,
+  ): { items: { seq: number; kind: string; label: string; text: string }[] } {
+    if (!turnId) return { items: [] };
+    const rows = this.db
+      .prepare(
+        "SELECT seq,type,payload FROM events WHERE threadId=? AND turnId=? AND type IN ('turn.progress','activity.summary','activity.command','activity.tool','error') ORDER BY seq DESC LIMIT 80",
+      )
+      .all(threadId, turnId);
+    const seen = new Set<string>(),
+      items: { seq: number; kind: string; label: string; text: string }[] = [];
+    for (const row of rows) {
+      const p = JSON.parse(String(row.payload));
+      const key = String(p.itemId || (row.type === "turn.progress" ? p.label : row.seq));
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const kind =
+        row.type === "activity.summary"
+          ? "summary"
+          : row.type === "activity.command" || p.command
+            ? "command"
+            : "step";
+      items.push({
+        seq: Number(row.seq),
+        kind,
+        label:
+          row.type === "activity.summary"
+            ? "Краткое пояснение"
+            : row.type === "activity.command"
+              ? p.exitCode === 0
+                ? "Команда завершена"
+                : "Результат команды"
+              : String(p.label || p.tool || p.message || "Действие Codex").slice(0, 500),
+        text: String(p.command || p.text || p.detail || "").slice(0, 8000),
+      });
+      if (items.length === 8) break;
+    }
+    return { items: items.reverse() };
+  }
+
   lastSeq(threadId: string): number {
     return Number(
       this.db
@@ -404,6 +446,10 @@ export class Store {
         .run(JSON.stringify(value), scope, key);
       return value;
     } catch (error) {
+      if (error instanceof NotSubmittedError) {
+        this.db.prepare("DELETE FROM commands WHERE scope=? AND key=?").run(scope, key);
+        throw error;
+      }
       this.db
         .prepare("UPDATE commands SET state='unknown' WHERE scope=? AND key=?")
         .run(scope, key);

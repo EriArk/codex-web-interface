@@ -277,3 +277,11 @@ The screenshot audit includes login, project and standalone lists, creation/fold
 Project/thread spinners now also observe desktop-owned work through D25's read-only metadata adapter. External updates arrive within the polling interval while the site is open; a browser reconnect refreshes the snapshot. Unavailable observation is visible in navigation, and uncertain work never appears as a completed success.
 
 During a turn, Send becomes Add to queue. An independently scrolling compact queue above the composer shows pending text/files, edit, delete and Steer. Clearing the draft exposes Stop; Stop remains accessible while typing. Queue edits capture the revision opened by the editor so another device's edit cannot be silently overwritten. Each action is touch-accessible. A queued message starts automatically after the current native turn, even with the browser closed. Model/mode settings remain those of the current native conversation. Steer is available for web-owned turns; an external desktop turn can receive queued follow-ups.
+
+
+### Compact workflow controls
+
+- The compact project drawer also opens with a single-finger rightward swipe starting within 28 CSS px of the workspace's left edge. Require at least 64 px of horizontal movement; cancel vertical, leftward, slow, cancelled and multi-touch gestures. Inputs, links/buttons, overlays and Remote do not activate this gesture. The hamburger remains available.
+- The composer has a 44 px normal/full access picker with short labels. No extra explanation of future-turn timing is displayed.
+- The turn-status row opens and collapses an eight-item recent-work panel with independent scroll and a maximum 28dvh/240px height. Keep Stop reachable while composing or transferring attachments. Accepted Steer receipts remain visible until inserted into the conversation.
+- Settings offers manual desktop handoff/return and a separately confirmed hard restart. Read-only navigation never silently returns a released machine to web control.

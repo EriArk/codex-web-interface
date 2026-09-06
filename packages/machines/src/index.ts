@@ -156,6 +156,8 @@ export async function stageAttachment(
     return path;
   }
   if (!machine.ssh) throw new HubError(503, "SSH_NOT_CONFIGURED", "SSH target is not configured");
+  const bytes = await readFile(sourcePath);
+  const encoded = bytes.toString("base64");
   const script = [
     "$ErrorActionPreference='Stop'",
     "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
@@ -163,11 +165,13 @@ export async function stageAttachment(
       quotePowerShell(`CodexWeb\\attachments\\${projectId}\\${id}`),
     "[IO.Directory]::CreateDirectory($dir) | Out-Null",
     `$path=Join-Path $dir ${quotePowerShell(`upload-${safeName}`)}`,
-    "$bytes=[Convert]::FromBase64String([Console]::In.ReadToEnd())",
+    // Windows OpenSSH may keep stdin open after the client sends EOF. Frame the payload explicitly.
+    "$encoded=[Console]::In.ReadLine()",
+    `if ($null -eq $encoded -or $encoded.Length -ne ${encoded.length}) { throw 'INCOMPLETE_UPLOAD' }`,
+    "$bytes=[Convert]::FromBase64String($encoded)",
     "[IO.File]::WriteAllBytes($path,$bytes)",
     "[Console]::Out.Write($path)",
   ].join("; ");
-  const bytes = await readFile(sourcePath);
   return new Promise((resolve, reject) => {
     const child = spawn(
       "ssh",
@@ -243,6 +247,6 @@ export async function stageAttachment(
             ),
       ),
     );
-    child.stdin.end(bytes.toString("base64"));
+    child.stdin.end(encoded + "\n");
   });
 }

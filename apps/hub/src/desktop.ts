@@ -7,7 +7,7 @@ import type { Store } from "./store.js";
 
 export type DesktopTransport = (
   machine: MachineConfig,
-  action: "Status" | "Restart",
+  action: "Status" | "Restart" | "ForceRestart",
   id?: string,
 ) => Promise<DesktopState>;
 export function registerDesktop(
@@ -41,8 +41,53 @@ export function registerDesktop(
   app.get("/api/machines/:id/desktop", async (req) => {
     const m = machine(req.params),
       state = await transport(m, "Status");
-    return { ...state, activeTasks: Math.max(state.activeTasks, active(m.id)) };
+    return {
+      ...state,
+      client: sessions.machineClient(m.id),
+      activeTasks: Math.max(state.activeTasks, active(m.id)),
+    };
   });
+  app.post("/api/machines/:id/client", async (req) => {
+    const m = machine(req.params),
+      key = z.string().uuid().parse(req.headers["idempotency-key"]);
+    const body = z
+      .object({ client: z.enum(["web", "desktop"]) })
+      .strict()
+      .parse(req.body);
+    if (busy.has(m.id)) throw desktopError("DESKTOP_RESTART_PENDING");
+    busy.add(m.id);
+    try {
+      return await store.once("machine-client:" + m.id, key, body, async () => {
+        await sessions.setMachineClient(m.id, body.client);
+        return { client: sessions.machineClient(m.id) };
+      });
+    } finally {
+      busy.delete(m.id);
+    }
+  });
+  app.post(
+    "/api/machines/:id/desktop/force-restart",
+    { config: { rateLimit: { max: 4, timeWindow: "1 minute" } } },
+    async (req) => {
+      const m = machine(req.params),
+        key = z.string().uuid().parse(req.headers["idempotency-key"]);
+      const body = z
+        .object({ confirmStopTasks: z.literal(true) })
+        .strict()
+        .parse(req.body);
+      if (busy.has(m.id)) throw desktopError("DESKTOP_RESTART_PENDING");
+      busy.add(m.id);
+      try {
+        return await store.once("desktop-force-restart:" + m.id, key, body, async () => {
+          await sessions.setMachineClient(m.id, "desktop", true);
+          const state = await transport(m, "ForceRestart", key);
+          return { ...state, client: "desktop" };
+        });
+      } finally {
+        busy.delete(m.id);
+      }
+    },
+  );
   app.post(
     "/api/machines/:id/desktop/restart",
     { config: { rateLimit: { max: 4, timeWindow: "1 minute" } } },

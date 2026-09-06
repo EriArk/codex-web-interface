@@ -12,10 +12,12 @@ import {
   type TurnSettings,
   turnSettingsSchema,
 } from "@codex-web/shared";
+import { accessCapabilities, requireAccess, threadAccess, turnAccess } from "./access.js";
 import { Attachments } from "./attachments.js";
 import { Catalog, type CatalogProject } from "./catalog.js";
 import { ExternalActivity } from "./externalActivity.js";
 import type { Store, ThreadRecord } from "./store.js";
+import { normalizeLimits } from "./usage.js";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -52,6 +54,7 @@ export class Sessions extends EventEmitter {
   private runtimes = new Map<string, Promise<Runtime>>();
   private locks = new Set<string>();
   private approvals = new Map<string, Approval>();
+  private summaries = new Map<string, { text: string; index: unknown; emittedAt: number }>();
   readonly attachments: Attachments;
   readonly catalog: Catalog;
   readonly externalActivity: ExternalActivity;
@@ -170,6 +173,71 @@ export class Sessions extends EventEmitter {
     }
   }
 
+  machineClient(machineId: string): "web" | "desktop" {
+    const clients = record(this.store.preferences().machineClients);
+    return clients[machineId] === "desktop" ? "desktop" : "web";
+  }
+  assertWritable(projectId: string): void {
+    const machineId = this.project(projectId).machineId;
+    if (this.machineClient(machineId) === "desktop")
+      throw new HubError(
+        409,
+        "MACHINE_RELEASED",
+        "Компьютер освобождён для Codex. Верни управление сайту в настройках.",
+      );
+  }
+  private machineWrites = new Map<string, number>();
+  async withThreadWrite<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    const projectId = this.thread(id).projectId;
+    this.assertWritable(projectId);
+    const machineId = this.project(projectId).machineId;
+    this.machineWrites.set(machineId, (this.machineWrites.get(machineId) ?? 0) + 1);
+    try {
+      return await fn();
+    } finally {
+      this.machineWrites.set(machineId, (this.machineWrites.get(machineId) ?? 1) - 1);
+    }
+  }
+  async setMachineClient(
+    machineId: string,
+    client: "web" | "desktop",
+    force = false,
+  ): Promise<void> {
+    if (!this.config.machines.some((m) => m.id === machineId))
+      throw new HubError(404, "MACHINE_NOT_FOUND", "Компьютер не найден");
+    const projects = this.catalog.projects().filter((p) => p.machineId === machineId);
+    if (client === "desktop" && !force) {
+      if (this.machineWrites.get(machineId) || projects.some((p) => this.locks.has(p.id)))
+        throw new HubError(409, "PROJECT_BUSY", "Дождись завершения отправки сообщения.");
+      if (
+        projects.some((p) =>
+          this.store
+            .threads(p.id)
+            .some(
+              (t) =>
+                t.activitySource !== "external" &&
+                ["running", "starting", "waiting_approval", "unknown"].includes(t.status),
+            ),
+        )
+      )
+        throw new HubError(409, "DESKTOP_BUSY", "Сначала останови задачи, запущенные через сайт.");
+    }
+    this.store.setPreferences({
+      machineClients: { ...record(this.store.preferences().machineClients), [machineId]: client },
+    });
+    if (client !== "desktop") return;
+    const existing = this.runtimes.get(machineId);
+    if (!existing) return;
+    // Pause mutations before awaiting a launch already in flight. Read-only discovery may reconnect later.
+    try {
+      const runtime = await existing;
+      runtime.rpc.close(); // Companion's job object terminates this App Server tree on pipe disconnect.
+      if (this.runtimes.get(machineId) === existing) this.runtimes.delete(machineId);
+    } catch {
+      /* A failed launch owns no live writer. */
+    }
+  }
+
   async owns(id: string): Promise<boolean> {
     const t = this.thread(id),
       p = this.project(t.projectId),
@@ -208,6 +276,16 @@ export class Sessions extends EventEmitter {
     }
   }
 
+  async usage(machineId: string) {
+    const project = this.catalog.projects().find((p) => p.machineId === machineId && p.enabled);
+    if (!project) throw new HubError(404, "MACHINE_NOT_FOUND", "Компьютер не найден");
+    const r = await this.runtime(project.id);
+    try {
+      return normalizeLimits(await r.rpc.request("account/rateLimits/read", {}));
+    } catch {
+      throw new HubError(503, "LIMITS_UNAVAILABLE", "Лимиты сейчас недоступны.");
+    }
+  }
   async capabilities(projectId: string): Promise<Capabilities> {
     const r = await this.runtime(projectId);
     r.touched = Date.now();
@@ -290,7 +368,10 @@ export class Sessions extends EventEmitter {
     const effort = model.efforts.includes(config.model_reasoning_effort as TurnSettings["effort"])
       ? (config.model_reasoning_effort as TurnSettings["effort"])
       : model.defaultEffort;
+    const access = await accessCapabilities(r.rpc, this.project(projectId).workingDirectory);
     r.capabilities = {
+      accessModes: access.modes,
+      accessMessage: access.message,
       serverVersion: r.version,
       warnings,
       models,
@@ -321,12 +402,38 @@ export class Sessions extends EventEmitter {
         "MODE_UNAVAILABLE",
         "Этот режим не поддерживается установленным Codex",
       );
+    await requireAccess(
+      (await this.runtime(projectId)).rpc,
+      this.project(projectId).workingDirectory,
+      value.access,
+    );
     return model;
   }
   async setSettings(id: string, value: TurnSettings): Promise<TurnSettings> {
     const thread = this.thread(id);
+    const changingAccess =
+      (this.store.threadSettings(id)?.access ?? "workspace") !== (value.access ?? "workspace");
+    if (changingAccess && !(await this.owns(id))) {
+      await this.externalActivity.refresh();
+      const latest = this.thread(id);
+      if (
+        latest.activitySource === "external" &&
+        ["running", "starting", "waiting_approval"].includes(latest.status)
+      )
+        throw new HubError(
+          409,
+          "THREAD_IN_USE",
+          "Сменить доступ можно после завершения задачи в другом клиенте.",
+        );
+    }
     return this.locked(thread.projectId, async () => {
       await this.validateSettings(thread.projectId, value);
+      const r = await this.runtime(thread.projectId);
+      if (changingAccess && r.loaded.has(id))
+        await r.rpc.request("thread/settings/update", {
+          threadId: thread.codexThreadId,
+          ...turnAccess(value.access),
+        });
       this.store.setThreadSettings(id, value);
       this.emitEvent(id, "thread.settings", { settings: value });
       return value;
@@ -334,6 +441,7 @@ export class Sessions extends EventEmitter {
   }
 
   private async locked<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+    this.assertWritable(projectId);
     if (this.locks.has(projectId))
       throw new HubError(409, "PROJECT_BUSY", "Другая команда для проекта ещё обрабатывается");
     this.locks.add(projectId);
@@ -429,7 +537,8 @@ export class Sessions extends EventEmitter {
         this.store.db.prepare("DELETE FROM threads WHERE id=?").run(created.id);
         throw error;
       }
-      if (original.settings) this.store.setThreadSettings(created.id, original.settings);
+      if (original.settings)
+        this.store.setThreadSettings(created.id, { ...original.settings, access: "workspace" });
       r.loaded.add(created.id);
       r.touched = Date.now();
       await r.rpc
@@ -447,12 +556,12 @@ export class Sessions extends EventEmitter {
     return this.locked(t.projectId, async () => {
       const r = await this.runtime(t.projectId);
       if (r.loaded.has(id)) return this.store.thread(id);
+      await requireAccess(r.rpc, this.project(t.projectId).workingDirectory, t.settings?.access);
       const result = await r.rpc.request("thread/resume", {
         threadId: t.codexThreadId,
         cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
         excludeTurns: true,
-        approvalPolicy: "on-request",
-        sandbox: "workspace-write",
+        ...threadAccess(t.settings?.access),
       });
       const turns =
         record(result.thread).turns ??
@@ -559,8 +668,7 @@ export class Sessions extends EventEmitter {
             ? { projectId: this.project(t.projectId).sourceId }
             : {}),
           historyMode: "paginated",
-          approvalPolicy: "on-request",
-          sandbox: "workspace-write",
+          ...threadAccess(selection.access),
         });
         const sourceId = text(record(fresh.thread).id);
         if (!sourceId) throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не создал диалог");
@@ -573,8 +681,7 @@ export class Sessions extends EventEmitter {
           threadId: t.codexThreadId,
           cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
           excludeTurns: true,
-          approvalPolicy: "on-request",
-          sandbox: "workspace-write",
+          ...threadAccess(selection.access),
         });
         r.loaded.add(id);
       }
@@ -584,6 +691,12 @@ export class Sessions extends EventEmitter {
         attachmentIds,
         model.supportsImages,
       );
+      try {
+        this.assertWritable(t.projectId);
+      } catch (error) {
+        prepared.release();
+        throw error;
+      }
       this.catalog.invalidate(id);
       const messageId = randomUUID();
       try {
@@ -619,6 +732,7 @@ export class Sessions extends EventEmitter {
           threadId: t.codexThreadId,
           input: [...(prompt ? [{ type: "text", text: prompt }] : []), ...prepared.input],
           clientUserMessageId: messageId,
+          ...turnAccess(selection.access),
           model: selection.model,
           effort: selection.effort,
           ...(r.nativeModes
@@ -773,7 +887,39 @@ export class Sessions extends EventEmitter {
     if (!t) return;
     r.touched = Date.now();
     const turnId = text(p.turnId) || t.activeTurnId;
-    if (method === "serverRequest/resolved") {
+    if (method === "item/reasoning/summaryTextDelta") {
+      // Only the native public summary stream is used. Never expose raw reasoning text/content.
+      const itemId = text(p.itemId, 200),
+        key = t.id + ":" + itemId;
+      if (!itemId) return;
+      const value = this.summaries.get(key) ?? { text: "", index: p.summaryIndex, emittedAt: 0 };
+      value.text = (
+        value.text +
+        (value.index !== p.summaryIndex ? "\n\n" : "") +
+        text(p.delta, 8000)
+      ).slice(0, 8000);
+      value.index = p.summaryIndex;
+      this.summaries.set(key, value);
+      if (this.summaries.size > 32) this.summaries.delete(this.summaries.keys().next().value!);
+      if (Date.now() - value.emittedAt >= 500) {
+        value.emittedAt = Date.now();
+        this.emitEvent(t.id, "activity.summary", { itemId, text: value.text }, turnId);
+      }
+    } else if (method === "thread/settings/updated" && r.loaded.has(t.id)) {
+      const settings = this.store.threadSettings(t.id),
+        native = record(p.threadSettings),
+        sandbox = record(native.sandboxPolicy);
+      const access =
+        sandbox.type === "dangerFullAccess" && native.approvalPolicy === "never"
+          ? "full"
+          : sandbox.type === "workspaceWrite" && native.approvalPolicy === "on-request"
+            ? "workspace"
+            : undefined;
+      if (settings && access && (settings.access ?? "workspace") !== access) {
+        this.store.setThreadSettings(t.id, { ...settings, access });
+        this.emitEvent(t.id, "thread.settings", { settings: { ...settings, access } });
+      }
+    } else if (method === "serverRequest/resolved") {
       for (const [key, a] of this.approvals)
         if (a.rpc === r.rpc && a.requestId === p.requestId) {
           this.approvals.delete(key);
@@ -790,6 +936,8 @@ export class Sessions extends EventEmitter {
         id = text(turn.id),
         status = text(turn.status);
       r.active.delete(t.id);
+      for (const key of this.summaries.keys())
+        if (key.startsWith(t.id + ":")) this.summaries.delete(key);
       this.catalog.invalidate(t.id);
       for (const [key, a] of this.approvals) if (a.threadId === t.id) this.approvals.delete(key);
       this.store.setStatus(
@@ -813,9 +961,10 @@ export class Sessions extends EventEmitter {
       const messageId = text(item.clientId) || text(item.id);
       this.store.db
         .prepare(
-          "DELETE FROM queue_transfers WHERE threadId=? AND id=? AND state IN ('enqueue_pending','enqueue_unknown')",
+          "DELETE FROM queue_transfers WHERE threadId=? AND ((id=? AND state IN ('enqueue_pending','enqueue_unknown')) OR (state IN ('pending','steered','unknown') AND json_extract(value, '$.clientUserMessageId')=?))",
         )
-        .run(t.id, messageId);
+        .run(t.id, messageId, messageId);
+      this.emitEvent(t.id, "queue.changed", {});
       const value = content
         .filter((c) => c.type === "text")
         .map((c) => text(c.text))
@@ -857,7 +1006,18 @@ export class Sessions extends EventEmitter {
       this.emitEvent(
         t.id,
         "turn.progress",
-        { label: labels[kind] ?? "Работает над задачей" },
+        {
+          label: labels[kind] ?? "Работает над задачей",
+          itemId: text(record(p.item).id, 200),
+          ...(kind === "commandExecution" ? { command: text(record(p.item).command, 4000) } : {}),
+          ...(kind === "mcpToolCall"
+            ? {
+                detail: [text(record(p.item).server, 200), text(record(p.item).tool, 200)]
+                  .filter(Boolean)
+                  .join(" · "),
+              }
+            : {}),
+        },
         turnId,
       );
     } else if (method === "item/agentMessage/delta" || method === "item/plan/delta") {
@@ -875,7 +1035,17 @@ export class Sessions extends EventEmitter {
       const item = record(p.item),
         id = text(item.id),
         type = text(item.type);
-      if (type === "agentMessage" || type === "plan") {
+      if (type === "reasoning") {
+        const summary = Array.isArray(item.summary)
+          ? item.summary
+              .filter((v) => typeof v === "string")
+              .join("\n\n")
+              .slice(0, 8000)
+          : "";
+        if (summary)
+          this.emitEvent(t.id, "activity.summary", { itemId: id, text: summary }, turnId);
+        this.summaries.delete(t.id + ":" + id);
+      } else if (type === "agentMessage" || type === "plan") {
         this.emitEvent(
           t.id,
           "assistant.completed",
@@ -895,6 +1065,7 @@ export class Sessions extends EventEmitter {
           t.id,
           "activity.command",
           {
+            itemId: id,
             id,
             command,
             status: text(item.status),
@@ -987,5 +1158,6 @@ export class Sessions extends EventEmitter {
       } catch {}
     }
     this.runtimes.clear();
+    this.summaries.clear();
   }
 }

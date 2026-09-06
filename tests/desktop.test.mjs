@@ -208,3 +208,72 @@ test("Windows maintenance activity scans all recent native work read-only and fa
     rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test("hard restart requires explicit stop confirmation, bypasses wedged activity checks and dispatches once", async () => {
+  const f = await fixture();
+  try {
+    f.set({ activityKnown: false, activeTasks: 3 });
+    const t = f.store.createThread("p", "native", "Active");
+    f.store.setStatus(t.id, "running", "turn");
+    const key = randomUUID(),
+      url = "/api/machines/pc/desktop/force-restart";
+    const post = (headers, payload) => f.app.inject({ method: "POST", url, headers, payload });
+    assert.equal((await post({ origin }, { confirmStopTasks: true })).statusCode, 401);
+    assert.equal(
+      (
+        await post(
+          { ...f.headers, "x-csrf-token": "wrong", "idempotency-key": key },
+          { confirmStopTasks: true },
+        )
+      ).statusCode,
+      403,
+    );
+    assert.equal(
+      (await post({ ...f.headers, "idempotency-key": key }, { confirm: true })).statusCode,
+      400,
+    );
+    assert.equal(f.calls.length, 0);
+    for (let n = 0; n < 2; n++) {
+      const r = await post({ ...f.headers, "idempotency-key": key }, { confirmStopTasks: true });
+      assert.equal(r.statusCode, 200, r.body);
+      assert.equal(r.json().client, "desktop");
+    }
+    assert.deepEqual(
+      f.calls.map((c) => c.action),
+      ["ForceRestart"],
+    );
+    assert.equal(f.store.preferences().machineClients.pc, "desktop");
+  } finally {
+    await f.close();
+  }
+});
+test("handoff endpoint is authenticated, rejects unrelated fields and requires explicit return", async () => {
+  const f = await fixture();
+  try {
+    const url = "/api/machines/pc/client";
+    assert.equal(
+      (
+        await f.app.inject({
+          method: "POST",
+          url,
+          headers: { origin },
+          payload: { client: "desktop" },
+        })
+      ).statusCode,
+      401,
+    );
+    for (const client of ["desktop", "web"]) {
+      const r = await f.app.inject({
+        method: "POST",
+        url,
+        headers: { ...f.headers, "idempotency-key": randomUUID() },
+        payload: { client },
+      });
+      assert.equal(r.statusCode, 200, r.body);
+      assert.equal(f.store.preferences().machineClients.pc, client);
+    }
+    assert.equal(f.calls.length, 0);
+  } finally {
+    await f.close();
+  }
+});

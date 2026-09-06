@@ -65,7 +65,12 @@ export function useTurnSettings(projectId: string, threadId: string, saved?: Tur
     } catch (e) {
       if (current.current === id) {
         setError(messageOf(e));
-        setSelection(saved ?? caps?.defaults);
+        try {
+          const actual = await api<TurnSettings>(`/threads/${id}/settings`);
+          if (current.current === id) setSelection(actual);
+        } catch {
+          if (current.current === id) setSelection(saved ?? caps?.defaults);
+        }
       }
     } finally {
       if (current.current === id) setSaving(false);
@@ -81,6 +86,7 @@ export function useTurnSettings(projectId: string, threadId: string, saved?: Tur
     reload: () => setRevision((v) => v + 1),
   };
 }
+export type ReturnTypeOfSettings = ReturnType<typeof useTurnSettings>;
 export function ComposerOptions({
   options,
   disabled,

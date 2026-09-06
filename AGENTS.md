@@ -258,3 +258,16 @@ Before mobile support is considered complete, the same core workflow must also w
 - Add an authenticated Settings action to restart the installed Windows Codex desktop app. This is an explicit user action, not an automatic writer-migration strategy.
 - Use the existing system SSH connection and a dedicated fixed Scheduled Task in the owner's interactive session. No public Windows port or generic command/GUI API is added. Keep the Companion and its independent App Servers running.
 - Block restart while tasks are known active or their state cannot be checked. Require an explicit in-app confirmation, guard against duplicate requests and expose the operation result. Do not restart the owner's desktop as part of development verification; use a harmless interactive probe and simulated process tests.
+
+
+## Owner-requested access and recovery controls (2026-09-06)
+
+- Allow an explicit per-conversation normal/full access choice using native permission profiles and approval policy. Default to normal; respect managed requirements. Keep the picker concise, without explanatory next-message copy.
+- Add a left-edge rightward swipe to open the compact project drawer while preserving vertical scroll, input controls, dialogs and Remote gestures.
+- Provide manual “work on the computer” handoff: close the Hub-owned App Server connection, persist the desktop choice and block automatic writer reacquisition. Returning to web control is explicit.
+- The owner additionally authorizes an exceptional hard restart action with an in-app confirmation that active tasks will stop. This action may bypass the normal active/unknown activity guard, disconnect the selected machine's Hub-owned App Server tree and force-restart the fixed desktop package. Keep the Companion itself and unrelated processes intact. Never exercise this action on the owner's live desktop during development.
+- Keep accepted Steer submissions visible until their matching native user message appears. Failed attachment preparation must not leave the draft blocked as already submitted.
+- Make the turn-status row expand/collapse a small panel of recent actions and native public reasoning summaries. Never expose raw reasoning text/content. Keep commands collapsed and the panel bounded.
+
+- Show native Codex usage windows in Settings, including the weekly remaining percentage and reset time. Determine windows by their duration rather than assuming primary/secondary order; do not expose billing credentials or credit balances.
+- Add a clearly visible end-of-task separator in conversation history. Do not insert one inside an active turn or between Steer messages belonging to the same turn.

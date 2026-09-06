@@ -9,7 +9,7 @@ export interface DesktopState {
   activeTasks: number;
   operation: null | {
     id: string;
-    kind: "restart" | "probe";
+    kind: "restart" | "forcerestart" | "probe";
     state: "queued" | "restarting" | "completed" | "failed" | "unknown";
     code: string;
     requestedAt: number;
@@ -54,7 +54,7 @@ export function parseDesktopReply(output: string): DesktopState {
     (operation !== null &&
       (!operation ||
         !/^[a-f0-9-]{36}$/i.test(operation.id) ||
-        !["restart", "probe"].includes(operation.kind) ||
+        !["restart", "forcerestart", "probe"].includes(operation.kind) ||
         !["queued", "restarting", "completed", "failed", "unknown"].includes(operation.state) ||
         !/^(?:DESKTOP_[A-Z_]{1,70})?$/.test(operation.code) ||
         !Number.isFinite(operation.requestedAt)))
@@ -79,12 +79,12 @@ export function parseDesktopReply(output: string): DesktopState {
 }
 export async function controlDesktop(
   machine: MachineConfig,
-  action: "Status" | "Restart",
+  action: "Status" | "Restart" | "ForceRestart",
   id?: string,
 ): Promise<DesktopState> {
   if (machine.type !== "ssh-windows" || !machine.codex.desktopControl || !machine.ssh)
     throw desktopError("DESKTOP_CONTROL_UNAVAILABLE");
-  if (action === "Restart" && !/^[a-f0-9-]{36}$/i.test(id ?? ""))
+  if (action !== "Status" && !/^[a-f0-9-]{36}$/i.test(id ?? ""))
     throw desktopError("DESKTOP_INVALID_REQUEST");
   const script =
     "& " +

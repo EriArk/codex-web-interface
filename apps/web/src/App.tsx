@@ -20,7 +20,9 @@ import type {
   TurnSettings,
   View,
 } from "./types";
+import { UsageLimits } from "./UsageLimits";
 import { useNavigation } from "./useNavigation";
+import { useProjectSwipe } from "./useProjectSwipe";
 import { useWorkspace } from "./useWorkspace";
 
 const readPreference = (name: string, fallback: string) => {
@@ -161,6 +163,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const root = useRef<HTMLDivElement>(null),
     settingsDialog = useRef<HTMLDialogElement>(null),
     drawerDialog = useRef<HTMLDialogElement>(null);
+  useProjectSwipe(
+    root,
+    view !== "remote" && !drawer && !settings && !createProject && !resultOverlay,
+    () => setDrawer(true),
+  );
   const { state, older, reconnect, refresh } = useWorkspace(threadId);
   const project = projects.find((p) => p.id === projectId);
   const selectedThread = threads.find((t) => t.id === threadId);
@@ -799,6 +806,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             </label>
           ))}
         </fieldset>
+        <UsageLimits machines={machines} open={settings} />
         <DesktopControl machines={machines} open={settings} />
         <button
           type="button"
