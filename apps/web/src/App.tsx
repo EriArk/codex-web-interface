@@ -151,8 +151,16 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const [drawer, setDrawer] = useState(false),
     [settings, setSettings] = useState(false),
     [navCollapsed, setNavCollapsed] = useState(false),
+    [rightHidden, setRightHidden] = useState(readPreference("right-hidden", "false") === "true"),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState("");
+  useEffect(() => {
+    try {
+      localStorage.setItem("codex-right-hidden", String(rightHidden));
+    } catch {
+      /* Optional preference. */
+    }
+  }, [rightHidden]);
   const [machine, setMachine] = useState<"checking" | "online" | "offline">("checking");
   const [results, setResults] = useState<Result[]>([]),
     [resultCursor, setResultCursor] = useState<number | null>(null),
@@ -435,6 +443,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     }
   };
   const showResult = (id: string) => {
+    setRightHidden(false);
     setFocusResult(id);
     setView("results");
   };
@@ -516,7 +525,10 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     <button
       type="button"
       className={view === name ? "active" : ""}
-      onClick={() => setView(name)}
+      onClick={() => {
+        if (name !== "chat") setRightHidden(false);
+        setView(name);
+      }}
       aria-current={view === name ? "page" : undefined}
     >
       <Icon name={icon} />
@@ -530,6 +542,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     <div
       className={`workspace ${navCollapsed ? "nav-collapsed" : ""}`}
       data-view={view}
+      data-right-hidden={rightHidden}
       data-remote-immersive={remoteImmersive}
       ref={root}
       style={{ "--right-width": `${rightWidth}%` } as CSSProperties}
@@ -578,6 +591,29 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
               : "Личный Hub"}
           </span>
         </div>
+        <button
+          type="button"
+          className="icon-button wide-pane-control"
+          aria-label="Открыть Remote"
+          title="Remote"
+          onClick={() => {
+            setRightHidden(false);
+            setView("remote");
+          }}
+        >
+          <Icon name="remote" />
+        </button>
+        <button
+          type="button"
+          className="icon-button wide-pane-control"
+          aria-label={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
+          title={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
+          aria-expanded={!rightHidden}
+          aria-controls="support-panel"
+          onClick={() => setRightHidden((value) => !value)}
+        >
+          <Icon name="panel-right" />
+        </button>
         <button
           type="button"
           className="icon-button"
@@ -692,7 +728,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           }}
           onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
         />
-        <div className="support-pane">
+        <div className="support-pane" id="support-panel">
           <div className="support-tabs">
             {tab("results", "Результаты", "results")}
             {tab("activity", "Активность", "activity")}
@@ -733,7 +769,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           <Remote
             projectId={projectId}
             threadId={threadId}
-            visible={view === "remote"}
+            visible={view === "remote" && (!wide || !rightHidden)}
             available={!!project?.remoteAvailable}
             onImmersiveChange={setRemoteImmersive}
             onBack={() => setView("chat")}
@@ -803,6 +839,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           type="button"
           className="secondary settings-activity"
           onClick={() => {
+            setRightHidden(false);
             setView("activity");
             setSettings(false);
           }}

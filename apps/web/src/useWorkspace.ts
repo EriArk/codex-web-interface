@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, messageOf } from "./api";
+import { mergeHistorySnapshot } from "./historyState";
 import type { Approval, Attachment, History, HubEvent, Message, TurnSettings } from "./types";
 export interface ChatState extends History {
   loading: boolean;
@@ -35,15 +36,7 @@ export function useWorkspace(threadId: string) {
   const refresh = useCallback(
     async (id: string) => {
       const history = await api<History>(`/threads/${id}/history`);
-      update(id, (s) => ({
-        ...s,
-        ...history,
-        contextTurn: history.contextTurn ?? "",
-        hasNewer: history.hasNewer ?? false,
-        loading: false,
-        error: "",
-        revision: s.revision + 1,
-      }));
+      update(id, (s) => mergeHistorySnapshot(s, history));
       return history;
     },
     [update],

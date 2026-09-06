@@ -214,3 +214,106 @@ test("unmatched native chats belong to the unassigned bucket and retain their ac
     f.store.close();
   }
 });
+
+test("reopening a live turn after multiple Steers preserves distinct users and assistant replies", async () => {
+  const f = fixture();
+  try {
+    await f.catalog.refresh();
+    await f.catalog.syncThreads("pc");
+    const thread = f.store.threadByCodex("real-thread");
+    f.entries.splice(
+      0,
+      f.entries.length,
+      ...Array.from({ length: 12 }, (_, n) => ({
+        turnId: "steered-turn",
+        item:
+          n % 2 === 0
+            ? {
+                id: "native-user-" + n,
+                type: "userMessage",
+                content: [{ type: "text", text: "Request " + n }],
+              }
+            : {
+                id: "assistant-" + n,
+                type: "agentMessage",
+                text: "Reply " + n,
+                phase: "commentary",
+              },
+      })).reverse(),
+    );
+    for (let n = 0; n < 12; n++) {
+      f.store.append(
+        thread.id,
+        n % 2 === 0 ? "user.message" : "assistant.completed",
+        {
+          id: (n % 2 === 0 ? "local-user-" : "assistant-") + n,
+          text: (n % 2 === 0 ? "Request " : "Reply ") + n,
+          phase: n % 2 === 0 ? "" : "commentary",
+        },
+        "steered-turn",
+      );
+    }
+    f.store.setStatus(thread.id, "running", "steered-turn");
+    const page = await f.catalog.history(f.store.thread(thread.id));
+    assert.equal(new Set(page.messages.map((m) => m.id)).size, page.messages.length);
+    assert.equal(page.messages.length, 12);
+    assert.deepEqual(
+      page.messages.map((m) => m.text),
+      Array.from({ length: 12 }, (_, n) => (n % 2 === 0 ? "Request " : "Reply ") + n),
+    );
+    assert.equal(page.messages.filter((m) => m.role === "assistant").length, 6);
+  } finally {
+    f.store.close();
+  }
+});
+
+test("identical Steer text stays distinct across older history pages", async () => {
+  const f = fixture();
+  try {
+    await f.catalog.refresh();
+    await f.catalog.syncThreads("pc");
+    const thread = f.store.threadByCodex("real-thread");
+    f.entries.splice(
+      0,
+      f.entries.length,
+      ...Array.from({ length: 60 }, (_, n) => ({
+        turnId: "repeat-turn",
+        item:
+          n % 2 === 0
+            ? {
+                id: "native-" + n,
+                type: "userMessage",
+                content: [{ type: "text", text: "Continue" }],
+              }
+            : { id: "reply-" + n, type: "agentMessage", text: "Reply " + n, phase: "commentary" },
+      })).reverse(),
+    );
+    for (let n = 0; n < 60; n++)
+      f.store.append(
+        thread.id,
+        n % 2 === 0 ? "user.message" : "assistant.completed",
+        {
+          id: (n % 2 === 0 ? "local-" : "reply-") + n,
+          text: n % 2 === 0 ? "Continue" : "Reply " + n,
+        },
+        "repeat-turn",
+      );
+    f.store.setStatus(thread.id, "running", "repeat-turn");
+    let before,
+      all = [];
+    do {
+      const page = await f.catalog.history(f.store.thread(thread.id), before);
+      assert(page.messages.length <= 20);
+      all = [...page.messages, ...all];
+      before = page.nextBefore;
+    } while (before);
+    assert.equal(all.length, 60);
+    assert.equal(new Set(all.map((m) => m.id)).size, 60);
+    assert.deepEqual(
+      all.filter((m) => m.role === "user").map((m) => m.id),
+      Array.from({ length: 30 }, (_, n) => "local-" + n * 2),
+    );
+  } finally {
+    f.store.close();
+  }
+});
