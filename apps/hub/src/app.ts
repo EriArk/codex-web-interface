@@ -12,6 +12,7 @@ import { ZodError, z } from "zod";
 import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
+import { registerNavigation } from "./navigation.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
 import { Store } from "./store.js";
@@ -72,7 +73,14 @@ export async function createApp(
       },
     },
   });
-  await app.register(rateLimit, { max: 240, timeWindow: "1 minute" });
+  await app.register(rateLimit, {
+    // Static assets and normal multi-device reading must not exhaust write/login budgets.
+    max: (req) => (req.method === "GET" || req.method === "HEAD" ? 600 : 240),
+    timeWindow: "1 minute",
+    keyGenerator: (req) =>
+      `${req.ip}:${req.method === "GET" || req.method === "HEAD" ? "read" : "write"}`,
+    allowList: (req) => !req.url.startsWith("/api/"),
+  });
   await app.register(websocket, {
     options: {
       maxPayload: 4096,
@@ -122,6 +130,7 @@ export async function createApp(
       },
     });
   });
+  registerNavigation(app, store, sessions, auth, sockets);
   app.get("/api/health", async () => ({ ok: true }));
   app.post(
     "/api/auth/login",

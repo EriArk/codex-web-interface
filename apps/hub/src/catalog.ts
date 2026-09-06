@@ -383,6 +383,7 @@ export class Catalog {
       if (raw.name)
         this.store.db.prepare("UPDATE threads SET title=? WHERE id=?").run(title, thread.id);
     }
+    this.store.changes.emit("navigation");
     return this.store.thread(thread.id);
   }
   async readThread(thread: ThreadRecord): Promise<{ version: number }> {

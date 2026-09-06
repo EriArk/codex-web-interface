@@ -233,6 +233,14 @@ Suggested semantic modes:
 
 Use container/layout logic and actual available width rather than device-name sniffing.
 
+## Live activity and read state
+
+A single authenticated Hub metadata stream updates every project's and chat's badges independently of the open chat. Active tasks sort first with their start time fixed during streaming; completed unread work follows; other entries sort by latest activity. Waiting questions retain an active position and show a question icon. A failed/interrupted completion uses an attention icon on its chat instead of a success mark.
+
+Both navigation tabs show active and unread counts. Projects counts projects with matching work, Dialogs counts standalone chats. Folder expansion alone does not acknowledge output. The Hub stores the exact completion cursor seen after the latest messages remain visible at the bottom of an unobstructed foreground Chat view for one second. Background tabs, Results/Remote on mobile and reading older history retain the badge. A stale acknowledgement cannot clear a later completion, and read state synchronizes across devices and survives Hub/browser restarts. Pre-existing historical conversations start read.
+
+The Chat view has a spinner after the current messages, a persistent progress strip above the composer and a header indicator. Result events refresh the feed while a turn is still running, and older in-flight result responses cannot overwrite the newly selected chat.
+
 ## Acceptance criteria
 
 Before calling mobile support complete, verify on a real iPhone that the user can:

@@ -531,9 +531,8 @@
     background: var(--accent);
     color: var(--accent-ink);
   }
-  .nav-mobile-switch span {
-    margin-left: 6px;
-    opacity: 0.65;
+  .nav-mobile-switch .nav-tab-title small {
+    opacity: 0.8;
   }
   .navigation-inner[data-section="threads"] .nav-projects,
   .navigation-inner[data-section="projects"] .nav-threads {
@@ -609,6 +608,104 @@
   .remote-control-panel {
     max-height: calc(100% - 70px);
   }
+}
+
+.chat-scroll {
+  overflow-anchor: none;
+}
+.chat-content {
+  min-height: 100%;
+  display: flow-root;
+}
+:root[data-theme="crt-green"] .nav-project.selected .activity-badge {
+  color: var(--accent-ink);
+}
+:root[data-theme="crt-green"] .nav-project.selected .activity-badge.is-unread {
+  background: color-mix(in srgb, var(--accent-ink) 12%, transparent);
+}
+:root[data-theme="crt-green"] .nav-project.selected .spinner {
+  border-color: color-mix(in srgb, var(--accent-ink) 25%, transparent);
+  border-top-color: var(--accent-ink);
+}
+
+.working .spinner {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+/* Activity uses the same compact badges in every theme and layout. */
+.activity-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.activity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 16px;
+  color: var(--accent);
+}
+.activity-badge .spinner {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.activity-badge b {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.activity-badge.is-unread {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 5px;
+  padding: 2px;
+}
+.activity-badge.is-empty {
+  color: var(--muted);
+}
+.activity-badge.needs-attention {
+  color: var(--gold);
+}
+.nav-thread > .activity-badges,
+.nav-project > .activity-badges {
+  flex: none;
+  width: auto;
+  overflow: visible;
+}
+.nav-sync-state {
+  font-size: 11px;
+  color: var(--muted);
+  margin: -5px 10px 8px;
+}
+.nav-mobile-switch button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 4px;
+}
+.nav-mobile-switch .nav-tab-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.nav-tab-title small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.nav-mobile-switch .activity-badges {
+  font-size: 11px;
+}
+.standalone-thread-list {
+  padding: 0 4px;
+}
+.turn-status .spinner {
+  width: 19px;
+  height: 19px;
+  border-width: 2px;
 }
 
 /* Project folders stay in place; the other tab contains only unassigned chats. */
@@ -741,9 +838,7 @@
   white-space: pre;
 }
 @media (prefers-reduced-motion: reduce) {
-  .turn-status .spinner,
-  .nav-thread .spinner,
-  .header-connection .spinner {
+  .spinner {
     animation: none;
   }
 }

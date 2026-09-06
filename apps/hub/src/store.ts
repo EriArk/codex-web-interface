@@ -1,8 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { type Attachment, HubError, type HubEvent, type TurnSettings } from "@codex-web/shared";
+import {
+  type Attachment,
+  compareThreadActivity,
+  HubError,
+  type HubEvent,
+  hasUnreadCompletion,
+  isActiveThread,
+  type NavigationState,
+  type ProjectActivity,
+  type ThreadActivity,
+  type TurnSettings,
+} from "@codex-web/shared";
 
 import { migrateDatabase } from "./migrations.js";
 
@@ -35,6 +47,7 @@ export interface MessageRecord {
   attachments?: Attachment[];
 }
 export class Store {
+  readonly changes = new EventEmitter();
   readonly schemaVersion: number;
   readonly db: DatabaseSync;
   constructor(path: string) {
@@ -67,6 +80,7 @@ export class Store {
         "INSERT INTO threads(id,projectId,codexThreadId,title,createdAt,updatedAt) VALUES(?,?,?,?,?,?)",
       )
       .run(id, projectId, codexThreadId, title, now, now);
+    this.changes.emit("navigation");
     return this.thread(id);
   }
   thread(id: string): ThreadRecord {
@@ -84,7 +98,9 @@ export class Store {
   threads(projectId: string): ThreadRecord[] {
     return (
       this.db
-        .prepare("SELECT * FROM threads WHERE projectId=? ORDER BY updatedAt DESC LIMIT 200")
+        .prepare(
+          "SELECT * FROM threads WHERE projectId=? AND archived=0 ORDER BY CASE WHEN status IN ('starting','running','waiting_approval') THEN 0 WHEN completedSeq>seenSeq THEN 1 ELSE 2 END, CASE WHEN status IN ('starting','running','waiting_approval') THEN activityAt ELSE updatedAt END DESC, id LIMIT 200",
+        )
         .all(projectId) as unknown as ThreadRecord[]
     ).map((t) => ({ ...t, settings: this.threadSettings(t.id) }));
   }
@@ -117,9 +133,57 @@ export class Store {
     } as unknown as Attachment;
   }
   setStatus(id: string, status: string, turnId: string | null = null): void {
+    const now = new Date().toISOString();
     this.db
-      .prepare("UPDATE threads SET status=?,activeTurnId=?,updatedAt=? WHERE id=?")
-      .run(status, turnId, new Date().toISOString(), id);
+      .prepare(
+        "UPDATE threads SET activityAt=CASE WHEN ? AND status NOT IN ('starting','running','waiting_approval') THEN ? ELSE activityAt END,status=?,activeTurnId=?,updatedAt=? WHERE id=?",
+      )
+      .run(Number(isActiveThread(status)), now, status, turnId, now, id);
+    this.changes.emit("navigation");
+  }
+  navigation(projectIds: string[]): NavigationState {
+    const projects = new Map<string, ProjectActivity>(
+      projectIds.map((id) => [
+        id,
+        { id, active: 0, unread: 0, waiting: 0, updatedAt: "", activityAt: "" },
+      ]),
+    );
+    const rows = this.db
+      .prepare(
+        "SELECT id,projectId,title,status,activeTurnId,updatedAt,activityAt,completedSeq,seenSeq,completedTurnId,completedStatus FROM threads WHERE archived=0",
+      )
+      .all() as unknown as ThreadActivity[];
+    const groups = new Map<string, ThreadActivity[]>();
+    for (const thread of rows) {
+      const project = projects.get(thread.projectId);
+      if (!project) continue;
+      const active = isActiveThread(thread.status);
+      project.active += Number(active);
+      project.unread += Number(hasUnreadCompletion(thread));
+      project.waiting += Number(thread.status === "waiting_approval");
+      if (thread.updatedAt > project.updatedAt) project.updatedAt = thread.updatedAt;
+      if (active && (thread.activityAt ?? "") > project.activityAt)
+        project.activityAt = thread.activityAt ?? "";
+      const list = groups.get(thread.projectId) ?? [];
+      list.push(thread);
+      groups.set(thread.projectId, list);
+    }
+    // Full counts, bounded metadata per project, never conversation contents.
+    return {
+      projects: [...projects.values()],
+      threads: [...groups.values()].flatMap((list) =>
+        list.sort(compareThreadActivity).slice(0, 200),
+      ),
+    };
+  }
+  markSeen(id: string, completedSeq: number): void {
+    this.thread(id);
+    const result = this.db
+      .prepare(
+        "UPDATE threads SET seenSeq=MIN(completedSeq,?) WHERE id=? AND seenSeq<MIN(completedSeq,?)",
+      )
+      .run(completedSeq, id, completedSeq);
+    if (result.changes) this.changes.emit("navigation");
   }
   append(
     threadId: string,
@@ -162,7 +226,18 @@ export class Store {
             "UPDATE messages SET turnId=? WHERE threadId=? AND role='user' AND turnId IS NULL AND firstSeq=(SELECT MAX(firstSeq) FROM messages WHERE threadId=? AND role='user')",
           )
           .run(turnId, threadId, threadId);
+      if (
+        type === "turn.completed" &&
+        turnId &&
+        ["completed", "interrupted", "failed"].includes(String(payload.status))
+      )
+        this.db
+          .prepare(
+            "UPDATE threads SET completedSeq=?,completedTurnId=?,completedStatus=? WHERE id=? AND (completedTurnId IS NULL OR completedTurnId<>?)",
+          )
+          .run(seq, turnId, String(payload.status), threadId, turnId);
       this.db.exec("COMMIT");
+      if (type === "turn.completed") this.changes.emit("navigation");
       return { seq, threadId, turnId, type, payload, createdAt };
     } catch (error) {
       this.db.exec("ROLLBACK");

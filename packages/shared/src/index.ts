@@ -99,6 +99,58 @@ export const configSchema = z
 export type HubConfig = z.infer<typeof configSchema>;
 export type MachineConfig = HubConfig["machines"][number];
 export type ProjectConfig = HubConfig["projects"][number];
+export interface ThreadActivity {
+  id: string;
+  projectId: string;
+  title: string;
+  status: string;
+  activeTurnId: string | null;
+  updatedAt: string;
+  activityAt: string | null;
+  completedSeq: number;
+  seenSeq: number;
+  completedTurnId: string | null;
+  completedStatus: string | null;
+}
+export interface ProjectActivity {
+  id: string;
+  active: number;
+  unread: number;
+  waiting: number;
+  updatedAt: string;
+  activityAt: string;
+}
+export interface NavigationState {
+  threads: ThreadActivity[];
+  projects: ProjectActivity[];
+}
+export const isActiveThread = (status: string): boolean =>
+  ["starting", "running", "waiting_approval"].includes(status);
+export const hasUnreadCompletion = (
+  thread: Pick<ThreadActivity, "completedSeq" | "seenSeq">,
+): boolean => thread.completedSeq > thread.seenSeq;
+export function compareActivity(a: ProjectActivity, b: ProjectActivity): number {
+  const rank = (p: ProjectActivity) => (p.active ? 0 : p.unread ? 1 : 2);
+  return (
+    rank(a) - rank(b) ||
+    (a.active && b.active
+      ? b.activityAt.localeCompare(a.activityAt)
+      : b.updatedAt.localeCompare(a.updatedAt)) ||
+    a.id.localeCompare(b.id)
+  );
+}
+export function compareThreadActivity(a: ThreadActivity, b: ThreadActivity): number {
+  const activity = (t: ThreadActivity): ProjectActivity => ({
+    id: t.id,
+    active: Number(isActiveThread(t.status)),
+    unread: Number(hasUnreadCompletion(t)),
+    waiting: Number(t.status === "waiting_approval"),
+    updatedAt: t.updatedAt,
+    activityAt: t.activityAt ?? t.updatedAt,
+  });
+  return compareActivity(activity(a), activity(b));
+}
+
 export interface HubEvent {
   seq: number;
   threadId: string;

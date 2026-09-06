@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { SCHEMA_VERSION } from "../apps/hub/dist/migrations.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -34,7 +35,7 @@ try{
  await turn(original.sessions,thread.id,"Isolated integration test. Do not use tools or inspect files. Remember "+marker+" and reply with that word only.",settings);
  const snapshot=await createSnapshot(config,join(root,"backups"),{revision:"b269368"});
  const manifest=await verifySnapshot(snapshot);
- assert.equal(manifest.schemaVersion,2);
+ assert.equal(manifest.schemaVersion,SCHEMA_VERSION);
  await original.app.close();original=undefined;
  const target=join(root,"restored");
  await restoreSnapshot(snapshot,target);

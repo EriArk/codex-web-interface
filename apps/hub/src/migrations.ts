@@ -52,6 +52,16 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 3,
+    name: "thread-activity-and-seen-completions",
+    up(db) {
+      // Existing history starts read; only newly observed completed turns create badges.
+      db.exec(
+        "ALTER TABLE threads ADD COLUMN activityAt TEXT; ALTER TABLE threads ADD COLUMN completedSeq INTEGER NOT NULL DEFAULT 0; ALTER TABLE threads ADD COLUMN seenSeq INTEGER NOT NULL DEFAULT 0; ALTER TABLE threads ADD COLUMN completedTurnId TEXT; ALTER TABLE threads ADD COLUMN completedStatus TEXT;",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

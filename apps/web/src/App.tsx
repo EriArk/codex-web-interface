@@ -19,6 +19,7 @@ import type {
   TurnSettings,
   View,
 } from "./types";
+import { useNavigation } from "./useNavigation";
 import { useWorkspace } from "./useWorkspace";
 
 const readPreference = (name: string, fallback: string) => {
@@ -120,6 +121,7 @@ export default function App() {
   );
 }
 function Workspace({ onLogout }: { onLogout: () => void }) {
+  const navigationState = useNavigation();
   const [initialized, setInitialized] = useState(false),
     [wide, setWide] = useState(window.innerWidth >= 1100);
   const [projects, setProjects] = useState<Project[]>([]),
@@ -133,7 +135,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const [machines, setMachines] = useState<Machine[]>([]),
     [createProject, setCreateProject] = useState(false),
     [syncing, setSyncing] = useState(false),
-    [remoteImmersive, setRemoteImmersive] = useState(false);
+    [remoteImmersive, setRemoteImmersive] = useState(false),
+    [resultOverlay, setResultOverlay] = useState(false);
   const threadRequest = useRef(0);
   const [projectId, setProjectId] = useState(""),
     [threadId, setThreadId] = useState(""),
@@ -250,7 +253,9 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       body: { projectId, ...(threadId ? { threadId } : {}), view },
     }).catch(() => {});
   }, [projectId, threadId, view]);
+  const resultRequest = useRef(0);
   const loadResults = useCallback(async () => {
+    const request = ++resultRequest.current;
     if (!threadId) {
       setResults([]);
       setResultCursor(null);
@@ -259,6 +264,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     const data = await api<{ items: Result[]; nextBefore: number | null }>(
       `/threads/${threadId}/results`,
     );
+    if (request !== resultRequest.current || selectionRef.current.threadId !== threadId) return;
     setResults(data.items);
     setResultCursor(data.nextBefore);
   }, [threadId]);
@@ -459,6 +465,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const navigation = (
     <ProjectNavigation
       projects={projects}
+      activity={navigationState.state}
+      activityConnected={navigationState.connected}
       threadGroups={threadGroups}
       projectId={projectId}
       threadId={threadId}
@@ -539,11 +547,15 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             }
           />
           <span>
-            {threadId
-              ? state.connection === "connected"
-                ? "На связи"
-                : "Подключение…"
-              : "Личный Hub"}
+            {sending || ["running", "starting"].includes(state.thread.status)
+              ? "Codex работает"
+              : state.thread.status === "waiting_approval"
+                ? "Нужен ответ"
+                : threadId
+                  ? state.connection === "connected"
+                    ? "На связи"
+                    : "Подключение…"
+                  : "Личный Hub"}
           </span>
         </div>
         <button
@@ -586,6 +598,15 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           sendError={sendError}
           writeBlocked={writeBlocked}
           visible={wide || view === "chat"}
+          canMarkSeen={
+            !drawer &&
+            !settings &&
+            !createProject &&
+            !remoteImmersive &&
+            !resultOverlay &&
+            navigationState.connected
+          }
+          completion={navigationState.state.threads.find((t) => t.id === threadId)}
           busy={busy}
           results={results}
           focusTurn={focusTurn}
@@ -658,6 +679,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             {tab("remote", "Remote", "remote")}
           </div>
           <Results
+            onOverlayChange={setResultOverlay}
             results={results}
             visible={view === "results" || view === "chat"}
             focusId={focusResult}
