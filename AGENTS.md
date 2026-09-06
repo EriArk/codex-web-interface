@@ -238,6 +238,12 @@ Before mobile support is considered complete, the same core workflow must also w
 - Default phone Remote to trackpad; support tablet direct touch and stylus. Connected phone Remote, especially landscape, must keep its full viewport with floating controls.
 - Revisit all three owner-drawn theme references. Organizer binding/paper, CRT housing/green text and light silver/cyan hitech materials are part of the intended design.
 
+## Owner-requested primary client update (2026-09-06)
+
+- The completed website is the owner's primary and intended sole client. Keep Windows execution independent of the desktop ChatGPT/Codex UI through the existing Companion.
+- Continue existing native conversations after their desktop writer is released. Do not make copies or a desktop relay the ordinary solution for sending.
+- Do not stop a running desktop task to migrate a writer. Finish the work, then explain the one-time full desktop exit if its writer is still held.
+
 ## Owner-requested workflow and density updates (2026-09-06)
 
 - Projects expand their chat lists in place. The separate conversations tab is for chats without a project.

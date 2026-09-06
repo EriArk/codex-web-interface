@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { basename } from "node:path";
 import { type HubConfig, HubError, type HubEvent, turnSettingsSchema } from "@codex-web/shared";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
@@ -516,11 +517,19 @@ export async function createApp(
     },
   );
   if (options.webRoot && existsSync(options.webRoot)) {
-    await app.register(staticFiles, { root: options.webRoot, prefix: "/", maxAge: 0 });
+    await app.register(staticFiles, {
+      root: options.webRoot,
+      prefix: "/",
+      maxAge: 0,
+      setHeaders(response, path) {
+        if (["index.html", "sw.js", "version.json"].includes(basename(path)))
+          response.header("Cache-Control", "no-store");
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith("/api/"))
         return reply.code(404).send({ error: { code: "NOT_FOUND", message: "Не найдено" } });
-      return reply.header("Cache-Control", "no-cache").sendFile("index.html");
+      return reply.header("Cache-Control", "no-store").sendFile("index.html");
     });
   }
   app.addHook("onClose", async () => {

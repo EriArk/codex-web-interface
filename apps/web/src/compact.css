@@ -1,4 +1,25 @@
 /* One spacing and type scale across themes; editable fields remain 16px. */
+.update-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 14px;
+}
+.update-notice small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.update-notice button {
+  flex-shrink: 0;
+}
+
 @media (max-width: 1099px) {
   .workspace-header {
     min-height: calc(56px + env(safe-area-inset-top));

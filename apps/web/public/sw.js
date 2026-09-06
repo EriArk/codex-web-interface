@@ -29,7 +29,7 @@ self.addEventListener("fetch", (event) => {
     return;
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: "no-store" })
         .then((response) => {
           if (response.ok) caches.open(CACHE).then((cache) => cache.put("/", response.clone()));
           return response;

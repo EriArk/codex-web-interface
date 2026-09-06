@@ -11,5 +11,5 @@ if (!root) throw new Error("Missing root");
 createRoot(root).render(<App />);
 if ("serviceWorker" in navigator)
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("/sw.js").catch(() => {});
+    void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
   });

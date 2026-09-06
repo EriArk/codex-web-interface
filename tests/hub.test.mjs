@@ -169,6 +169,33 @@ test("approvals and questions are single-use and scoped to the server request", 
     store.close();
   }
 });
+test("the primary web writer retains a native conversation between completed turns", async () => {
+  const store = new Store(":memory:"),
+    rpc = new FakeRpc(),
+    sessions = new Sessions(config, store, () => rpc);
+  try {
+    const t = store.createThread("project", "native-existing-id", "Imported");
+    store.db
+      .prepare("UPDATE threads SET origin='desktop',historyMode='paginated' WHERE id=?")
+      .run(t.id);
+    await sessions.resume(t.id);
+    for (const prompt of ["first", "second"]) {
+      await sessions.startTurn(t.id, prompt);
+      rpc.emit("notification", "turn/completed", {
+        threadId: t.codexThreadId,
+        turn: { id: store.thread(t.id).activeTurnId, status: "completed" },
+      });
+    }
+    assert.equal(rpc.calls.filter((c) => c.method === "thread/resume").length, 1);
+    assert.equal(rpc.calls.filter((c) => c.method === "thread/unsubscribe").length, 0);
+    assert.equal(store.thread(t.id).codexThreadId, "native-existing-id");
+    assert.equal(store.history(t.id).messages.filter((m) => m.role === "user").length, 2);
+  } finally {
+    await sessions.close();
+    store.close();
+  }
+});
+
 test("private password enrollment, cookies, CSRF, auth and websocket revocation", async () => {
   const setupToken = randomBytes(32).toString("base64url"),
     password = `Only used by this isolated test ${randomBytes(12).toString("hex")}`;

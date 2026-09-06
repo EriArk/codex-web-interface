@@ -212,3 +212,9 @@ Return HTTP 409 with a readable message, preserve the draft, and offer an option
 The owner requested expandable project/thread trees and a separate list of projectless conversations. Use virtual per-machine Hub buckets for unmatched native conversations, preserving their actual cwd; never create native projects just for navigation.
 
 Show turn progress and pending choices next to the composer. Keep code and commands behind disclosures; show loaded image results first. Use locally bundled Roboto Condensed in organizer/hi-tech, sharp monospace in CRT, shared mobile spacing and 44px touch targets. Small visible parameter captions overlay full-size native selects so the selector text can be compact while keeping native picker/accessibility behavior.
+
+## D24 — Web as the primary client
+
+The owner clarified that the completed website will be the only primary client. Windows runs Codex through the independently scheduled local-only Companion; keeping desktop ChatGPT/Codex open is not a dependency. This supersedes D22's copy-first UI fallback: preserve native IDs and drafts, explain the one-time desktop exit needed to release an existing writer, and expose a same-thread access retry. Do not forcibly quit an active desktop task. The Hub retains loaded writers between turns, with existing idle teardown and restart recovery.
+
+A version manifest tied to the built JavaScript and stylesheet assets lets a long-lived mobile page offer an explicit update. Never auto-reload an in-progress draft or upload. The HTML, service worker and manifest use no-store headers; private API responses remain outside service-worker caches.

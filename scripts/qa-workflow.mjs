@@ -70,16 +70,35 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.unroute(turns);
   await page.route(turns,route=>route.fulfill({status:409,contentType:"application/json",body:JSON.stringify({error:{code:"THREAD_IN_USE",message:"Этот диалог открыт в настольном Codex. Черновик сохранён."}})}));
   await page.getByRole("button",{name:"Отправить сообщение",exact:true}).tap();
-  await expect(page.getByRole("button",{name:"Продолжить в копии",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Проверить доступ",exact:true})).toBeVisible();
   await page.unroute(turns);
-  await page.getByLabel("Выбрать файлы или изображения",{exact:true}).setInputFiles({name:"copy-note.txt",mimeType:"text/plain",buffer:Buffer.from("draft attachment")});
-  await page.getByRole("button",{name:"Удалить copy-note.txt",exact:true}).waitFor();
-  await page.getByRole("button",{name:"Продолжить в копии",exact:true}).tap();
-  await expect(page.locator(".header-project small")).toContainText("копия");
+  const originalTitle = await page.locator(".header-project small").textContent();
+  await page.getByLabel("Выбрать файлы или изображения",{exact:true}).setInputFiles({name:"handoff-note.txt",mimeType:"text/plain",buffer:Buffer.from("draft attachment")});
+  await page.getByRole("button",{name:"Удалить handoff-note.txt",exact:true}).waitFor();
+  let automaticSends = 0, forks = 0;
+  const observe = request => {
+    if (request.method() === "POST" && request.url().endsWith("/turns")) automaticSends++;
+    if (request.method() === "POST" && request.url().endsWith("/fork")) forks++;
+  };
+  page.on("request", observe);
+  const resumeRoute = "**/api/threads/*/resume";
+  await page.route(resumeRoute, route => route.fulfill({status:409,contentType:"application/json",body:JSON.stringify({error:{code:"THREAD_IN_USE",message:"Диалог ещё занят"}})}));
+  await page.getByRole("button",{name:"Проверить доступ",exact:true}).tap();
+  await expect(page.locator(".send-error")).toContainText("Диалог ещё занят");
   await expect(input).toHaveValue("Черновик при ошибке");
-  await page.getByRole("button",{name:"Удалить copy-note.txt",exact:true}).waitFor();
-  await page.getByRole("button",{name:"Удалить copy-note.txt",exact:true}).tap();
-  await expect(page.locator(".chat-pane .empty-state h2")).toBeVisible();
+  await page.unroute(resumeRoute);
+  await page.getByRole("button",{name:"Проверить доступ",exact:true}).tap();
+  await expect(page.locator(".send-error")).toHaveCount(0);
+  await expect(page.locator(".global-notice")).toContainText("Диалог готов к работе");
+  await expect(page.locator(".header-project small")).toHaveText(originalTitle);
+  await expect(input).toHaveValue("Черновик при ошибке");
+  await page.getByRole("button",{name:"Удалить handoff-note.txt",exact:true}).waitFor();
+  assert.equal(automaticSends, 0);
+  assert.equal(forks, 0);
+  page.off("request", observe);
+  await page.screenshot({path:".local/qa-workflow/"+engine+"-same-thread.png"});
+  await page.getByRole("button",{name:"Закрыть уведомление",exact:true}).click();
+  await page.getByRole("button",{name:"Удалить handoff-note.txt",exact:true}).tap();
   await input.fill("Выбор ответа "+engine);
   await page.getByRole("button",{name:"Отправить сообщение",exact:true}).tap();
   await expect(page.locator(".turn-status")).toBeVisible();
@@ -108,7 +127,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:".local/qa-workflow/"+engine+"-wide.png"});
   assert.deepEqual(errors,[]);
-  report.push({engine,compactNativePickers:true,expandInPlace:true,standaloneTab:true,imagesFirst:true,codeCollapsed:true,readableProxyError:true,draftPreserved:true,explicitCopy:true,copyPreservesAttachment:true,visibleWorkState:true,multipleQuestionChoiceAndFreeText:true,pendingQuestionSurvivesReload:true,wide:true});
+  report.push({engine,compactNativePickers:true,expandInPlace:true,standaloneTab:true,imagesFirst:true,codeCollapsed:true,readableProxyError:true,draftPreserved:true,sameThreadRetry:true,retryPreservesAttachment:true,noAutomaticSendOrFork:true,visibleWorkState:true,multipleQuestionChoiceAndFreeText:true,pendingQuestionSurvivesReload:true,wide:true});
   await context.close();
  }finally{await browser.close();}
 }

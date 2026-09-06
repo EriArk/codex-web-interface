@@ -5,6 +5,7 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { Icon } from "./icons";
 import type { Approval, Result, TurnSettings } from "./types";
+import { UpdateNotice } from "./UpdateNotice";
 import type { ChatState } from "./useWorkspace";
 
 const positions = new Map<string, number>();
@@ -160,7 +161,6 @@ export function Chat({
   sending,
   sendError,
   writeBlocked,
-  onFork,
   visible,
   busy,
   results,
@@ -181,7 +181,6 @@ export function Chat({
   sending: boolean;
   sendError: string;
   writeBlocked: boolean;
-  onFork: (draft: string, attachments: string[]) => void;
   visible: boolean;
   busy: boolean;
   results: Result[];
@@ -436,6 +435,7 @@ export function Chat({
           К новым сообщениям ↓
         </button>
       )}
+      <UpdateNotice visible={visible} busy={busy || attachments.busy} />
       {threadId && state.error && (
         <div className="notice error-notice" role="alert">
           <span>{state.error}</span>
@@ -490,14 +490,9 @@ export function Chat({
               type="button"
               className="secondary"
               disabled={busy || attachments.busy}
-              onClick={() =>
-                onFork(
-                  draft,
-                  attachments.files.map((file) => file.id),
-                )
-              }
+              onClick={onReconnect}
             >
-              Продолжить в копии
+              Проверить доступ
             </button>
           )}
         </div>

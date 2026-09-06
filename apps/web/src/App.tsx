@@ -382,33 +382,28 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     setThreadGroups((groups) => ({ ...groups, [id]: data.threads }));
     if (data.warning) setNotice(data.warning);
   }, []);
-  const forkThread = (draft: string, attachments: string[]) =>
-    void action(async () => {
-      const copy = await api<Thread>(`/threads/${threadId}/fork`, {
-        method: "POST",
-        key: crypto.randomUUID(),
-        body: { attachments },
-      });
-      try {
-        sessionStorage.setItem(`codex-draft-${copy.id}`, draft);
-      } catch {}
-      setThreadId(copy.id);
-      setThreads((list) => [copy, ...list]);
-      setThreadGroups((groups) => ({
-        ...groups,
-        [projectId]: [copy, ...(groups[projectId] ?? [])],
-      }));
-      void loadThreads(projectId, copy.id).catch(() => {});
+  const resume = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNotice("");
+    const selected = threadId;
+    try {
+      await api(`/threads/${selected}/resume`, { method: "POST" });
+      if (selectionRef.current.threadId !== selected) return;
       setSendError("");
       setWriteBlocked(false);
-      setNotice("Копия создана с завершённой перепиской. Проверь черновик и отправь сообщение.");
-    });
-  const resume = () =>
-    void action(async () => {
-      await api(`/threads/${threadId}/resume`, { method: "POST" });
-      await refresh();
+      setNotice("Диалог готов к работе через сайт. Можно отправлять сообщение.");
+      // Recover access only: the owner decides when to send the preserved draft.
+      void refresh().catch(() => {});
       reconnect();
-    });
+    } catch (error) {
+      if (selectionRef.current.threadId !== selected) return;
+      setWriteBlocked(error instanceof ApiError && error.code === "THREAD_IN_USE");
+      setSendError(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
   const showResult = (id: string) => {
     setFocusResult(id);
     setView("results");
@@ -590,7 +585,6 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           sending={sending}
           sendError={sendError}
           writeBlocked={writeBlocked}
-          onFork={forkThread}
           visible={wide || view === "chat"}
           busy={busy}
           results={results}
@@ -620,7 +614,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             )
           }
           onResult={showResult}
-          onReconnect={resume}
+          onReconnect={() => void resume()}
           onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
         />
         <hr

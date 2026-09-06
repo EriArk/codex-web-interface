@@ -469,17 +469,8 @@ export class Sessions extends EventEmitter {
         this.store.threadSettings(id) ??
         (await this.capabilities(t.projectId)).defaults;
       const model = await this.validateSettings(t.projectId, selection);
-      if (
-        r.loaded.has(id) &&
-        (t.origin === "desktop" ||
-          (t.historyMode &&
-            this.store.db
-              .prepare("SELECT 1 FROM events WHERE threadId=? AND type='turn.completed' LIMIT 1")
-              .get(id)))
-      ) {
-        await r.rpc.request("thread/unsubscribe", { threadId: t.codexThreadId });
-        r.loaded.delete(id);
-      }
+      // The Hub is the primary writer. Keep its loaded conversation between turns;
+      // releasing and reacquiring it here lets another App Server steal the writer.
       if (
         !r.loaded.has(id) &&
         t.origin !== "desktop" &&
