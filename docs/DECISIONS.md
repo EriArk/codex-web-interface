@@ -243,3 +243,12 @@ The owner requested images in place of desktop attachment paths. Register only s
 The displayed text removes only the known desktop file wrapper corresponding to its structured image references. Other text and unrelated file references are preserved. Both native and web-uploaded images display useful-sized previews in the message and open in a touch-accessible viewer. Missing sources have a retry action. Image fetching is lazy and does not load older chat pages.
 
 Unconfirmed native queue additions also retain a Hub recovery record and bound attachment metadata. Observing the matching native queued item/user message reconciles that record; it does not resend the message.
+
+
+## D28 — Explicit desktop restart from Settings
+
+The owner requested a Codex restart button. Optional machines[].codex.desktopControl points to the installed fixed PowerShell control script. Hub exposes authenticated status and confirmed restart endpoints, never process IDs, executable paths or caller-supplied commands. System SSH invokes only Status/Restart with a UUID. A demand-only Scheduled Task launches its fixed action using the owner's Interactive logon, Highest run level (needed for administrator-launched Codex), and IgnoreNew. Its private user/SYSTEM/Administrators directory contains fixed scripts/config and one latest operation record. No network listener or Companion change is added.
+
+The task resolves the installed OpenAI.Codex package for the pinned family and current owner. It closes only that package's UI and captured direct native App Server children, checking creation identity before forced exit. Companion-owned native processes remain separate. Relaunch occurs in the same nonzero interactive session. State is queued/restarting/completed/failed/unknown; completion requires observing the new desktop process. Stale requests never execute after a later login; uncertain outcomes are read back, never replayed automatically.
+
+Hub checks its own active turns. Windows independently queries all non-archived native latest-turn metadata read-only (bounded to 10000 threads), applying D25's ten-minute freshness rule. Active or unreadable state blocks restart. The task repeats this check immediately before close and before forced exit. A desktop task beginning during the narrow close window cannot be coordinated atomically through the current protocol; use this explicit maintenance action between tasks. No automatic restart on errors or writer conflicts is introduced.

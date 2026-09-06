@@ -1,6 +1,7 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
+import { DesktopControl } from "./DesktopControl";
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { ProjectDialog } from "./ProjectDialog";
@@ -798,6 +799,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             </label>
           ))}
         </fieldset>
+        <DesktopControl machines={machines} open={settings} />
         <button
           type="button"
           className="secondary settings-activity"

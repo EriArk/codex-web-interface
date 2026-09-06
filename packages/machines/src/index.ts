@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 
 export { type NativeActivity, readNativeActivity } from "./activity.js";
+export { controlDesktop, type DesktopState, desktopError } from "./desktop.js";
 export { readMachineImage } from "./image.js";
 
 export function quotePowerShell(value: string): string {

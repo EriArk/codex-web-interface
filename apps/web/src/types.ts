@@ -14,6 +14,7 @@ export interface Machine {
   type: "ssh-windows" | "local-linux";
   projectsDirectory: string;
   canCreateProjects?: boolean;
+  desktopRestartAvailable?: boolean;
   remoteAvailable: boolean;
 }
 export interface Project {
