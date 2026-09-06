@@ -1,0 +1,28 @@
+import {readFileSync} from 'node:fs';
+import {createServer} from 'node:http';
+process.env.HOST='127.0.0.1';
+process.env.PORT='8080';
+process.env.DATA_DIR='/data/bridge';
+process.env.API_TOKEN=readFileSync('/data/service-token','utf8').trim();
+process.env.BRIDGE_TOKEN=readFileSync('/data/bridge-token','utf8').trim();
+process.env.CHATGPT_TRANSIENT_ERROR_MAX_RETRIES='0';
+process.env.AUTO_OPEN_TAB='false';
+process.env.PAYLOAD_DEBUG='false';
+process.env.ATTACHMENT_TRANSPORT='base64';
+process.env.ANSWER_TIMEOUT_MS='600000';
+const {BrowserExtensionHub}=await import('/opt/bridge/src/browserExtensionHub.js');
+const {BrowserBridge}=await import('/opt/bridge/src/browserBridge.js');
+const {FileStore}=await import('/opt/bridge/src/fileStore.js');
+const {EventBus}=await import('/opt/bridge/src/eventBus.js');
+const {createApp}=await import('/opt/bridge/src/server.js');
+const {setLogEnabled}=await import('/opt/bridge/src/logger.js');
+setLogEnabled(false);
+const events=new EventBus({limit:200});
+const hub=new BrowserExtensionHub(events);
+const files=new FileStore();
+const bridge=new BrowserBridge(hub,files,events,{autoOpenTab:false,publicBaseUrl:'http://127.0.0.1:8080'});
+const server=createServer(createApp(bridge,files,events));
+hub.attach(server);
+server.listen(8080,'127.0.0.1');
+async function close(){server.close();await bridge.close({cancelPending:false});process.exit(0)}
+process.on('SIGTERM',close);process.on('SIGINT',close);

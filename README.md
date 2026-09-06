@@ -65,3 +65,9 @@ For loopback development, use publicBaseUrl `http://127.0.0.1:8780` and secureCo
 Native Codex project discovery and bounded external history are implemented. [Sync and Remote behavior](docs/SYNC_AND_REMOTE.md) explains the desktop saved-folder limitation and continuation semantics. Notes, a general file/Git browser, additional machines and automatic collection of arbitrary generated artifacts remain later modules. The local Linux transport is implemented; this deployment has only the authenticated Windows backend configured.
 
 Read [AGENTS.md](AGENTS.md), [decisions](docs/DECISIONS.md), [architecture](docs/ARCHITECTURE.md), [mobile UX](docs/MOBILE.md) and [security](docs/SECURITY.md) before substantial changes.
+
+### Optional GPT and interactive design demos
+
+The Codex/GPT switch can connect a separately signed-in private ChatGPT browser on the Linux Hub. It shows the real account's conversations and projects, sends text/files/images, selects native models and power, and retrieves generated images. The protected original interface remains available for other native controls. See [installation and boundaries](ops/gpt/README.md).
+
+Self-contained HTML designs can appear as interactive Results from native HTML resources, HTML file changes, assistant HTML blocks or local project-file links. See [the artifact contract](docs/CODEX_INTEGRATION.md#interactive-html-result-contract). Previews run in an isolated frame and do not require a public Windows development server.

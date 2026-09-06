@@ -13,7 +13,9 @@ import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
+import { registerGpt } from "./gpt.js";
 import { registerNavigation } from "./navigation.js";
+import { previewCsp } from "./previews.js";
 import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
@@ -133,6 +135,7 @@ export async function createApp(
       },
     });
   });
+  registerGpt(app, config, store);
   registerNavigation(app, store, sessions, auth, sockets);
   registerQueue(app, sessions, store);
   registerDesktop(app, config, store, sessions, options.desktopTransport);
@@ -382,6 +385,25 @@ export async function createApp(
       .header("X-Content-Type-Options", "nosniff")
       .header("Content-Disposition", 'inline; filename="image.png"')
       .send(image.data);
+  });
+  app.get("/api/previews/:id/ready", async (req) => {
+    const id = paramId(req);
+    sessions.thread(sessions.catalog.previews.thread(id));
+    await sessions.catalog.previews.document(id);
+    return { ready: true };
+  });
+  app.get("/api/previews/:id", async (req, reply) => {
+    const id = paramId(req);
+    sessions.thread(sessions.catalog.previews.thread(id));
+    const document = await sessions.catalog.previews.document(id);
+    return reply
+      .header("Content-Security-Policy", previewCsp)
+      .removeHeader("X-Frame-Options")
+      .header("Cache-Control", "private, no-store")
+      .header("Referrer-Policy", "no-referrer")
+      .header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+      .type("text/html; charset=utf-8")
+      .send(document);
   });
   app.get("/api/artifacts/:id", async (req, reply) => {
     const id = z.string().uuid().parse(paramId(req)),

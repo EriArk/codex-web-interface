@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { Icon } from "./icons";
+import { PreviewViewer } from "./PreviewViewer";
 import type { Activity, Result } from "./types";
 export function Results({
   onOverlayChange,
@@ -23,8 +24,9 @@ export function Results({
   onTurn: (id: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null),
-    [image, setImage] = useState<Result | null>(null);
-  useEffect(() => onOverlayChange(!!image), [image, onOverlayChange]);
+    [image, setImage] = useState<Result | null>(null),
+    [preview, setPreview] = useState<Result | null>(null);
+  useEffect(() => onOverlayChange(!!image || !!preview), [image, preview, onOverlayChange]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Newly loaded result cards must be focused after rendering.
   useEffect(() => {
     if (visible && focusId)
@@ -61,7 +63,11 @@ export function Results({
           </div>
         )}
         {results
-          .toSorted((a, b) => Number(b.type === "image") - Number(a.type === "image"))
+          .toSorted(
+            (a, b) =>
+              Number(["image", "preview"].includes(b.type)) -
+              Number(["image", "preview"].includes(a.type)),
+          )
           .map((r) => (
             <article className={`result-card result-${r.type}`} key={r.id} data-result={r.id}>
               <div className="result-title">
@@ -103,6 +109,15 @@ export function Results({
                   />
                 </button>
               )}
+              {r.type === "preview" && (
+                <button
+                  type="button"
+                  className="secondary result-demo-open"
+                  onClick={() => setPreview(r)}
+                >
+                  <Icon name="remote" /> Открыть демо <Icon name="chevron" size={16} />
+                </button>
+              )}
               {r.type === "plan" && (
                 <div className="result-plan">
                   <Markdown components={{ pre: CollapsibleCode }}>{r.payload.text ?? ""}</Markdown>
@@ -142,6 +157,7 @@ export function Results({
           </button>
         )}
       </div>
+      {preview && <PreviewViewer result={preview} onClose={() => setPreview(null)} />}
       {image && (
         <div className="image-viewer" role="dialog" aria-modal="true" aria-label="Просмотр снимка">
           <div className="viewer-toolbar">

@@ -8,6 +8,7 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
+import { ClientPicker } from "./ClientPicker";
 import { Icon } from "./icons";
 import type { Project, Thread } from "./types";
 
@@ -28,6 +29,7 @@ export function ProjectNavigation({
   onRefresh,
   onClose,
   onSettings,
+  onClient,
 }: {
   projects: Project[];
   activity: NavigationState;
@@ -45,6 +47,7 @@ export function ProjectNavigation({
   onRefresh: () => void;
   onClose: () => void;
   onSettings: () => void;
+  onClient?: (value: "codex" | "gpt") => void;
 }) {
   const [section, setSection] = useState<"projects" | "threads">("projects");
   const [query, setQuery] = useState("");
@@ -166,7 +169,8 @@ export function ProjectNavigation({
       <div className="nav-brand">
         <img src="/icon.svg" width="32" height="32" alt="" />
         <span>
-          codex<small className="brand-subtitle">Личное пространство</small>
+          {onClient ? <ClientPicker value="codex" onChange={onClient} /> : "codex"}
+          <small className="brand-subtitle">Личное пространство</small>
         </span>
         <button
           type="button"

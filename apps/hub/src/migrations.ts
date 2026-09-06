@@ -71,6 +71,19 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 5,
+    name: "chatgpt-outbox-and-interactive-previews",
+    up(db) {
+      db.exec(
+        "CREATE TABLE IF NOT EXISTS gpt_jobs(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,nativeId TEXT,text TEXT NOT NULL,files TEXT NOT NULL,model TEXT NOT NULL,effort TEXT NOT NULL,status TEXT NOT NULL,answer TEXT NOT NULL,assets TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,error TEXT NOT NULL,requestId TEXT,submitted INTEGER NOT NULL DEFAULT 0);" +
+          "CREATE TABLE IF NOT EXISTS gpt_uploads(id TEXT PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,bytes INTEGER NOT NULL,image INTEGER NOT NULL,createdAt INTEGER NOT NULL);",
+      );
+      db.exec(
+        "CREATE TABLE IF NOT EXISTS html_previews(id TEXT PRIMARY KEY,threadId TEXT NOT NULL,source TEXT NOT NULL,createdAt TEXT NOT NULL)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

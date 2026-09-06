@@ -1098,6 +1098,8 @@ export class Sessions extends EventEmitter {
       const item = record(p.item),
         id = text(item.id),
         type = text(item.type);
+      for (const previewId of this.catalog.previews.observe(t, turnId, item))
+        this.emitEvent(t.id, "result.created", { id: previewId, type: "preview" }, turnId);
       if (type === "reasoning") {
         const summary = Array.isArray(item.summary)
           ? item.summary

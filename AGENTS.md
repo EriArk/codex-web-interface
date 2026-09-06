@@ -297,3 +297,19 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Opening another client or restoring history during a live turn must preserve all public assistant messages and summaries. A turn can contain multiple Steer messages; never reconcile user messages by turn ID alone.
 - On the wide tablet layout, allow the right pane to collapse and remember that choice locally. Keep an accessible Remote shortcut and the pane toggle in the top bar. Explicit result/Remote navigation reveals the pane without losing chat state; compact layouts retain their existing bottom tabs.
+
+## Owner-approved ChatGPT mode (2026-09-06)
+
+- Add a Codex/GPT switch in the sidebar branding. GPT uses the owner's real consumer ChatGPT account, conversations, projects and available model/power choices; it is not a separate API account or a renamed Codex conversation.
+- The owner approved a ready-made browser integration and personally completed login in an isolated Linux browser. Keep its persistent profile and connector tokens private on the Hub host. Do not copy Windows ChatGPT/Codex credentials or request an API billing key.
+- The optional ChatGPT browser container has only a loopback Hub connector and private Docker-network VNC. The public client consumes authenticated Hub contracts, never raw extension events, tokens or signed native asset URLs.
+- Hub-owned durable, idempotent sends continue when the web page closes. Serialize the browser writer and settings changes; preserve uncertain submissions without automatic replay. Read canonical native history in visible pages of 20, following its current branch.
+- Normalize visible assistant text and generated image results only. Never expose hidden analysis, raw thoughts, tool internals or adapter diagnostics. A canonical completed native turn may confirm an image-only response when the UI adapter fails to recognize it.
+- Keep native ChatGPT functionality accessible through the protected connection page; share the app's themes and responsive shell for the primary GPT chat workflow.
+
+## Owner-requested history order and interactive demos (2026-09-06)
+
+- Reopening a long live turn must not append older Hub messages below the latest native page. Reconcile known attachment envelopes using their bound attachment IDs and exact user text; preserve distinct Steer messages.
+- Show interactive HTML design demos in Results when Codex emits an HTML block, a linked project HTML file, an HTML file change or an explicit MCP HTML resource.
+- Read project HTML through the existing machine transport with bounded size and project-root checks. Never start a public preview server on Windows.
+- Run demos in a separate opaque-origin sandbox with scripts, without same-origin privileges, network access, forms or host credentials. Keep source code collapsed and provide an accessible close control.
