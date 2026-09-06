@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 const credentials=JSON.parse(await readFile(".local/qa-credentials.json","utf8")),origin="http://127.0.0.1:8782";
 await mkdir(".local/qa-access",{recursive:true});const report=[];
 for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
+ console.log("Checking",engine);
  const browser=await type.launch({headless:true,...(engine==="chromium"?{args:["--no-sandbox"]}:{})});
  try{
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
@@ -40,7 +41,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.getByRole("button",{name:"Открыть проекты",exact:true}).tap();await page.locator(".project-sheet[open]").waitFor();await close();
   await page.getByRole("button",{name:"Remote",exact:true}).tap();await swipe();await closed();
   await page.getByRole("button",{name:"Чат",exact:true}).tap();
-  for(const theme of ["organizer","crt-green","hitech-2000s"]){
+  for(const theme of ["organizer","crt-green","hitech-2000s","classic-dark"]){
    await page.getByRole("button",{name:"Настройки",exact:true}).tap();
    await page.locator(".theme-option."+theme).tap();
    await swipe();await closed();
@@ -60,6 +61,8 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.getByRole("button",{name:"Отправить сообщение",exact:true}).tap();
   await expect(page.getByRole("button",{name:"Остановить Codex",exact:true})).toBeVisible();
   const toggle=page.getByRole("button",{name:"Ход работы",exact:true});
+  await expect(page.locator(".chat-pane > .pane-heading")).toHaveCount(0);
+  await expect(page.locator(".header-connection > span:last-child")).not.toContainText("Codex работает");
   await expect(toggle).toHaveAttribute("aria-expanded","false");await toggle.tap();
   const details=page.getByRole("region",{name:"Ход работы",exact:true});
   await expect(details).toContainText("Проверяю входные данные.",{timeout:10000});
@@ -79,7 +82,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await text.fill(marker);
   let failed=false,release;
   const held=new Promise(r=>release=r);
-  const failRoute=async route=>{if(route.request().method()==="POST"&&!failed){failed=true;await held;await route.fulfill({status:504,json:{error:{code:"UPLOAD_TRANSFER_TIMEOUT",message:"Не удалось передать вложение на компьютер вовремя"}}});}else await route.continue();};
+  const failRoute=async route=>{if(route.request().method()==="POST"&&!failed){failed=true;await held;await route.fulfill({status:503,json:{error:{code:"UPLOAD_TRANSFER_TIMEOUT",message:"Не успели передать вложение на компьютер. Сообщение не отправлено; текст и файлы сохранены. Попробуй снова."}}});}else await route.continue();};
   await page.route("**/api/threads/*/queue",failRoute);
   await enqueue.tap();
   await expect(page.getByRole("button",{name:"Остановить Codex",exact:true})).toBeEnabled();
@@ -97,8 +100,33 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.getByRole("button",{name:"Остановить Codex",exact:true}).tap();
   await page.locator(".task-boundary").last().scrollIntoViewIfNeeded();
   await page.screenshot({path:".local/qa-access/"+engine+"-task-boundary.png"});
+  const directMarker="Queue QA image send "+engine+" "+Date.now();
+  await text.fill(directMarker);
+  await page.getByLabel("Выбрать файлы или изображения",{exact:true}).setInputFiles({name:"photo.png",mimeType:"image/png",buffer:await page.screenshot()});
+  await expect(page.locator(".composer .attachment")).toHaveCount(1);
+  let failSend=true,releaseSend;const sendHeld=new Promise(r=>releaseSend=r),keys=[];
+  const directRoute=async route=>{
+   if(route.request().method()!=="POST")return route.continue();
+   keys.push(route.request().headers()["idempotency-key"]);
+   if(failSend){failSend=false;await sendHeld;return route.fulfill({status:503,json:{error:{code:"UPLOAD_TRANSFER_TIMEOUT",message:"Не успели передать вложение на компьютер. Сообщение не отправлено; текст и файлы сохранены. Попробуй снова."}}});}
+   return route.continue();
+  };
+  await page.route("**/api/threads/*/turns",directRoute);
+  const send=page.getByRole("button",{name:"Отправить сообщение",exact:true});
+  await send.tap();await expect(page.locator(".turn-status")).toContainText("Передаём вложения");
+  releaseSend();
+  await expect(send).toBeEnabled();await expect(text).toHaveValue(directMarker);
+  await expect(page.locator(".composer .attachment")).toHaveCount(1);
+  await expect(page.locator(".send-error")).toContainText("Сообщение не отправлено");
+  await page.screenshot({path:".local/qa-access/"+engine+"-image-send-retry.png"});
+  await send.tap();await expect(text).toHaveValue("");
+  await expect(page.locator(".composer .attachment")).toHaveCount(0);
+  await expect(page.locator(".chat-content .message.user").filter({hasText:directMarker})).toHaveCount(1);
+  assert.equal(keys.length,2);assert.equal(keys[0],keys[1]);
+  await page.unroute("**/api/threads/*/turns",directRoute);
+  await expect(send).toBeVisible();
   assert.deepEqual(errors,[]);
-  report.push({engine,accessPersists:true,standardRestored:true,activeDefaultChange:true,edgeSwipe:true,gestureGuards:true,hamburger:true,themes:3,sizes:4,pageErrors:errors});
+  report.push({engine,accessPersists:true,standardRestored:true,activeDefaultChange:true,edgeSwipe:true,gestureGuards:true,hamburger:true,themes:4,sizes:4,pageErrors:errors});
  }finally{await browser.close();}
 }
 await writeFile(".local/qa-access/report.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report));

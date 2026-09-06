@@ -188,6 +188,7 @@ export class Attachments {
     const release = () => {
       for (const file of files) this.protectedIds.delete(file.id);
     };
+    const deadline = Date.now() + 40_000;
     const input: Record<string, unknown>[] = [],
       references: { name: string; path: string }[] = [];
     try {
@@ -198,6 +199,7 @@ export class Attachments {
           file.id,
           file.name,
           this.path(file.id),
+          deadline,
         );
         references.push({ name: file.name, path });
         if (file.image) {
@@ -207,6 +209,7 @@ export class Attachments {
             file.id,
             "image-preview.jpg",
             this.path(file.id, true),
+            deadline,
           );
           input.push({ type: "localImage", path: imagePath });
         }

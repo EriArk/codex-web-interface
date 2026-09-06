@@ -239,7 +239,7 @@ A single authenticated Hub metadata stream updates every project's and chat's ba
 
 Both navigation tabs show active and unread counts. Projects counts projects with matching work, Dialogs counts standalone chats. Folder expansion alone does not acknowledge output. The Hub stores the exact completion cursor seen after the latest messages remain visible at the bottom of an unobstructed foreground Chat view for one second. Background tabs, Results/Remote on mobile and reading older history retain the badge. A stale acknowledgement cannot clear a later completion, and read state synchronizes across devices and survives Hub/browser restarts. Pre-existing historical conversations start read.
 
-The Chat view has a spinner after the current messages, a persistent progress strip above the composer and a header indicator. Result events refresh the feed while a turn is still running, and older in-flight result responses cannot overwrite the newly selected chat.
+The Chat view has a spinner after the current messages, an expandable progress strip above the composer and a compact header indicator. There is no duplicate upper chat heading/status strip; the header text describes connectivity. Result events refresh the feed while a turn is still running, and older in-flight result responses cannot overwrite the newly selected chat.
 
 ## Acceptance criteria
 

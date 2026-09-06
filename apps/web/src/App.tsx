@@ -571,15 +571,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             }
           />
           <span>
-            {sending || ["running", "starting"].includes(state.thread.status)
-              ? "Codex работает"
-              : state.thread.status === "waiting_approval"
-                ? "Нужен ответ"
-                : threadId
-                  ? state.connection === "connected"
-                    ? "На связи"
-                    : "Подключение…"
-                  : "Личный Hub"}
+            {threadId
+              ? state.connection === "connected"
+                ? "На связи"
+                : "Подключение…"
+              : "Личный Hub"}
           </span>
         </div>
         <button
