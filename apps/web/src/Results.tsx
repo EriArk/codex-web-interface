@@ -4,6 +4,7 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { Icon } from "./icons";
 import type { Activity, Result } from "./types";
 export function Results({
+  onOverlayChange,
   results,
   visible,
   focusId,
@@ -12,6 +13,7 @@ export function Results({
   onOlder,
   onTurn,
 }: {
+  onOverlayChange: (open: boolean) => void;
   results: Result[];
   visible: boolean;
   focusId: string;
@@ -22,6 +24,7 @@ export function Results({
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null);
+  useEffect(() => onOverlayChange(!!image), [image, onOverlayChange]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Newly loaded result cards must be focused after rendering.
   useEffect(() => {
     if (visible && focusId)

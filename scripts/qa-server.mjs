@@ -34,6 +34,21 @@ class FakeRpc extends EventEmitter {
   if(method==="thread/items/list")return {data:[],nextCursor:null};
   if(method==="turn/start"){
    this.activeThread=p.threadId;this.turn=randomUUID();
+   if(p.input.some(item=>item.text?.includes("Realtime QA"))) {
+    const turn=this.turn,thread=p.threadId,id=randomUUID();
+    this.emit("notification","turn/started",{threadId:thread,turn:{id:turn}});
+    setTimeout(()=>this.emit("notification","item/agentMessage/delta",{threadId:thread,turnId:turn,itemId:id,delta:"Realtime: первая часть. "}),300);
+    setTimeout(()=>this.emit("notification","item/agentMessage/delta",{threadId:thread,turnId:turn,itemId:id,delta:"Вторая часть пришла."}),1200);
+    setTimeout(()=>this.emit("notification","item/completed",{threadId:thread,turnId:turn,item:{id:"qa-live-check-"+turn,type:"commandExecution",command:"npm test -- live",status:"completed",exitCode:0,aggregatedOutput:"LIVE CHECK PASSED"}}),1800);
+    setTimeout(()=>{
+      const hubThread=store.threadByCodex(thread);
+      const image=store.result(hubThread.id,turn,"live-image-"+turn,"image","Изображение в реальном времени",{url:"/icon.svg",width:180,height:180});
+      const event=store.append(hubThread.id,"result.created",{id:image,type:"image"},turn);sessions.emit("event",event);
+    },2400);
+    setTimeout(()=>this.emit("notification","item/completed",{threadId:thread,turnId:turn,item:{id,type:"agentMessage",text:"Realtime: первая часть. Вторая часть пришла. Готово.",phase:"final_answer"}}),10000);
+    setTimeout(()=>this.emit("notification","turn/completed",{threadId:thread,turn:{id:turn,status:"completed"}}),10500);
+    return {turn:{id:turn}};
+   }
    this.emit("notification","turn/started",{threadId:p.threadId,turn:{id:this.turn}});
    const id=randomUUID();
    setTimeout(()=>this.emit("notification","item/agentMessage/delta",{threadId:p.threadId,turnId:this.turn,itemId:id,delta:"Проверяю проект. "}),150);

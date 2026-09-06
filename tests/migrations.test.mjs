@@ -43,6 +43,13 @@ test("empty and deployed version-1 databases upgrade with auth, history and nati
       "catalog_projects",
       "history_cursors",
     ];
+    const columns = tables.map((table) =>
+      db
+        .prepare("PRAGMA table_info(" + table + ")")
+        .all()
+        .map((row) => row.name)
+        .join(","),
+    );
     const before = tables.map((table) => db.prepare("SELECT * FROM " + table).all());
     db.close();
     db = undefined;
@@ -50,9 +57,13 @@ test("empty and deployed version-1 databases upgrade with auth, history and nati
     try {
       assert.equal(upgraded.schemaVersion, SCHEMA_VERSION);
       assert.deepEqual(
-        tables.map((table) => upgraded.db.prepare("SELECT * FROM " + table).all()),
+        tables.map((table, index) =>
+          upgraded.db.prepare("SELECT " + columns[index] + " FROM " + table).all(),
+        ),
         before,
       );
+      assert.equal(upgraded.thread("t").completedSeq, 0);
+      assert.equal(upgraded.thread("t").seenSeq, 0);
       const checkpoints = readdirSync(join(root, "migration-backups"));
       assert.equal(checkpoints.length, 1);
       assert.equal(statSync(join(root, "migration-backups", checkpoints[0])).mode & 0o077, 0);

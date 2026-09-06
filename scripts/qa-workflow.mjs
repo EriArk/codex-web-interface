@@ -25,7 +25,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   const seed=sheet.locator(".nav-project").filter({hasText:"CodexWeb"}).or(sheet.locator(".nav-project").filter({hasText:"Codex Web Interface"}));
   const seedButton=seed.first();
   if(await seedButton.getAttribute("aria-expanded")!=="true")await seedButton.tap();
-  await expect(sheet.getByRole("button",{name:"Проверка мобильного интерфейса",exact:true})).toBeVisible();
+  await expect(sheet.locator(".nav-thread").filter({hasText:"Проверка мобильного интерфейса"})).toBeVisible();
   const second=sheet.locator(".nav-project").filter({hasText:"Второй проект"});
   await second.tap();
   await expect(sheet.locator(".nav-thread").filter({hasText:"Чат второго проекта"})).toBeVisible();
@@ -36,7 +36,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await expect(sheet.locator(".nav-thread").filter({hasText:"Отдельный чат"})).toBeVisible();
   await expect(sheet.locator(".nav-thread").filter({hasText:"Чат второго проекта"})).not.toBeVisible();
   await projectsTab.tap();
-  await sheet.getByRole("button",{name:"Проверка мобильного интерфейса",exact:true}).tap();
+  await sheet.locator(".nav-thread").filter({hasText:"Проверка мобильного интерфейса"}).tap();
   const input=page.getByRole("textbox",{name:"Сообщение Codex"});
   await expect(input).toBeEnabled();
   for(const [label,value] of [["Модель Codex","qa-text"],["Уровень размышления","high"],["Режим Codex","plan"],["Модель Codex","qa-model"]]){

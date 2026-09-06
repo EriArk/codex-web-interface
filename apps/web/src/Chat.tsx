@@ -1,6 +1,8 @@
+import { hasUnreadCompletion, type ThreadActivity } from "@codex-web/shared";
 import { type FormEvent, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
+import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { Icon } from "./icons";
@@ -174,7 +176,11 @@ export function Chat({
   onResult,
   onReconnect,
   onLatest,
+  completion,
+  canMarkSeen,
 }: {
+  completion?: ThreadActivity;
+  canMarkSeen: boolean;
   projectId: string;
   threadId: string;
   state: ChatState;
@@ -198,11 +204,86 @@ export function Chat({
   const options = useTurnSettings(projectId, threadId, state.thread.settings);
   const attachments = useAttachments(threadId),
     fileInput = useRef<HTMLInputElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null),
     composer = useRef<HTMLTextAreaElement>(null);
   const atBottom = useRef(true),
     previousThread = useRef(""),
     pendingHeight = useRef<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const el = scroller.current,
+      body = content.current;
+    if (!el || !body || !visible) return;
+    // Fonts, result chips and the software keyboard can resize a settled chat.
+    // Keep following its end only while the reader has not scrolled away.
+    const resize = new ResizeObserver(() => {
+      if (atBottom.current && pendingHeight.current === undefined) el.scrollTop = el.scrollHeight;
+    });
+    resize.observe(el);
+    resize.observe(body);
+    return () => resize.disconnect();
+  }, [visible]);
+  const seenRequest = useRef("");
+  useEffect(() => {
+    const el = scroller.current;
+    if (
+      !el ||
+      !completion ||
+      !hasUnreadCompletion(completion) ||
+      !visible ||
+      !canMarkSeen ||
+      state.loading ||
+      state.contextTurn ||
+      state.hasNewer ||
+      state.lastSeq < completion.completedSeq
+    )
+      return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    const key = `${threadId}:${completion.completedSeq}`;
+    const check = () => {
+      clearTimeout(timer);
+      if (
+        document.visibilityState !== "visible" ||
+        el.scrollHeight - el.scrollTop - el.clientHeight >= 100 ||
+        seenRequest.current === key
+      )
+        return;
+      timer = setTimeout(() => {
+        if (
+          document.visibilityState !== "visible" ||
+          el.scrollHeight - el.scrollTop - el.clientHeight >= 100
+        )
+          return;
+        seenRequest.current = key;
+        void api(`/threads/${threadId}/seen`, {
+          method: "POST",
+          body: { completedSeq: completion.completedSeq },
+        }).catch(() => {
+          seenRequest.current = "";
+          if (!disposed) timer = setTimeout(check, 5000);
+        });
+      }, 1000);
+    };
+    check();
+    document.addEventListener("visibilitychange", check);
+    el.addEventListener("scroll", check, { passive: true });
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      el.removeEventListener("scroll", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [
+    threadId,
+    completion,
+    visible,
+    canMarkSeen,
+    state.loading,
+    state.contextTurn,
+    state.hasNewer,
+    state.lastSeq,
+  ]);
   const [draft, setDraft] = useState(""),
     [newMessages, setNewMessages] = useState(false);
   const active = ["running", "starting", "waiting_approval"].includes(state.thread.status);
@@ -301,126 +382,130 @@ export function Chat({
           if (atBottom.current) setNewMessages(false);
         }}
       >
-        {(state.contextTurn || state.hasNewer) && (
-          <div className="history-loader">
-            <span className="small muted">
-              {state.contextTurn ? "Фрагмент диалога" : "В Codex появились новые сообщения"}
-            </span>
-            <button type="button" className="secondary" onClick={onLatest}>
-              К последним сообщениям
-            </button>
-          </div>
-        )}
-        {!threadId ? (
-          <div className="empty-state chat-empty">
-            <div className="empty-symbol">
-              <Icon name="chat" size={30} />
+        <div className="chat-content" ref={content}>
+          {(state.contextTurn || state.hasNewer) && (
+            <div className="history-loader">
+              <span className="small muted">
+                {state.contextTurn ? "Фрагмент диалога" : "В Codex появились новые сообщения"}
+              </span>
+              <button type="button" className="secondary" onClick={onLatest}>
+                К последним сообщениям
+              </button>
             </div>
-            <div className="eyebrow">Рабочее пространство</div>
-            <h2>С чего начнём?</h2>
-            <p>
-              Открой диалог или создай новый.
-              <br />
-              Код и инструменты уже на твоём компьютере.
-            </p>
-            <button type="button" className="primary" onClick={onCreate} disabled={busy}>
-              <Icon name="plus" />
-              Новый диалог
-            </button>
-          </div>
-        ) : state.loading ? (
-          <div className="empty-state">
-            <span className="spinner" />
-            Открываем диалог…
-          </div>
-        ) : (
-          <>
-            {state.hasMore && (
-              <div className="history-loader">
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={state.loadingOlder}
-                  onClick={() => void older()}
+          )}
+          {!threadId ? (
+            <div className="empty-state chat-empty">
+              <div className="empty-symbol">
+                <Icon name="chat" size={30} />
+              </div>
+              <div className="eyebrow">Рабочее пространство</div>
+              <h2>С чего начнём?</h2>
+              <p>
+                Открой диалог или создай новый.
+                <br />
+                Код и инструменты уже на твоём компьютере.
+              </p>
+              <button type="button" className="primary" onClick={onCreate} disabled={busy}>
+                <Icon name="plus" />
+                Новый диалог
+              </button>
+            </div>
+          ) : state.loading ? (
+            <div className="empty-state">
+              <span className="spinner" />
+              Открываем диалог…
+            </div>
+          ) : (
+            <>
+              {state.hasMore && (
+                <div className="history-loader">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={state.loadingOlder}
+                    onClick={() => void older()}
+                  >
+                    {state.loadingOlder ? "Загружаем…" : "Загрузить предыдущие"}
+                  </button>
+                  <small>По 20 сообщений за раз</small>
+                </div>
+              )}
+              {!state.messages.length && (
+                <div className="empty-state chat-empty">
+                  <div className="empty-symbol">
+                    <Icon name="folder" size={30} />
+                  </div>
+                  <h2>Новый диалог, чистый лист.</h2>
+                  <p>
+                    Опиши задачу внизу.
+                    <br />
+                    Проверки и снимки появятся в результатах.
+                  </p>
+                </div>
+              )}
+              {state.messages.map((message) => (
+                <article
+                  className={
+                    "message " +
+                    message.role +
+                    " " +
+                    (message.phase === "commentary" ? "commentary-message" : "")
+                  }
+                  key={message.id}
+                  data-turn={message.turnId ?? ""}
+                  data-message={message.id}
                 >
-                  {state.loadingOlder ? "Загружаем…" : "Загрузить предыдущие"}
-                </button>
-                <small>По 20 сообщений за раз</small>
-              </div>
-            )}
-            {!state.messages.length && (
-              <div className="empty-state chat-empty">
-                <div className="empty-symbol">
-                  <Icon name="folder" size={30} />
+                  <div className="message-meta">
+                    <span className="avatar">{message.role === "user" ? "Я" : "C"}</span>
+                    <strong>{message.role === "user" ? "Вы" : "Codex"}</strong>
+                    <time>{time(message.createdAt)}</time>
+                    {message.phase === "plan" && <span className="badge">План</span>}
+                    {message.phase === "commentary" && (
+                      <span className="small muted">В работе</span>
+                    )}
+                  </div>
+                  <div className="message-body">
+                    <MessageText text={message.text} />
+                    {!message.text && !message.attachments?.length && (
+                      <span className="typing">•••</span>
+                    )}
+                    <AttachmentList files={message.attachments ?? []} />
+                  </div>
+                  {message.role === "assistant" &&
+                    message.phase !== "commentary" &&
+                    results.some((r) => r.turnId === message.turnId) && (
+                      <button
+                        type="button"
+                        className="result-chip"
+                        onClick={() =>
+                          onResult(results.find((r) => r.turnId === message.turnId)?.id ?? "")
+                        }
+                      >
+                        <Icon name="results" size={15} />
+                        Результаты этого хода
+                        <Icon name="chevron" size={14} />
+                      </button>
+                    )}
+                </article>
+              ))}
+              {state.approvals.map((a) => (
+                <ApprovalCard
+                  key={a.id}
+                  approval={a}
+                  busy={busy}
+                  onDecision={onDecision}
+                  onAnswer={onAnswer}
+                />
+              ))}
+              {active && !state.approvals.length && (
+                <div className="working">
+                  <span className="spinner" role="img" aria-label="Codex работает" />
+                  {statusLabel(state.thread.status)}
                 </div>
-                <h2>Новый диалог, чистый лист.</h2>
-                <p>
-                  Опиши задачу внизу.
-                  <br />
-                  Проверки и снимки появятся в результатах.
-                </p>
-              </div>
-            )}
-            {state.messages.map((message) => (
-              <article
-                className={
-                  "message " +
-                  message.role +
-                  " " +
-                  (message.phase === "commentary" ? "commentary-message" : "")
-                }
-                key={message.id}
-                data-turn={message.turnId ?? ""}
-                data-message={message.id}
-              >
-                <div className="message-meta">
-                  <span className="avatar">{message.role === "user" ? "Я" : "C"}</span>
-                  <strong>{message.role === "user" ? "Вы" : "Codex"}</strong>
-                  <time>{time(message.createdAt)}</time>
-                  {message.phase === "plan" && <span className="badge">План</span>}
-                  {message.phase === "commentary" && <span className="small muted">В работе</span>}
-                </div>
-                <div className="message-body">
-                  <MessageText text={message.text} />
-                  {!message.text && !message.attachments?.length && (
-                    <span className="typing">•••</span>
-                  )}
-                  <AttachmentList files={message.attachments ?? []} />
-                </div>
-                {message.role === "assistant" &&
-                  message.phase !== "commentary" &&
-                  results.some((r) => r.turnId === message.turnId) && (
-                    <button
-                      type="button"
-                      className="result-chip"
-                      onClick={() =>
-                        onResult(results.find((r) => r.turnId === message.turnId)?.id ?? "")
-                      }
-                    >
-                      <Icon name="results" size={15} />
-                      Результаты этого хода
-                      <Icon name="chevron" size={14} />
-                    </button>
-                  )}
-              </article>
-            ))}
-            {state.approvals.map((a) => (
-              <ApprovalCard
-                key={a.id}
-                approval={a}
-                busy={busy}
-                onDecision={onDecision}
-                onAnswer={onAnswer}
-              />
-            ))}
-            {active && !state.approvals.length && (
-              <div className="working">
-                <span className="pulse" />
-                {statusLabel(state.thread.status)}
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
       {newMessages && (
         <button
@@ -461,7 +546,11 @@ export function Chat({
           role="status"
           aria-live="polite"
         >
-          <span className={state.approvals.length ? "status-dot attention" : "spinner"} />
+          <span
+            className={state.approvals.length ? "status-dot attention" : "spinner"}
+            role="img"
+            aria-label={state.approvals.length ? "Нужен ответ" : "Codex работает"}
+          />
           <span>
             {sending
               ? "Отправляем сообщение…"

@@ -1,9 +1,20 @@
+import {
+  compareActivity,
+  compareThreadActivity,
+  hasUnreadCompletion,
+  type NavigationState,
+  type ProjectActivity,
+  type ThreadActivity,
+} from "@codex-web/shared";
 import { useEffect, useState } from "react";
+import { ActivityBadge } from "./ActivityBadge";
 import { Icon } from "./icons";
 import type { Project, Thread } from "./types";
 
 export function ProjectNavigation({
   projects,
+  activity,
+  activityConnected,
   threadGroups,
   projectId,
   threadId,
@@ -19,6 +30,8 @@ export function ProjectNavigation({
   onSettings,
 }: {
   projects: Project[];
+  activity: NavigationState;
+  activityConnected: boolean;
   threadGroups: Record<string, Thread[]>;
   projectId: string;
   threadId: string;
@@ -39,7 +52,38 @@ export function ProjectNavigation({
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const selected = projects.find((p) => p.id === projectId);
-  const folders = projects.filter((p) => !p.unassigned);
+  const projectActivity = new Map(activity.projects.map((p) => [p.id, p]));
+  const threadActivity = new Map(activity.threads.map((t) => [t.id, t]));
+  const summary = (p: Project): ProjectActivity =>
+    projectActivity.get(p.id) ?? {
+      id: p.id,
+      active: 0,
+      unread: 0,
+      waiting: 0,
+      updatedAt: "",
+      activityAt: "",
+    };
+  const detail = (t: Thread): ThreadActivity =>
+    threadActivity.get(t.id) ?? {
+      ...t,
+      updatedAt: "",
+      activityAt: null,
+      completedSeq: 0,
+      seenSeq: 0,
+      completedTurnId: null,
+      completedStatus: null,
+    };
+  const groups = { ...threadGroups };
+  for (const p of projects) {
+    const list = new Map((groups[p.id] ?? []).map((t) => [t.id, t]));
+    for (const t of activity.threads)
+      if (t.projectId === p.id) list.set(t.id, { ...list.get(t.id), ...t });
+    if (list.size)
+      groups[p.id] = [...list.values()].sort((a, b) => compareThreadActivity(detail(a), detail(b)));
+  }
+  const folders = projects
+    .filter((p) => !p.unassigned)
+    .sort((a, b) => compareActivity(summary(a), summary(b)));
   const standalone = projects.filter((p) => p.unassigned);
   const matches = (text: string) =>
     text.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
@@ -61,8 +105,32 @@ export function ProjectNavigation({
   useEffect(() => {
     if (projectId) setExpanded((old) => new Set(old).add(projectId));
   }, [projectId]);
+  const renderThread = (t: Thread) => {
+    const status = detail(t);
+    const active = ["running", "starting", "waiting_approval"].includes(status.status);
+    return (
+      <button
+        type="button"
+        className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
+        key={t.id}
+        disabled={busy}
+        onClick={() => onThread(t.id, t.projectId)}
+        aria-current={threadId === t.id ? "page" : undefined}
+        data-thread-id={t.id}
+      >
+        <Icon name="chat" size={17} />
+        <span>{t.title}</span>
+        <ActivityBadge
+          active={Number(active)}
+          waiting={Number(status.status === "waiting_approval")}
+          unread={Number(hasUnreadCompletion(status))}
+          failed={status.completedStatus !== "completed"}
+        />
+      </button>
+    );
+  };
   const threadList = (p: Project) => {
-    const list = threadGroups[p.id];
+    const list = groups[p.id];
     return (
       <section className="project-thread-list" aria-label={`Диалоги: ${p.name}`}>
         {pending.has(p.id) && !list && (
@@ -75,27 +143,7 @@ export function ProjectNavigation({
             {errors[p.id]} Повторить
           </button>
         )}
-        {list
-          ?.filter((t) => matches(p.name) || matches(t.title))
-          .map((t) => (
-            <button
-              type="button"
-              className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
-              key={t.id}
-              disabled={busy}
-              onClick={() => onThread(t.id, p.id)}
-              aria-current={threadId === t.id ? "page" : undefined}
-            >
-              <Icon name="chat" size={17} />
-              <span>{t.title}</span>
-              {["running", "starting"].includes(t.status) && (
-                <span className="spinner" role="img" aria-label="Codex работает" />
-              )}
-              {t.status === "waiting_approval" && (
-                <span className="status-dot attention" role="img" aria-label="Нужен ответ" />
-              )}
-            </button>
-          ))}
+        {list?.filter((t) => matches(p.name) || matches(t.title)).map(renderThread)}
         {list?.length === 0 && !pending.has(p.id) && (
           <p className="nav-empty">
             {p.unassigned ? "Пока нет чатов без проекта." : "В проекте пока нет диалогов."}
@@ -138,7 +186,19 @@ export function ProjectNavigation({
             setQuery("");
           }}
         >
-          Проекты <span>{folders.length}</span>
+          <span className="nav-tab-title">
+            Проекты <small>{folders.length}</small>
+          </span>
+          <ActivityBadge
+            counts
+            active={folders.filter((p) => summary(p).active > 0).length}
+            waiting={
+              folders.filter(
+                (p) => summary(p).active > 0 && summary(p).active === summary(p).waiting,
+              ).length
+            }
+            unread={folders.filter((p) => summary(p).unread > 0).length}
+          />
         </button>
         <button
           type="button"
@@ -149,13 +209,18 @@ export function ProjectNavigation({
             for (const p of standalone) void load(p.id);
           }}
         >
-          Диалоги{" "}
-          <span>
-            {standalone.reduce(
-              (sum, p) => sum + (threadGroups[p.id]?.length ?? p.threadCount ?? 0),
-              0,
-            )}
+          <span className="nav-tab-title">
+            Диалоги{" "}
+            <small>
+              {standalone.reduce((sum, p) => sum + (groups[p.id]?.length ?? p.threadCount ?? 0), 0)}
+            </small>
           </span>
+          <ActivityBadge
+            counts
+            active={standalone.reduce((sum, p) => sum + summary(p).active, 0)}
+            waiting={standalone.reduce((sum, p) => sum + summary(p).waiting, 0)}
+            unread={standalone.reduce((sum, p) => sum + summary(p).unread, 0)}
+          />
         </button>
       </nav>
       <div className="nav-search">
@@ -168,6 +233,11 @@ export function ProjectNavigation({
           type="search"
         />
       </div>
+      {!activityConnected && (
+        <p className="nav-sync-state" role="status">
+          Обновляем состояние…
+        </p>
+      )}
       <div className="nav-scroll">
         <section className="nav-projects">
           <div className="nav-label">
@@ -199,8 +269,8 @@ export function ProjectNavigation({
             </p>
           )}
           {folders
-            .filter((p) => matches(p.name) || threadGroups[p.id]?.some((t) => matches(t.title)))
-            .map((p, index) => {
+            .filter((p) => matches(p.name) || groups[p.id]?.some((t) => matches(t.title)))
+            .map((p) => {
               const open = expanded.has(p.id) || !!query.trim();
               return (
                 <div className="nav-project-group" key={p.id}>
@@ -209,6 +279,7 @@ export function ProjectNavigation({
                     className={`nav-project ${projectId === p.id ? "selected" : ""}`}
                     disabled={busy}
                     aria-expanded={open}
+                    data-project-id={p.id}
                     onClick={() => {
                       setExpanded((old) => {
                         const next = new Set(old);
@@ -219,13 +290,20 @@ export function ProjectNavigation({
                       if (!open) void load(p.id);
                     }}
                   >
-                    <span className={`folder-icon folder-${index % 5}`}>
+                    <span
+                      className={`folder-icon folder-${projects.findIndex((item) => item.id === p.id) % 5}`}
+                    >
                       <Icon name="folder" />
                     </span>
                     <span>
                       {p.name}
                       <small>{p.machineName}</small>
                     </span>
+                    <ActivityBadge
+                      active={summary(p).active}
+                      unread={summary(p).unread}
+                      waiting={summary(p).waiting}
+                    />
                     <span className="project-chevron" data-open={open}>
                       <Icon name="chevron" size={15} />
                     </span>
@@ -236,7 +314,7 @@ export function ProjectNavigation({
             })}
           {query &&
             !folders.some(
-              (p) => matches(p.name) || threadGroups[p.id]?.some((t) => matches(t.title)),
+              (p) => matches(p.name) || groups[p.id]?.some((t) => matches(t.title)),
             ) && <p className="nav-empty">Ничего не найдено</p>}
           <button type="button" className="nav-add-project" onClick={onNewProject} disabled={busy}>
             <Icon name="plus" size={16} />
@@ -248,12 +326,25 @@ export function ProjectNavigation({
           <p className="nav-section-help">
             Отдельные чаты. Диалоги проектов раскрываются во вкладке «Проекты».
           </p>
-          {standalone.map((p) => (
-            <div key={p.id}>
-              {standalone.length > 1 && <div className="nav-label">{p.machineName}</div>}
-              {threadList(p)}
-            </div>
-          ))}
+          <section className="standalone-thread-list" aria-label="Диалоги без проекта">
+            {standalone
+              .flatMap((p) => groups[p.id] ?? [])
+              .filter((t) => matches(t.title))
+              .sort((a, b) => compareThreadActivity(detail(a), detail(b)))
+              .map(renderThread)}
+            {standalone.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="nav-new-thread"
+                disabled={busy}
+                onClick={() => onNewThread(p.id)}
+              >
+                <Icon name="plus" size={16} />
+                Новый диалог{standalone.length > 1 ? ` · ${p.machineName}` : ""}
+              </button>
+            ))}
+          </section>
           {!standalone.length && <p className="nav-empty">Чатов без проекта пока нет.</p>}
         </section>
       </div>

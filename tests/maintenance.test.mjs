@@ -8,6 +8,7 @@ import { createApp } from "../apps/hub/dist/app.js";
 import { Artifacts } from "../apps/hub/dist/artifacts.js";
 import { Attachments } from "../apps/hub/dist/attachments.js";
 import { createSnapshot, restoreSnapshot, verifySnapshot } from "../apps/hub/dist/maintenance.js";
+import { SCHEMA_VERSION } from "../apps/hub/dist/migrations.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { configSchema } from "../packages/shared/dist/index.js";
 
@@ -78,7 +79,7 @@ test("online backup restores login, native IDs, projections and file bytes; old 
       privateFiles: [{ name: "remote.env", path: extra }],
     });
     const manifest = await verifySnapshot(snapshot);
-    assert.equal(manifest.schemaVersion, 2);
+    assert.equal(manifest.schemaVersion, SCHEMA_VERSION);
     assert.equal(manifest.revision, "abcdef1");
     assert(manifest.files.some((file) => file.path === "private/remote.env"));
     assert(manifest.files.every((file) => !file.path.includes("repository")));
