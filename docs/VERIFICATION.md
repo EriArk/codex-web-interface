@@ -43,3 +43,12 @@ No real website password is created by verification; test enrollment uses random
 - At 844×390, the connected Remote surface occupied the full 390px viewport height and mobile navigation was hidden. Switching touch modes kept the session connected.
 - All three themes were captured and inspected. The layout suite covered 390×844, 375×667, 844×390, 820×1180 and 1366×1024 in both engines: 30 theme/viewport combinations, with no horizontal overflow or clipped composer. Project creation and the directory picker were also exercised in both browsers.
 - Actual Apple Pencil/iPhone gestures and standalone iOS behavior still require owner hardware verification. Browser engine simulation is recorded separately from the native Windows protocol checks.
+
+## iPhone Remote keyboard revision — 2026-09-06
+
+- Replaced the zero-size Guacamole InputSink and its deferred focus with a nonzero native textarea focused synchronously by the keyboard button. The same button now closes the keyboard and reflects focus state.
+- Keep touch-to-click activation intact in WebKit; prevent only mouse-driven focus loss when toggling. A pointerdown cancellation blocked the synthetic touch click in the regression browser and was removed before release.
+- Keep text input working after IME composition and suppress a duplicate final composition input. Reuse one Guacamole keyboard per mounted pane and clear connection callbacks on teardown.
+- The dedicated `scripts/qa-remote-keyboard.mjs` check runs Chromium and WebKit with touch at 390×844, then 844×390. It covers synchronous tap focus, nonzero input geometry, open/close, Russian text, composition commit without duplicates, subsequent text, Backspace/Enter, chat input isolation and reconnect without duplicate keys.
+- This focused suite uses the actual vendored Guacamole keyboard with a simulated display/transport. No test keystrokes are sent to the owner's Windows desktop. Real VNC transport/rendering was checked separately in the previous revision.
+- Native iOS keyboard appearance and behavior in installed PWA/Safari still require the owner's physical iPhone. The browser engine check does not establish that a system software keyboard appeared.

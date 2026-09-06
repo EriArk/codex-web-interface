@@ -24,13 +24,9 @@ interface Client {
   onerror: (error: { message: string }) => void;
 }
 interface Keyboard {
-  onkeydown: (key: number) => boolean;
-  onkeyup: (key: number) => void;
+  onkeydown: ((key: number) => boolean) | null;
+  onkeyup: ((key: number) => void) | null;
   reset: () => void;
-}
-interface Sink {
-  getElement: () => HTMLElement;
-  focus: () => void;
 }
 interface Guac {
   Client: new (tunnel: unknown) => Client;
@@ -38,7 +34,6 @@ interface Guac {
     url: string,
   ) => { onerror: (e: { message: string }) => void; onstatechange: (state: number) => void };
   Keyboard: new (element: HTMLElement) => Keyboard;
-  InputSink: new () => Sink;
 }
 declare global {
   interface Window {
@@ -91,7 +86,8 @@ export function Remote({
     pane = useRef<HTMLElement>(null),
     cursor = useRef<HTMLSpanElement>(null);
   const clientRef = useRef<Client | undefined>(undefined),
-    sinkRef = useRef<Sink | undefined>(undefined),
+    sinkRef = useRef<HTMLTextAreaElement | undefined>(undefined),
+    keyboardRef = useRef<Keyboard | undefined>(undefined),
     inputRef = useRef<RemoteInput | undefined>(undefined),
     modifiers = useRef(new Set<number>());
   const profile = useRef(
@@ -104,6 +100,7 @@ export function Remote({
     [compact, setCompact] = useState(window.innerWidth < 1100 || window.innerHeight < 600),
     [controls, setControls] = useState(false),
     [touchMode, setTouchMode] = useState<RemoteInputMode>(() => savedMode(profile.current)),
+    [keyboardActive, setKeyboardActive] = useState(false),
     [snapshotBusy, setSnapshotBusy] = useState(false),
     [held, setHeld] = useState<number[]>([]),
     [zoom, setZoom] = useState(1),
@@ -351,16 +348,51 @@ export function Remote({
             setStatus("error");
           }
         };
-        const sink = new G.InputSink();
-        sinkRef.current = sink;
-        const sinkElement = sink.getElement();
+        // Keep focus inside the user gesture: InputSink.focus() defers it and iOS can reject it.
+        const sinkElement = document.createElement("textarea");
+        sinkRef.current = sinkElement;
+        sinkElement.className = "remote-keyboard-input";
+        sinkElement.rows = 1;
+        sinkElement.tabIndex = -1;
+        sinkElement.inputMode = "text";
+        sinkElement.addEventListener("focus", () => setKeyboardActive(true));
+        sinkElement.addEventListener("blur", () => {
+          setKeyboardActive(false);
+          keyboard?.reset();
+          release();
+        });
+        sinkElement.addEventListener("keypress", () => {
+          sinkElement.value = "";
+        });
+        // Guacamole removes its input listener on compositionstart without restoring it.
+        // Keep it attached, and suppress a browser's duplicate final input after the commit.
+        let committedText = "";
+        sinkElement.addEventListener("compositionstart", (event) => {
+          committedText = "";
+          event.stopPropagation();
+        });
+        sinkElement.addEventListener("compositionend", (event) => {
+          committedText = event.data;
+          sinkElement.value = "";
+          window.setTimeout(() => {
+            committedText = "";
+          }, 0);
+        });
+        sinkElement.addEventListener("input", (event) => {
+          if (!event.isComposing) {
+            if (committedText && event.data === committedText) event.stopPropagation();
+            committedText = "";
+            sinkElement.value = "";
+          }
+        });
         sinkElement.setAttribute("aria-label", "Клавиатура удалённого рабочего стола");
         sinkElement.setAttribute("autocapitalize", "off");
         sinkElement.setAttribute("autocomplete", "off");
         sinkElement.setAttribute("autocorrect", "off");
         sinkElement.setAttribute("spellcheck", "false");
         inputHost.current.replaceChildren(sinkElement);
-        keyboard = new G.Keyboard(pane.current ?? surface);
+        keyboardRef.current ??= new G.Keyboard(pane.current ?? surface);
+        keyboard = keyboardRef.current;
         const keyboardFocused = () =>
           surface.contains(document.activeElement) ||
           !!inputHost.current?.contains(document.activeElement);
@@ -402,6 +434,12 @@ export function Remote({
     return () => {
       blur();
       input?.dispose();
+      if (keyboard) {
+        keyboard.onkeydown = null;
+        keyboard.onkeyup = null;
+      }
+      sinkRef.current?.blur();
+      setKeyboardActive(false);
       disposed = true;
       if (raf) cancelAnimationFrame(raf);
       pending = undefined;
@@ -545,10 +583,20 @@ export function Remote({
           <div className="remote-dock">
             <button
               type="button"
-              className="remote-fab"
-              aria-label="Открыть клавиатуру"
+              className={`remote-fab ${keyboardActive ? "selected" : ""}`}
+              aria-label={keyboardActive ? "Скрыть клавиатуру" : "Открыть клавиатуру"}
+              aria-pressed={keyboardActive}
               disabled={!connected}
-              onClick={() => sinkRef.current?.focus()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const field = sinkRef.current;
+                if (!field) return;
+                if (document.activeElement === field) field.blur();
+                else {
+                  field.focus({ preventScroll: true });
+                  field.setSelectionRange(0, 0);
+                }
+              }}
             >
               <Icon name="keyboard" />
             </button>
