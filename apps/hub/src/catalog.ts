@@ -258,6 +258,7 @@ export class Catalog {
         projectsDirectory: root,
         canCreateProjects: this.projectSupport.get(m.id) !== false,
         remoteAvailable: !!m.remote,
+        desktopRestartAvailable: m.type === "ssh-windows" && !!m.codex.desktopControl,
       };
     });
   }

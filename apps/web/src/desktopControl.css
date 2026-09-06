@@ -1,0 +1,54 @@
+.desktop-control {
+  border-top: 1px solid var(--line);
+  margin-top: 1rem;
+  padding-top: 1rem;
+  margin-bottom: 0.7rem;
+}
+.desktop-control-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.desktop-control-heading > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.desktop-control-heading strong {
+  font-weight: 600;
+}
+.desktop-control-heading .muted {
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.desktop-control p {
+  margin: 0.6rem 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.desktop-restart-button {
+  width: 100%;
+  justify-content: center;
+  min-height: 44px;
+}
+.desktop-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.desktop-control-actions button {
+  flex: 1;
+  min-height: 44px;
+}
+.desktop-restart-confirm {
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  padding: 0.7rem;
+}
+.desktop-control .desktop-operation:empty {
+  display: none;
+}
+.desktop-control-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}

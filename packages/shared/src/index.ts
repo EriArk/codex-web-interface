@@ -18,6 +18,18 @@ const machine = z
         shell: z.enum(["powershell", "pwsh"]).default("powershell"),
         launcher: z.string().min(1).max(1024).optional(),
         activityNode: z.string().min(1).max(1024).optional(),
+        desktopControl: z
+          .string()
+          .min(7)
+          .max(1024)
+          .refine(
+            (value) =>
+              /^[A-Za-z]:/.test(value) &&
+              [47, 92].includes(value.charCodeAt(2)) &&
+              value.toLowerCase().endsWith(".ps1") &&
+              !Array.from(value).some((c) => [0, 10, 13].includes(c.charCodeAt(0))),
+          )
+          .optional(),
       })
       .default({ command: "codex", shell: "powershell" }),
     remote: z

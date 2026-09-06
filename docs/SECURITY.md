@@ -263,3 +263,6 @@ VNC is restricted to the trusted LAN path and the Hub source IP. Browser traffic
 
 
 Native message images are exposed by opaque, session-protected IDs bound to an enabled thread. Their source is taken from structured native history, never a browser path argument. External HTTP URLs, non-raster extensions and oversized input are rejected. Native files are read over the existing SSH transport with bounded buffers; image decoding, metadata stripping/resizing and private caching happen on the Hub. Cache references are included in normal SQLite/artifact backups.
+
+
+Desktop maintenance is an opt-in authenticated Hub capability protected by Origin/CSRF, strict confirmation, UUID idempotency, per-machine in-flight exclusion and restart rate limiting. The browser cannot choose commands, script paths, packages, users or PIDs. Windows resolves the pinned OpenAI.Codex package for the configured user and uses a private demand-only interactive task with no listener. The task runs elevated to handle an elevated desktop app; script/config ACL excludes other ordinary users. It does not terminate Companion or its App Servers. Unknown activity and mutation outcomes are explicit. Recent inProgress blocks restart; stale records use D25's documented compatibility rule.

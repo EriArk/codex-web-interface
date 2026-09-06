@@ -12,6 +12,7 @@ import { ZodError, z } from "zod";
 import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
+import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { registerNavigation } from "./navigation.js";
 import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
@@ -34,6 +35,7 @@ export async function createApp(
     store?: Store;
     sessions?: Sessions;
     logger?: boolean;
+    desktopTransport?: DesktopTransport;
   } = {},
 ) {
   const app = Fastify({
@@ -133,6 +135,7 @@ export async function createApp(
   });
   registerNavigation(app, store, sessions, auth, sockets);
   registerQueue(app, sessions, store);
+  registerDesktop(app, config, store, sessions, options.desktopTransport);
   app.get("/api/health", async () => ({ ok: true }));
   app.post(
     "/api/auth/login",

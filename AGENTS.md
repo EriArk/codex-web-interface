@@ -251,3 +251,10 @@ Before mobile support is considered complete, the same core workflow must also w
 - Collapse code/commands by default in Results and conversation Markdown; prioritize image result cards.
 - Use a more compact mobile UI, especially the model/mode/effort row. Roboto Condensed is the selected face for organizer and hi-tech; retain CRT monospace and touch target sizes.
 - Inspect screenshots across the main screens, orientations and all three themes; keep one shared functional UI.
+
+
+## Owner-requested desktop maintenance (2026-09-06)
+
+- Add an authenticated Settings action to restart the installed Windows Codex desktop app. This is an explicit user action, not an automatic writer-migration strategy.
+- Use the existing system SSH connection and a dedicated fixed Scheduled Task in the owner's interactive session. No public Windows port or generic command/GUI API is added. Keep the Companion and its independent App Servers running.
+- Block restart while tasks are known active or their state cannot be checked. Require an explicit in-app confirmation, guard against duplicate requests and expose the operation result. Do not restart the owner's desktop as part of development verification; use a harmless interactive probe and simulated process tests.

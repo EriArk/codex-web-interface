@@ -100,3 +100,10 @@ Raw Docker/SSH logs may contain installation-specific details; review them befor
 For the tested Codex 0.153.4 layout, optionally set `machines[].codex.activityNode` to the absolute path of Node 24+ on the execution machine. On Windows this is commonly `C:/Program Files/nodejs/node.exe`; verify the actual path. This setting only enables the fixed read-only metadata reader described in DECISIONS D25. It uses the existing SSH target and does not require a Companion restart or a listener. The machine must have node:sqlite and the native database layout expected by the reader. Unsupported or unreachable observation appears as unavailable, without writing to native files.
 
 Schema 4 stores observation baselines and only uncertain queue-to-Steer transfer records. Pin the backup image to the deployed revision when upgrading. Restore rehearsal and old-image rollback require the matching pre-migration snapshot; never start a schema-3 image against schema 4.
+
+
+## Optional Windows desktop restart
+
+From Windows PowerShell 5.1 as the intended desktop user with administrator rights, run `ops/windows/Install-DesktopControl.ps1` (optionally supply `-NodeCommand` and `-CodexHome`). Node must support node:sqlite; the metadata check currently matches Codex 0.153.4. Installation creates the demand-only CodexWebDesktopRestart task and does not restart Codex or Companion. Set that machine's `codex.desktopControl` to the absolute installed path `%LOCALAPPDATA%/CodexWeb/desktop-control/CodexDesktopControl.ps1`, expanding the placeholder. Only configured Windows machines expose the Settings control.
+
+Use the installed script's `-Action Status` for a read-only check. `-Action Probe -RequestId <new UUID>` exercises the scheduled interactive action without closing or launching Codex. Actual restart is requested from Settings and waits for no active tasks; a Windows login must remain available. The latest operation survives Hub/browser restarts. Never automatically retry an uncertain restart. Keep private desktop-control configuration and task definition in Windows backups. Reinstall the helper after a script change; no Companion restart is needed.
