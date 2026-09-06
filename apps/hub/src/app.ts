@@ -184,6 +184,7 @@ export async function createApp(
     await sessions.catalog.refresh();
     return { machines: sessions.catalog.machines() };
   });
+  app.get("/api/machines/:id/limits", async (req) => sessions.usage(paramId(req)));
   app.get("/api/machines/:id/directories", async (req) => {
     const query = z.object({ path: z.string().min(1).max(2048) }).parse(req.query);
     return sessions.catalog.directories(paramId(req), query.path);
@@ -259,6 +260,12 @@ export async function createApp(
     sessions.thread(id);
     return store.results(id, page(req).before);
   });
+  app.get("/api/threads/:id/progress", async (req) => {
+    const id = paramId(req),
+      thread = sessions.thread(id);
+    const query = z.object({ turnId: idSchema.optional() }).strict().parse(req.query);
+    return store.progressDetails(id, query.turnId ?? thread.activeTurnId);
+  });
   app.get("/api/threads/:id/activity", async (req) => {
     const id = paramId(req);
     sessions.thread(id);
@@ -287,6 +294,10 @@ export async function createApp(
     return store.once(`turn:${id}`, key(req), body, () =>
       sessions.startTurn(id, body.text, body.settings, body.attachments),
     );
+  });
+  app.get("/api/threads/:id/settings", async (req) => {
+    const t = sessions.thread(paramId(req));
+    return store.threadSettings(t.id) ?? (await sessions.capabilities(t.projectId)).defaults;
   });
   app.patch("/api/threads/:id/settings", async (req) =>
     sessions.setSettings(paramId(req), turnSettingsSchema.parse(req.body)),

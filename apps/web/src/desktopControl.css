@@ -52,3 +52,15 @@
   color: var(--danger);
   overflow-wrap: anywhere;
 }
+
+.desktop-maintenance-actions {
+  display: grid;
+  gap: 4px;
+}
+.desktop-maintenance-actions .text-button {
+  min-height: 44px;
+  color: var(--danger);
+}
+.desktop-control-actions > span {
+  width: 100%;
+}

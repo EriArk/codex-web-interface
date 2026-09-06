@@ -26,7 +26,7 @@ export class QueueService {
     if (this.locks.has(id)) throw new HubError(409, "QUEUE_BUSY", "Дождись обновления очереди");
     this.locks.add(id);
     try {
-      return await fn();
+      return await this.sessions.withThreadWrite(id, fn);
     } finally {
       this.locks.delete(id);
     }
@@ -93,6 +93,11 @@ export class QueueService {
   async list(id: string) {
     try {
       const native = await this.native(id);
+      this.store.db
+        .prepare(
+          "DELETE FROM queue_transfers WHERE threadId=? AND state='steered' AND EXISTS (SELECT 1 FROM messages WHERE messages.threadId=queue_transfers.threadId AND messages.id=json_extract(queue_transfers.value, '$.clientUserMessageId'))",
+        )
+        .run(id);
       for (const q of native)
         this.store.db
           .prepare(
@@ -145,6 +150,7 @@ export class QueueService {
         input: [{ type: "text", text }, ...prepared.input],
       };
       try {
+        this.sessions.assertWritable(t.projectId);
         this.sessions.attachments.bind(id, clientId, prepared.files);
         this.store.db
           .prepare("INSERT INTO queue_transfers VALUES(?,?,?,'enqueue_pending')")
@@ -185,6 +191,8 @@ export class QueueService {
       const t = this.sessions.thread(id),
         rpc = await this.sessions.queueClient(id);
       const held = this.held(id, qid);
+      if (held?.state === "steered")
+        throw new HubError(409, "MESSAGE_ACCEPTED", "Codex уже принял сообщение.");
       if (held && ["pending", "enqueue_pending"].includes(held.state))
         throw new HubError(409, "QUEUE_BUSY", "Steer ещё передаётся");
       const q = held?.submission ?? (await this.native(id)).find((v) => v.id === qid);
@@ -276,8 +284,9 @@ export class QueueService {
               "INVALID_STEER_RESPONSE",
               "Codex не подтвердил направление текущего хода",
             );
+          // Keep accepted Steer visible until Codex emits the matching user message.
           this.store.db
-            .prepare("DELETE FROM queue_transfers WHERE threadId=? AND id=?")
+            .prepare("UPDATE queue_transfers SET state='steered' WHERE threadId=? AND id=?")
             .run(id, qid);
         } catch (error) {
           this.store.db

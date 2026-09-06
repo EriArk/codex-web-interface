@@ -3,7 +3,7 @@ import { createReadStream, mkdirSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stageAttachment } from "@codex-web/machines";
-import { type Attachment, type HubConfig, HubError } from "@codex-web/shared";
+import { type Attachment, type HubConfig, HubError, NotSubmittedError } from "@codex-web/shared";
 import sharp from "sharp";
 import type { Store } from "./store.js";
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -221,7 +221,7 @@ export class Attachments {
       return { files, input, release };
     } catch (error) {
       release();
-      throw error;
+      throw new NotSubmittedError(error);
     }
   }
   bind(threadId: string, messageId: string, files: Attachment[]): void {

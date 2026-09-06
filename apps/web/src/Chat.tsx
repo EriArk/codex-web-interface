@@ -1,13 +1,24 @@
 import { hasUnreadCompletion, type ThreadActivity } from "@codex-web/shared";
-import { type FormEvent, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  Fragment,
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import Markdown from "react-markdown";
+import { AccessPicker } from "./AccessPicker";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
 import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { Icon } from "./icons";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
-import type { Approval, Result, TurnSettings } from "./types";
+import { TurnDetails } from "./TurnDetails";
+import "./taskBoundary.css";
+import type { Approval, Message, Result, TurnSettings } from "./types";
 import { UpdateNotice } from "./UpdateNotice";
 import type { ChatState } from "./useWorkspace";
 
@@ -37,6 +48,21 @@ export const statusLabel = (status: string) =>
     unknown: "Проверь состояние диалога",
     idle: "Готов к работе",
   })[status] ?? "Готов к работе";
+function endsTask(
+  message: Message,
+  next: Message | undefined,
+  activeTurn: string | null,
+  status: string,
+): boolean {
+  return (
+    !!message.turnId &&
+    message.turnId !== activeTurn &&
+    next?.turnId !== message.turnId &&
+    (!!next ||
+      message.phase === "final_answer" ||
+      ["completed", "interrupted", "failed"].includes(status))
+  );
+}
 function ApprovalCard({
   approval,
   busy,
@@ -286,6 +312,11 @@ export function Chat({
     state.hasNewer,
     state.lastSeq,
   ]);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Collapse details when switching conversations.
+  useEffect(() => {
+    setDetailsOpen(false);
+  }, [threadId]);
   const [draft, setDraft] = useState(""),
     [newMessages, setNewMessages] = useState(false);
   const active = ["running", "starting", "waiting_approval"].includes(state.thread.status);
@@ -390,6 +421,19 @@ export function Chat({
           if (atBottom.current) setNewMessages(false);
         }}
       >
+        {newMessages && (
+          <button
+            type="button"
+            className="new-message-button secondary"
+            onClick={() => {
+              atBottom.current = true;
+              setNewMessages(false);
+              if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
+            }}
+          >
+            К новым сообщениям ↓
+          </button>
+        )}
         <div className="chat-content" ref={content}>
           {(state.contextTurn || state.hasNewer) && (
             <div className="history-loader">
@@ -451,64 +495,78 @@ export function Chat({
                   </p>
                 </div>
               )}
-              {state.messages.map((message) => (
-                <article
-                  className={
-                    "message " +
-                    message.role +
-                    " " +
-                    (message.phase === "commentary" ? "commentary-message" : "")
-                  }
-                  key={message.id}
-                  data-turn={message.turnId ?? ""}
-                  data-message={message.id}
-                >
-                  <div className="message-meta">
-                    <span className="avatar">{message.role === "user" ? "Я" : "C"}</span>
-                    <strong>{message.role === "user" ? "Вы" : "Codex"}</strong>
-                    <time>{time(message.createdAt)}</time>
-                    {message.phase === "plan" && <span className="badge">План</span>}
-                    {message.phase === "commentary" && (
-                      <span className="small muted">В работе</span>
-                    )}
-                  </div>
-                  <div className="message-body">
-                    <MessageText text={message.text} />
-                    {!message.text && !message.attachments?.length && (
-                      <span className="typing">•••</span>
-                    )}
-                    <AttachmentList
-                      files={[
-                        ...(message.attachments ?? []),
-                        ...(message.images ?? []).map((image) => ({
-                          ...image,
-                          threadId,
-                          messageId: message.id,
-                          mime: "image/png",
-                          bytes: 0,
-                          image: true,
-                          previewUrl: image.url,
-                          createdAt: "",
-                        })),
-                      ]}
-                    />
-                  </div>
-                  {message.role === "assistant" &&
-                    message.phase !== "commentary" &&
-                    results.some((r) => r.turnId === message.turnId) && (
-                      <button
-                        type="button"
-                        className="result-chip"
-                        onClick={() =>
-                          onResult(results.find((r) => r.turnId === message.turnId)?.id ?? "")
-                        }
-                      >
-                        <Icon name="results" size={15} />
-                        Результаты этого хода
-                        <Icon name="chevron" size={14} />
-                      </button>
-                    )}
-                </article>
+              {state.messages.map((message, index) => (
+                <Fragment key={message.id}>
+                  <article
+                    className={
+                      "message " +
+                      message.role +
+                      " " +
+                      (message.phase === "commentary" ? "commentary-message" : "")
+                    }
+                    key={message.id}
+                    data-turn={message.turnId ?? ""}
+                    data-message={message.id}
+                  >
+                    <div className="message-meta">
+                      <span className="avatar">{message.role === "user" ? "Я" : "C"}</span>
+                      <strong>{message.role === "user" ? "Вы" : "Codex"}</strong>
+                      <time>{time(message.createdAt)}</time>
+                      {message.phase === "plan" && <span className="badge">План</span>}
+                      {message.phase === "commentary" && (
+                        <span className="small muted">В работе</span>
+                      )}
+                    </div>
+                    <div className="message-body">
+                      <MessageText text={message.text} />
+                      {!message.text && !message.attachments?.length && (
+                        <span className="typing">•••</span>
+                      )}
+                      <AttachmentList
+                        files={[
+                          ...(message.attachments ?? []),
+                          ...(message.images ?? []).map((image) => ({
+                            ...image,
+                            threadId,
+                            messageId: message.id,
+                            mime: "image/png",
+                            bytes: 0,
+                            image: true,
+                            previewUrl: image.url,
+                            createdAt: "",
+                          })),
+                        ]}
+                      />
+                    </div>
+                    {message.role === "assistant" &&
+                      message.phase !== "commentary" &&
+                      results.some((r) => r.turnId === message.turnId) && (
+                        <button
+                          type="button"
+                          className="result-chip"
+                          onClick={() =>
+                            onResult(results.find((r) => r.turnId === message.turnId)?.id ?? "")
+                          }
+                        >
+                          <Icon name="results" size={15} />
+                          Результаты этого хода
+                          <Icon name="chevron" size={14} />
+                        </button>
+                      )}
+                  </article>
+                  {endsTask(
+                    message,
+                    state.messages[index + 1],
+                    state.thread.activeTurnId,
+                    state.thread.status,
+                  ) && (
+                    <div className="task-boundary">
+                      <hr aria-label="Конец задачи" />
+                      <span aria-hidden="true">Конец задачи</span>
+                      <div className="task-boundary-line" aria-hidden="true" />
+                    </div>
+                  )}
+                </Fragment>
               ))}
               {state.approvals.map((a) => (
                 <ApprovalCard
@@ -529,19 +587,6 @@ export function Chat({
           )}
         </div>
       </div>
-      {newMessages && (
-        <button
-          type="button"
-          className="new-message-button secondary"
-          onClick={() => {
-            atBottom.current = true;
-            setNewMessages(false);
-            if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
-          }}
-        >
-          К новым сообщениям ↓
-        </button>
-      )}
       <UpdateNotice visible={visible} busy={busy || attachments.busy} />
       {threadId && state.error && (
         <div className="notice error-notice" role="alert">
@@ -562,26 +607,51 @@ export function Chat({
           Восстановить диалог
         </button>
       )}
-      {(sending || active) && (
+      {(sending || queue.busy || active) && (
         <div
           className={`turn-status ${state.approvals.length ? "needs-answer" : ""}`}
           role="status"
           aria-live="polite"
         >
-          <span
-            className={state.approvals.length ? "status-dot attention" : "spinner"}
-            role="img"
-            aria-label={state.approvals.length ? "Нужен ответ" : "Codex работает"}
-          />
-          <span>
-            {sending
-              ? "Отправляем сообщение…"
-              : state.approvals.length
-                ? "Codex ждёт твоего ответа"
-                : state.thread.activitySource === "external"
-                  ? "Codex работает в другом клиенте"
-                  : state.progress || statusLabel(state.thread.status)}
-          </span>
+          <button
+            type="button"
+            className="turn-status-toggle"
+            aria-label="Ход работы"
+            aria-expanded={detailsOpen}
+            aria-controls="turn-details"
+            onClick={() => setDetailsOpen((v) => !v)}
+          >
+            <span
+              className={state.approvals.length ? "status-dot attention" : "spinner"}
+              role="img"
+              aria-label={state.approvals.length ? "Нужен ответ" : "Codex работает"}
+            />
+            <span>
+              {queue.busy
+                ? "Передаём сообщение…"
+                : sending
+                  ? "Отправляем сообщение…"
+                  : state.approvals.length
+                    ? "Codex ждёт твоего ответа"
+                    : state.thread.activitySource === "external"
+                      ? "Codex работает в другом клиенте"
+                      : state.progress || statusLabel(state.thread.status)}
+            </span>
+            <span className="details-chevron">
+              <Icon name="chevron" size={14} />
+            </span>
+          </button>
+          {active && (draft.trim() || attachments.files.length > 0) && (
+            <button
+              type="button"
+              className="text-button"
+              aria-label="Остановить Codex"
+              disabled={busy || state.thread.activitySource === "external"}
+              onClick={onStop}
+            >
+              Остановить
+            </button>
+          )}
           {state.approvals.length > 0 && (
             <button
               type="button"
@@ -594,6 +664,9 @@ export function Chat({
             </button>
           )}
         </div>
+      )}
+      {detailsOpen && (sending || queue.busy || active) && (
+        <TurnDetails threadId={threadId} turnId={state.thread.activeTurnId} />
       )}
       {sendError && (
         <div className="send-error" role="alert">
@@ -730,16 +803,15 @@ export function Chat({
                 : queue.state.message || "Очередь загружается…"
               : "Enter — новая строка"}
           </span>
-          {active && (draft.trim() || attachments.files.length > 0) && (
-            <button
-              type="button"
-              className="text-button"
-              disabled={busy || state.thread.activitySource === "external"}
-              onClick={onStop}
-            >
-              Остановить
-            </button>
-          )}
+          <AccessPicker
+            options={options}
+            disabled={
+              !threadId ||
+              state.loading ||
+              busy ||
+              (active && state.thread.activitySource === "external")
+            }
+          />
           <span>⌘ / Ctrl + Enter — отправить</span>
         </div>
       </form>

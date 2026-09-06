@@ -184,11 +184,25 @@ export class HubError extends Error {
   }
 }
 
+/** The user message has not reached Codex; an explicit retry is safe. */
+export class NotSubmittedError extends HubError {
+  constructor(error: unknown) {
+    super(
+      error instanceof HubError ? error.statusCode : 500,
+      error instanceof HubError ? error.code : "PREPARATION_FAILED",
+      error instanceof HubError
+        ? error.message
+        : "Не удалось подготовить сообщение. Попробуй снова.",
+    );
+  }
+}
+
 export const turnSettingsSchema = z
   .object({
     model: z.string().min(1).max(200),
     effort: z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]),
     mode: z.enum(["default", "plan"]),
+    access: z.enum(["workspace", "full"]).optional(),
   })
   .strict();
 export type TurnSettings = z.infer<typeof turnSettingsSchema>;
@@ -201,6 +215,8 @@ export interface ModelOption {
   supportsImages: boolean;
 }
 export interface Capabilities {
+  accessModes?: ("workspace" | "full")[];
+  accessMessage?: string;
   serverVersion?: string;
   warnings?: string[];
   models: ModelOption[];

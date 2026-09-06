@@ -193,58 +193,64 @@ export function MessageQueue({
                     постановкой в очередь.
                   </p>
                 )}
-                <div className="queue-actions">
-                  {item.state === "queued" ? (
-                    <button
-                      type="button"
-                      className="text-button steer-button"
-                      disabled={queue.busy || !turnId || !queue.state.canSteer}
-                      title={
-                        queue.state.canSteer
-                          ? "Направить текущую работу"
-                          : "Текущий ход открыт в другом клиенте"
-                      }
-                      onClick={() =>
-                        void queue.change(item, "steer", undefined, turnId ?? undefined)
-                      }
-                    >
-                      Steer <Icon name="send" size={14} />
-                    </button>
-                  ) : (
+                {item.state === "steered" ? (
+                  <span className="small muted" role="status">
+                    <Icon name="check" size={14} /> Принято
+                  </span>
+                ) : (
+                  <div className="queue-actions">
+                    {item.state === "queued" ? (
+                      <button
+                        type="button"
+                        className="text-button steer-button"
+                        disabled={queue.busy || !turnId || !queue.state.canSteer}
+                        title={
+                          queue.state.canSteer
+                            ? "Направить текущую работу"
+                            : "Текущий ход открыт в другом клиенте"
+                        }
+                        onClick={() =>
+                          void queue.change(item, "steer", undefined, turnId ?? undefined)
+                        }
+                      >
+                        Steer <Icon name="send" size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={queue.busy || ["pending", "enqueue_pending"].includes(item.state)}
+                        onClick={() => void queue.change(item, "restore")}
+                      >
+                        {["pending", "enqueue_pending"].includes(item.state)
+                          ? "Передаём…"
+                          : "Вернуть в очередь"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="text-button"
                       disabled={queue.busy || ["pending", "enqueue_pending"].includes(item.state)}
-                      onClick={() => void queue.change(item, "restore")}
+                      onClick={() => {
+                        setEditing(item.id);
+                        setEditRevision(item.revision);
+                        setText(item.text);
+                      }}
+                      aria-label="Изменить сообщение"
                     >
-                      {["pending", "enqueue_pending"].includes(item.state)
-                        ? "Передаём…"
-                        : "Вернуть в очередь"}
+                      Изменить
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className="text-button"
-                    disabled={queue.busy || ["pending", "enqueue_pending"].includes(item.state)}
-                    onClick={() => {
-                      setEditing(item.id);
-                      setEditRevision(item.revision);
-                      setText(item.text);
-                    }}
-                    aria-label="Изменить сообщение"
-                  >
-                    Изменить
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    disabled={queue.busy || ["pending", "enqueue_pending"].includes(item.state)}
-                    onClick={() => void queue.change(item, "delete")}
-                    aria-label="Удалить сообщение из очереди"
-                  >
-                    <Icon name="close" size={17} />
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      disabled={queue.busy || ["pending", "enqueue_pending"].includes(item.state)}
+                      onClick={() => void queue.change(item, "delete")}
+                      aria-label="Удалить сообщение из очереди"
+                    >
+                      <Icon name="close" size={17} />
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </article>
