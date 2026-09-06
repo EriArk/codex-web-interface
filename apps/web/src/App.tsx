@@ -8,6 +8,7 @@ import { ProjectDialog } from "./ProjectDialog";
 import { ProjectNavigation } from "./ProjectNavigation";
 import { Remote } from "./Remote";
 import { ActivityPane, Results } from "./Results";
+import { applyTheme, cachedTheme, themes } from "./theme";
 import type {
   Activity,
   History,
@@ -144,7 +145,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const [projectId, setProjectId] = useState(""),
     [threadId, setThreadId] = useState(""),
     [view, setView] = useState<View>("chat"),
-    [theme, setTheme] = useState<Theme>(readPreference("theme", "organizer") as Theme);
+    [theme, setTheme] = useState<Theme>(cachedTheme);
   const selectionRef = useRef({ projectId, threadId });
   selectionRef.current = { projectId, threadId };
   const [drawer, setDrawer] = useState(false),
@@ -225,7 +226,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     })();
   }, [loadThreads]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    applyTheme(theme);
     try {
       localStorage.setItem("codex-theme", theme);
     } catch {
@@ -784,13 +785,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         <p className="muted">Твоё пространство, твой стиль.</p>
         <fieldset className="theme-picker">
           <legend>Оформление</legend>
-          {(
-            [
-              ["organizer", "Органайзер", "Бумага, закладки, спокойный зелёный"],
-              ["crt-green", "Зелёный терминал", "Чёткий текст и свет фосфора"],
-              ["hitech-2000s", "Hi-Tech 2000s", "Холодный металл и синий свет"],
-            ] as const
-          ).map(([id, title, description]) => (
+          {themes.map(({ id, title, description }) => (
             <label key={id} className={`theme-option ${id}`}>
               <input
                 type="radio"
