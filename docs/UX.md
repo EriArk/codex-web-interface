@@ -379,3 +379,11 @@ Plan for:
 - avoid expensive full-screen CSS filters on every frame;
 - pause/reduce animated theme effects when app is backgrounded;
 - preserve scroll anchors during streaming.
+
+### Classic Dark and CRT refinement
+
+Classic Dark is a fourth shared theme: graphite backgrounds, clear surface levels, soft blue-gray selection and Roboto Condensed. It has no hardware decoration. CRT uses IBM Plex Mono, phosphor text/edge glow and static raster/glass backgrounds. Photos and Remote remain unfiltered; code and input text stay crisp without glow. Increased contrast removes the raster/text glow. No flicker or scanline animation is used.
+
+The selected theme is persisted to Hub preferences and cached for login/loading. Safari/browser theme-color follows the selection. Switching a theme preserves the active chat, draft, scroll and workspace mode.
+
+Hi-Tech uses a neutral silver chassis, dark panel seams, inset pale screens and beveled cyan controls from the owner reference. Organizer keeps clean light paper, oval binder rings, pastel tabs and blue user avatars. Both reduce decorative edges on compact layouts without changing touch targets or workspace structure.

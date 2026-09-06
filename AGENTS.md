@@ -279,3 +279,11 @@ Before mobile support is considered complete, the same core workflow must also w
 - Desktop Retry opens the existing conversation after release; continuation may require a new message. Do not imply transfer of an in-memory running turn.
 - Returning from native desktop can explicitly close its app through the existing fixed user-session Scheduled Task, after confirming that its active tasks will stop. Keep Companion and its independent App Servers running. Enable web writes only after verified desktop closure.
 - Verify ownership switching using disposable native conversations and simulated Windows process effects. Do not interrupt or close the owner's desktop tasks during development checks.
+
+## Owner-requested CRT refresh and classic dark theme (2026-09-06)
+
+- Refresh crt-green toward the owner's terminal reference with phosphor glow, restrained raster/glass surfaces and an appropriate Cyrillic-capable monospace font. Keep glyphs crisp and mobile working area intact; no flickering or animated full-screen filters.
+- Add classic-dark alongside the existing themes: graphite surfaces, quiet accents, clear contrast and the shared compact Roboto Condensed typography.
+- Themes remain semantic tokens and decorative CSS over one functional UI. Images and Remote retain original colors. Persist the fourth theme through Hub preferences and apply the cached theme and browser chrome color before rendering login/workspace.
+
+- Revisit organizer and especially Hi-Tech 2000s against the owner-drawn references in the same theme update. Hi-tech should emphasize a silver equipment chassis, dark joins, recessed light screens and cyan highlights. Organizer should retain clean paper, binding and pastel tabs. Keep all phone decoration compact.

@@ -2,7 +2,7 @@ import type { Attachment, TurnSettings } from "@codex-web/shared";
 
 export type { Attachment, Capabilities, ModelOption, TurnSettings } from "@codex-web/shared";
 export type View = "chat" | "results" | "remote" | "activity";
-export type Theme = "organizer" | "crt-green" | "hitech-2000s";
+export type { Theme } from "./theme";
 export interface Session {
   authenticated: boolean;
   csrf: string;

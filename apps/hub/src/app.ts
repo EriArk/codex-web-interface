@@ -427,7 +427,7 @@ export async function createApp(
     store.setPreferences(
       z
         .object({
-          theme: z.enum(["organizer", "crt-green", "hitech-2000s"]).optional(),
+          theme: z.enum(["organizer", "crt-green", "hitech-2000s", "classic-dark"]).optional(),
           projectId: idSchema.optional(),
           threadId: idSchema.optional(),
           view: z.enum(["chat", "results", "remote", "activity"]).optional(),
