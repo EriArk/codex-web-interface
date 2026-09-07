@@ -14,6 +14,10 @@ export function registerNavigation(
 ): void {
   const snapshot = () => ({
     ...store.navigation(sessions.catalog.projects().map((p) => p.id)),
+    library: sessions.catalog.library.all().map((e) => ({
+      ...e,
+      ...(e.kind === "thread" ? { id: e.localId ?? store.threadByCodex(e.id)?.id ?? e.id } : {}),
+    })),
     warnings: [...(sessions.externalActivity?.errors?.values() ?? [])],
   });
   app.get("/api/navigation", async () => snapshot());

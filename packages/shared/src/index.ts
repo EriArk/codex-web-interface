@@ -155,6 +155,14 @@ export interface ProjectActivity {
   activityAt: string;
 }
 export interface NavigationState {
+  library?: {
+    id: string;
+    kind: "thread" | "project";
+    name?: string;
+    pinned?: boolean;
+    archived?: boolean;
+    deleted?: boolean;
+  }[];
   warnings?: string[];
   threads: ThreadActivity[];
   projects: ProjectActivity[];

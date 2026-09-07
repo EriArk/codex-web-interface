@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { CodexClient, type ServerRequest } from "@codex-web/codex";
 import { spawnCodex } from "@codex-web/machines";
@@ -16,6 +17,7 @@ import { accessCapabilities, requireAccess, threadAccess, turnAccess } from "./a
 import { Attachments } from "./attachments.js";
 import { Catalog, type CatalogProject } from "./catalog.js";
 import { ExternalActivity } from "./externalActivity.js";
+import type { EntityAction, EntityKind } from "./library.js";
 import type { Store, ThreadRecord } from "./store.js";
 import { normalizeLimits } from "./usage.js";
 
@@ -179,6 +181,8 @@ export class Sessions extends EventEmitter {
   }
   assertWritable(projectId: string): void {
     const machineId = this.project(projectId).machineId;
+    if (this.catalog.library.get("project", projectId)?.deleted)
+      throw new HubError(404, "PROJECT_DELETED", "Проект удалён.");
     if (
       this.handingOff.has(machineId) ||
       record(this.store.preferences().desktopReturns)[machineId]
@@ -251,7 +255,11 @@ export class Sessions extends EventEmitter {
     }
   }
   async withThreadWrite<T>(id: string, fn: () => Promise<T>): Promise<T> {
-    const projectId = this.thread(id).projectId;
+    const thread = this.thread(id);
+    if (thread.archived) throw new HubError(409, "THREAD_ARCHIVED", "Сначала разархивируй диалог.");
+    const projectId = thread.projectId;
+    if (this.entityWrites.has(projectId))
+      throw new HubError(409, "ENTITY_BUSY", "Обновляем список диалогов.");
     this.assertWritable(projectId);
     const machineId = this.project(projectId).machineId;
     this.machineWrites.set(machineId, (this.machineWrites.get(machineId) ?? 0) + 1);
@@ -311,6 +319,149 @@ export class Sessions extends EventEmitter {
     } catch {
       return false;
     }
+  }
+  private entityWrites = new Set<string>();
+  async manageEntity(kind: EntityKind, id: string, action: EntityAction) {
+    const t = kind === "thread" ? this.thread(id) : undefined;
+    const projectId = t?.projectId ?? id;
+    if (this.machineWrites.get(this.project(projectId).machineId))
+      throw new HubError(409, "ENTITY_BUSY", "Дождись завершения отправки сообщения.");
+    return this.locked(projectId, async () => {
+      this.entityWrites.add(projectId);
+      try {
+        const r = await this.runtime(projectId);
+        if ((action.action === "archive" && action.value) || action.action === "delete") {
+          const targets = t ? [t] : this.store.threads(projectId);
+          for (const row of targets) {
+            if (
+              r.active.has(row.id) ||
+              row.activeTurnId ||
+              ["running", "starting", "waiting_approval", "unknown"].includes(row.status)
+            )
+              throw new HubError(409, "ENTITY_BUSY", "Дождись завершения работы в этом чате.");
+            const result = await r.rpc.request("thread/read", {
+              threadId: row.codexThreadId,
+              includeTurns: false,
+            });
+            const status = record(record(result.thread).status);
+            if (status.type === "active" || status.type === "systemError")
+              throw new HubError(409, "ENTITY_BUSY", "Диалог сейчас занят. Обнови его состояние.");
+            const queue = row.archived
+              ? { data: [] }
+              : await r.rpc.request("thread/queue/list", {
+                  threadId: row.codexThreadId,
+                  limit: 100,
+                });
+            if (!Array.isArray(queue.data) || queue.data.length || queue.nextCursor)
+              throw new HubError(
+                409,
+                "ENTITY_QUEUED",
+                "Сначала обработай сообщения в очереди этого чата.",
+              );
+          }
+        }
+        if (!t) return await this.catalog.changeProject(id, action);
+        const library = this.catalog.library;
+        library.assertExists("thread", t.codexThreadId);
+        if (action.action === "pin") {
+          library.save("thread", t.codexThreadId, {
+            name: t.title,
+            localId: id,
+            pinned: action.value,
+          });
+        } else if (action.action === "rename") {
+          await r.rpc.request("thread/name/set", { threadId: t.codexThreadId, name: action.name });
+          this.store.db.prepare("UPDATE threads SET title=? WHERE id=?").run(action.name, id);
+        } else if (action.action === "archive") {
+          let localArchive = library.get("thread", t.codexThreadId)?.localArchive === true;
+          if (!localArchive) {
+            try {
+              await r.rpc.request(action.value ? "thread/archive" : "thread/unarchive", {
+                threadId: t.codexThreadId,
+              });
+            } catch (error) {
+              if (
+                action.value &&
+                error instanceof HubError &&
+                error.code === "THREAD_NOT_PERSISTED" &&
+                t.origin === "web" &&
+                !this.store.db.prepare("SELECT 1 FROM messages WHERE threadId=? LIMIT 1").get(id)
+              )
+                localArchive = true;
+              else throw error;
+            }
+          }
+          this.store.db
+            .prepare("UPDATE threads SET archived=? WHERE id=?")
+            .run(Number(action.value), id);
+          library.save("thread", t.codexThreadId, {
+            name: t.title,
+            localId: id,
+            archived: action.value,
+            localArchive: action.value && localArchive,
+          });
+          if (!localArchive) r.loaded.delete(id);
+          this.catalog.invalidate(id);
+        } else {
+          await r.rpc.request("thread/delete", { threadId: t.codexThreadId });
+          library.save("thread", t.codexThreadId, { name: "", localId: id, deleted: true });
+          r.loaded.delete(id);
+          this.catalog.invalidate(id);
+          const files = [
+            ...this.store.db
+              .prepare("SELECT id FROM artifacts WHERE threadId=?")
+              .all(id)
+              .map((row) => join(this.config.hub.resultsPath, String(row.id) + ".png")),
+            ...this.store.db
+              .prepare("SELECT id FROM attachments WHERE threadId=?")
+              .all(id)
+              .flatMap((row) =>
+                [".bin", ".jpg"].map((ext) =>
+                  join(this.config.hub.resultsPath, "uploads", String(row.id) + ext),
+                ),
+              ),
+            ...this.store.db
+              .prepare("SELECT id FROM html_previews WHERE threadId=?")
+              .all(id)
+              .map((row) =>
+                join(this.config.hub.resultsPath, "previews", String(row.id) + ".html"),
+              ),
+          ];
+          this.store.db.exec("BEGIN IMMEDIATE");
+          try {
+            for (const table of [
+              "native_images",
+              "artifacts",
+              "attachments",
+              "queue_transfers",
+              "thread_settings",
+              "messages",
+              "events",
+              "results",
+              "history_cursors",
+              "html_previews",
+            ])
+              this.store.db.prepare("DELETE FROM " + table + " WHERE threadId=?").run(id);
+            this.store.db.prepare("DELETE FROM threads WHERE id=?").run(id);
+            this.store.db.exec("COMMIT");
+          } catch (error) {
+            this.store.db.exec("ROLLBACK");
+            throw error;
+          }
+          for (const path of files) {
+            try {
+              unlinkSync(path);
+            } catch {
+              /* Already absent or deferred to storage maintenance. */
+            }
+          }
+        }
+        this.store.changes.emit("navigation");
+        return { ok: true };
+      } finally {
+        this.entityWrites.delete(projectId);
+      }
+    });
   }
   async queueClient(id: string): Promise<CodexClient> {
     const r = await this.runtime(this.thread(id).projectId);
@@ -616,16 +767,50 @@ export class Sessions extends EventEmitter {
   }
   async resume(id: string): Promise<ThreadRecord> {
     const t = this.thread(id);
+    if (t.archived) throw new HubError(409, "THREAD_ARCHIVED", "Сначала разархивируй диалог.");
     return this.locked(t.projectId, async () => {
       const r = await this.runtime(t.projectId);
       if (r.loaded.has(id)) return this.store.thread(id);
       await requireAccess(r.rpc, this.project(t.projectId).workingDirectory, t.settings?.access);
-      const result = await r.rpc.request("thread/resume", {
-        threadId: t.codexThreadId,
-        cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
-        excludeTurns: true,
-        ...threadAccess(t.settings?.access),
-      });
+      let result: Record<string, unknown>;
+      try {
+        result = await r.rpc.request("thread/resume", {
+          threadId: t.codexThreadId,
+          cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
+          excludeTurns: true,
+          ...threadAccess(t.settings?.access),
+        });
+      } catch (error) {
+        const empty =
+          t.origin === "web" &&
+          !this.store.db.prepare("SELECT 1 FROM messages WHERE threadId=? LIMIT 1").get(id) &&
+          !this.store.db.prepare("SELECT 1 FROM queue_transfers WHERE threadId=? LIMIT 1").get(id);
+        if (!(error instanceof HubError && error.code === "THREAD_NOT_PERSISTED" && empty))
+          throw error;
+        // No native conversation history existed yet. Recreate only the empty placeholder.
+        const project = this.project(t.projectId);
+        result = await r.rpc.request("thread/start", {
+          cwd: t.workingDirectory || project.workingDirectory,
+          ...(project.sourceId ? { projectId: project.sourceId } : {}),
+          historyMode: "paginated",
+          ...threadAccess(t.settings?.access),
+        });
+        const nativeId = text(record(result.thread).id);
+        if (!nativeId)
+          throw new HubError(502, "INVALID_CODEX_RESPONSE", "Codex не подтвердил пустой диалог.");
+        const previousId = t.codexThreadId,
+          meta = this.catalog.library.get("thread", previousId);
+        this.store.db.prepare("UPDATE threads SET codexThreadId=? WHERE id=?").run(nativeId, id);
+        t.codexThreadId = nativeId;
+        if (meta) {
+          this.catalog.library.save("thread", nativeId, { ...meta, id: nativeId, localId: id });
+          this.store.db
+            .prepare("DELETE FROM library_entities WHERE client='codex' AND kind='thread' AND id=?")
+            .run(previousId);
+        }
+        await r.rpc.request("thread/name/set", { threadId: nativeId, name: t.title });
+        result = { ...result, thread: { ...record(result.thread), turns: [] } };
+      }
       const turns =
         record(result.thread).turns ??
         (

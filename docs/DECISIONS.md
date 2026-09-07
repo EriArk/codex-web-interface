@@ -342,3 +342,18 @@ The owner extended the explicit Settings handoff with desktop launch, maximizati
 Open never closes a process or checks active work as a reason to stop it. A second launch forwards the validated link to the existing app. Window activation is restricted to the configured package, owner and interactive session. Completion requires a visible maximized window; foreground denial is reported separately. No thread-navigation acknowledgement is available from the native URL handler, so the result confirms window preparation and link delivery, not an in-memory turn transfer.
 
 Handoff remains in desktop mode if opening fails. Read-only status recovers the result after browser loss; an explicit Open retry is available. Pending or uncertain Open blocks return to web so a delayed scheduled launch cannot grab a newly acquired writer. The existing expiry, single-task lock and idempotency guards remain. No network listener or generic launch endpoint is added.
+
+
+## 2026-09-07 — Native navigation actions and shared menus
+
+Chats and projects expose Pin, Rename, Archive and Delete in that order. Delete requires a named confirmation and uses a red action. A shared dialog/menu supplies touch and keyboard behavior in both modes.
+
+Codex chat names, archive state and deletion use App Server methods; project names/deletion use its project catalog. Deleting a project detaches chats and never calls a filesystem deletion method. The installed 0.153.4 schema has no isPinned field in thread/metadata/update, even though newer public docs describe it, so pins live in Hub SQLite. Whole-project archiving is a reversible Hub view preference for both clients. Archived native Codex threads are read in pages of 20; their queues cannot be read until unarchived.
+
+An empty Codex thread may have no native rollout yet. Its archive is a Hub preference until it contains a message. After a connection restart, only a provably empty, web-created placeholder with no messages or queue transfers may receive a new native placeholder ID. Existing conversation history never takes this path and prompts are never replayed.
+
+ChatGPT chat archive, rename and deletion and chat/project pins use the current consumer client's native contracts. Project rename preserves instructions, emoji and theme while changing its name. Project deletion uses the native API and deletes its chats/files. The native ten-item pin limit is retained, without evicting existing pins.
+
+Schema 7 adds library_entities, private Hub metadata for pins, project archives, names and deletion tombstones. Tombstones prevent stale browser/catalog snapshots from recreating deleted entries. All mutations use authenticated Hub routes, strict allowlists and idempotency keys. Active/queued/uncertain work blocks destructive changes; queue writes are serialized with catalog changes. Source files, authentication credentials and execution topology remain unchanged.
+
+Validation includes disposable native Codex project/chat lifecycles, empty-chat reconnect, a disposable ChatGPT project/chat lifecycle, native pin-limit rejection and unpin, mock race/guard tests and Chromium/WebKit phone/tablet visual checks.

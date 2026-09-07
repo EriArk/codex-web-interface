@@ -18,6 +18,9 @@ export interface Machine {
   remoteAvailable: boolean;
 }
 export interface Project {
+  pinned?: boolean;
+  archived?: boolean;
+  deleted?: boolean;
   unassigned?: boolean;
   machineId?: string;
   workingDirectory?: string;
@@ -30,6 +33,7 @@ export interface Project {
   remoteAvailable: boolean;
 }
 export interface Thread {
+  pinned?: boolean;
   id: string;
   projectId: string;
   title: string;

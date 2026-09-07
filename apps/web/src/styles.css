@@ -1521,8 +1521,11 @@ dialog::backdrop {
     border-top: 1px solid var(--line);
     background: var(--paper);
   }
-  .mobile-tabs > button {
-    flex: 1;
+  .mobile-tabs > :is(button, a) {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 1px 6px;
+    text-decoration: none;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -1534,11 +1537,11 @@ dialog::backdrop {
     border-radius: 8px;
     min-height: 46px;
   }
-  .mobile-tabs > button.active {
+  .mobile-tabs > :is(button, a).active {
     background: var(--soft);
     color: var(--accent);
   }
-  .mobile-tabs > button svg {
+  .mobile-tabs > :is(button, a) svg {
     width: 20px;
     height: 20px;
   }

@@ -1,0 +1,149 @@
+.entity-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  border-radius: 8px;
+}
+.entity-row.selected {
+  background: var(--soft);
+}
+.entity-row > .nav-thread,
+.entity-row > .nav-project {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  margin-block: 0;
+}
+.entity-row > .entity-trigger {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  color: var(--muted);
+}
+.entity-row > .entity-trigger svg {
+  flex: none;
+}
+.entity-dialog {
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(var(--app-height, 100dvh) - 24px);
+  margin: auto;
+  padding: 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  --delete-color: #b42332;
+}
+:root[data-theme="classic-dark"] .entity-dialog,
+:root[data-theme="crt-green"] .entity-dialog {
+  --delete-color: #ff7882;
+}
+.entity-menu {
+  width: 300px;
+}
+.entity-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.entity-heading h2 {
+  font-size: 17px;
+  line-height: 1.3;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.entity-heading > button {
+  flex: 0 0 44px;
+}
+.entity-actions {
+  display: grid;
+  gap: 2px;
+}
+.entity-actions > button {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  gap: 12px;
+  border-radius: 7px;
+  padding: 9px 12px;
+  font-size: 15px;
+}
+.entity-actions > button:hover:not(:disabled) {
+  background: var(--soft);
+}
+.entity-actions > button.entity-danger {
+  color: var(--delete-color);
+  border-top: 1px solid var(--line);
+  margin-top: 5px;
+  border-radius: 0 0 7px 7px;
+}
+.entity-dialog input,
+.entity-dialog select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+}
+.entity-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+.entity-footer button {
+  min-height: 44px;
+  padding: 9px 18px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+}
+.entity-footer .entity-delete {
+  color: #fff;
+  background: #b42332;
+  border-color: #b42332;
+}
+.entity-confirm p {
+  line-height: 1.45;
+  font-size: 14px;
+}
+.entity-confirm .entity-name {
+  font-weight: 600;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.entity-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--muted);
+  min-height: 36px;
+}
+.archive-dialog {
+  width: 480px;
+}
+.archive-list .entity-row {
+  gap: 10px;
+  padding-left: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.archive-list .entity-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.archive-list .entity-row > svg {
+  flex: none;
+}
+.archive-dialog > button {
+  min-height: 44px;
+  width: 100%;
+}

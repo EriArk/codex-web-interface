@@ -21,6 +21,13 @@ import {
   gptProjects,
 } from "./gpt-history.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
+import {
+  type EntityAction,
+  type EntityKind,
+  entityAction,
+  Library,
+  libraryMutation,
+} from "./library.js";
 import type { Store } from "./store.js";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -38,6 +45,8 @@ export class GptService {
     gptHistory(await this.json("/conversation?id=" + encodeURIComponent(id))),
   );
   private working = false;
+  private libraryBusy = false;
+  readonly library: Library;
   private stopped = false;
   private readonly lifetime = new AbortController();
   private completion = Promise.resolve();
@@ -50,6 +59,7 @@ export class GptService {
     readonly config: HubConfig,
     readonly store: Store,
   ) {
+    this.library = new Library(store, "gpt");
     this.token = config.gpt ? (process.env[config.gpt.tokenSecret] ?? "") : "";
     this.root = join(config.hub.resultsPath, "gpt");
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
@@ -79,6 +89,18 @@ export class GptService {
       });
       if (!response.ok) {
         await response.body?.cancel();
+        if (path === "/library" && response.status === 429)
+          throw error(
+            "GPT_PIN_LIMIT",
+            "ChatGPT не разрешил закрепление. Уже закреплено 10 элементов; сначала открепи один.",
+            409,
+          );
+        if (path === "/library" && response.status === 409)
+          throw error(
+            "GPT_ACTION_REJECTED",
+            "ChatGPT сейчас не разрешает это действие. Обнови список и повтори.",
+            409,
+          );
         throw error(
           "GPT_UNAVAILABLE",
           "Не удалось выполнить действие в ChatGPT. Проверь подключение.",
@@ -93,6 +115,151 @@ export class GptService {
   }
   async json(path: string, body?: unknown): Promise<Json> {
     return (await this.response(path, body)).json();
+  }
+  async pins() {
+    const raw = await this.json("/pins");
+    const rows: Json[] = Array.isArray(raw) ? raw : Array.isArray(raw.items) ? raw.items : [];
+    return rows
+      .filter((row) => ["conversation", "project"].includes(row.item_type))
+      .flatMap((row) => {
+        const item = row.item;
+        const nativeId = item?.gizmo?.id ?? item?.gizmo?.gizmo?.id ?? item?.id;
+        return gptId(nativeId)
+          ? [{ id: nativeId, kind: row.item_type === "project" ? "project" : "thread", item }]
+          : [];
+      });
+  }
+  async catalog(offset = 0, archived = false) {
+    const [raw, pins] = await Promise.all([
+      this.json("/catalog?offset=" + offset + (archived ? "&archived=1" : "")),
+      this.pins(),
+    ]);
+    const page = gptCatalog(raw);
+    for (const row of page.items) {
+      const saved = this.library.get("thread", row.id);
+      if (saved?.deleted) continue;
+      const recent = saved?.changedAt && Date.now() - saved.changedAt < 60000;
+      this.library.save("thread", row.id, {
+        name: recent ? saved.name : row.title,
+        projectId: row.projectId,
+        archived: recent ? saved.archived : archived,
+      });
+      if (recent) row.title = saved.name;
+    }
+    if (!archived && offset === 0) {
+      for (const pin of pins.filter((p) => p.kind === "thread")) {
+        const item = gptCatalog({ items: [pin.item] }).items[0];
+        if (item && !page.items.some((t) => t.id === item.id)) page.items.push(item);
+      }
+    }
+    return {
+      ...page,
+      pinnedIds: pins.filter((p) => p.kind === "thread").map((p) => p.id),
+      library: this.library.all(),
+      items: page.items
+        .filter((row) => !this.library.get("thread", row.id)?.deleted)
+        .map((row) => ({
+          ...row,
+          pinned: pins.some((p) => p.kind === "thread" && p.id === row.id),
+          archived,
+        })),
+    };
+  }
+  async projects() {
+    const [raw, pins] = await Promise.all([this.json("/projects"), this.pins()]);
+    for (const saved of this.library
+      .all()
+      .filter((e) => e.kind === "project" && e.renamed && !e.deleted)) {
+      if (Date.now() - (saved.nameCheckedAt ?? 0) < 60000) continue;
+      try {
+        const canonical = gptProjects({
+          items: [await this.json("/project?id=" + encodeURIComponent(saved.id))],
+        })[0];
+        if (canonical)
+          this.library.save("project", saved.id, {
+            name: canonical.name,
+            nameCheckedAt: Date.now(),
+          });
+      } catch {
+        /* Keep the last confirmed name if the connection is unavailable. */
+      }
+    }
+    const items = gptProjects(raw).map((row) => ({
+      ...row,
+      ...this.library.get("project", row.id),
+      id: row.id,
+      name: this.library.get("project", row.id)?.renamed
+        ? this.library.get("project", row.id)!.name
+        : row.name,
+      pinned: pins.some((p) => p.kind === "project" && p.id === row.id),
+    }));
+    for (const entry of this.library
+      .all()
+      .filter((e) => e.kind === "project" && (e.archived || e.deleted)))
+      if (!items.some((p) => p.id === entry.id))
+        items.push({ ...entry, name: entry.name, pinned: false });
+    return {
+      items,
+      conversations: gptProjectConversations(raw)
+        .filter((row) => !this.library.get("thread", row.id)?.deleted)
+        .map((row) => ({
+          ...row,
+          pinned: pins.some((p) => p.kind === "thread" && p.id === row.id),
+        })),
+    };
+  }
+  async manageEntity(kind: EntityKind, nativeId: string, action: EntityAction) {
+    this.library.assertExists(kind, nativeId);
+    if (
+      this.working ||
+      this.libraryBusy ||
+      this.jobs().some((job) => active.includes(job.status) || job.status === "unknown")
+    )
+      throw error("GPT_BUSY", "Дождись завершения текущей работы GPT.");
+    this.libraryBusy = true;
+    try {
+      const state = await this.json("/active");
+      if (state.generating || state.requestId) throw error("GPT_BUSY", "ChatGPT сейчас занят.");
+      let name: string, projectId: string | undefined;
+      if (kind === "thread") {
+        const source = await this.json("/conversation?id=" + encodeURIComponent(nativeId));
+        if (!source.mapping) throw error("GPT_NOT_FOUND", "Чат не найден.", 404);
+        name = typeof source.title === "string" ? source.title : "Чат GPT";
+        projectId = gptId(source.gizmo_id) ? source.gizmo_id : undefined;
+      } else {
+        const source = (await this.projects()).items.find((p) => p.id === nativeId);
+        if (!source) throw error("GPT_NOT_FOUND", "Проект не найден.", 404);
+        name = source.name;
+      }
+      if (kind !== "project" || action.action !== "archive")
+        await this.json("/library", { kind, id: nativeId, ...action });
+      this.library.save(kind, nativeId, {
+        name: action.action === "rename" ? action.name : name,
+        projectId,
+        changedAt: Date.now(),
+        ...(action.action === "rename" ? { renamed: true, nameCheckedAt: Date.now() } : {}),
+        ...(action.action === "archive" ? { archived: action.value } : {}),
+        ...(action.action === "delete" ? { deleted: true, archived: false } : {}),
+      });
+      if (kind === "project" && action.action === "delete") {
+        for (const child of this.library
+          .all()
+          .filter((e) => e.kind === "thread" && e.projectId === nativeId)) {
+          this.library.save("thread", child.id, { deleted: true, archived: false, name: "" });
+          this.historyCache.invalidate(child.id);
+          this.store.db.prepare("DELETE FROM gpt_jobs WHERE nativeId=?").run(child.id);
+        }
+      }
+      if (kind === "thread") {
+        this.historyCache.invalidate(nativeId);
+        if (action.action === "delete")
+          this.store.db.prepare("DELETE FROM gpt_jobs WHERE nativeId=?").run(nativeId);
+      }
+      return { ok: true };
+    } finally {
+      this.libraryBusy = false;
+      if (!this.stopped) void this.pump();
+    }
   }
   async models(): Promise<GptModels> {
     if (this.modelCache && (this.working || this.modelCache.expires > Date.now()))
@@ -244,6 +411,13 @@ export class GptService {
   enqueue(jobId: string, value: Input) {
     if (!this.available())
       throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
+    if (this.libraryBusy)
+      throw error("GPT_LIBRARY_BUSY", "Обновляем список чатов. Повтори отправку через секунду.");
+    if (value.nativeId) {
+      this.library.assertExists("thread", value.nativeId);
+      if (this.library.get("thread", value.nativeId)?.archived)
+        throw error("GPT_ARCHIVED", "Сначала разархивируй чат.");
+    }
     const fingerprint = createHash("sha256").update(JSON.stringify(value)).digest("hex");
     const existing = this.store.db
       .prepare("SELECT fingerprint FROM gpt_jobs WHERE id=?")
@@ -319,6 +493,7 @@ export class GptService {
   async pump() {
     if (
       this.working ||
+      this.libraryBusy ||
       this.stopped ||
       !this.available() ||
       this.jobs().some((job) => job.status === "unknown")
@@ -515,6 +690,29 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
   app.addHook("onReady", async () => {
     void service.pump();
   });
+  app.post("/api/library/gpt/:kind/:id", async (req) => {
+    const params = z.object({ kind: z.enum(["thread", "project"]), id }).parse(req.params),
+      action = entityAction.parse(req.body);
+    return store.once(
+      "library:gpt:" + params.kind + ":" + params.id,
+      uuid.parse(req.headers["idempotency-key"]),
+      action,
+      () => libraryMutation(() => service.manageEntity(params.kind, params.id, action)),
+    );
+  });
+  app.get("/api/library/gpt/archived", async (req) => {
+    const q = z
+      .object({ offset: z.coerce.number().int().min(0).max(100000).default(0) })
+      .parse(req.query);
+    const page = await service.catalog(q.offset, true);
+    return {
+      items: [
+        ...(!q.offset ? service.library.archived().filter((e) => e.kind === "project") : []),
+        ...page.items.map((t) => ({ ...t, kind: "thread", name: t.title })),
+      ],
+      nextOffset: page.nextOffset,
+    };
+  });
   app.get("/api/gpt/status", async () => ({
     configured: service.available(),
     ...(service.available() ? await service.json("/status") : {}),
@@ -525,11 +723,10 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
     const q = z
       .object({ offset: z.coerce.number().int().min(0).max(100000).default(0) })
       .parse(req.query);
-    return gptCatalog(await service.json("/catalog?offset=" + q.offset));
+    return service.catalog(q.offset);
   });
   app.get("/api/gpt/projects", async () => {
-    const data = await service.json("/projects");
-    return { items: gptProjects(data), conversations: gptProjectConversations(data) };
+    return service.projects();
   });
   app.get("/api/gpt/conversations/:id/messages", async (req) => {
     const p = z.object({ id }).parse(req.params),
@@ -552,6 +749,7 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
         "SELECT 1 FROM gpt_jobs WHERE nativeId=? AND status IN ('queued','preparing','running') LIMIT 1",
       )
       .get(p.id);
+    service.library.assertExists("thread", p.id);
     return service.historyCache.page(p.id, q, running ? 3000 : 15000);
   });
   app.get("/api/gpt/jobs", async (req) => {

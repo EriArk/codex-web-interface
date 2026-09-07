@@ -1,6 +1,10 @@
 import type { CSSProperties } from "react";
 
 const paths: Record<string, string[]> = {
+  pin: ["m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v7"],
+  edit: ["m4 16 12-12 4 4-12 12-5 1 1-5ZM14 6l4 4"],
+  archive: ["M3 3h18v5H3zM5 8v13h14V8M9 12h6"],
+  trash: ["M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"],
   file: ["M6 2h8l4 4v16H6zM14 2v5h5M9 11h6M9 15h6"],
   search: ["M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15ZM16 16l5 5"],
   "arrow-up": ["m6 10 6-6 6 6M12 4v16"],

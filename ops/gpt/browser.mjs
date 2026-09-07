@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import {readFileSync,mkdirSync,existsSync,unlinkSync} from 'node:fs';
 import {connect as connectSocket} from 'node:net';
 import {readAsset} from './browser-assets.mjs';
+import {mutateLibrary} from './browser-library.mjs';
 import {readModels,selectModels} from './browser-models.mjs';
 import {readJson,proxyBridge} from './bridge-proxy.mjs';
 import {timingSafeEqual} from 'node:crypto';
@@ -58,6 +59,16 @@ const server=createServer(async(req,res)=>{
   }catch{res.writeHead(503).end()}
   return;
  }
+ if(req.method==='POST'&&url.pathname==='/library'){
+  try{
+   const input=await readJson(req,4096);
+   const health=await(await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)})).json();
+   if(health.activeRequests?.length){res.writeHead(409).end('{}');return}
+   const result=await mutateLibrary(await activePage(),input);
+   res.writeHead(result.status,{'Content-Type':'application/json'}).end(JSON.stringify({ok:result.ok===true}));
+  }catch{res.writeHead(409,{'Content-Type':'application/json'}).end('{}')}
+  return;
+ }
  if(req.method==='POST'&&url.pathname==='/settings'){
   try{
    const settings=await readJson(req,4096);
@@ -68,7 +79,7 @@ const server=createServer(async(req,res)=>{
   }catch(error){console.error('GPT settings:',String(error?.message).slice(0,300));res.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'GPT_SETTINGS_NOT_CONFIRMED'}))}
   return;
  }
- if(req.method!=='GET'||!['/status','/catalog','/conversation','/bridge-health','/models','/projects','/active'].includes(url.pathname)){res.writeHead(404).end();return}
+ if(req.method!=='GET'||!['/status','/catalog','/conversation','/bridge-health','/models','/projects','/active','/pins','/project'].includes(url.pathname)){res.writeHead(404).end();return}
  const target=await activePage();
  res.setHeader('Content-Type','application/json');
  try{
@@ -88,14 +99,14 @@ const server=createServer(async(req,res)=>{
    res.statusCode=upstream.status;res.end(await upstream.text());return;
   }
   let path;
-  if(url.pathname==='/projects'){path='/backend-api/gizmos/snorlax/sidebar?conversations_per_gizmo=5'}else if(url.pathname==='/catalog'){
+  if(url.pathname==='/pins'){path='/backend-api/pins'}else if(url.pathname==='/projects'){path='/backend-api/gizmos/snorlax/sidebar?conversations_per_gizmo=5'}else if(url.pathname==='/catalog'){
    const offset=Number(url.searchParams.get('offset')??0);
    if(!Number.isSafeInteger(offset)||offset<0||offset>100000){res.writeHead(400).end('{}');return}
-   path='/backend-api/conversations?offset='+offset+'&limit=20&order=updated';
+   path='/backend-api/conversations?offset='+offset+'&limit=20&order=updated&is_archived='+(url.searchParams.get('archived')==='1'?'true':'false');
   }else{
    const id=url.searchParams.get('id')??'';
    if(!/^[a-z0-9-]{16,80}$/i.test(id)){res.writeHead(400).end('{}');return}
-   path='/backend-api/conversation/'+encodeURIComponent(id);
+   path=(url.pathname==='/project'?'/backend-api/gizmos/':'/backend-api/conversation/')+encodeURIComponent(id);
   }
   if(new URL(target.url()).origin!=='https://chatgpt.com'){res.writeHead(409).end(JSON.stringify({error:'GPT_LOGIN_REQUIRED'}));return}
   const result=await target.evaluate(async path=>{

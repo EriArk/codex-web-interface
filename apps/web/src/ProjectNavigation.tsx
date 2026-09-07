@@ -9,6 +9,7 @@ import {
 import { useEffect, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
 import { ClientPicker } from "./ClientPicker";
+import { EntityArchive, EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
 import type { Project, Thread } from "./types";
 
@@ -52,6 +53,8 @@ export function ProjectNavigation({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const metadata = new Map((activity.library ?? []).map((e) => [e.kind + e.id, e]));
+  projects = projects.map((p) => ({ ...p, ...metadata.get("project" + p.id) }));
   const selected = projects.find((p) => p.id === projectId);
   const projectActivity = new Map(activity.projects.map((p) => [p.id, p]));
   const threadActivity = new Map(activity.threads.map((t) => [t.id, t]));
@@ -76,15 +79,51 @@ export function ProjectNavigation({
     };
   const groups = { ...threadGroups };
   for (const p of projects) {
-    const list = new Map((groups[p.id] ?? []).map((t) => [t.id, t]));
+    const list = new Map(
+      (groups[p.id] ?? [])
+        .filter(
+          (t) =>
+            !metadata.get("thread" + t.id)?.archived && !metadata.get("thread" + t.id)?.deleted,
+        )
+        .map((t) => [
+          t.id,
+          {
+            ...t,
+            pinned: metadata.has("thread" + t.id)
+              ? metadata.get("thread" + t.id)?.pinned === true
+              : t.pinned,
+          },
+        ]),
+    );
     for (const t of activity.threads)
-      if (t.projectId === p.id) list.set(t.id, { ...list.get(t.id), ...t });
-    if (list.size)
-      groups[p.id] = [...list.values()].sort((a, b) => compareThreadActivity(detail(a), detail(b)));
+      if (
+        t.projectId === p.id &&
+        !metadata.get("thread" + t.id)?.archived &&
+        !metadata.get("thread" + t.id)?.deleted
+      )
+        list.set(t.id, {
+          ...list.get(t.id),
+          ...t,
+          pinned: metadata.has("thread" + t.id)
+            ? metadata.get("thread" + t.id)?.pinned === true
+            : list.get(t.id)?.pinned,
+        });
+    groups[p.id] = [...list.values()].sort(
+      (a, b) =>
+        Number(["running", "starting", "waiting_approval"].includes(detail(b).status)) -
+          Number(["running", "starting", "waiting_approval"].includes(detail(a).status)) ||
+        Number(!!b.pinned) - Number(!!a.pinned) ||
+        compareThreadActivity(detail(a), detail(b)),
+    );
   }
   const folders = projects
-    .filter((p) => !p.unassigned)
-    .sort((a, b) => compareActivity(summary(a), summary(b)));
+    .filter((p) => !p.unassigned && !p.archived && !p.deleted)
+    .sort(
+      (a, b) =>
+        Number(summary(b).active > 0) - Number(summary(a).active > 0) ||
+        Number(!!b.pinned) - Number(!!a.pinned) ||
+        compareActivity(summary(a), summary(b)),
+    );
   const standalone = projects.filter((p) => p.unassigned);
   const matches = (text: string) =>
     text.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
@@ -110,24 +149,36 @@ export function ProjectNavigation({
     const status = detail(t);
     const active = ["running", "starting", "waiting_approval"].includes(status.status);
     return (
-      <button
-        type="button"
-        className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
-        key={t.id}
-        disabled={busy}
-        onClick={() => onThread(t.id, t.projectId)}
-        aria-current={threadId === t.id ? "page" : undefined}
-        data-thread-id={t.id}
-      >
-        <Icon name="chat" size={17} />
-        <span>{t.title}</span>
-        <ActivityBadge
-          active={Number(active)}
-          waiting={Number(status.status === "waiting_approval")}
-          unread={Number(hasUnreadCompletion(status))}
-          failed={status.completedStatus !== "completed"}
+      <div className={"entity-row " + (threadId === t.id ? "selected" : "")} key={t.id}>
+        <button
+          type="button"
+          className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
+          disabled={busy}
+          onClick={() => onThread(t.id, t.projectId)}
+          aria-current={threadId === t.id ? "page" : undefined}
+          data-thread-id={t.id}
+        >
+          <Icon name={t.pinned ? "pin" : "chat"} size={17} />
+          <span>{t.title}</span>
+          <ActivityBadge
+            active={Number(active)}
+            waiting={Number(status.status === "waiting_approval")}
+            unread={Number(hasUnreadCompletion(status))}
+            failed={status.completedStatus !== "completed"}
+          />
+        </button>
+        <EntityMenu
+          client="codex"
+          entity={{
+            id: t.id,
+            kind: "thread",
+            name: t.title,
+            projectId: t.projectId,
+            pinned: t.pinned,
+          }}
+          active={active}
         />
-      </button>
+      </div>
     );
   };
   const threadList = (p: Project) => {
@@ -268,40 +319,47 @@ export function ProjectNavigation({
               const open = expanded.has(p.id) || !!query.trim();
               return (
                 <div className="nav-project-group" key={p.id}>
-                  <button
-                    type="button"
-                    className={`nav-project ${projectId === p.id ? "selected" : ""}`}
-                    disabled={busy}
-                    aria-expanded={open}
-                    data-project-id={p.id}
-                    onClick={() => {
-                      setExpanded((old) => {
-                        const next = new Set(old);
-                        if (next.has(p.id)) next.delete(p.id);
-                        else next.add(p.id);
-                        return next;
-                      });
-                      if (!open) void load(p.id);
-                    }}
-                  >
-                    <span
-                      className={`folder-icon folder-${projects.findIndex((item) => item.id === p.id) % 5}`}
+                  <div className={"entity-row " + (projectId === p.id ? "selected" : "")}>
+                    <button
+                      type="button"
+                      className={`nav-project ${projectId === p.id ? "selected" : ""}`}
+                      disabled={busy}
+                      aria-expanded={open}
+                      data-project-id={p.id}
+                      onClick={() => {
+                        setExpanded((old) => {
+                          const next = new Set(old);
+                          if (next.has(p.id)) next.delete(p.id);
+                          else next.add(p.id);
+                          return next;
+                        });
+                        if (!open) void load(p.id);
+                      }}
                     >
-                      <Icon name="folder" />
-                    </span>
-                    <span>
-                      {p.name}
-                      <small>{p.machineName}</small>
-                    </span>
-                    <ActivityBadge
-                      active={summary(p).active}
-                      unread={summary(p).unread}
-                      waiting={summary(p).waiting}
+                      <span
+                        className={`folder-icon folder-${projects.findIndex((item) => item.id === p.id) % 5}`}
+                      >
+                        <Icon name={p.pinned ? "pin" : "folder"} />
+                      </span>
+                      <span>
+                        {p.name}
+                        <small>{p.machineName}</small>
+                      </span>
+                      <ActivityBadge
+                        active={summary(p).active}
+                        unread={summary(p).unread}
+                        waiting={summary(p).waiting}
+                      />
+                      <span className="project-chevron" data-open={open}>
+                        <Icon name="chevron" size={15} />
+                      </span>
+                    </button>
+                    <EntityMenu
+                      client="codex"
+                      entity={{ id: p.id, kind: "project", name: p.name, pinned: p.pinned }}
+                      active={summary(p).active > 0}
                     />
-                    <span className="project-chevron" data-open={open}>
-                      <Icon name="chevron" size={15} />
-                    </span>
-                  </button>
+                  </div>
                   {open && threadList(p)}
                 </div>
               );
@@ -317,14 +375,19 @@ export function ProjectNavigation({
         </section>
         <section className="nav-threads">
           <div className="nav-label">Без проекта</div>
-          <p className="nav-section-help">
-            Отдельные чаты. Диалоги проектов раскрываются во вкладке «Проекты».
-          </p>
           <section className="standalone-thread-list" aria-label="Диалоги без проекта">
             {standalone
               .flatMap((p) => groups[p.id] ?? [])
               .filter((t) => matches(t.title))
-              .sort((a, b) => compareThreadActivity(detail(a), detail(b)))
+              .sort(
+                (a, b) =>
+                  Number(["running", "starting", "waiting_approval"].includes(detail(b).status)) -
+                    Number(
+                      ["running", "starting", "waiting_approval"].includes(detail(a).status),
+                    ) ||
+                  Number(!!b.pinned) - Number(!!a.pinned) ||
+                  compareThreadActivity(detail(a), detail(b)),
+              )
               .map(renderThread)}
             {standalone.map((p) => (
               <button
@@ -343,6 +406,7 @@ export function ProjectNavigation({
         </section>
       </div>
       <div className="nav-bottom">
+        <EntityArchive client="codex" />
         <div className="machine-indicator">
           <span className={`status-dot ${machine}`} />
           <span>

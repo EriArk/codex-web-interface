@@ -319,3 +319,14 @@ Before mobile support is considered complete, the same core workflow must also w
 - The explicit Settings handoff must also open and maximize the installed Codex desktop app after its Hub writers are released. Pass the selected conversation through its native local thread link when available.
 - Extend the existing fixed interactive Scheduled Task with Open; never stop processes for Open, accept caller URLs/commands or acquire a writer automatically. Only a Hub-resolved native UUID may identify a conversation. Keep failure visible and allow an explicit retry.
 - Continue verifying desktop effects with simulated processes and harmless window probes, without exercising handoff on the owner's active conversation.
+
+
+## Owner-requested navigation actions (2026-09-07)
+
+- Codex and GPT share a small, always touch-accessible per-project/per-chat action menu. Order: Pin, Rename, Archive, Delete. Pin and Archive change to Unpin and Unarchive when applicable.
+- Delete is red and requires a separate confirmation naming the selected object. A Codex project deletion removes native grouping and leaves source directories and conversations intact; ChatGPT project deletion uses its native destructive semantics and the confirmation names its chats/files.
+- Use native rename/archive/delete operations and native ChatGPT pins. Installed Codex 0.153.4 has no thread pin operation; persist its pins on the Hub across devices. Whole-project archives are Hub presentation preferences in both modes.
+- Provide an explicit Archive view with restoration. Keep active work ahead of pinned inactive entries. Mutations must update other clients and must not replay sends or interrupt active work.
+- Preserve ChatGPT project instructions and appearance when renaming through its current PATCH contract. Native pin limits remain enforced; never unpin another item automatically.
+- Existing Codex project creation must remain available for creating a folder or connecting an existing folder.
+- Match the GPT mobile navigation geometry to Codex, including anchors, and correct demonstrated visual inconsistencies without a separate theme/device implementation.

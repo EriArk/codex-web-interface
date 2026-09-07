@@ -347,7 +347,7 @@
 :root[data-theme="classic-dark"] :is(.folder-icon, .project-bookmark) {
   color: var(--muted);
 }
-:root[data-theme="classic-dark"] :is(.nav-project.selected, .mobile-tabs > button.active) {
+:root[data-theme="classic-dark"] :is(.nav-project.selected, .mobile-tabs > :is(button, a).active) {
   background: var(--soft);
   color: var(--accent);
   box-shadow: inset 0 0 0 1px #46556c;
@@ -542,7 +542,7 @@
 :root[data-theme="hitech-2000s"]
   :is(
     .nav-project.selected,
-    .mobile-tabs > button.active,
+    .mobile-tabs > :is(button, a).active,
     .support-tabs button.active,
     .nav-mobile-switch button.active
   ) {
@@ -669,7 +669,7 @@
   :root[data-theme="organizer"] .mobile-tabs {
     background: linear-gradient(#f5f3e9, #eae7dc);
   }
-  :root[data-theme="organizer"] .mobile-tabs > button.active {
+  :root[data-theme="organizer"] .mobile-tabs > :is(button, a).active {
     box-shadow: inset 0 2px #93ae91;
     border-radius: 6px;
   }

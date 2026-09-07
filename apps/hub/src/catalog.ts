@@ -8,6 +8,7 @@ import {
   type ProjectConfig,
   turnSettingsSchema,
 } from "@codex-web/shared";
+import { type EntityAction, Library } from "./library.js";
 import { displayUserText, NativeImages } from "./nativeImages.js";
 import { Previews } from "./previews.js";
 import type { MessageRecord, Store, ThreadRecord } from "./store.js";
@@ -50,6 +51,7 @@ export class Catalog {
   private threadRefresh = new Map<string, { at: number; pending?: Promise<void> }>();
   private pages = new Map<string, { until: number; value: Promise<HistoryPage> }>();
   readonly projectSupport = new Map<string, boolean>();
+  readonly library: Library;
   readonly images: NativeImages;
   readonly previews: Previews;
   readonly errors = new Map<string, string>();
@@ -58,6 +60,7 @@ export class Catalog {
     readonly store: Store,
     private connect: (machineId: string) => Promise<CodexClient>,
   ) {
+    this.library = new Library(store, "codex");
     this.images = new NativeImages(config, store, (threadId) => {
       const thread = store.thread(threadId),
         project = this.projects().find((p) => p.id === thread.projectId);
@@ -238,6 +241,9 @@ export class Catalog {
       return {
         id: p.id,
         name: p.name,
+        pinned: this.library.get("project", p.id)?.pinned === true,
+        archived: this.library.get("project", p.id)?.archived === true,
+        deleted: this.library.get("project", p.id)?.deleted === true,
         unassigned: p.unassigned === true,
         machineId: machine.id,
         machineName: machine.name,
@@ -332,6 +338,76 @@ export class Catalog {
     this.refreshed = 0;
     return this.publicProjects().find((p) => p.id === project.id);
   }
+  async changeProject(id: string, action: EntityAction) {
+    if (this.refreshing) await this.refreshing;
+    const p = this.projects().find((p) => p.id === id && !p.unassigned);
+    if (!p) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект не найден");
+    this.library.assertExists("project", id);
+    if (action.action === "pin" || action.action === "archive") {
+      return this.library.save("project", id, {
+        name: p.name,
+        [action.action === "pin" ? "pinned" : "archived"]: action.value,
+      });
+    }
+    if (!p.sourceId)
+      throw new HubError(
+        409,
+        "NATIVE_PROJECT_REQUIRED",
+        "Сначала обнови список проектов с компьютера.",
+      );
+    const rpc = await this.connect(p.machineId);
+    if (action.action === "rename") {
+      const result = await rpc.request("project/update", {
+        projectId: p.sourceId,
+        name: action.name,
+      });
+      if (!this.saveProject(this.machine(p.machineId), obj(result.project)))
+        throw new HubError(502, "PROJECT_UPDATE_FAILED", "Codex не подтвердил название.");
+      this.library.save("project", id, { name: action.name });
+    } else {
+      await rpc.request("project/delete", { projectId: p.sourceId });
+      this.library.save("project", id, { name: p.name, deleted: true, archived: false });
+      // Deleting a Codex project removes its grouping, never its source directory.
+      this.store.db
+        .prepare("UPDATE threads SET projectId=? WHERE projectId=?")
+        .run("unassigned-" + p.machineId, id);
+    }
+    this.refreshed = 0;
+    this.store.changes.emit("navigation");
+  }
+  async archivedThreads(machineId: string, cursor?: string) {
+    const rpc = await this.connect(machineId);
+    const page = await rpc.request("thread/list", {
+      archived: true,
+      limit: 20,
+      sortKey: "updated_at",
+      ...(cursor ? { cursor } : {}),
+    });
+    const items = [];
+    for (const raw of array(page.data)) {
+      if (raw.ephemeral || raw.parentThreadId || this.library.get("thread", str(raw.id))?.deleted)
+        continue;
+      const existing = this.store.threadByCodex(str(raw.id));
+      const owner =
+        this.projects().find((p) =>
+          existing
+            ? p.id === existing.projectId
+            : p.machineId === machineId && p.sourceId === raw.projectId,
+        ) ?? this.projects().find((p) => p.machineId === machineId && p.unassigned);
+      if (!owner) continue;
+      const t = this.importThread(owner, raw);
+      this.store.db.prepare("UPDATE threads SET archived=1 WHERE id=?").run(t.id);
+      items.push({
+        id: t.id,
+        kind: "thread" as const,
+        name: str(raw.name) || t.title,
+        projectId: t.projectId,
+        archived: true,
+        pinned: this.library.get("thread", t.codexThreadId)?.pinned === true,
+      });
+    }
+    return { items, nextCursor: typeof page.nextCursor === "string" ? page.nextCursor : null };
+  }
   async syncThreads(machineId: string, force = false): Promise<void> {
     const cache = this.threadRefresh.get(machineId);
     if (cache?.pending) return cache.pending;
@@ -339,7 +415,10 @@ export class Catalog {
     const pending = (async () => {
       const rpc = await this.connect(machineId),
         machine = this.machine(machineId);
-      const projects = this.projects().filter((p) => p.machineId === machineId && !p.unassigned);
+      const projects = this.projects().filter(
+        (p) =>
+          p.machineId === machineId && !p.unassigned && !this.library.get("project", p.id)?.deleted,
+      );
       let cursor: unknown;
       const seen = new Set<string>();
       for (let n = 0; n < 30; n++) {
@@ -354,7 +433,13 @@ export class Catalog {
           if (raw.ephemeral || raw.parentThreadId) continue;
           const cwd = str(raw.cwd, 2048),
             sourceId = str(raw.id, 100);
-          if (!sourceId || !cwd || seen.has(sourceId)) continue;
+          if (
+            !sourceId ||
+            !cwd ||
+            seen.has(sourceId) ||
+            this.library.get("thread", sourceId)?.deleted
+          )
+            continue;
           seen.add(sourceId);
           const path = this.pathKey(machine, cwd);
           const project =
@@ -384,6 +469,9 @@ export class Catalog {
     return pending;
   }
   importThread(project: CatalogProject, raw: Record<string, unknown>): ThreadRecord {
+    if (this.library.get("project", project.id)?.deleted)
+      project =
+        this.projects().find((p) => p.machineId === project.machineId && p.unassigned) ?? project;
     const codexId = str(raw.id, 100),
       cwd = this.absolute(
         this.machine(project.machineId),
