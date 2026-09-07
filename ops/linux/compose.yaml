@@ -57,6 +57,9 @@ services:
     build:
       context: ../gpt
     container_name: codex-web-gpt-connect
+    environment:
+      GPT_UPLOAD_MAX_BYTES: ${GPT_UPLOAD_MAX_BYTES:-2147483648}
+      GPT_ARTIFACT_MAX_BYTES: ${GPT_ARTIFACT_MAX_BYTES:-8589934592}
     hostname: codex-web-gpt
     restart: unless-stopped
     init: true

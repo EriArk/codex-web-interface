@@ -26,6 +26,7 @@ import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.
 import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
+import { storageReport } from "./storage.js";
 import { Store } from "./store.js";
 
 const idSchema = z.string().min(1).max(100);
@@ -66,7 +67,7 @@ export async function createApp(
   const store = options.store ?? new Store(config.hub.databasePath);
   const sessions = options.sessions ?? new Sessions(config, store);
   const auth = new Auth(config, store);
-  const artifacts = new Artifacts(config.hub.resultsPath, store);
+  const artifacts = new Artifacts(config.hub.resultsPath, store, config.hub.storage.artifactBytes);
   await auth.prepare(options.setupToken);
   await app.register(cookie);
   await app.register(helmet, {
@@ -147,6 +148,17 @@ export async function createApp(
   registerNavigation(app, store, sessions, auth, sockets);
   registerQueue(app, sessions, store);
   registerDesktop(app, config, store, sessions, options.desktopTransport);
+  let storageCache: { until: number; pending: ReturnType<typeof storageReport> } | undefined;
+  app.get("/api/storage", async () => {
+    if (!storageCache || storageCache.until < Date.now()) {
+      const pending = storageReport(config, store.db);
+      storageCache = { until: Date.now() + 60000, pending };
+      void pending.catch(() => {
+        if (storageCache?.pending === pending) storageCache = undefined;
+      });
+    }
+    return storageCache.pending;
+  });
   app.get("/api/health", async () => ({ ok: true }));
   app.post(
     "/api/auth/login",

@@ -1911,3 +1911,34 @@ hr.pane-divider {
     display: none;
   }
 }
+
+.storage-usage {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 12px;
+}
+.storage-usage summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+.storage-usage dl {
+  margin: 0 0 12px;
+}
+.storage-usage dl > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 0.9rem;
+}
+.storage-usage dt {
+  min-width: 0;
+}
+.storage-usage dd {
+  margin: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

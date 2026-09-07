@@ -57,6 +57,32 @@ export class GptService {
   private readonly lifetime = new AbortController();
   private completion = Promise.resolve();
   private releaseCompletion: (() => void) | undefined;
+  private releasingUploads = false;
+  private storageTimer = setInterval(() => {
+    if (!this.working) void this.releaseCompletedUploads();
+  }, 60000).unref();
+  async releaseCompletedUploads() {
+    if (this.stopped || !this.available() || this.releasingUploads) return;
+    this.releasingUploads = true;
+    try {
+      const rows = this.store.db
+        .prepare(
+          "SELECT s.jobId,s.fileId FROM gpt_staged_uploads s JOIN gpt_jobs j ON j.id=s.jobId WHERE j.status='completed' ORDER BY s.createdAt LIMIT 8",
+        )
+        .all();
+      if (!rows.length) return;
+      const result = await this.json("/uploads/release", { ids: rows.map((row) => row.fileId) });
+      if (this.stopped || result.ok !== true) return;
+      for (const row of rows)
+        this.store.db
+          .prepare("DELETE FROM gpt_staged_uploads WHERE jobId=? AND fileId=?")
+          .run(String(row.jobId), String(row.fileId));
+    } catch {
+      /* Retain receipts and retry only cleanup, never the prompt. */
+    } finally {
+      this.releasingUploads = false;
+    }
+  }
   private recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   private connectionCache: { value: GptConnection; until: number } | undefined;
   private compatibilityFailure = false;
@@ -436,11 +462,6 @@ export class GptService {
       throw error("GPT_INVALID_FILENAME", "Проверь имя файла.", 400);
     if (!bytes.length || bytes.length > 25 * 1024 * 1024)
       throw error("GPT_FILE_TOO_LARGE", "Файл должен быть меньше 25 МБ.", 413);
-    const total = Number(
-      this.store.db.prepare("SELECT COALESCE(SUM(bytes),0) AS total FROM gpt_uploads").get()?.total,
-    );
-    if (total + bytes.length > 2 * 1024 ** 3)
-      throw error("GPT_STORAGE_FULL", "Хранилище вложений GPT заполнено.", 507);
     let mime = "application/octet-stream",
       image = false;
     if (/\.(png|jpe?g|webp|gif|avif|heic|heif|tiff?)$/i.test(name)) {
@@ -462,6 +483,11 @@ export class GptService {
       name = name.replace(/\.[^.]+$/, ".jpg");
     } else if (/\.txt$/i.test(name)) mime = "text/plain";
     else if (/\.pdf$/i.test(name)) mime = "application/pdf";
+    const total = Number(
+      this.store.db.prepare("SELECT COALESCE(SUM(bytes),0) AS total FROM gpt_uploads").get()?.total,
+    );
+    if (total + bytes.length > this.config.hub.storage.gptUploadBytes)
+      throw error("GPT_STORAGE_FULL", "Хранилище вложений GPT заполнено.", 507);
     const fileId = randomUUID();
     writeFileSync(join(this.root, fileId), bytes, { mode: 0o600, flag: "wx" });
     this.store.db
@@ -563,7 +589,10 @@ export class GptService {
     const next = this.store.db
       .prepare("SELECT id FROM gpt_jobs WHERE status='queued' ORDER BY createdAt LIMIT 1")
       .get();
-    if (!next) return;
+    if (!next) {
+      await this.releaseCompletedUploads();
+      return;
+    }
     this.working = true;
     this.completion = new Promise((resolve) => {
       this.releaseCompletion = resolve;
@@ -611,6 +640,9 @@ export class GptService {
         if (!gptId(data.file?.id))
           throw error("GPT_UPLOAD_FAILED", "Не удалось подготовить вложение.");
         files.push(data.file.id);
+        this.store.db
+          .prepare("INSERT OR IGNORE INTO gpt_staged_uploads VALUES(?,?,?)")
+          .run(jobId, data.file.id, Date.now());
       }
       if (this.job(jobId).status === "cancelled") return;
       dispatched = true;
@@ -748,6 +780,8 @@ export class GptService {
     } finally {
       if (monitor) clearInterval(monitor);
       streamController.abort();
+      if (!this.stopped && done && this.job(jobId).status === "completed")
+        await this.releaseCompletedUploads();
       this.working = false;
       this.releaseCompletion?.();
       if (!this.stopped) {
@@ -763,6 +797,7 @@ export class GptService {
   async close() {
     this.stopped = true;
     clearTimeout(this.recoveryTimer);
+    clearInterval(this.storageTimer);
     this.lifetime.abort();
     await this.completion;
   }

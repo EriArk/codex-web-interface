@@ -68,7 +68,11 @@ export class Sessions extends EventEmitter {
       new CodexClient(spawnCodex(m, cwd)),
   ) {
     super();
-    this.attachments = new Attachments(join(config.hub.resultsPath, "uploads"), store);
+    this.attachments = new Attachments(
+      join(config.hub.resultsPath, "uploads"),
+      store,
+      config.hub.storage.attachmentBytes,
+    );
     this.catalog = new Catalog(config, store, async (machineId) => {
       const seed =
         config.projects.find((p) => p.machineId === machineId && p.enabled) ??

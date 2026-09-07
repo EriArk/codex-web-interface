@@ -3,7 +3,13 @@ import { createReadStream, mkdirSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stageAttachment } from "@codex-web/machines";
-import { type Attachment, type HubConfig, HubError, NotSubmittedError } from "@codex-web/shared";
+import {
+  type Attachment,
+  defaultStoragePolicy,
+  type HubConfig,
+  HubError,
+  NotSubmittedError,
+} from "@codex-web/shared";
 import sharp from "sharp";
 import type { Store } from "./store.js";
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -17,6 +23,7 @@ export class Attachments {
   constructor(
     readonly root: string,
     readonly store: Store,
+    readonly maxBytes = defaultStoragePolicy.attachmentBytes,
   ) {
     mkdirSync(root, { recursive: true, mode: 0o700 });
   }
@@ -71,7 +78,7 @@ export class Attachments {
             ?.total,
         ) +
           bytes.length >
-        2 * 1024 ** 3
+        this.maxBytes
       )
         throw new HubError(507, "ATTACHMENT_STORAGE_FULL", "Хранилище вложений заполнено");
       const id = randomUUID();

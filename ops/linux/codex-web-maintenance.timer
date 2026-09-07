@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly Codex Web storage maintenance
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+RandomizedDelaySec=10min
+Persistent=true
+Unit=codex-web-maintenance.service
+[Install]
+WantedBy=timers.target
