@@ -19,7 +19,7 @@ foreach ($sid in @($identity.User,[Security.Principal.SecurityIdentifier]::new('
     $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow'))
 }
 Set-Acl -LiteralPath $targetDirectory -AclObject $acl
-foreach ($file in @('CodexDesktopControl.ps1','desktop-activity.cjs')) {
+foreach ($file in @('CodexDesktopControl.ps1','desktop-activity.cjs','DesktopWindow.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $targetDirectory $file) -Force
 }
 $config=@{packageFamily=$package[0].PackageFamilyName;userSid=$identity.User.Value;nodeCommand=[IO.Path]::GetFullPath($NodeCommand);codexHome=[IO.Path]::GetFullPath($CodexHome)}

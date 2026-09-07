@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Status','Restart','ForceRestart','ForceRelease','Probe','Run')][string]$Action='Status',
-    [string]$RequestId
+    [ValidateSet('Status','Open','Restart','ForceRestart','ForceRelease','Probe','Run')][string]$Action='Status',
+    [string]$RequestId,
+    [string]$ThreadId
 )
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
@@ -9,6 +10,7 @@ $controlRoot=[IO.Path]::GetFullPath($PSScriptRoot)
 $config=Get-Content -LiteralPath (Join-Path $controlRoot 'config.json') -Raw | ConvertFrom-Json
 $currentPath=Join-Path $controlRoot 'current.json'
 $taskName='CodexWebDesktopRestart'
+. (Join-Path $controlRoot 'DesktopWindow.ps1')
 function Save-Operation($value) {
     $temporary=Join-Path $controlRoot 'current.tmp'
     [IO.File]::WriteAllText($temporary,($value | ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
@@ -48,6 +50,23 @@ function Get-State([switch]$SkipActivity) {
 function Complete-Operation($operation,[string]$state,[string]$code) {
     $operation.state=$state; $operation.code=$code; Save-Operation $operation
 }
+function Open-Desktop($desktop,$operation,[int]$session) {
+    # Launching a second instance forwards this validated local link to the existing app.
+    # No arbitrary URL, command, prompt or process ID is accepted from the caller.
+    if ($operation.threadId -and $operation.threadId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { throw 'DESKTOP_INVALID_REQUEST' }
+    $arguments=@{FilePath=$desktop.exe;WorkingDirectory=(Split-Path -Parent $desktop.exe);WindowStyle='Maximized'}
+    if ($operation.threadId) { $arguments.ArgumentList=@('codex://threads/'+$operation.threadId) }
+    Start-Process @arguments | Out-Null
+    $deadline=[DateTime]::UtcNow.AddSeconds(25)
+    $window=$null
+    do {
+        Start-Sleep -Milliseconds 350
+        $processes=@((Get-Desktop).processes | Where-Object SessionId -EQ $session)
+        if ($processes.Count) { $window=Show-DesktopWindow -ProcessIds @($processes | ForEach-Object ProcessId) }
+    } while (-not $window -and [DateTime]::UtcNow -lt $deadline)
+    if (-not $window) { throw 'DESKTOP_WINDOW_UNAVAILABLE' }
+    Complete-Operation $operation 'completed' $(if ($window.foreground) { 'DESKTOP_OPENED' } else { 'DESKTOP_OPENED_BACKGROUND' })
+}
 function Run-Operation {
     $operation=Read-Operation
     if (-not $operation -or $operation.state -ne 'queued') { return }
@@ -59,6 +78,11 @@ function Run-Operation {
         if ($session -eq 0) { throw 'DESKTOP_INTERACTIVE_SESSION_REQUIRED' }
         $desktop=Get-Desktop
         if (@($desktop.processes | Where-Object SessionId -NE $session).Count) { throw 'DESKTOP_OTHER_SESSION' }
+        if ($operation.kind -eq 'open') {
+            Complete-Operation $operation 'restarting' ''
+            Open-Desktop $desktop $operation $session
+            return
+        }
         $force=$operation.kind -in @('forcerestart','forcerelease')
         $release=$operation.kind -eq 'forcerelease'
         $activity=if ($force) { @{active=0} } else { Get-Activity }
@@ -116,22 +140,24 @@ try {
     if ($Action -eq 'Status') { Get-State | ConvertTo-Json -Compress -Depth 4; exit 0 }
     if ($Action -eq 'Run') { Run-Operation; exit 0 }
     if ($RequestId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { throw 'DESKTOP_INVALID_REQUEST' }
+    if ($ThreadId -and ($Action -ne 'Open' -or $ThreadId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')) { throw 'DESKTOP_INVALID_REQUEST' }
     $lock=[IO.File]::Open((Join-Path $controlRoot 'request.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
     try {
         $operation=Read-Operation
         if ($operation -and $operation.id -eq $RequestId) { Get-State | ConvertTo-Json -Compress -Depth 4; exit 0 }
         $task=Get-ScheduledTask -TaskName $taskName
         if ($task.State -eq 'Running') { throw 'DESKTOP_RESTART_PENDING' }
-        if ($operation -and [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()-$operation.requestedAt -lt 60) { throw 'DESKTOP_RESTART_COOLDOWN' }
-        $state=Get-State -SkipActivity:($Action -in @('ForceRestart','ForceRelease'))
-        if ($Action -notin @('ForceRestart','ForceRelease') -and -not $state.activityKnown) { throw 'DESKTOP_ACTIVITY_UNAVAILABLE' }
+        if ($operation -and $Action -ne 'Open' -and $operation.kind -ne 'open' -and [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()-$operation.requestedAt -lt 60) { throw 'DESKTOP_RESTART_COOLDOWN' }
+        $state=Get-State -SkipActivity:($Action -in @('Open','ForceRestart','ForceRelease'))
+        if ($Action -notin @('Open','ForceRestart','ForceRelease') -and -not $state.activityKnown) { throw 'DESKTOP_ACTIVITY_UNAVAILABLE' }
         if ($Action -eq 'Restart' -and $state.activeTasks -gt 0) { throw 'DESKTOP_BUSY' }
         $operation=[pscustomobject]@{id=$RequestId;kind=$Action.ToLowerInvariant();state='queued';code='';requestedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
+        if ($ThreadId) { $operation | Add-Member NoteProperty threadId $ThreadId }
         Save-Operation $operation
         try { Start-ScheduledTask -TaskName $taskName } catch {
             Complete-Operation $operation 'failed' 'DESKTOP_TASK_START_FAILED'; throw 'DESKTOP_TASK_START_FAILED'
         }
-        Get-State -SkipActivity:($Action -in @('ForceRestart','ForceRelease')) | ConvertTo-Json -Compress -Depth 4
+        Get-State -SkipActivity:($Action -in @('Open','ForceRestart','ForceRelease')) | ConvertTo-Json -Compress -Depth 4
     } finally { $lock.Dispose() }
 } catch {
     $code=[string]$_.Exception.Message

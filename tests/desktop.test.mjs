@@ -42,8 +42,21 @@ async function fixture() {
       operation: null,
     },
     failure = false;
-  const transport = async (_m, action, id) => {
-    calls.push({ action, id });
+  const transport = async (_m, action, id, threadId) => {
+    calls.push({ action, id, threadId, client: store.preferences().machineClients?.pc });
+    if (action === "Open") {
+      state = {
+        ...state,
+        operation: {
+          id,
+          kind: "open",
+          state: "completed",
+          code: "DESKTOP_OPENED",
+          requestedAt: Date.now() / 1000,
+        },
+      };
+      if (failure) throw failure === true ? Error("lost acknowledgement") : failure;
+    }
     if (["Restart", "ForceRelease"].includes(action)) {
       state = {
         ...state,
@@ -275,7 +288,7 @@ test("handoff endpoint is authenticated, rejects unrelated fields and requires e
     }
     assert.deepEqual(
       f.calls.map((c) => c.action),
-      ["Status"],
+      ["Open", "Status"],
     );
   } finally {
     await f.close();
@@ -408,6 +421,100 @@ test("a definite native cooldown rejection clears pending return immediately", a
     assert.equal(r.statusCode, 409);
     assert.deepEqual(f.store.preferences().desktopReturns, {});
     assert.equal(f.store.preferences().machineClients.pc, "desktop");
+  } finally {
+    await f.close();
+  }
+});
+
+test("handoff opens the selected native thread after release, once, and accepts no arbitrary URL", async () => {
+  const f = await fixture();
+  try {
+    const native = randomUUID(),
+      t = f.store.createThread("p", native, "Handoff");
+    const key = randomUUID(),
+      body = { client: "desktop", threadId: t.id };
+    for (let i = 0; i < 2; i++) {
+      const result = await clientRequest(f, body, key);
+      assert.equal(result.statusCode, 200, result.body);
+      assert.equal(result.json().operation.kind, "open");
+    }
+    assert.deepEqual(
+      f.calls.filter((c) => c.action === "Open"),
+      [{ action: "Open", id: key, threadId: native, client: "desktop" }],
+    );
+    for (const extra of [
+      { threadId: "codex://threads/invalid" },
+      { url: "https://evil.test" },
+      { command: "calc.exe" },
+    ])
+      assert.equal((await clientRequest(f, { client: "desktop", ...extra })).statusCode, 400);
+    assert.equal(
+      (await clientRequest(f, { client: "desktop", threadId: randomUUID() })).statusCode,
+      404,
+    );
+    const unrelated = f.store.createThread("different-machine-project", randomUUID(), "Other");
+    assert.equal(
+      (await clientRequest(f, { client: "desktop", threadId: unrelated.id })).statusCode,
+      400,
+    );
+    assert.equal(f.calls.filter((c) => c.action === "Open").length, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("active handoff cannot open the desktop before work has stopped", async () => {
+  const f = await fixture();
+  try {
+    const t = f.store.createThread("p", randomUUID(), "Active");
+    f.store.setStatus(t.id, "running", "turn");
+    assert.equal((await clientRequest(f, { client: "desktop", threadId: t.id })).statusCode, 409);
+    assert.equal(f.calls.filter((c) => c.action === "Open").length, 0);
+    assert.notEqual(f.store.preferences().machineClients?.pc, "desktop");
+  } finally {
+    await f.close();
+  }
+});
+
+test("an unconfirmed open preserves desktop ownership, never replays and blocks return until resolved", async () => {
+  const f = await fixture();
+  try {
+    f.fail();
+    const key = randomUUID(),
+      body = { client: "desktop" };
+    assert.equal((await clientRequest(f, body, key)).statusCode, 500);
+    assert.equal(f.store.preferences().machineClients.pc, "desktop");
+    assert.equal((await clientRequest(f, body, key)).statusCode, 409);
+    f.set({
+      running: false,
+      operation: {
+        id: key,
+        kind: "open",
+        state: "queued",
+        code: "",
+        requestedAt: Date.now() / 1000,
+      },
+    });
+    for (const next of [
+      { client: "web" },
+      { client: "web", releaseDesktop: true, confirmStopTasks: true },
+    ]) {
+      const r = await clientRequest(f, next);
+      assert.equal(r.statusCode, 409);
+      assert.equal(r.json().error.code, "HANDOFF_PENDING");
+    }
+    assert.equal(f.calls.filter((c) => c.action === "ForceRelease").length, 0);
+    f.set({
+      operation: {
+        id: key,
+        kind: "open",
+        state: "failed",
+        code: "DESKTOP_WINDOW_UNAVAILABLE",
+        requestedAt: Date.now() / 1000,
+      },
+    });
+    assert.equal((await clientRequest(f, { client: "web" })).statusCode, 200);
+    assert.equal(f.calls.filter((c) => c.action === "Open").length, 1);
   } finally {
     await f.close();
   }

@@ -313,3 +313,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Show interactive HTML design demos in Results when Codex emits an HTML block, a linked project HTML file, an HTML file change or an explicit MCP HTML resource.
 - Read project HTML through the existing machine transport with bounded size and project-root checks. Never start a public preview server on Windows.
 - Run demos in a separate opaque-origin sandbox with scripts, without same-origin privileges, network access, forms or host credentials. Keep source code collapsed and provide an accessible close control.
+
+## Owner-requested desktop preparation (2026-09-07)
+
+- The explicit Settings handoff must also open and maximize the installed Codex desktop app after its Hub writers are released. Pass the selected conversation through its native local thread link when available.
+- Extend the existing fixed interactive Scheduled Task with Open; never stop processes for Open, accept caller URLs/commands or acquire a writer automatically. Only a Hub-resolved native UUID may identify a conversation. Keep failure visible and allow an explicit retry.
+- Continue verifying desktop effects with simulated processes and harmless window probes, without exercising handoff on the owner's active conversation.

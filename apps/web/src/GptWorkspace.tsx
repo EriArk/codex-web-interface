@@ -459,7 +459,6 @@ export function GptWorkspace({
               }
             }}
           />
-          <small className="brand-subtitle">Личное пространство</small>
         </span>
         <button
           type="button"

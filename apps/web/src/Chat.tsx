@@ -470,7 +470,6 @@ export function Chat({
                   >
                     {state.loadingOlder ? "Загружаем…" : "Загрузить предыдущие"}
                   </button>
-                  <small>По 20 сообщений за раз</small>
                 </div>
               )}
               {!state.messages.length && (
@@ -479,11 +478,6 @@ export function Chat({
                     <Icon name="folder" size={30} />
                   </div>
                   <h2>Новый диалог, чистый лист.</h2>
-                  <p>
-                    Опиши задачу внизу.
-                    <br />
-                    Проверки и снимки появятся в результатах.
-                  </p>
                 </div>
               )}
               {state.messages.map((message, index) => (
@@ -670,6 +664,11 @@ export function Chat({
           )}
         </div>
       )}
+      {active && !queue.state.available && queue.state.message && (
+        <div className="composer-error" role="status">
+          {queue.state.message}
+        </div>
+      )}
       <MessageQueue key={threadId} queue={queue} turnId={state.thread.activeTurnId} />
       <form
         className="composer"
@@ -712,17 +711,28 @@ export function Chat({
               e.target.value = "";
             }}
           />
-          <button
-            type="button"
-            className="icon-button attach-button"
-            aria-label="Добавить файлы или изображения"
-            disabled={
-              !threadId || busy || queue.busy || attachments.busy || attachments.files.length >= 8
-            }
-            onClick={() => fileInput.current?.click()}
-          >
-            <Icon name="plus" />
-          </button>
+          <div className="composer-tools">
+            <button
+              type="button"
+              className="icon-button attach-button"
+              aria-label="Добавить файлы или изображения"
+              disabled={
+                !threadId || busy || queue.busy || attachments.busy || attachments.files.length >= 8
+              }
+              onClick={() => fileInput.current?.click()}
+            >
+              <Icon name="plus" />
+            </button>
+            <AccessPicker
+              options={options}
+              disabled={
+                !threadId ||
+                state.loading ||
+                busy ||
+                (active && state.thread.activitySource === "external")
+              }
+            />
+          </div>
           <textarea
             ref={composer}
             onPaste={(e) => {
@@ -781,25 +791,6 @@ export function Chat({
               )}
             </button>
           )}
-        </div>
-        <div className="composer-hint">
-          <span>
-            {active
-              ? queue.state.available
-                ? "Отправить → в очередь"
-                : queue.state.message || "Очередь загружается…"
-              : "Enter — новая строка"}
-          </span>
-          <AccessPicker
-            options={options}
-            disabled={
-              !threadId ||
-              state.loading ||
-              busy ||
-              (active && state.thread.activitySource === "external")
-            }
-          />
-          <span>⌘ / Ctrl + Enter — отправить</span>
         </div>
       </form>
     </section>
