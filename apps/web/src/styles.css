@@ -1993,3 +1993,23 @@ hr.pane-divider {
 .gpt-settings-heading h2 {
   margin: 0;
 }
+
+/* Native GPT source references remain compact, but tappable like normal links. */
+.message-body a {
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+  overflow-wrap: anywhere;
+}
+.message-body a.source-link {
+  display: inline-block;
+  max-width: 100%;
+  margin: 2px 3px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 0.85em;
+  line-height: 1.5;
+  text-decoration: none;
+  vertical-align: baseline;
+}

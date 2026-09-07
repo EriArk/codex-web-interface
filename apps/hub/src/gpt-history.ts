@@ -1,5 +1,7 @@
 import type { GptConversation, GptFile, GptMessage, GptProject } from "@codex-web/shared";
 
+import { gptLinkedText } from "./gpt-links.js";
+
 type Json = Record<string, any>;
 const record = (value: unknown): Json =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {};
@@ -81,11 +83,10 @@ export function gptHistory(value: unknown): GptMessage[] {
     const parts = Array.isArray(content.parts) ? content.parts : [];
     const body = generatedImage
       ? ""
-      : parts
-          .filter((part: unknown) => typeof part === "string")
-          .join("\n")
-          .replace(/\ue200[^\ue201]*\ue201/g, "")
-          .slice(0, 500000);
+      : gptLinkedText(
+          parts.filter((part: unknown) => typeof part === "string").join("\n"),
+          metadata,
+        ).slice(0, 500000);
     const files = new Map<string, GptFile>();
     const add = (file: Json) => {
       if (!gptId(file.id)) return;

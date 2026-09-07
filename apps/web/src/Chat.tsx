@@ -14,6 +14,7 @@ import {
   useState,
 } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { AccessPicker } from "./AccessPicker";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
 import { api } from "./api";
@@ -39,6 +40,7 @@ const MessageText = memo(function MessageText({
 }) {
   return (
     <Markdown
+      remarkPlugins={[remarkGfm]}
       components={{
         pre: CollapsibleCode,
         ...(onImages
