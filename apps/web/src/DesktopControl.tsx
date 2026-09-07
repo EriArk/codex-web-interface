@@ -16,6 +16,14 @@ interface State {
 const operationText = (state: State) => {
   if (state.returning) return "Возвращаю управление сайту…";
   const op = state.operation;
+  if (op?.kind === "open" && state.client === "desktop") {
+    if (["queued", "restarting"].includes(op.state)) return "Открываю Codex на компьютере…";
+    if (op.state === "completed")
+      return op.code === "DESKTOP_OPENED_BACKGROUND"
+        ? "Codex развёрнут. Windows оставила другое окно на переднем плане."
+        : "Codex открыт на компьютере.";
+    return "Компьютер освобождён, но открытие Codex не подтверждено.";
+  }
   if (op?.kind === "forcerelease") {
     if (op.state === "completed")
       return state.client === "web" ? "Управление возвращено сайту." : "";
@@ -32,10 +40,17 @@ const operationText = (state: State) => {
     return "Результат перезапуска пока неизвестен. Проверь Codex в Remote.";
   return "Перезапуск не завершился. Проверь Codex и вход в Windows через Remote.";
 };
-function Control({ machine, open }: { machine: Machine; open: boolean }) {
+function Control({
+  machine,
+  open,
+  threadId,
+}: {
+  machine: Machine;
+  open: boolean;
+  threadId?: string;
+}) {
   const [state, setState] = useState<State>(),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
     [confirm, setConfirm] = useState<false | "restart" | "force" | "handoff" | "return">(false),
     [sending, setSending] = useState(false),
     [action, setAction] = useState<string>();
@@ -86,24 +101,23 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
   const restarting =
     !!state?.returning ||
     (!!state?.operation &&
-      ["restart", "forcerestart", "forcerelease"].includes(state.operation.kind) &&
+      ["open", "restart", "forcerestart", "forcerelease"].includes(state.operation.kind) &&
       ["queued", "restarting"].includes(state.operation.state));
   const unavailable =
     !state || !state.activityKnown || state.activeTasks > 0 || restarting || sending;
-  const run = async (kind: "restart" | "force" | "client" | "handoff" | "return") => {
+  const run = async (kind: "restart" | "force" | "client" | "handoff" | "return" | "open") => {
     if (sendingRef.current || restarting || (kind === "restart" && unavailable)) return;
     sendingRef.current = true;
     setSending(true);
     setAction(kind);
     setConfirm(false);
     setError("");
-    setNotice("");
     try {
-      if (["client", "handoff", "return"].includes(kind)) {
+      if (["client", "handoff", "return", "open"].includes(kind)) {
         const client =
           kind === "return"
             ? "web"
-            : kind === "handoff"
+            : ["handoff", "open"].includes(kind)
               ? "desktop"
               : state?.client === "desktop"
                 ? "web"
@@ -113,13 +127,13 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
           key: crypto.randomUUID(),
           body: {
             client,
+            ...(client === "desktop" && threadId ? { threadId } : {}),
             ...(kind === "handoff" ? { confirmInterrupt: true } : {}),
             ...(kind === "return" ? { releaseDesktop: true, confirmStopTasks: true } : {}),
           },
         });
         if (alive.current) {
           setState((v) => (v ? { ...v, ...result } : v));
-          setNotice(client === "desktop" ? "Компьютер освобождён. Нажми Retry в Codex." : "");
         }
       } else {
         const value = await api<State>(path + (kind === "force" ? "/force-restart" : "/restart"), {
@@ -180,15 +194,33 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
                 : "Работать с компьютера"}
         </button>
       </div>
-      <p className="muted">
-        {state?.activeTasks
-          ? "Активных задач: " + state.activeTasks
-          : state && !state.activityKnown
-            ? "Проверка задач недоступна."
-            : state
-              ? "Приложение в Windows"
-              : "Проверяю состояние приложения…"}
+      {state?.client === "desktop" && !restarting && (
+        <button
+          type="button"
+          className="text-button"
+          disabled={sending}
+          onClick={() => void run("open")}
+        >
+          <Icon name="remote" size={16} /> Открыть Codex на компьютере
+        </button>
+      )}
+      <p className="desktop-operation small" role="status" aria-live="polite">
+        {state ? operationText(state) : ""}
       </p>
+      {error && (
+        <p className="desktop-control-error small" role="alert">
+          {error}
+        </p>
+      )}
+      {(!state || state.activeTasks > 0 || !state.activityKnown) && (
+        <p className="muted">
+          {state?.activeTasks
+            ? "Активных задач: " + state.activeTasks
+            : state && !state.activityKnown
+              ? "Проверка задач недоступна."
+              : "Проверяю состояние приложения…"}
+        </p>
+      )}
       {confirm ? (
         <div className="desktop-restart-confirm">
           <p>
@@ -243,24 +275,31 @@ function Control({ machine, open }: { machine: Machine; open: boolean }) {
           </button>
         </div>
       )}
-      <p className="desktop-operation small" role="status" aria-live="polite">
-        {notice || (state ? operationText(state) : "")}
-      </p>
-      {error && (
-        <p className="desktop-control-error small" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }
-export function DesktopControl({ machines, open }: { machines: Machine[]; open: boolean }) {
+export function DesktopControl({
+  machines,
+  open,
+  threadId,
+  machineId,
+}: {
+  machines: Machine[];
+  open: boolean;
+  threadId?: string;
+  machineId?: string;
+}) {
   return (
     <>
       {machines
         .filter((m) => m.desktopRestartAvailable)
         .map((machine) => (
-          <Control key={machine.id} machine={machine} open={open} />
+          <Control
+            key={machine.id}
+            machine={machine}
+            open={open}
+            threadId={machine.id === machineId ? threadId : undefined}
+          />
         ))}
     </>
   );

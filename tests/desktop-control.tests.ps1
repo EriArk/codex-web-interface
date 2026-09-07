@@ -4,11 +4,14 @@ $ErrorActionPreference='Stop'
 $tokens=$null;$parseErrors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile([IO.Path]::GetFullPath($ControlScript),[ref]$tokens,[ref]$parseErrors)
 if ($parseErrors.Count) { throw 'PowerShell syntax error' }
-$function=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Run-Operation'},$true)
-. ([ScriptBlock]::Create($function.Extent.Text))
+foreach ($name in @('Run-Operation','Open-Desktop')) {
+    $function=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
+    . ([ScriptBlock]::Create($function.Extent.Text))
+}
 function Assert($condition,$message) { if (-not $condition) { throw $message } }
 function Reset-Test {
     $script:operation=[pscustomobject]@{id='test';kind='restart';state='queued';code='';requestedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
+    $script:windowIds=@();$script:launchArguments=@();$script:windowFailure=$false;$script:foreground=$true;
     $script:active=0;$script:session=1;$script:stopped=@();$script:started=0;$script:closed=0;$script:failure=$false
     $script:processes=@{
         10=[pscustomobject]@{ProcessId=10;ParentProcessId=1;SessionId=1;CreationDate=10;ExecutablePath='C:\Package\ChatGPT.exe'}
@@ -35,10 +38,18 @@ function Get-CimInstance {
 }
 function Stop-Process { param($Id,[switch]$Force,$ErrorAction) $script:stopped+=@($Id);$script:processes.Remove([int]$Id) }
 function Start-Process {
-    param($FilePath,$WorkingDirectory)
+    param($FilePath,$WorkingDirectory,$WindowStyle,$ArgumentList)
+    $script:launchArguments=@($ArgumentList)
+    if ($operation.kind -eq 'open') { Assert ($WindowStyle -eq 'Maximized') 'Open must request a visible maximized window' }
     Assert ($FilePath -eq 'C:\Package\ChatGPT.exe') 'Only the installed package can launch'
     $script:started++
     $script:processes[20]=[pscustomobject]@{ProcessId=20;SessionId=1;ExecutablePath='C:\Package\ChatGPT.exe'}
+}
+function Show-DesktopWindow {
+    param([int[]]$ProcessIds)
+    $script:windowIds=$ProcessIds
+    if ($script:windowFailure) { throw 'DESKTOP_WINDOW_UNAVAILABLE' }
+    return @{foreground=$script:foreground}
 }
 function Start-Sleep { param($Milliseconds) }
 Reset-Test;Run-Operation
@@ -67,4 +78,22 @@ Assert ($operation.code -eq 'DESKTOP_RELEASED' -and $closed -eq 1 -and $started 
 Assert ($stopped.Count -eq 1 -and $stopped[0] -eq 11 -and $processes.ContainsKey(12)) 'Return touched a Companion-owned App Server'
 Reset-Test;$operation.kind='forcerelease';$script:session=0;Run-Operation
 Assert ($operation.code -eq 'DESKTOP_INTERACTIVE_SESSION_REQUIRED' -and $closed -eq 0 -and $stopped.Count -eq 0) 'Return escaped the interactive-session boundary'
-Write-Output '11 desktop maintenance checks passed; all process effects were simulated.'
+Reset-Test;$operation.kind='open';$script:active=4;$script:failure=$true
+$operation | Add-Member NoteProperty threadId '11111111-1111-4111-8111-111111111111'
+Run-Operation
+Assert ($operation.code -eq 'DESKTOP_OPENED' -and $started -eq 1) 'Open failed with live/unknown desktop activity'
+Assert ($closed -eq 0 -and $stopped.Count -eq 0 -and $processes.ContainsKey(12)) 'Open closed a process'
+Assert ($launchArguments.Count -eq 1 -and $launchArguments[0] -eq 'codex://threads/11111111-1111-4111-8111-111111111111') 'Selected thread link was not forwarded'
+Assert ($windowIds -contains 10 -and $windowIds -contains 20 -and $windowIds -notcontains 12) 'Window activation included an unrelated process'
+Run-Operation;Assert ($started -eq 1) 'Open was replayed'
+Reset-Test;$operation.kind='open';$processes.Remove(10);Run-Operation
+Assert ($operation.code -eq 'DESKTOP_OPENED' -and $started -eq 1) 'Closed desktop did not launch'
+Reset-Test;$operation.kind='open';$operation | Add-Member NoteProperty threadId 'x; calc.exe';Run-Operation
+Assert ($operation.code -eq 'DESKTOP_INVALID_REQUEST' -and $started -eq 0) 'Untrusted launch argument accepted'
+Reset-Test;$operation.kind='open';$script:session=0;Run-Operation
+Assert ($operation.code -eq 'DESKTOP_INTERACTIVE_SESSION_REQUIRED' -and $started -eq 0) 'Open ran in Session 0'
+Reset-Test;$operation.kind='open';$script:windowFailure=$true;Run-Operation
+Assert ($operation.state -eq 'failed' -and $operation.code -eq 'DESKTOP_WINDOW_UNAVAILABLE') 'Window failure was reported as successful'
+Reset-Test;$operation.kind='open';$script:foreground=$false;Run-Operation
+Assert ($operation.code -eq 'DESKTOP_OPENED_BACKGROUND') 'Windows foreground restriction was hidden'
+Write-Output '17 desktop maintenance/open checks passed; all process effects were simulated.'

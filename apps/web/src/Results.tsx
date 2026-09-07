@@ -43,9 +43,7 @@ export function Results({
           <Icon name="results" />
           Результаты
         </span>
-        <span className="small muted">
-          {results.length ? `${results.length} сохранено` : "Всё важное — здесь"}
-        </span>
+        {results.length > 0 && <span className="small muted">{results.length}</span>}
       </div>
       <div className="pane-scroll" ref={ref}>
         {!results.length && (
@@ -54,12 +52,6 @@ export function Results({
               <Icon name="results" size={29} />
             </div>
             <h2>Здесь появится результат.</h2>
-            <p>
-              Изменённые файлы, итоги проверок
-              <br />и снимки рабочего стола.
-            </p>
-            <div className="empty-rule" />
-            <span className="small muted">Подробности выполнения — в «Активности»</span>
           </div>
         )}
         {results
@@ -200,14 +192,12 @@ export function ActivityPane({
           <Icon name="activity" />
           Активность
         </span>
-        <span className="small muted">Детали выполнения</span>
       </div>
       <div className="pane-scroll">
         {!items.length && (
           <div className="empty-state">
             <Icon name="activity" size={30} />
             <h2>Пока тихо.</h2>
-            <p>Команды и подробный вывод будут здесь.</p>
           </div>
         )}
         {items.map((item) => (

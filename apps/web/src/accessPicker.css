@@ -1,22 +1,23 @@
-.composer .composer-hint {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+.composer-tools {
+  display: grid;
+  grid-template-columns: 44px;
+  align-self: end;
+  gap: 0;
+}
+.composer .composer-input textarea {
+  align-self: stretch;
+  min-height: 88px;
 }
 .access-picker {
   position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  min-height: 44px;
-  padding: 0 7px;
-  font-size: 12px;
-  line-height: 1.2;
-  white-space: nowrap;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   color: var(--muted);
-  border-radius: 7px;
+  border-radius: 9px;
 }
 .access-picker select {
   position: absolute;
@@ -33,18 +34,10 @@
 .access-picker.access-full {
   color: var(--accent);
   background: var(--soft);
-  font-weight: 600;
 }
 .access-picker:has(select:disabled) {
   opacity: 0.55;
 }
-@media (max-width: 700px) {
-  .composer .access-picker {
-    margin-left: auto;
-    font-size: 11px;
-  }
-}
-
 .chat-scroll .new-message-button {
   position: sticky;
   top: 8px;

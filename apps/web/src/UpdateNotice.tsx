@@ -126,10 +126,7 @@ export function UpdateNotice({ visible, busy }: { visible: boolean; busy: boolea
   if ((!available && !notice) || !visible) return null;
   return (
     <div className="update-notice" role="status">
-      <span>
-        {updating ? "Обновляем…" : notice || "Есть обновление сайта"}
-        {available && !notice && <small>Черновик сохранится</small>}
-      </span>
+      <span>{updating ? "Обновляем…" : notice || "Есть обновление сайта"}</span>
       {available && (
         <button
           type="button"

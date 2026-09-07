@@ -13,8 +13,7 @@ export function AccessPicker({
   const full = selection.access === "full";
   return (
     <label className={"access-picker" + (full ? " access-full" : "")}>
-      <Icon name={full ? "unlock" : "lock"} size={15} />
-      <span aria-hidden="true">{full ? "Полный доступ" : "Обычный доступ"}</span>
+      <Icon name={full ? "unlock" : "lock"} size={19} />
       <select
         aria-label="Доступ Codex"
         value={selection.access ?? "workspace"}

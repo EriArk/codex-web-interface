@@ -7,8 +7,9 @@ import type { Store } from "./store.js";
 
 export type DesktopTransport = (
   machine: MachineConfig,
-  action: "Status" | "Restart" | "ForceRestart" | "ForceRelease",
+  action: "Status" | "Open" | "Restart" | "ForceRestart" | "ForceRelease",
   id?: string,
+  threadId?: string,
 ) => Promise<DesktopState>;
 export function registerDesktop(
   app: FastifyInstance,
@@ -107,7 +108,11 @@ export function registerDesktop(
     const body = z
       .discriminatedUnion("client", [
         z
-          .object({ client: z.literal("desktop"), confirmInterrupt: z.literal(true).optional() })
+          .object({
+            client: z.literal("desktop"),
+            confirmInterrupt: z.literal(true).optional(),
+            threadId: z.string().uuid().optional(),
+          })
           .strict(),
         z
           .object({
@@ -125,9 +130,38 @@ export function registerDesktop(
         if (pendingReturns()[m.id])
           throw new HubError(409, "HANDOFF_PENDING", "Передача управления ещё выполняется.");
         if (body.client === "desktop") {
+          // Resolve the selected Hub thread before releasing any writer. Never accept a native URL.
+          const thread = body.threadId ? store.thread(body.threadId) : undefined;
+          if (
+            thread &&
+            sessions.catalog.projects().find((p) => p.id === thread.projectId)?.machineId !== m.id
+          )
+            throw new HubError(
+              400,
+              "THREAD_MACHINE_MISMATCH",
+              "Этот диалог находится на другом компьютере.",
+            );
+          const nativeId = thread?.codexThreadId;
+          if (nativeId && !z.string().uuid().safeParse(nativeId).success)
+            throw new HubError(
+              400,
+              "DESKTOP_THREAD_UNSUPPORTED",
+              "Этот диалог нельзя открыть в настольном Codex.",
+            );
           await sessions.handoffToDesktop(m.id, body.confirmInterrupt);
-          return { client: sessions.machineClient(m.id) };
+          const state = await transport(m, "Open", key, nativeId);
+          return { ...state, client: sessions.machineClient(m.id) };
         }
+        const desktopState = await transport(m, "Status");
+        if (
+          desktopState.operation?.kind === "open" &&
+          ["queued", "restarting", "unknown"].includes(desktopState.operation.state)
+        )
+          throw new HubError(
+            409,
+            "HANDOFF_PENDING",
+            "Codex ещё открывается на компьютере. Дождись завершения.",
+          );
         if (body.releaseDesktop !== body.confirmStopTasks)
           throw new HubError(400, "CONFIRM_STOP_REQUIRED", "Подтверди закрытие настольного Codex.");
         if (body.releaseDesktop) {
@@ -154,8 +188,7 @@ export function registerDesktop(
           };
         }
         if (sessions.machineClient(m.id) !== "web") {
-          const state = await transport(m, "Status");
-          if (state.running)
+          if (desktopState.running)
             throw new HubError(
               409,
               "DESKTOP_RELEASE_REQUIRED",

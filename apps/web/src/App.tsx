@@ -525,7 +525,6 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       }}
       projects={projects}
       activity={navigationState.state}
-      activityConnected={navigationState.connected}
       threadGroups={threadGroups}
       projectId={projectId}
       threadId={threadId}
@@ -852,7 +851,6 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             <Icon name="close" />
           </button>
         </div>
-        <p className="muted">Твоё пространство, твой стиль.</p>
         <fieldset className="theme-picker">
           <legend>Оформление</legend>
           {themes.map(({ id, title, description }) => (
@@ -872,7 +870,12 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           ))}
         </fieldset>
         <UsageLimits machines={machines} open={settings} />
-        <DesktopControl machines={machines} open={settings} />
+        <DesktopControl
+          machines={machines}
+          open={settings}
+          threadId={threadId}
+          machineId={project?.machineId}
+        />
         <button
           type="button"
           className="secondary settings-activity"

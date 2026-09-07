@@ -26,7 +26,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   });
   await page.route("**/api/machines/*/client",async route=>{
    assert(route.request().headers()["x-csrf-token"]);const body=route.request().postDataJSON();
-   if(body.client==="desktop"){if(active)assert.equal(body.confirmInterrupt,true);handoffs++;client="desktop";active=0;}
+   if(body.client==="desktop"){if(active)assert.equal(body.confirmInterrupt,true);handoffs++;client="desktop";active=0;operation={id:route.request().headers()["idempotency-key"],kind:"open",state:"completed",code:"DESKTOP_OPENED",requestedAt:Date.now()/1000};}
    else {assert.equal(body.releaseDesktop,true);assert.equal(body.confirmStopTasks,true);returns++;returning=true;operation={id:route.request().headers()["idempotency-key"],kind:"forcerelease",state:"queued",code:""};}
    await route.fulfill({json:{client,returning,running,operation}});
   });
@@ -72,6 +72,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]){
   await page.screenshot({path:".local/qa-desktop/"+engine+"-handoff-confirm.png"});
   await dialog.getByRole("button",{name:"Остановить и передать",exact:true}).tap();
   await expect(dialog.getByRole("button",{name:"Продолжить на сайте",exact:true})).toBeVisible();assert.equal(handoffs,1);
+  await expect(dialog.locator(".desktop-operation")).toHaveText("Codex открыт на компьютере.");
   await page.reload();await page.locator(".workspace").waitFor();await open();
   await dialog.getByRole("button",{name:"Продолжить на сайте",exact:true}).tap();
   await dialog.getByRole("button",{name:"Отмена",exact:true}).tap();assert.equal(returns,0);

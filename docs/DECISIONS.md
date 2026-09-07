@@ -334,3 +334,11 @@ Persist up to 24 short public progress labels per Hub GPT job in schema 6. Accep
 ## Release notices use the booted build identity (2026-09-07)
 
 The build writes one deterministic fingerprint of all bundled JavaScript/CSS filenames to both HTML and version.json. Compare this identity rather than the styles currently mounted in the DOM: lazy GPT CSS is absent in an ordinary Codex view and previously caused a permanent false update notice. Explicit update navigation preserves URL state and drafts, adds a temporary cache-busting release marker, and confirms the target identity after boot. A stale/offline document retains a retry notice; an actual updated document briefly confirms success and removes the notice. Do not unregister the service worker or clear the owner's application data.
+
+## Desktop preparation on handoff (2026-09-07)
+
+The owner extended the explicit Settings handoff with desktop launch, maximization and selection of the current native conversation. Hub resolves an optional authenticated Hub thread ID against the selected machine before releasing writers, then sends only the native UUID through the existing SSH control to the demand-only interactive Scheduled Task. The installed OpenAI.Codex 26.901.5280.0 package registers the codex protocol and handles codex://threads/<UUID> as a local conversation route; this compatibility path was verified in the installed package, not inferred from an API endpoint. No desktop state files are edited.
+
+Open never closes a process or checks active work as a reason to stop it. A second launch forwards the validated link to the existing app. Window activation is restricted to the configured package, owner and interactive session. Completion requires a visible maximized window; foreground denial is reported separately. No thread-navigation acknowledgement is available from the native URL handler, so the result confirms window preparation and link delivery, not an in-memory turn transfer.
+
+Handoff remains in desktop mode if opening fails. Read-only status recovers the result after browser loss; an explicit Open retry is available. Pending or uncertain Open blocks return to web so a delayed scheduled launch cannot grab a newly acquired writer. The existing expiry, single-task lock and idempotency guards remain. No network listener or generic launch endpoint is added.

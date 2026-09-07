@@ -15,7 +15,6 @@ import type { Project, Thread } from "./types";
 export function ProjectNavigation({
   projects,
   activity,
-  activityConnected,
   threadGroups,
   projectId,
   threadId,
@@ -33,7 +32,6 @@ export function ProjectNavigation({
 }: {
   projects: Project[];
   activity: NavigationState;
-  activityConnected: boolean;
   threadGroups: Record<string, Thread[]>;
   projectId: string;
   threadId: string;
@@ -168,10 +166,7 @@ export function ProjectNavigation({
     <div className="navigation-inner" data-section={section}>
       <div className="nav-brand">
         <img src="/icon.svg" width="32" height="32" alt="" />
-        <span>
-          {onClient ? <ClientPicker value="codex" onChange={onClient} /> : "codex"}
-          <small className="brand-subtitle">Личное пространство</small>
-        </span>
+        <span>{onClient ? <ClientPicker value="codex" onChange={onClient} /> : "codex"}</span>
         <button
           type="button"
           className="icon-button mobile-only"
@@ -237,16 +232,6 @@ export function ProjectNavigation({
           type="search"
         />
       </div>
-      {!activityConnected && (
-        <p className="nav-sync-state" role="status">
-          Обновляем состояние…
-        </p>
-      )}
-      {activity.warnings?.map((w) => (
-        <p className="nav-sync-state" role="status" key={w}>
-          {w}
-        </p>
-      ))}
       <div className="nav-scroll">
         <section className="nav-projects">
           <div className="nav-label">

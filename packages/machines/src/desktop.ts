@@ -9,13 +9,14 @@ export interface DesktopState {
   activeTasks: number;
   operation: null | {
     id: string;
-    kind: "restart" | "forcerestart" | "forcerelease" | "probe";
+    kind: "open" | "restart" | "forcerestart" | "forcerelease" | "probe";
     state: "queued" | "restarting" | "completed" | "failed" | "unknown";
     code: string;
     requestedAt: number;
   };
 }
 const messages: Record<string, string> = {
+  DESKTOP_WINDOW_UNAVAILABLE: "Не удалось развернуть окно Codex. Проверь компьютер через Remote.",
   DESKTOP_BUSY: "Codex ещё работает. Дождись завершения задач перед перезапуском.",
   DESKTOP_ACTIVITY_UNAVAILABLE: "Не удалось проверить активные задачи. Перезапуск пока недоступен.",
   DESKTOP_PACKAGE_UNAVAILABLE: "Приложение Codex не найдено на компьютере.",
@@ -54,7 +55,7 @@ export function parseDesktopReply(output: string): DesktopState {
     (operation !== null &&
       (!operation ||
         !/^[a-f0-9-]{36}$/i.test(operation.id) ||
-        !["restart", "forcerestart", "forcerelease", "probe"].includes(operation.kind) ||
+        !["open", "restart", "forcerestart", "forcerelease", "probe"].includes(operation.kind) ||
         !["queued", "restarting", "completed", "failed", "unknown"].includes(operation.state) ||
         !/^(?:DESKTOP_[A-Z_]{1,70})?$/.test(operation.code) ||
         !Number.isFinite(operation.requestedAt)))
@@ -79,12 +80,18 @@ export function parseDesktopReply(output: string): DesktopState {
 }
 export async function controlDesktop(
   machine: MachineConfig,
-  action: "Status" | "Restart" | "ForceRestart" | "ForceRelease",
+  action: "Status" | "Open" | "Restart" | "ForceRestart" | "ForceRelease",
   id?: string,
+  threadId?: string,
 ): Promise<DesktopState> {
   if (machine.type !== "ssh-windows" || !machine.codex.desktopControl || !machine.ssh)
     throw desktopError("DESKTOP_CONTROL_UNAVAILABLE");
   if (action !== "Status" && !/^[a-f0-9-]{36}$/i.test(id ?? ""))
+    throw desktopError("DESKTOP_INVALID_REQUEST");
+  if (
+    threadId !== undefined &&
+    (action !== "Open" || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(threadId))
+  )
     throw desktopError("DESKTOP_INVALID_REQUEST");
   const script =
     "& " +
@@ -92,6 +99,7 @@ export async function controlDesktop(
     " -Action " +
     action +
     (id ? " -RequestId " + quotePowerShell(id) : "") +
+    (threadId ? " -ThreadId " + quotePowerShell(threadId) : "") +
     "; exit $LASTEXITCODE";
   const child = spawn(
     "ssh",
