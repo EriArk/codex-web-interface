@@ -16,7 +16,8 @@ function setup() {
   }
   const host = new Host(),
     sent = [],
-    zooms = [];
+    zooms = [],
+    pans = [];
   let mode = "trackpad";
   const input = new RemoteInput(host, {
     mode: () => mode,
@@ -28,7 +29,7 @@ function setup() {
     pointer: () => {},
     position: () => {},
     zoom: (...args) => zooms.push(args),
-    pan: () => {},
+    pan: (...args) => pans.push(args),
   });
   input.setPosition(500, 400);
   const event = (type, id, x, y, kind = "touch", button = 0) => {
@@ -36,7 +37,7 @@ function setup() {
     Object.assign(e, { pointerId: id, clientX: x, clientY: y, pointerType: kind, button });
     host.dispatchEvent(e);
   };
-  return { input, sent, zooms, event, mode: (value) => (mode = value) };
+  return { input, sent, zooms, pans, event, mode: (value) => (mode = value) };
 }
 test("phone trackpad moves relatively and taps at the pointer, with no absolute jump", () => {
   const f = setup();
@@ -74,7 +75,7 @@ test("direct touch and stylus map coordinates and cancel releases held buttons",
     f.input.dispose();
   }
 });
-test("two-finger tap right-clicks once; slow parallel motion scrolls; pinch zooms", () => {
+test("two-finger tap right-clicks once; slow parallel motion scrolls; pinch zooms", async () => {
   const f = setup();
   try {
     f.event("pointerdown", 1, 100, 100);
@@ -96,7 +97,41 @@ test("two-finger tap right-clicks once; slow parallel motion scrolls; pinch zoom
     f.event("pointerdown", 5, 100, 100);
     f.event("pointerdown", 6, 200, 100);
     f.event("pointermove", 6, 240, 100);
+    await new Promise((resolve) => setTimeout(resolve, 60));
     assert(f.zooms.length > 0);
+  } finally {
+    f.input.dispose();
+  }
+});
+
+test("direct touch scrolls under the gesture, fast parallel motion is not a pinch, and three fingers still pan", () => {
+  const f = setup();
+  try {
+    f.mode("touch");
+    f.event("pointerdown", 1, 100, 200);
+    f.event("pointerdown", 2, 100, 300);
+    f.event("pointermove", 1, 100, 120);
+    f.event("pointermove", 2, 100, 220);
+    assert(f.sent.some((s) => s.down && s.x === 200 && s.y === 500));
+    assert.equal(f.zooms.length, 0);
+    f.event("pointermove", 1, 100, 240);
+    f.event("pointermove", 2, 100, 340);
+    assert(f.sent.some((s) => s.up));
+    f.event("pointerup", 1, 100, 240);
+    f.event("pointerup", 2, 100, 340);
+    assert(!f.sent.some((s) => s.left || s.right));
+    const before = f.sent.filter((s) => s.up || s.down).length;
+    f.event("pointerdown", 3, 100, 100);
+    f.event("pointerdown", 4, 200, 100);
+    f.event("pointerdown", 5, 150, 150);
+    f.event("pointermove", 3, 120, 140);
+    f.event("pointermove", 4, 220, 140);
+    assert(f.pans.length > 0);
+    assert.equal(f.sent.filter((s) => s.up || s.down).length, before);
+    f.input.reset();
+    assert(
+      !Object.entries(f.sent.at(-1)).some(([key, value]) => !["x", "y"].includes(key) && value),
+    );
   } finally {
     f.input.dispose();
   }

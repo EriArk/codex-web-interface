@@ -196,3 +196,10 @@ Windows Home uses the VNC provider through guacd 1.6.0 and signed TightVNC 2.8.8
 TCP chunks must be buffered into complete Guacamole instructions before sending them to the WebSocket. Otherwise a tunnel keepalive can land inside a partial image/blob instruction. A regression test covers every split point including Unicode. First-frame readiness and screenshots wait for rendered display content.
 
 The phone Remote pane includes trackpad/direct-touch modes, keyboard helpers, screenshot-to-Results and fullscreen. Closing the pane or backgrounding the page releases Remote. It does not interrupt a Codex turn. Physical iOS touch and secure-desktop behavior remain device acceptance checks.
+
+### Touch scrolling
+
+Both touch and trackpad modes scroll the remote application with two fingers.
+Direct touch targets the midpoint where the gesture starts; trackpad mode keeps
+the existing pointer position. A three-finger drag moves the zoomed viewport,
+and a pinch changes scale. Two-finger taps retain right-click.
