@@ -8,7 +8,9 @@ Run these commands on the Linux Hub, as the account owning its private state. Th
 node apps/hub/dist/maintenance.js backup --config /srv/codex-web/config.json --destination /srv/codex-web/backups/snapshots --keep 7 --revision COMMIT_SHA
 ```
 
-The source database stays live. Node's SQLite online backup includes committed WAL data. The tool copies every DB-referenced screenshot/upload and local-Linux staged uploads, records schema/application/revision metadata and SHA-256 checksums, verifies the result, then atomically publishes the snapshot directory.
+The source database stays live. Node's SQLite online backup includes committed WAL data. The tool copies every DB-referenced Codex screenshot/upload, GPT upload and local-Linux staged upload, plus existing captured HTML preview documents. It records schema/application/revision metadata and SHA-256 checksums, verifies the result, then atomically publishes the snapshot directory. Notes such as chat/project pins are included with the complete SQLite snapshot.
+
+Format 2 explicitly inventories captured HTML previews. Unopened previews retain their database source references without reading the execution machine during backup. Format 1 remains readable, but old snapshots missing a referenced GPT upload now fail verification; old format-1 snapshots cannot prove HTML cache coverage. Keep incomplete legacy snapshots for manual recovery rather than discarding them.
 
 Artifacts/uploads are immutable after writing; deletion during a snapshot causes an incomplete snapshot to fail without publishing it. Retry the backup during a quiet period if that occurs. The tool never stops the Hub or another service. File copying/checksums use bounded buffers.
 
@@ -16,7 +18,7 @@ Destinations must be absolute private directories (0700) without symlinks, outsi
 
 The keep count applies only to verified directories created by this tool. Unrecognized, damaged and unrelated files are never pruned automatically. Old manual DB checkpoints in data/migration-backups are separate and should be reviewed after upgrade acceptance.
 
-The data snapshot excludes unrelated files, source repositories, native Codex account/history and Windows staging outside Hub storage. Native continuation still requires the original machine/account/native history. Restoring to a different Hub path does not rewrite absolute paths stored in native Linux conversations: keep the original configured paths when switching a real installation.
+The data snapshot excludes unrelated files, source repositories, native Codex account/history and Windows staging outside Hub storage. The separate ChatGPT browser profile is not ordinary upload/cache data and is not copied by this tool; back it up only with its browser stopped or sign into ChatGPT again after recovery. Generated native ChatGPT assets continue to depend on the original account/connector. Native continuation still requires the original machine/account/native history. Restoring to a different Hub path does not rewrite absolute paths stored in native Linux conversations: keep the original configured paths when switching a real installation.
 
 ## Deployment configuration and secrets
 
@@ -42,7 +44,7 @@ node apps/hub/dist/maintenance.js verify --snapshot /srv/codex-web/backups/snaps
 node apps/hub/dist/maintenance.js restore --snapshot /srv/codex-web/backups/snapshots/SNAPSHOT --target /srv/codex-web/restore-check
 ```
 
-The target must not exist. The tool checks every checksum and required file, copies into a private temporary sibling, runs supported migrations, revokes all old sessions/bootstrap tokens and marks pending/active work unknown. It never overwrites the live installation. The password hash, original Hub/native thread IDs, history projections and results survive.
+The target must not exist. The tool checks every checksum and required file, copies into a private temporary sibling, runs supported migrations, revokes all old sessions/bootstrap tokens and marks pending/active work unknown. It never overwrites the live installation. The password hash, original Hub/native thread IDs, history projections and results survive. GPT queued/preparing/running jobs are also marked unknown: they may have completed in the original installation after the backup. Their text/files and native IDs remain intact for explicit review; restoration never automatically resends them. Normal Hub restarts still retain ordinary queued-job behavior.
 
 The restored directory contains app.db, results/, optional private/ configuration and a restore.json receipt. Configure an isolated Hub on a separate loopback port, pointing databasePath/resultsPath there; log in with the existing password and inspect history/files. Use a disposable native conversation for any execution test, not an active owner's conversation.
 
@@ -90,4 +92,4 @@ The report checks Hub HTTP, SQLite schema/usage, private-path access, disk space
 
 Machine labels are anonymous indexes. Reports omit configured Windows paths, hostnames, account names, project names, tokens, prompts and raw RPC/SSH errors. The canonical public origin and numeric versions/counts are included. Human and JSON forms use the same normalized checks; no telemetry is sent.
 
-A successful metadata probe is not proof of the full turn contract. Codex 0.153.4 is the exercised Windows version; other versions receive a verification warning. Full compatibility gating and allowed project roots remain issues #7 and #6.
+A successful metadata probe is not proof of the full turn contract. Codex 0.153.4 is the exercised Windows version; other versions receive a verification warning. The native compatibility gate is implemented; per-machine allowed project roots remain issue #6.

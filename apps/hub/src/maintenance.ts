@@ -37,7 +37,8 @@ const inside = (root: string, path: string) => {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Entry = { path: string; bytes: number; sha256: string };
 interface Manifest {
-  format: 1;
+  format: 1 | 2;
+  cachedPreviews?: string[];
   kind: "codex-web-backup";
   createdAt: string;
   appVersion: string;
@@ -152,7 +153,27 @@ function requiredResults(db: DatabaseSync): string[] {
     paths.push("uploads/" + String(row.id) + ".bin");
     if (row.image) paths.push("uploads/" + String(row.id) + ".jpg");
   }
+  if (hasTable(db, "gpt_uploads"))
+    for (const row of db.prepare("SELECT id FROM gpt_uploads").all()) {
+      if (!uuid.test(String(row.id)))
+        fail("INVALID_FILE_ID", "Invalid stored GPT upload identifier");
+      paths.push("gpt/" + String(row.id));
+    }
   return paths;
+}
+function hasTable(db: DatabaseSync, table: string): boolean {
+  return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
+}
+function previewIds(db: DatabaseSync): string[] {
+  if (!hasTable(db, "html_previews")) return [];
+  return db
+    .prepare("SELECT id FROM html_previews")
+    .all()
+    .map((row) => {
+      const id = String(row.id);
+      if (!/^[a-f0-9]{64}$/.test(id)) fail("INVALID_FILE_ID", "Invalid stored preview identifier");
+      return id;
+    });
 }
 function inspectDatabase(db: DatabaseSync): number {
   const version = schemaVersion(db);
@@ -169,7 +190,9 @@ export async function verifySnapshot(directory: string): Promise<Manifest> {
   await privateDirectory(directory, false);
   const raw = JSON.parse((await bytesAt(directory, "manifest.json")).toString()) as Manifest;
   if (
-    raw.format !== 1 ||
+    ![1, 2].includes(raw.format) ||
+    (raw.format === 2 &&
+      (!Array.isArray(raw.cachedPreviews) || raw.cachedPreviews.length > 2000)) ||
     raw.kind !== "codex-web-backup" ||
     !Array.isArray(raw.files) ||
     raw.files.length > 100000 ||
@@ -202,6 +225,17 @@ export async function verifySnapshot(directory: string): Promise<Manifest> {
     for (const path of requiredResults(db))
       if (!files.has("results/" + path))
         fail("SNAPSHOT_INCOMPLETE", "A referenced artifact or upload is missing");
+    if (raw.format === 2) {
+      const known = new Set(previewIds(db)),
+        cached = new Set<string>();
+      for (const id of raw.cachedPreviews ?? []) {
+        if (typeof id !== "string" || !known.has(id) || cached.has(id))
+          fail("INVALID_SNAPSHOT", "Invalid cached preview inventory");
+        cached.add(id);
+        if (!files.has("results/previews/" + id + ".html"))
+          fail("SNAPSHOT_INCOMPLETE", "A captured HTML preview is missing");
+      }
+    }
   } finally {
     db.close();
   }
@@ -240,13 +274,29 @@ export async function createSnapshot(
     }
     await chmod(join(staging, "app.db"), 0o600);
     const db = new DatabaseSync(join(staging, "app.db"));
-    let paths: string[], version: number;
+    let paths: string[], previews: string[], version: number;
+    const cachedPreviews: string[] = [];
     try {
       db.exec("PRAGMA journal_mode=DELETE");
       version = inspectDatabase(db);
       paths = requiredResults(db);
+      previews = previewIds(db);
     } finally {
       db.close();
+    }
+    // Unopened previews have only a source reference; preserve captured documents
+    // without reading project files or contacting an execution machine during backup.
+    for (const id of previews) {
+      const path = "previews/" + id + ".html";
+      try {
+        const info = await lstat(join(config.hub.resultsPath, path));
+        if (!info.isFile() || info.isSymbolicLink())
+          fail("UNSAFE_FILE", "Preview cache must contain regular files");
+        paths.push(path);
+        cachedPreviews.push(id);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
     }
     // Local-Linux staged attachment copies may be referenced by native history.
     const staged = join(config.hub.resultsPath, "uploads", "staged");
@@ -286,7 +336,8 @@ export async function createSnapshot(
       files.push(await digestAt(staging, path));
     }
     const manifest: Manifest = {
-      format: 1,
+      format: 2,
+      cachedPreviews,
       kind: "codex-web-backup",
       createdAt: new Date().toISOString(),
       appVersion: "0.1.0",
@@ -354,6 +405,11 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
       db.exec(
         "BEGIN IMMEDIATE; DELETE FROM sessions; DELETE FROM bootstrap; UPDATE commands SET state='unknown' WHERE state='pending'; UPDATE threads SET status='unknown' WHERE status IN ('starting','running','waiting_approval'); COMMIT;",
       );
+      // A queued job in an older backup may have already reached ChatGPT since
+      // that snapshot. Restoration must not replay it, even if submitted was false.
+      db.prepare(
+        "UPDATE gpt_jobs SET status='unknown',error=? WHERE status IN ('queued','preparing','running')",
+      ).run("Восстановлено из резервной копии. Проверь ответ в ChatGPT перед повторной отправкой.");
       inspectDatabase(db);
     } finally {
       db.close();
