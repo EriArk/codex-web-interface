@@ -20,6 +20,7 @@ export function showGptJob(job: GptJob, messages: GptMessage[], now = Date.now()
 }
 
 export function mergeGptJobs(previous: GptJob[], incoming: GptJob[]): GptJob[] {
+  if (!incoming.length) return previous;
   const map = new Map(previous.map((job) => [job.id, job]));
   for (const job of incoming) {
     const old = map.get(job.id);

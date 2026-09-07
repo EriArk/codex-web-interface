@@ -110,6 +110,9 @@ test("GPT job summaries cannot erase retained answers and late snapshots cannot 
     createdAt: 1,
     updatedAt: 10,
   };
+  assert.equal(mergeGptJobs([old], []).length, 1);
+  const unchanged = [old];
+  assert.equal(mergeGptJobs(unchanged, []), unchanged);
   const result = mergeGptJobs(
     [old],
     [{ ...old, text: "", answer: "", status: "completed", summaryOnly: true, updatedAt: 20 }],
