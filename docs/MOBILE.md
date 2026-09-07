@@ -296,3 +296,8 @@ History restoration must not replace newer WebSocket messages. A fresh second cl
 ### Interactive design previews
 
 HTML demo cards open a single large viewer over the workspace. The close action stays in its top toolbar; mobile fills the viewport and respects safe areas. Fit-to-width is the default, with an optional 960px canvas for designs meant for a wider display. Navigation and chat state remain mounted underneath. The demo receives no access to the surrounding app or its credentials.
+
+
+### Copy controls
+
+Codex and GPT message headers expose a small copy icon with a 44px touch target. Code/text blocks have a separate copy control available while collapsed, and Results commands/diffs can be copied independently. Copy uses the current message text or exact block contents, without interface labels. A brief check mark confirms success; a failed browser clipboard operation stays visible and allows retry. Keyboard focus, selection and composer drafts are preserved.

@@ -14,6 +14,7 @@ import { AttachmentList, useAttachments } from "./AttachmentPicker";
 import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
+import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
 import { TurnDetails } from "./TurnDetails";
@@ -501,6 +502,7 @@ export function Chat({
                       {message.phase === "commentary" && (
                         <span className="small muted">В работе</span>
                       )}
+                      <CopyButton text={message.text} />
                     </div>
                     <div className="message-body">
                       <MessageText text={message.text} />

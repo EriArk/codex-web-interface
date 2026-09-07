@@ -1,0 +1,94 @@
+.copy-control {
+  display: inline-flex;
+  flex: 0 0 44px;
+  position: relative;
+  align-self: center;
+}
+.copy-control .copy-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.copy-control .copy-button:hover,
+.copy-control .copy-button:focus-visible {
+  color: var(--accent);
+  background: var(--soft);
+}
+.copy-control .copy-button:active {
+  transform: scale(0.94);
+}
+.copy-control[data-copy-state="copied"] .copy-button {
+  color: var(--accent);
+}
+.message-meta > .copy-control,
+.message-header > .copy-control {
+  margin-inline-start: auto;
+  margin-block: -6px;
+}
+.copyable-block {
+  position: relative;
+  margin: 10px 0;
+}
+.copyable-block > .code-disclosure {
+  margin: 0;
+}
+.copyable-block > .code-disclosure > summary {
+  padding-inline-end: 52px;
+}
+.copyable-block > .copy-control {
+  position: absolute;
+  inset-block-start: 1px;
+  inset-inline-end: 1px;
+}
+.result-card > .copyable-block {
+  margin: 10px 16px;
+}
+.file-change > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.file-change > summary > .copy-control {
+  margin-inline-start: auto;
+}
+.copy-error {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-end: 0;
+  z-index: 4;
+  width: max-content;
+  max-width: 220px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .copy-control .copy-button:active {
+    transform: none;
+  }
+}
+
+.copy-control .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

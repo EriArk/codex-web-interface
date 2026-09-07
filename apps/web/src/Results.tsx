@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { CollapsibleCode } from "./CollapsibleCode";
+import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { PreviewViewer } from "./PreviewViewer";
 import type { Activity, Result } from "./types";
@@ -116,16 +117,14 @@ export function Results({
                 </div>
               )}
               {r.payload.command && (
-                <details className="code-disclosure">
-                  <summary>Команда и код</summary>
-                  <pre>{r.payload.command}</pre>
-                </details>
+                <CollapsibleCode label="Команда и код">{r.payload.command}</CollapsibleCode>
               )}
               {r.payload.changes?.map((change) => (
                 <details className="file-change" key={change.path}>
                   <summary>
                     <span>{change.path.split(/[\\/]/).at(-1)}</span>
                     <span className="small muted">{change.kind}</span>
+                    <CopyButton text={change.diff ?? ""} label="Копировать diff" />
                   </summary>
                   <small className="file-path">{change.path}</small>
                   <pre>{change.diff || "Сводка изменений без текстового diff"}</pre>
