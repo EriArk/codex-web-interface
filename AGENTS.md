@@ -330,3 +330,11 @@ Before mobile support is considered complete, the same core workflow must also w
 - Preserve ChatGPT project instructions and appearance when renaming through its current PATCH contract. Native pin limits remain enforced; never unpin another item automatically.
 - Existing Codex project creation must remain available for creating a folder or connecting an existing folder.
 - Match the GPT mobile navigation geometry to Codex, including anchors, and correct demonstrated visual inconsistencies without a separate theme/device implementation.
+
+
+## Owner-requested copy controls and stabilization priorities (2026-09-07)
+
+- Provide always-visible, touch-accessible icon copy controls for both Codex/GPT messages and fenced code/text blocks, with brief success feedback. A block can be copied while collapsed; preserve exact whitespace and avoid copying interface labels.
+- Defer issue #6 project-root restrictions pending the owner's decision; preserve the existing project workflow.
+- Physical-device verification continues through the owner's everyday iPhone/iPad usage and reported fixes. Do not claim a separate completed formal hardware acceptance pass.
+- Continue GPT recovery (#30), conservative storage maintenance (#5), and interactive preview isolation verification (#29), retaining features and the existing password-only experience.

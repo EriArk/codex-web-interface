@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 const paths: Record<string, string[]> = {
+  copy: ["M9 9h12v12H9zM15 9V3H3v12h6"],
   pin: ["m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v7"],
   edit: ["m4 16 12-12 4 4-12 12-5 1 1-5ZM14 6l4 4"],
   archive: ["M3 3h18v5H3zM5 8v13h14V8M9 12h6"],

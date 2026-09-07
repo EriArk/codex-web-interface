@@ -5,6 +5,7 @@ import { AccountControls } from "./AccountControls";
 import { api, messageOf } from "./api";
 import { ClientPicker } from "./ClientPicker";
 import { CollapsibleCode } from "./CollapsibleCode";
+import { CopyButton } from "./CopyButton";
 import {
   EntityArchive,
   EntityMenu,
@@ -425,6 +426,7 @@ export function GptWorkspace({
                 <span className="avatar">Я</span>
                 <b>Вы</b>
                 <small>{titles[job.status]}</small>
+                <CopyButton text={job.text} />
               </div>
               <div className="message-body">
                 <Text value={job.text} />
@@ -437,6 +439,7 @@ export function GptWorkspace({
               <div className="message-header">
                 <span className="avatar">G</span>
                 <b>GPT</b>
+                <CopyButton text={job.answer} />
               </div>
               <div className="message-body">
                 {!isActive(job) && !!job.progress?.length && <GptProgress items={job.progress} />}
@@ -821,6 +824,7 @@ export function GptWorkspace({
                   <div className="message-header">
                     <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
                     <b>{message.role === "user" ? "Вы" : "GPT"}</b>
+                    <CopyButton text={message.text} />
                   </div>
                   <div className="message-body">
                     {message.role === "assistant" &&
