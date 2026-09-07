@@ -1,25 +1,29 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { releaseVersion } from "./releaseVersion.ts";
 export default defineConfig({
   plugins: [
     react(),
     {
       name: "release-version",
+      transformIndexHtml: {
+        order: "post",
+        handler(_html, context) {
+          if (!context.bundle) return;
+          return [
+            {
+              tag: "meta",
+              attrs: { name: "codex-release", content: releaseVersion(context.bundle).id },
+              injectTo: "head",
+            },
+          ];
+        },
+      },
       generateBundle(_options, bundle) {
-        const entry = Object.values(bundle).find(
-          (chunk) => chunk.type === "chunk" && chunk.isEntry,
-        );
-        if (!entry) throw new Error("Missing web entry");
         this.emitFile({
           type: "asset",
           fileName: "version.json",
-          source: JSON.stringify({
-            entry: `/${entry.fileName}`,
-            styles: Object.values(bundle)
-              .filter((asset) => asset.type === "asset" && asset.fileName.endsWith(".css"))
-              .map((asset) => `/${asset.fileName}`)
-              .sort(),
-          }),
+          source: JSON.stringify(releaseVersion(bundle)),
         });
       },
     },
