@@ -1,4 +1,5 @@
 import type {
+  GptConnection,
   GptConversation,
   GptFile,
   GptJob,
@@ -123,6 +124,35 @@ export function GptWorkspace({
   onSession: (session: Session) => void;
   onLogout: () => void;
 }) {
+  const connectionRequest = useRef(0);
+  const [connection, setConnection] = useState<GptConnection | null>(null);
+  const [checkingConnection, setCheckingConnection] = useState(false);
+  const checkConnection = async () => {
+    setCheckingConnection(true);
+    const request = ++connectionRequest.current;
+    try {
+      const next = await api<GptConnection>("/gpt/reconnect", { method: "POST" });
+      if (request === connectionRequest.current) {
+        setConnection(next);
+        setReady(next.canSend);
+      }
+      if (next.canSend) {
+        const catalog = await api<GptModels>("/gpt/models");
+        setModels(catalog);
+        setModel((old) =>
+          catalog.models.some((item) => item.id === old) ? old : catalog.currentModel,
+        );
+        setEffort((old) =>
+          catalog.efforts.some((item) => item.id === old) ? old : catalog.currentEffort,
+        );
+        gptCache.models = catalog;
+      }
+    } catch (e) {
+      setNotice(messageOf(e));
+    } finally {
+      setCheckingConnection(false);
+    }
+  };
   const [items, setItems] = useState<GptConversation[]>(gptCache.items),
     [projects, setProjects] = useState<GptProject[]>(gptCache.projects),
     [offset, setOffset] = useState<number | null>(gptCache.offset);
@@ -250,9 +280,13 @@ export function GptWorkspace({
   useEffect(() => {
     let disposed = false;
     void action(async () => {
-      const status = await api<{ configured: boolean }>("/gpt/status");
+      const request = ++connectionRequest.current;
+      const status = await api<GptConnection>("/gpt/status");
       if (disposed) return;
-      setReady(status.configured);
+      if (request === connectionRequest.current) {
+        setConnection(status);
+        setReady(status.canSend);
+      }
       if (!status.configured) {
         setNotice("Подключение GPT ещё не настроено.");
         return;
@@ -365,6 +399,47 @@ export function GptWorkspace({
     observer.observe(messageList.current);
     return () => observer.disconnect();
   }, []);
+  useEffect(() => {
+    let disposed = false;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      const request = ++connectionRequest.current;
+      try {
+        const next = await api<GptConnection>("/gpt/status");
+        if (!disposed && request === connectionRequest.current) {
+          setConnection(next);
+          setReady(next.canSend);
+        }
+      } catch {
+        /* Current drafts remain editable through a transient Hub outage. */
+      }
+    };
+    const interval = setInterval(() => void refresh(), 10000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+  useEffect(() => {
+    if (!connection?.canSend || models) return;
+    let disposed = false;
+    void api<GptModels>("/gpt/models")
+      .then((next) => {
+        if (disposed) return;
+        setModels(next);
+        gptCache.models = next;
+        setModel((old) => (next.models.some((item) => item.id === old) ? old : next.currentModel));
+        setEffort((old) =>
+          next.efforts.some((item) => item.id === old) ? old : next.currentEffort,
+        );
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+    };
+  }, [connection?.canSend, models]);
   const currentJobs = jobs
     .filter((job) => (selected ? job.nativeId === selected : job.nativeId === null))
     .sort((a, b) => a.createdAt - b.createdAt);
@@ -918,6 +993,26 @@ export function GptWorkspace({
             </div>
           </div>
           <div className="gpt-composer-wrap">
+            {connection && !connection.canSend && (
+              <div className="gpt-connection-notice" role="status">
+                <span>{connection.message}</span>
+                {connection.state === "login_required" ? (
+                  <a className="secondary" href="/gpt-connect">
+                    Войти
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Проверить подключение GPT"
+                    disabled={checkingConnection}
+                    onClick={() => void checkConnection()}
+                  >
+                    <Icon name="refresh" />
+                  </button>
+                )}
+              </div>
+            )}
             {active && (
               <GptProgress
                 key={active.id}
@@ -1105,9 +1200,21 @@ export function GptWorkspace({
             </button>
           ))}
         </div>
-        <a className="primary" href="/gpt-connect">
-          Подключение ChatGPT
-        </a>
+        <section className="gpt-connection-settings" aria-label="Состояние GPT">
+          <p role="status">{connection?.message ?? "Проверяем подключение GPT…"}</p>
+          <button
+            type="button"
+            className="secondary"
+            disabled={checkingConnection}
+            onClick={() => void checkConnection()}
+          >
+            <Icon name="refresh" />
+            {checkingConnection ? "Проверяем…" : "Перепроверить подключение"}
+          </button>
+          <a className="primary" href="/gpt-connect">
+            {connection?.state === "login_required" ? "Войти в ChatGPT" : "Подключение ChatGPT"}
+          </a>
+        </section>
         <AccountControls onSession={onSession} onLogout={onLogout} />
       </dialog>
     </div>

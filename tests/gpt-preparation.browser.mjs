@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect, webkit } from "@playwright/test";
+import { inspectComposer, readConnectorHealth } from "../ops/gpt/browser-health.mjs";
 import { selectModels } from "../ops/gpt/browser-models.mjs";
 import { sessionReady } from "../ops/gpt/browser-session.mjs";
 
@@ -38,6 +39,47 @@ for (const [name, type] of [
     );
     await page.goto("https://chatgpt.com/");
     assert(await sessionReady(page, null));
+    let authenticated = false;
+    await page.route("https://chatgpt.com/api/auth/session", (route) =>
+      route.fulfill({ json: authenticated ? { accessToken: "fixture-token" } : {} }),
+    );
+    const connector = {
+      health: async () => ({
+        ok: true,
+        activeRequests: [],
+        activeClient: {
+          url: page.url(),
+          ready: true,
+          pageReady: true,
+          compatible: true,
+          extensionProtocolVersion: 5,
+          compatibility: { bridgeVersion: "6.3.14" },
+          capabilities: {
+            promptInput: true,
+            fileUpload: true,
+            modelSelection: true,
+            effortSelection: true,
+          },
+        },
+      }),
+      pages: () => [page],
+      privateState: { permissions: true, locked: true },
+    };
+    assert.equal((await readConnectorHealth(connector)).state, "login_required");
+    authenticated = true;
+    assert.equal((await readConnectorHealth(connector)).state, "healthy");
+    assert.deepEqual(await inspectComposer(page), {
+      composer: true,
+      attachments: true,
+      models: true,
+      generating: false,
+    });
+    await page.locator("#open").evaluate((node) => node.removeAttribute("aria-haspopup"));
+    assert.equal((await inspectComposer(page)).models, false);
+    await page.locator("#open").evaluate((node) => node.setAttribute("aria-haspopup", "menu"));
+    await page.locator("[data-testid=composer-plus-btn]").evaluate((node) => (node.hidden = true));
+    assert.equal((await inspectComposer(page)).attachments, false);
+    await page.locator("[data-testid=composer-plus-btn]").evaluate((node) => (node.hidden = false));
     await page.locator("#prompt-textarea").fill("unsent text");
     assert.equal(
       await sessionReady(page, null),
@@ -80,6 +122,14 @@ for (const [name, type] of [
       /GPT_MODEL_UNAVAILABLE/,
     );
     await expect(page.locator("#content")).not.toBeVisible();
+    await page.evaluate(() => {
+      for (const radio of document.querySelectorAll("[role=menuitemradio]"))
+        radio.onclick = () => {};
+    });
+    await assert.rejects(
+      selectModels(page, { model: "Previous", effort: "2" }),
+      /GPT_SETTINGS_NOT_CONFIRMED/,
+    );
     console.log(
       JSON.stringify({
         browser: name,

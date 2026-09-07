@@ -16,6 +16,7 @@ import {
 import { Store } from "../apps/hub/dist/store.js";
 import { showGptJob } from "../apps/web/src/gptState.ts";
 import { configSchema } from "../packages/shared/dist/index.js";
+import { healthyConnection } from "./fixtures/gpt-connection.mjs";
 
 const waitUntil = async (fn) => {
   const start = Date.now();
@@ -124,6 +125,11 @@ test("GPT sends survive client closure, serialize jobs, reject conflicting retri
     for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : {};
     requests.push({ path: req.url, body });
+    if (req.url === "/status" || req.url === "/settings") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(req.url === "/status" ? healthyConnection : body));
+      return;
+    }
     if (req.url === "/bridge/chat") {
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.write(
@@ -263,6 +269,11 @@ test("GPT preparation errors preserve text and files, explain the failed step an
     for await (const chunk of req) {
     }
     requests.push(req.url);
+    if (req.url === "/status") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(healthyConnection));
+      return;
+    }
     res.writeHead(req.url === "/settings" ? 409 : 200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify(
