@@ -1959,3 +1959,37 @@ hr.pane-divider {
   min-height: 44px;
   flex: 1;
 }
+
+/* Focus the panel on opening; reserve visible control focus for keyboard navigation. */
+:root .panel-close {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+  flex: 0 0 44px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+:root .panel-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+.project-sheet:focus,
+.settings-dialog:focus,
+.gpt-settings:focus {
+  outline: none;
+}
+.sheet-content .nav-brand {
+  min-height: 64px;
+  padding: 8px;
+}
+.settings-dialog .dialog-heading,
+.gpt-settings-heading {
+  min-height: 44px;
+  gap: 12px;
+}
+.gpt-settings-heading h2 {
+  margin: 0;
+}

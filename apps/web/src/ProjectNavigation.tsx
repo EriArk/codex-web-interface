@@ -220,7 +220,7 @@ export function ProjectNavigation({
         <span>{onClient ? <ClientPicker value="codex" onChange={onClient} /> : "codex"}</span>
         <button
           type="button"
-          className="icon-button mobile-only"
+          className="icon-button mobile-only panel-close"
           aria-label="Закрыть проекты"
           data-drawer-close
           onClick={onClose}

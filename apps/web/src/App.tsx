@@ -223,6 +223,8 @@ function Workspace({
   const root = useRef<HTMLDivElement>(null),
     settingsDialog = useRef<HTMLDialogElement>(null),
     drawerDialog = useProjectDrawer(drawer);
+  useProjectSwipe(drawerDialog, drawer, () => setDrawer(false), "close");
+  useProjectSwipe(settingsDialog, settings, () => setSettings(false), "close");
   useProjectSwipe(
     root,
     client === "codex" &&
@@ -388,8 +390,14 @@ function Workspace({
     };
   }, [view, threadId, state.revision]);
   useEffect(() => {
-    if (settings) settingsDialog.current?.showModal();
-    else settingsDialog.current?.close();
+    if (settings) {
+      const panel = settingsDialog.current;
+      if (panel) {
+        panel.tabIndex = -1;
+        panel.showModal();
+        panel.focus({ preventScroll: true });
+      }
+    } else settingsDialog.current?.close();
   }, [settings]);
   const selectThread = (id: string, owner = projectId) => {
     if (owner !== projectId) {
@@ -947,7 +955,7 @@ function Workspace({
           <h2>Настройки</h2>
           <button
             type="button"
-            className="icon-button"
+            className="icon-button panel-close"
             onClick={() => setSettings(false)}
             aria-label="Закрыть настройки"
           >

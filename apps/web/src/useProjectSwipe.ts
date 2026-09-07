@@ -11,9 +11,10 @@ export function opensProjects(start: SwipePoint, end: SwipePoint): boolean {
   return elapsed >= 0 && elapsed < 1000 && dx >= 64 && dx > dy * 1.6;
 }
 export function useProjectSwipe(
-  root: RefObject<HTMLDivElement | null>,
+  root: RefObject<HTMLElement | null>,
   enabled: boolean,
   open: () => void,
+  direction: "open" | "close" = "open",
 ) {
   const callback = useRef(open);
   callback.current = open;
@@ -25,21 +26,24 @@ export function useProjectSwipe(
       start = undefined;
       if (
         event.touches.length !== 1 ||
-        el.clientWidth >= 1100 ||
-        document.querySelector("dialog[open]")
+        (direction === "open" && (el.clientWidth >= 1100 || document.querySelector("dialog[open]")))
       )
         return;
       const target = event.target;
       if (
         !(target instanceof Element) ||
         target.closest(
-          "button,a,input,textarea,select,[contenteditable],dialog,[data-swipe-ignore],.remote-workspace",
+          direction === "open"
+            ? "button,a,input,textarea,select,[contenteditable],dialog,[data-swipe-ignore],.remote-workspace"
+            : "input,textarea,select,[contenteditable],[data-swipe-ignore],.remote-workspace",
         )
       )
         return;
+      if (direction === "close" && target.closest("dialog") !== el) return;
       const touch = event.touches[0]!,
         rect = el.getBoundingClientRect();
-      if (touch.clientX < rect.left || touch.clientX > rect.left + 28) return;
+      if (direction === "open" && (touch.clientX < rect.left || touch.clientX > rect.left + 28))
+        return;
       start = { x: touch.clientX, y: touch.clientY, time: performance.now() };
     };
     const move = (event: TouchEvent) => {
@@ -49,7 +53,7 @@ export function useProjectSwipe(
         return;
       }
       const touch = event.touches[0]!,
-        dx = touch.clientX - start.x,
+        dx = (touch.clientX - start.x) * (direction === "close" ? -1 : 1),
         dy = Math.abs(touch.clientY - start.y);
       if (dx < -8 || (dy > 14 && dy > Math.abs(dx))) {
         start = undefined;
@@ -62,15 +66,19 @@ export function useProjectSwipe(
       start = undefined;
       if (!initial || event.touches.length || event.changedTouches.length !== 1) return;
       const touch = event.changedTouches[0]!;
-      if (opensProjects(initial, { x: touch.clientX, y: touch.clientY, time: performance.now() }))
+      const endPoint = { x: touch.clientX, y: touch.clientY, time: performance.now() };
+      if (direction === "close") endPoint.x = initial.x + (initial.x - endPoint.x);
+      if (opensProjects(initial, endPoint)) {
+        if (direction === "close" && event.cancelable) event.preventDefault();
         callback.current();
+      }
     };
     const cancel = () => {
       start = undefined;
     };
     el.addEventListener("touchstart", begin, { passive: true });
     el.addEventListener("touchmove", move, { passive: false });
-    el.addEventListener("touchend", end, { passive: true });
+    el.addEventListener("touchend", end, { passive: false });
     el.addEventListener("touchcancel", cancel, { passive: true });
     return () => {
       el.removeEventListener("touchstart", begin);
@@ -78,5 +86,5 @@ export function useProjectSwipe(
       el.removeEventListener("touchend", end);
       el.removeEventListener("touchcancel", cancel);
     };
-  }, [enabled, root]);
+  }, [enabled, root, direction]);
 }

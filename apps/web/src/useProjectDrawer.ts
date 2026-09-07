@@ -7,8 +7,10 @@ export function useProjectDrawer(open: boolean) {
     if (!dialog || (!open && !dialog.open)) return;
     if (open && !dialog.open) {
       // Native dialog focus must not open the first select on iOS.
-      dialog.querySelector("[data-drawer-close]")?.setAttribute("autofocus", "");
+      dialog.tabIndex = -1;
+      dialog.setAttribute("autofocus", "");
       dialog.showModal();
+      dialog.focus({ preventScroll: true });
     }
     dialog.dataset.closing = String(!open);
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !dialog.animate) {
