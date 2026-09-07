@@ -48,6 +48,7 @@ export class RemoteInput {
   private group?: Group;
   private abort = new AbortController();
   private hold?: ReturnType<typeof setTimeout>;
+  private gesture?: ReturnType<typeof setTimeout>;
   private lastTap = { at: 0, x: 0, y: 0 };
   private state: RemoteMouseState = {
     x: 0,
@@ -143,6 +144,12 @@ export class RemoteInput {
       this.state.left = false;
       this.send();
       const pair = this.pair();
+      for (const contact of this.contacts.values()) {
+        contact.startX = contact.x;
+        contact.startY = contact.y;
+        contact.travel = 0;
+      }
+      if (this.adapter.mode() === "touch" && pair) this.absolute(pair.x, pair.y);
       if (pair)
         this.group = {
           ...pair,
@@ -156,6 +163,12 @@ export class RemoteInput {
           consumed: false,
         };
       return;
+    }
+    if (this.contacts.size === 3 && this.group) {
+      clearTimeout(this.gesture);
+      this.gesture = undefined;
+      const pair = this.pair()!;
+      this.group = { ...this.group, ...pair, kind: "pan", moved: true, consumed: true };
     }
     if (this.contacts.size !== 1) return;
     if (this.adapter.mode() === "trackpad") {
@@ -205,30 +218,7 @@ export class RemoteInput {
       return;
     }
     if (this.contacts.size >= 2 && this.group) {
-      const pair = this.pair(),
-        group = this.group;
-      if (!pair) return;
-      const dx = pair.x - group.x,
-        dy = pair.y - group.y;
-      if (Math.abs(pair.distance / group.initialDistance - 1) > 0.08) group.kind = "zoom";
-      if (group.kind === "pending" && Math.hypot(pair.x - group.startX, pair.y - group.startY) > 3)
-        group.kind = this.adapter.mode() === "trackpad" ? "scroll" : "pan";
-      if (group.kind === "zoom")
-        this.adapter.zoom(pair.distance / group.distance, { x: group.x, y: group.y }, pair);
-      else if (group.kind === "pan") this.adapter.pan(dx, dy);
-      else if (group.kind === "scroll") {
-        group.scroll += dy;
-        const steps = Math.min(8, Math.floor(Math.abs(group.scroll) / 24));
-        if (steps) {
-          this.scroll(group.scroll < 0 ? 1 : -1, steps);
-          group.scroll %= 24;
-        }
-      }
-      if (point.travel > 7 || Math.abs(pair.distance / group.initialDistance - 1) > 0.06)
-        group.moved = true;
-      group.x = pair.x;
-      group.y = pair.y;
-      group.distance = pair.distance;
+      this.moveGroup();
       return;
     }
     if (point.suppressed || this.contacts.size !== 1) return;
@@ -250,11 +240,62 @@ export class RemoteInput {
       }
     }
   };
+  private moveGroup(settled = false) {
+    const group = this.group,
+      pair = this.pair();
+    if (!group || !pair) return;
+    if (group.kind === "pending") {
+      const [a, b] = [...this.contacts.values()];
+      const ax = a!.x - a!.startX,
+        ay = a!.y - a!.startY;
+      const bx = b!.x - b!.startX,
+        by = b!.y - b!.startY;
+      const first = Math.hypot(ax, ay),
+        second = Math.hypot(bx, by);
+      // Touch contacts arrive as separate pointer events. Wait briefly for the other
+      // finger before interpreting a single contact's movement as a pinch.
+      if (!settled && (first < 3 || second < 3)) {
+        if (!this.gesture)
+          this.gesture = setTimeout(() => {
+            this.gesture = undefined;
+            this.moveGroup(true);
+          }, 40);
+        return;
+      }
+      const parallel = first >= 3 && second >= 3 && ax * bx + ay * by > first * second * 0.5;
+      if (!parallel && Math.abs(pair.distance / group.initialDistance - 1) > 0.08)
+        group.kind = "zoom";
+      else if (Math.hypot(pair.x - group.startX, pair.y - group.startY) > 3) group.kind = "scroll";
+      if (group.kind === "pending") return;
+      clearTimeout(this.gesture);
+      this.gesture = undefined;
+      group.moved = true;
+    }
+    const dx = pair.x - group.x,
+      dy = pair.y - group.y;
+    if (group.kind === "zoom")
+      this.adapter.zoom(pair.distance / group.distance, { x: group.x, y: group.y }, pair);
+    else if (group.kind === "pan") this.adapter.pan(dx, dy);
+    else if (group.kind === "scroll") {
+      group.scroll += dy;
+      const steps = Math.min(8, Math.floor(Math.abs(group.scroll) / 24));
+      if (steps) {
+        this.scroll(group.scroll < 0 ? 1 : -1, steps);
+        group.scroll %= 24;
+      }
+    }
+    group.x = pair.x;
+    group.y = pair.y;
+    group.distance = pair.distance;
+  }
   private up = (event: PointerEvent) => {
     const point = this.contacts.get(event.pointerId);
     if (!point) return;
     event.preventDefault();
     this.stopHold();
+    clearTimeout(this.gesture);
+    this.gesture = undefined;
+    if (this.group) this.moveGroup(true);
     if (point.kind === "mouse" || point.kind === "pen") {
       if (event.button === 2) this.state.right = false;
       else if (event.button === 1) this.state.middle = false;
@@ -322,6 +363,8 @@ export class RemoteInput {
   };
   reset() {
     this.stopHold();
+    clearTimeout(this.gesture);
+    this.gesture = undefined;
     this.contacts.clear();
     this.lastTap.at = 0;
     this.group = undefined;
