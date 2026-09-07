@@ -4,8 +4,15 @@ import Markdown from "react-markdown";
 import { api, messageOf } from "./api";
 import { ClientPicker } from "./ClientPicker";
 import { CollapsibleCode } from "./CollapsibleCode";
+import {
+  EntityArchive,
+  EntityMenu,
+  type LibraryChange,
+  type LibraryEntity,
+  libraryEvent,
+} from "./EntityMenu";
 import { GptProgress } from "./GptProgress";
-import { gptCache, saveGptCache } from "./gptCache";
+import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { type Theme, themes } from "./theme";
@@ -115,19 +122,84 @@ export function GptWorkspace({
       setNotice(messageOf(e));
     }
   }, []);
+  const catalogVersion = useRef(0);
   const catalog = useCallback(async (append = false, next = 0, force = true) => {
     if (!append && !force && Date.now() - gptCache.catalogAt < 30000) return;
-    const data = await api<{ items: GptConversation[]; nextOffset: number | null }>(
-      "/gpt/conversations?offset=" + next,
-    );
+    const version = catalogVersion.current;
+    const data = await api<{
+      items: GptConversation[];
+      nextOffset: number | null;
+      pinnedIds?: string[];
+      library?: LibraryEntity[];
+    }>("/gpt/conversations?offset=" + next);
+    if (version !== catalogVersion.current) return;
     gptCache.catalogAt = Date.now();
-    setItems((old) => [...new Map([...old, ...data.items].map((c) => [c.id, c])).values()]);
+    const metadata = new Map(
+      (data.library ?? []).filter((e) => e.kind === "thread").map((e) => [e.id, e]),
+    );
+    setItems((old) =>
+      [...new Map([...old, ...data.items].map((c) => [c.id, c])).values()].map((row) => ({
+        ...row,
+        title: metadata.get(row.id)?.name || row.title,
+        pinned: data.pinnedIds ? data.pinnedIds.includes(row.id) : row.pinned,
+        archived: metadata.get(row.id)?.archived ?? row.archived,
+        deleted: metadata.get(row.id)?.deleted ?? row.deleted,
+      })),
+    );
     setOffset((old) =>
       !append && next === 0 && old !== null
         ? Math.max(old, data.nextOffset ?? 0) || null
         : data.nextOffset,
     );
   }, []);
+  useEffect(() => {
+    const refresh = async () => {
+      const version = catalogVersion.current;
+      await catalog();
+      const data = await api<{ items: GptProject[]; conversations: GptConversation[] }>(
+        "/gpt/projects",
+      );
+      if (version !== catalogVersion.current) return;
+      setProjects(data.items);
+      setItems((old) => [
+        ...new Map([...data.conversations, ...old].map((t) => [t.id, t])).values(),
+      ]);
+      gptCache.projectsAt = Date.now();
+    };
+    const changed = (event: Event) => {
+      const d = (event as CustomEvent<LibraryChange>).detail;
+      if (d.client !== "gpt") return;
+      catalogVersion.current++;
+      const patch = {
+        ...(d.action === "rename" ? { title: d.name, name: d.name } : {}),
+        ...(d.action === "pin" ? { pinned: d.value } : {}),
+        ...(d.action === "archive" ? { archived: d.value } : {}),
+        ...(d.action === "delete" ? { deleted: true } : {}),
+      };
+      if (d.kind === "thread")
+        setItems((old) => old.map((t) => (t.id === d.id ? { ...t, ...patch } : t)));
+      else setProjects((old) => old.map((p) => (p.id === d.id ? { ...p, ...patch } : p)));
+      if (
+        (d.action === "delete" || (d.action === "archive" && d.value)) &&
+        (d.id === selectedRef.current ||
+          (d.kind === "project" &&
+            items.some((t) => t.id === selectedRef.current && t.projectId === d.id)))
+      )
+        setSelected("");
+      void refresh().catch((e) => setNotice(messageOf(e)));
+    };
+    const visible = () => {
+      if (!document.hidden) void refresh().catch(() => {});
+    };
+    window.addEventListener(libraryEvent, changed);
+    document.addEventListener("visibilitychange", visible);
+    const timer = setInterval(visible, 30000);
+    return () => {
+      window.removeEventListener(libraryEvent, changed);
+      document.removeEventListener("visibilitychange", visible);
+      clearInterval(timer);
+    };
+  }, [catalog, items]);
   useEffect(() => {
     let disposed = false;
     void action(async () => {
@@ -423,27 +495,63 @@ export function GptWorkspace({
         </section>
       );
     });
+  useEffect(() => {
+    const current = items.find((t) => t.id === selected);
+    if (
+      current &&
+      (current.deleted ||
+        current.archived ||
+        projects.some((p) => p.id === current.projectId && (p.deleted || p.archived)))
+    )
+      setSelected("");
+    for (const row of items.filter(
+      (t) => t.deleted || projects.some((p) => p.id === t.projectId && p.deleted),
+    )) {
+      delete gptCache.chats[row.id];
+      beginGptHistory(row.id);
+    }
+  }, [items, projects, selected]);
   const navThread = (item: GptConversation) => {
     const running = jobs.some((job) => job.nativeId === item.id && isActive(job));
     return (
-      <button
-        className={"nav-thread " + (selected === item.id ? "selected" : "")}
-        type="button"
-        key={item.id}
-        onClick={() => choose(item.id)}
-      >
-        <Icon name="chat" size={17} />
-        <span>{item.title}</span>
-        {running && <span className="spinner" />}
-      </button>
+      <div className={"entity-row " + (selected === item.id ? "selected" : "")} key={item.id}>
+        <button
+          className={"nav-thread " + (selected === item.id ? "selected" : "")}
+          type="button"
+          onClick={() => choose(item.id)}
+        >
+          <Icon name={item.pinned ? "pin" : "chat"} size={17} />
+          <span>{item.title}</span>
+          {running && <span className="spinner" />}
+        </button>
+        <EntityMenu
+          client="gpt"
+          entity={{
+            id: item.id,
+            kind: "thread",
+            name: item.title,
+            projectId: item.projectId,
+            pinned: item.pinned,
+          }}
+          active={running}
+        />
+      </div>
     );
   };
   const filtered = items
-    .filter((item) => item.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+    .filter(
+      (item) =>
+        !item.archived &&
+        !item.deleted &&
+        !projects.some((p) => p.id === item.projectId && (p.archived || p.deleted)) &&
+        item.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+    )
     .sort(
       (a, b) =>
         Number(jobs.some((j) => j.nativeId === b.id && isActive(j))) -
-          Number(jobs.some((j) => j.nativeId === a.id && isActive(j))) || b.updatedAt - a.updatedAt,
+          Number(jobs.some((j) => j.nativeId === a.id && isActive(j))) ||
+        Number(!!b.pinned) - Number(!!a.pinned) ||
+        b.updatedAt - a.updatedAt,
     );
   const navigation = (
     <div className="navigation-inner">
@@ -479,29 +587,64 @@ export function GptWorkspace({
         />
       </div>
       <div className="gpt-nav-list">
-        {projects.map((project) => (
-          <section key={project.id}>
-            <button
-              type="button"
-              className="nav-thread"
-              aria-expanded={expanded.has(project.id)}
-              onClick={() =>
-                setExpanded((old) => {
-                  const next = new Set(old);
-                  if (next.has(project.id)) next.delete(project.id);
-                  else next.add(project.id);
-                  return next;
-                })
-              }
-            >
-              <Icon name="folder" />
-              <span>{project.name}</span>
-              <Icon name="chevron" />
-            </button>
-            {expanded.has(project.id) &&
-              filtered.filter((c) => c.projectId === project.id).map(navThread)}
-          </section>
-        ))}
+        {projects
+          .filter((p) => !p.archived && !p.deleted)
+          .sort(
+            (a, b) =>
+              Number(
+                jobs.some(
+                  (j) =>
+                    isActive(j) && items.some((t) => t.id === j.nativeId && t.projectId === b.id),
+                ),
+              ) -
+                Number(
+                  jobs.some(
+                    (j) =>
+                      isActive(j) && items.some((t) => t.id === j.nativeId && t.projectId === a.id),
+                  ),
+                ) || Number(!!b.pinned) - Number(!!a.pinned),
+          )
+          .map((project) => (
+            <section key={project.id}>
+              <div className="entity-row">
+                <button
+                  type="button"
+                  className="nav-thread"
+                  aria-expanded={expanded.has(project.id)}
+                  onClick={() =>
+                    setExpanded((old) => {
+                      const next = new Set(old);
+                      if (next.has(project.id)) next.delete(project.id);
+                      else next.add(project.id);
+                      return next;
+                    })
+                  }
+                >
+                  <Icon name={project.pinned ? "pin" : "folder"} />
+                  <span>{project.name}</span>
+                  <span className="project-chevron" data-open={expanded.has(project.id)}>
+                    <Icon name="chevron" size={15} />
+                  </span>
+                </button>
+                <EntityMenu
+                  client="gpt"
+                  entity={{
+                    id: project.id,
+                    kind: "project",
+                    name: project.name,
+                    pinned: project.pinned,
+                  }}
+                  active={jobs.some(
+                    (j) =>
+                      isActive(j) &&
+                      items.some((t) => t.id === j.nativeId && t.projectId === project.id),
+                  )}
+                />
+              </div>
+              {expanded.has(project.id) &&
+                filtered.filter((c) => c.projectId === project.id).map(navThread)}
+            </section>
+          ))}
         <div className="nav-label">
           <span>Диалоги</span>
           <button
@@ -528,6 +671,7 @@ export function GptWorkspace({
         <Icon name="refresh" />
         Обновить
       </button>
+      <EntityArchive client="gpt" />
       <a className="nav-new-thread" href="/gpt-connect">
         <Icon name="remote" />
         Открыть ChatGPT
@@ -574,7 +718,10 @@ export function GptWorkspace({
           <Icon name="menu" />
         </button>
         <div className="header-project">
-          <span>GPT</span>
+          <span>
+            <Icon name="chat" size={17} />
+            GPT
+          </span>
           <small>{items.find((item) => item.id === selected)?.title ?? "Новый чат"}</small>
         </div>
         {active && <span className="spinner" role="img" aria-label="GPT работает" />}
@@ -814,7 +961,7 @@ export function GptWorkspace({
         <div className="support-pane gpt-results">
           <div className="support-tabs">
             <button type="button" className="active">
-              Результаты
+              <Icon name="results" size={16} /> Результаты
             </button>
           </div>
           <div className="gpt-result-scroll">

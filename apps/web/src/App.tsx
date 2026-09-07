@@ -10,6 +10,7 @@ import {
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
 import { DesktopControl } from "./DesktopControl";
+import { type LibraryChange, libraryEvent } from "./EntityMenu";
 
 import { Icon } from "./icons";
 import { Login } from "./Login";
@@ -200,8 +201,16 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     () => setDrawer(true),
   );
   const { state, older, reconnect, refresh } = useWorkspace(threadId);
-  const project = projects.find((p) => p.id === projectId);
+  const storedProject = projects.find((p) => p.id === projectId);
+  const project = storedProject
+    ? {
+        ...storedProject,
+        ...navigationState.state.library?.find((e) => e.kind === "project" && e.id === projectId),
+      }
+    : undefined;
   const selectedThread = threads.find((t) => t.id === threadId);
+  const selectedThreadTitle =
+    navigationState.state.threads.find((t) => t.id === threadId)?.title ?? selectedThread?.title;
   const action = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
     if (busy) return;
     setBusy(true);
@@ -244,9 +253,10 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         setProjects(list);
         if (prefs.theme) setTheme(prefs.theme);
         if (prefs.view) setView(prefs.view);
-        const id = list.some((p) => p.id === prefs.projectId)
+        const visible = list.filter((p) => !p.archived && !p.deleted);
+        const id = visible.some((p) => p.id === prefs.projectId)
           ? (prefs.projectId ?? "")
-          : (list[0]?.id ?? "");
+          : (visible[0]?.id ?? "");
         setProjectId(id);
         if (id) await loadThreads(id, prefs.threadId);
         setInitialized(true);
@@ -495,8 +505,16 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         setProjects(data.projects);
         if (data.warnings?.length) setNotice(data.warnings[0] ?? "");
         const selected = selectionRef.current;
-        if (selected.projectId && data.projects.some((p) => p.id === selected.projectId))
-          await loadThreads(selected.projectId, selected.threadId);
+        const available = data.projects.filter((p) => !p.archived && !p.deleted);
+        const project = available.find((p) => p.id === selected.projectId) ?? available[0];
+        if (project) {
+          setProjectId(project.id);
+          await loadThreads(project.id, selected.threadId);
+        } else {
+          setProjectId("");
+          setThreadId("");
+          setThreads([]);
+        }
       } catch (e) {
         setNotice(messageOf(e));
       } finally {
@@ -517,6 +535,53 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       document.removeEventListener("visibilitychange", update);
     };
   }, [initialized, refreshCatalog]);
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const detail = (event as CustomEvent<LibraryChange>).detail;
+      if (detail.client !== "codex") return;
+      if (detail.kind === "thread") {
+        setThreadGroups((groups) =>
+          Object.fromEntries(
+            Object.entries(groups).map(([id, rows]) => [
+              id,
+              rows
+                .filter(
+                  (t) =>
+                    t.id !== detail.id ||
+                    !["archive", "delete"].includes(detail.action) ||
+                    detail.value === false,
+                )
+                .map((t) =>
+                  t.id === detail.id
+                    ? {
+                        ...t,
+                        title: detail.action === "rename" ? detail.name : t.title,
+                        pinned: detail.action === "pin" ? detail.value : t.pinned,
+                      }
+                    : t,
+                ),
+            ]),
+          ),
+        );
+      }
+      void refreshCatalog();
+    };
+    window.addEventListener(libraryEvent, changed);
+    return () => window.removeEventListener(libraryEvent, changed);
+  }, [refreshCatalog]);
+  useEffect(() => {
+    const library = navigationState.state.library ?? [];
+    const selected = selectionRef.current;
+    if (
+      library.some(
+        (e) =>
+          (e.archived || e.deleted) &&
+          ((e.kind === "thread" && e.id === selected.threadId) ||
+            (e.kind === "project" && e.id === selected.projectId)),
+      )
+    )
+      void refreshCatalog();
+  }, [navigationState.state.library, refreshCatalog]);
   const navigation = (
     <ProjectNavigation
       onClient={(value) => {
@@ -602,7 +667,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             <Icon name="folder" size={17} />
             {project?.name ?? "Рабочее пространство"}
           </span>
-          <small>{selectedThread?.title ?? "Выбери диалог"}</small>
+          <small>{selectedThreadTitle ?? "Выбери диалог"}</small>
         </div>
         <div className="header-connection">
           <span

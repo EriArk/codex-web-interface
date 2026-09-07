@@ -14,6 +14,7 @@ import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { registerGpt } from "./gpt.js";
+import { entityAction, libraryMutation } from "./library.js";
 import { registerNavigation } from "./navigation.js";
 import { previewCsp } from "./previews.js";
 import { registerQueue } from "./queue.js";
@@ -175,6 +176,42 @@ export async function createApp(
     closeSession(auth.logout(req, reply));
     return { ok: true };
   });
+  app.post("/api/library/codex/:kind/:id", async (req) => {
+    const params = z
+      .object({ kind: z.enum(["thread", "project"]), id: idSchema })
+      .parse(req.params);
+    const action = entityAction.parse(req.body);
+    return store.once(
+      "library:codex:" + params.kind + ":" + params.id,
+      key(req),
+      action,
+      async () => {
+        await libraryMutation(() => sessions.manageEntity(params.kind, params.id, action));
+        return { ok: true };
+      },
+    );
+  });
+  app.get("/api/library/codex/archived", async (req) => {
+    const q = z
+      .object({ machineId: idSchema.optional(), cursor: z.string().max(4000).optional() })
+      .parse(req.query);
+    const machine = q.machineId ?? config.machines[0]?.id;
+    if (!machine) return { items: [], nextCursor: null };
+    const page = await sessions.catalog.archivedThreads(machine, q.cursor);
+    return {
+      ...page,
+      items: [
+        ...(!q.cursor
+          ? sessions.catalog.library
+              .archived()
+              .filter((e) => e.kind === "project" || e.localArchive)
+              .map((e) => ({ ...e, id: e.localId ?? e.id }))
+          : []),
+        ...page.items,
+      ],
+      machines: sessions.catalog.machines().map((m) => ({ id: m.id, name: m.name })),
+    };
+  });
   app.get("/api/projects", async (req) => {
     const query = z.object({ refresh: z.enum(["1"]).optional() }).parse(req.query);
     await sessions.catalog.refresh(query.refresh === "1");
@@ -221,7 +258,13 @@ export async function createApp(
     } catch {
       warning = "Компьютер недоступен. Показаны сохранённые диалоги.";
     }
-    return { threads: store.threads(project.id), warning };
+    return {
+      threads: store.threads(project.id).map((t) => ({
+        ...t,
+        pinned: sessions.catalog.library.get("thread", t.codexThreadId)?.pinned === true,
+      })),
+      warning,
+    };
   });
   app.get("/api/projects/:id/capabilities", async (req) => sessions.capabilities(paramId(req)));
   app.get("/api/projects/:id/status", async (req) => {

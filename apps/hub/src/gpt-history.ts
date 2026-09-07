@@ -17,6 +17,8 @@ export function gptCatalog(value: unknown): {
     .map((r: Json) => ({
       id: r.id,
       title: text(r.title) || "Новый чат",
+      pinned: r.is_starred === true || !!r.pinned_time,
+      archived: r.is_archived === true,
       updatedAt:
         typeof r.update_time === "number"
           ? r.update_time

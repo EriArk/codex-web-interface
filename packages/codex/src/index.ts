@@ -151,17 +151,23 @@ export class CodexClient extends EventEmitter {
                   "CODEX_METHOD_UNSUPPORTED",
                   "Установленный Codex не поддерживает эту возможность",
                 )
-              : message.includes("already has an active writer")
+              : message.startsWith("no rollout found for thread id ")
                 ? new HubError(
-                    409,
-                    "THREAD_IN_USE",
-                    "Диалог занят другим клиентом Codex. Для перехода на веб полностью выйди из ChatGPT/Codex на Windows, включая значок в трее, когда его работа завершится. Фоновый CodexWeb Companion оставь включённым. Черновик сохранён.",
+                    404,
+                    "THREAD_NOT_PERSISTED",
+                    "В этом диалоге ещё нет сохранённых сообщений.",
                   )
-                : new HubError(
-                    502,
-                    "CODEX_RPC_ERROR",
-                    "Codex отклонил запрос. Сообщение не подтверждено; проверь состояние диалога.",
-                  ),
+                : message.includes("already has an active writer")
+                  ? new HubError(
+                      409,
+                      "THREAD_IN_USE",
+                      "Диалог занят другим клиентом Codex. Для перехода на веб полностью выйди из ChatGPT/Codex на Windows, включая значок в трее, когда его работа завершится. Фоновый CodexWeb Companion оставь включённым. Черновик сохранён.",
+                    )
+                  : new HubError(
+                      502,
+                      "CODEX_RPC_ERROR",
+                      "Codex отклонил запрос. Сообщение не подтверждено; проверь состояние диалога.",
+                    ),
           );
         } else if (value.result && typeof value.result === "object" && !Array.isArray(value.result))
           entry.resolve(value.result as RecordValue);

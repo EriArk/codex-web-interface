@@ -578,7 +578,7 @@
     min-height: calc(48px + env(safe-area-inset-bottom));
     padding: 2px 12px calc(2px + env(safe-area-inset-bottom));
   }
-  .mobile-tabs > button {
+  .mobile-tabs > :is(button, a) {
     flex-direction: row;
     min-height: 44px;
     gap: 8px;

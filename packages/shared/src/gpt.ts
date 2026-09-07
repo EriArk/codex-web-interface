@@ -14,12 +14,18 @@ export interface GptMessage {
   files: GptFile[];
 }
 export interface GptConversation {
+  pinned?: boolean;
+  archived?: boolean;
+  deleted?: boolean;
   id: string;
   title: string;
   updatedAt: number;
   projectId?: string;
 }
 export interface GptProject {
+  pinned?: boolean;
+  archived?: boolean;
+  deleted?: boolean;
   id: string;
   name: string;
 }

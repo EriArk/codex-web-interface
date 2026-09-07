@@ -93,6 +93,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 7,
+    name: "navigation-library",
+    up(db) {
+      db.exec(
+        "CREATE TABLE library_entities(client TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,value TEXT NOT NULL,PRIMARY KEY(client,kind,id))",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 
