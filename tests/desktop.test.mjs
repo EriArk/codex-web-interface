@@ -519,3 +519,29 @@ test("an unconfirmed open preserves desktop ownership, never replays and blocks 
     await f.close();
   }
 });
+
+test("confirmed web return skips process actions when the desktop is already closed", async () => {
+  const f = await fixture();
+  try {
+    await clientRequest(f, { client: "desktop" });
+    f.set({
+      running: false,
+      operation: {
+        id: randomUUID(),
+        kind: "open",
+        state: "failed",
+        code: "DESKTOP_WINDOW_UNAVAILABLE",
+      },
+    });
+    const result = await clientRequest(f, {
+      client: "web",
+      releaseDesktop: true,
+      confirmStopTasks: true,
+    });
+    assert.equal(result.statusCode, 200, result.body);
+    assert.equal(result.json().client, "web");
+    assert.equal(f.calls.filter((c) => c.action === "ForceRelease").length, 0);
+  } finally {
+    await f.close();
+  }
+});

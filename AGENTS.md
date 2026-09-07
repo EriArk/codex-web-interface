@@ -345,3 +345,8 @@ Before mobile support is considered complete, the same core workflow must also w
 - Generated images, interactive demos and downloadable assistant files belong in Results, with compact links from conversation messages. User uploads remain visible in the chat.
 - Selecting media opens a Preview tab; allow expansion and return without discarding the demo's local state or chat state.
 - Keep message and block copy controls available in both modes, including collapsed code.
+
+## Owner-requested send-time handoff (2026-09-07)
+
+- When sending to a computer-owned Codex conversation, offer a concise modal to continue on the website. After explicit confirmation, use the existing verified desktop-release action and send the preserved text/files once in the same chat. Cancel/failure/navigation must preserve the draft and never replay an uncertain send.
+- Suppress old unread-completion badges while that same thread is active. A project may show both indicators only for different threads.

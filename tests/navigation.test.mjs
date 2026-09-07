@@ -175,3 +175,27 @@ test("global navigation stream updates unopened chats and read receipts across c
     await app.close();
   }
 });
+
+test("a running thread hides its old unread badge without clearing the completion receipt", () => {
+  const store = new Store(":memory:");
+  try {
+    const a = store.createThread("p", "a", "Active"),
+      b = store.createThread("p", "b", "Other");
+    complete(store, a.id);
+    store.setStatus(a.id, "running", "next");
+    let p = store.navigation(["p"]).projects[0];
+    assert.equal(p.active, 1);
+    assert.equal(p.unread, 0);
+    assert(store.navigation(["p"]).threads.find((t) => t.id === a.id).completedSeq > 0);
+    complete(store, b.id);
+    p = store.navigation(["p"]).projects[0];
+    assert.equal(p.active, 1);
+    assert.equal(p.unread, 1);
+    complete(store, a.id);
+    p = store.navigation(["p"]).projects[0];
+    assert.equal(p.active, 0);
+    assert.equal(p.unread, 2);
+  } finally {
+    store.close();
+  }
+});

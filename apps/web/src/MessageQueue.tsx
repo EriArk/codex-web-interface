@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, messageOf } from "./api";
+import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { Attachment } from "./types";
 
@@ -45,7 +45,8 @@ export function useMessageQueue(threadId: string) {
       checking = true;
       void refresh()
         .catch((e) => {
-          if (!disposed) setError(messageOf(e));
+          if (!disposed)
+            setError(e instanceof ApiError && e.code === "MACHINE_RELEASED" ? "" : messageOf(e));
         })
         .finally(() => {
           checking = false;
@@ -65,7 +66,7 @@ export function useMessageQueue(threadId: string) {
       document.removeEventListener("visibilitychange", check);
     };
   }, [threadId, refresh]);
-  const action = async (fn: () => Promise<unknown>) => {
+  const action = async (fn: () => Promise<unknown>, handoff = false) => {
     if (busyRef.current) return false;
     busyRef.current = true;
     setBusy(true);
@@ -77,6 +78,7 @@ export function useMessageQueue(threadId: string) {
       void refresh().catch(() => {});
       return true;
     } catch (e) {
+      if (handoff && e instanceof ApiError && e.code === "MACHINE_RELEASED") throw e;
       if (current.current === id) setError(messageOf(e));
       void refresh().catch(() => {});
       return false;
@@ -97,7 +99,7 @@ export function useMessageQueue(threadId: string) {
         body: { text, attachments, clientId: pending.current.id },
       });
       pending.current = undefined;
-    });
+    }, true);
   const change = (
     item: QueuedMessage,
     kind: "edit" | "delete" | "steer" | "restore",

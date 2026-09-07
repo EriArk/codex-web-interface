@@ -443,6 +443,7 @@ function Workspace({
       void loadThreads(projectId, threadId).catch(() => {});
       return true;
     } catch (error) {
+      if (error instanceof ApiError && error.code === "MACHINE_RELEASED") throw error;
       if (
         error instanceof ApiError &&
         ["THREAD_IN_USE", "PROJECT_BUSY", "INVALID_REQUEST"].includes(error.code)
@@ -784,6 +785,7 @@ function Workspace({
       )}
       <main className="workspace-content">
         <Chat
+          machineId={project?.machineId}
           projectId={projectId}
           threadId={threadId}
           state={state}

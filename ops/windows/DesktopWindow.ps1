@@ -12,7 +12,6 @@ namespace CodexWeb {
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
         [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr window, uint command);
         [DllImport("user32.dll")] private static extern int GetWindowTextLength(IntPtr window);
-        [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window, int index);
         [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
         [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr window);
         [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr window, int command);
@@ -20,17 +19,18 @@ namespace CodexWeb {
         [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
         public static IntPtr Find(int[] processIds) {
             var allowed = new HashSet<int>(processIds);
-            IntPtr found = IntPtr.Zero, foreground = GetForegroundWindow();
+            IntPtr found = IntPtr.Zero, hidden = IntPtr.Zero, foreground = GetForegroundWindow();
             EnumWindows((window, unused) => {
                 uint processId;
                 GetWindowThreadProcessId(window, out processId);
                 if (!allowed.Contains((int)processId) || GetWindow(window, 4) != IntPtr.Zero ||
-                    GetWindowTextLength(window) == 0 || !IsWindowVisible(window) ||
-                    (GetWindowLong(window, -16) & 0x10000) == 0) return true;
+                    GetWindowTextLength(window) == 0) return true;
+                // Electron custom chrome can omit WS_MAXIMIZEBOX; a tray-hidden main window is still valid.
+                if (!IsWindowVisible(window)) { if (hidden == IntPtr.Zero) hidden = window; return true; }
                 if (found == IntPtr.Zero || window == foreground) found = window;
                 return window != foreground;
             }, IntPtr.Zero);
-            return found;
+            return found != IntPtr.Zero ? found : hidden;
         }
     }
 }
