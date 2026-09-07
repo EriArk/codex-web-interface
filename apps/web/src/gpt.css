@@ -363,3 +363,31 @@
 .gpt-progress-details p {
   margin: 4px 0;
 }
+
+.gpt-connection-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+.gpt-connection-settings {
+  display: grid;
+  gap: 10px;
+}
+.gpt-connection-settings p {
+  margin: 0;
+}
+.gpt-connection-settings .primary,
+.gpt-connection-settings .secondary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}

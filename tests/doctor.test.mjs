@@ -6,6 +6,7 @@ import test from "node:test";
 import { collectDiagnostics, safeVersion, sshFailure } from "../apps/hub/dist/doctor.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { configSchema } from "../packages/shared/dist/index.js";
+import { healthyConnection } from "./fixtures/gpt-connection.mjs";
 
 test("doctor preserves active state and emits no source, credential or RPC payload fields", async () => {
   const root = await mkdtemp(join(tmpdir(), "codex-doctor-")),
@@ -103,4 +104,43 @@ test("diagnostic classifiers produce only bounded recognized version and failure
   assert.equal(sshFailure("sensitive-path: Permission denied (publickey)"), "SSH_AUTH_FAILED");
   assert.equal(sshFailure("SECRET REMOTE HOST IDENTIFICATION HAS CHANGED"), "SSH_HOST_KEY_FAILED");
   assert.equal(sshFailure("unexpected private detail"), "SSH_UNREACHABLE");
+});
+
+test("doctor reports GPT compatibility, queue counts and private-state flags without connector payloads", async () => {
+  const root = await mkdtemp(join(tmpdir(), "gpt-doctor-"));
+  const config = configSchema.parse({
+    hub: {
+      publicBaseUrl: "https://qa.example",
+      databasePath: join(root, "hub.db"),
+      resultsPath: join(root, "results"),
+    },
+    auth: {},
+    machines: [],
+    projects: [],
+    gpt: { endpoint: "http://127.0.0.1:1", tokenSecret: "PRIVATE_TOKEN_NAME" },
+  });
+  const store = new Store(config.hub.databasePath);
+  await mkdir(config.hub.resultsPath, { mode: 0o700 });
+  try {
+    const report = await collectDiagnostics(
+      config,
+      {},
+      {
+        gpt: async () => ({
+          ...healthyConnection,
+          token: "SECRET",
+          url: "SECRET",
+          profile: "SECRET",
+        }),
+      },
+    );
+    assert.equal(report.gpt.state, "healthy");
+    assert.equal(report.gpt.activeJobs, 0);
+    assert.equal(report.gpt.unknownJobs, 0);
+    assert(report.checks.some((check) => check.code === "GPT_HEALTHY"));
+    assert.doesNotMatch(JSON.stringify(report), /SECRET|PRIVATE_TOKEN_NAME/);
+  } finally {
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });

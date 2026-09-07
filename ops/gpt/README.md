@@ -42,4 +42,20 @@ Before applying model/power settings, session preparation verifies the selected 
 
 Model selection checks the active advanced view before touching its toggle, closes the menu using Escape and permits one bounded recovery attempt for an interrupted menu. The chosen model and power are read back before sending. This retries explicit settings only, never the chat prompt. Failed preparation keeps the text/files and identifies whether conversation opening, settings or attachments failed.
 
-Regression coverage: `tests/gpt-preparation.test.mjs` and `tests/gpt.test.mjs`; the opt-in `tests/gpt-preparation.browser.mjs` exercises Chromium/WebKit with isolated ChatGPT DOM fixtures and no network. The real-account acceptance used two distinct disposable new conversations with Latest/High and verified their replies before deleting only those fixtures.
+Regression coverage: `tests/gpt-preparation.test.mjs` and `tests/gpt.test.mjs`; `tests/gpt-preparation.browser.mjs` in CI exercises Chromium/WebKit with isolated ChatGPT DOM fixtures and no network. The real-account acceptance used two distinct disposable new conversations with Latest/High and verified their replies before deleting only those fixtures.
+
+## Connection lifecycle
+
+The private browser `/status` contract identifies its pinned bridge revision, bridge 6.3.14 / extension protocol 5, login state, composer/file/model/effort capabilities and private profile ownership/lock checks. It reads the authenticated browser session in place and returns only normalized flags. The Hub validates this contract and exposes disabled, starting, healthy, login-required, incompatible, busy, degraded or unavailable states. Account tokens, native URLs and browser diagnostics are never part of that response.
+
+Each queued job checks compatibility before native navigation. Session setup still proves the target chat; settings must return the exact selected model and effort before attachments or prompt dispatch. Missing capabilities leave unsubmitted work queued. A failed settings readback blocks further dispatch until an explicit connection recheck succeeds. An unavailable/login-required connector is rechecked with bounded delay; recovery may resume queued work but never replays or clears an unknown submission. Settings offers the existing protected sign-in page and a recheck action. Healthy connections add no new login step or composer explanation.
+
+Doctor includes the normalized state, pinned versions, active/unknown counts and private-state flags. Offline doctor skips connector probes. Chromium/WebKit fixtures cover login recovery, missing native controls and rejected settings readback; deterministic service tests cover offline/degraded queues and unknown outcomes. Real-account checks remain opt-in and should be read-only unless a disposable send is explicitly part of acceptance.
+
+### Upgrading the browser bridge
+
+1. Review the new upstream revision and attachment patches; update both the image pin and Hub compatibility contract together. Build a versioned browser image, never a floating dependency.
+2. Run unit checks and Chromium/WebKit fixtures with no account credentials. Verify source, protocol and settings readback; do not waive a failed gate by disabling a supported feature.
+3. Confirm Hub jobs and native browser requests are idle. Stop only the optional browser container, preserve its private state directory, and take a stopped-profile backup if changing browser/profile format. Never run two Chromium instances against that profile.
+4. Start the versioned connector with the same fixed hostname, exclusive lock and user. Read `/status`, catalog/history and model choices through the protected contract. Login-required uses the ordinary connection page; unknown jobs stay unresolved.
+5. Deploy the matching Hub after its own active turns finish. Retain the prior image pair and normal Hub backup for rollback; never replay prompts as an upgrade check.

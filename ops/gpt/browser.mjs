@@ -2,6 +2,7 @@ import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {readFileSync,mkdirSync,existsSync,unlinkSync} from 'node:fs';
 import {connect as connectSocket} from 'node:net';
+import {privateState,readConnectorHealth} from './browser-health.mjs';
 import {readAsset} from './browser-assets.mjs';
 import {mutateLibrary} from './browser-library.mjs';
 import {readModels,selectModels} from './browser-models.mjs';
@@ -45,6 +46,7 @@ async function activePage(){
  throw Error('GPT_ACTIVE_TAB_UNAVAILABLE');
 }
 function authorized(req){const v=Buffer.from(req.headers.authorization??''),expected=Buffer.from('Bearer '+token);return v.length===expected.length&&timingSafeEqual(v,expected)}
+const storageState=privateState();
 const server=createServer(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!authorized(req)){res.writeHead(401).end();return}
@@ -94,13 +96,16 @@ const server=createServer(async(req,res)=>{
   return;
  }
  if(req.method!=='GET'||!['/status','/catalog','/conversation','/bridge-health','/models','/projects','/active','/pins','/project'].includes(url.pathname)){res.writeHead(404).end();return}
- const target=await activePage();
  res.setHeader('Content-Type','application/json');
  try{
   if(url.pathname==='/status'){
-   const title=await target.title().catch(()=>'');
-   res.end(JSON.stringify({browserReady:true,challenge:/just a moment|verify.*human/i.test(title),origin:new URL(target.url()).origin,extensionReady:context.serviceWorkers().length>0}));return;
+   const report=await readConnectorHealth({health:async()=>{
+    const r=await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)});
+    if(!r.ok)throw Error('GPT_BRIDGE_UNAVAILABLE');return r.json();
+   },pages:()=>context.pages(),privateState:storageState});
+   res.end(JSON.stringify(report));return;
   }
+  const target=await activePage();
   if(url.pathname==='/models'){res.end(JSON.stringify(await readModels(target)));return}
   if(url.pathname==='/active'){
    const health=await(await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)})).json();

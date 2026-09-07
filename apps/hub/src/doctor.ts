@@ -9,6 +9,7 @@ import { parseArgs } from "node:util";
 import { CodexClient } from "@codex-web/codex";
 import { probeCodex, spawnCodex, stopProcess } from "@codex-web/machines";
 import type { HubConfig, MachineConfig } from "@codex-web/shared";
+import { normalizeGptConnection } from "@codex-web/shared";
 import { loadConfig } from "./config.js";
 import { SCHEMA_VERSION, schemaVersion } from "./migrations.js";
 
@@ -135,11 +136,14 @@ export async function collectDiagnostics(
     ssh?: typeof sshProbe;
     codex?: typeof probeCodex;
     rpc?: (machine: MachineConfig, cwd: string) => Rpc;
+    gpt?: () => Promise<unknown>;
   } = {},
 ) {
   const checks: Check[] = [];
   const add = (boundary: string, state: State, code: string) =>
     checks.push({ boundary, state, code });
+  let gptActive = 0,
+    gptUnknown = 0;
   let schema: number | undefined,
     databaseBytes = 0,
     resultsBytes = 0,
@@ -149,6 +153,19 @@ export async function collectDiagnostics(
     const db = new DatabaseSync(config.hub.databasePath, { readOnly: true });
     try {
       schema = schemaVersion(db);
+      if (schema >= 6)
+        try {
+          gptActive = Number(
+            db
+              .prepare(
+                "SELECT count(*) AS n FROM gpt_jobs WHERE status IN ('queued','preparing','running')",
+              )
+              .get()?.n,
+          );
+          gptUnknown = Number(
+            db.prepare("SELECT count(*) AS n FROM gpt_jobs WHERE status='unknown'").get()?.n,
+          );
+        } catch {}
       add(
         "database",
         schema === SCHEMA_VERSION ? "ok" : schema > SCHEMA_VERSION ? "error" : "warning",
@@ -226,6 +243,40 @@ export async function collectDiagnostics(
         "PUBLIC_HEALTH",
       );
   }
+  let gpt = normalizeGptConnection(null, !!config.gpt);
+  if (config.gpt && !options.offline) {
+    let raw: unknown = null;
+    try {
+      if (dependencies.gpt) raw = await dependencies.gpt();
+      else {
+        const token = process.env[config.gpt.tokenSecret];
+        if (token) {
+          const response = await fetch(new URL("/status", config.gpt.endpoint), {
+            headers: { Authorization: "Bearer " + token },
+            signal: AbortSignal.timeout(15000),
+            redirect: "error",
+          });
+          if (response.ok) raw = await response.json();
+          else await response.body?.cancel();
+        }
+      }
+    } catch {}
+    gpt = normalizeGptConnection(raw);
+    add(
+      "gpt",
+      gpt.state === "healthy" || gpt.state === "busy" ? "ok" : "warning",
+      "GPT_" + gpt.state.toUpperCase(),
+    );
+    if (gpt.privateState)
+      add(
+        "gpt/private-state",
+        gpt.privateState.permissions && gpt.privateState.locked ? "ok" : "warning",
+        "GPT_PRIVATE_STATE_" +
+          (gpt.privateState.permissions && gpt.privateState.locked ? "OK" : "CHECK"),
+      );
+  } else add("gpt", "skipped", config.gpt ? "NETWORK_PROBES_SKIPPED" : "GPT_DISABLED");
+  gpt.activeJobs = gptActive;
+  gpt.unknownJobs = gptUnknown;
   const machines = [];
   for (const [index, machine] of config.machines.entries()) {
     const boundary = "machine-" + (index + 1);
@@ -357,6 +408,7 @@ export async function collectDiagnostics(
     schemaVersion: schema,
     storage: { databaseBytes, resultsBytes, sizePartial, freeBytes },
     machines,
+    gpt,
     checks,
     ok: checks.every((check) => check.state !== "error"),
   };

@@ -2,11 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type GptConnection,
   type GptFile,
   type GptJob,
   type GptModels,
+  gptConnectionMessages,
   type HubConfig,
   HubError,
+  normalizeGptConnection,
   resultCategorySchema,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
@@ -54,6 +57,56 @@ export class GptService {
   private readonly lifetime = new AbortController();
   private completion = Promise.resolve();
   private releaseCompletion: (() => void) | undefined;
+  private recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  private connectionCache: { value: GptConnection; until: number } | undefined;
+  private compatibilityFailure = false;
+  async connection(force = false): Promise<GptConnection> {
+    let value: GptConnection;
+    if (!force && this.connectionCache && this.connectionCache.until > Date.now())
+      value = this.connectionCache.value;
+    else {
+      let raw: unknown = null;
+      if (this.available())
+        try {
+          raw = await this.json("/status");
+        } catch {}
+      value = normalizeGptConnection(raw, this.available());
+      this.connectionCache = { value, until: Date.now() + 5000 };
+    }
+    const activeJobs = Number(
+      this.store.db
+        .prepare(
+          "SELECT count(*) AS n FROM gpt_jobs WHERE status IN ('queued','preparing','running')",
+        )
+        .get()?.n,
+    );
+    const unknownJobs = Number(
+      this.store.db.prepare("SELECT count(*) AS n FROM gpt_jobs WHERE status='unknown'").get()?.n,
+    );
+    if (this.compatibilityFailure && value.state === "healthy")
+      value = {
+        ...value,
+        state: "degraded",
+        canSend: false,
+        message: gptConnectionMessages.degraded,
+      };
+    return { ...value, activeJobs, unknownJobs };
+  }
+  async reconnect(): Promise<GptConnection> {
+    if (this.working || this.libraryBusy) return this.connection();
+    this.compatibilityFailure = false;
+    this.modelCache = undefined;
+    const state = await this.connection(true);
+    if (state.state === "healthy") {
+      try {
+        await this.models();
+      } catch {
+        this.compatibilityFailure = true;
+      }
+      if (!this.compatibilityFailure) void this.pump();
+    }
+    return this.connection();
+  }
   private modelsPending: Promise<GptModels> | undefined;
   private modelCache: { value: GptModels; expires: number } | undefined;
   private readonly token: string;
@@ -272,7 +325,8 @@ export class GptService {
     if (this.modelCache && (this.working || this.modelCache.expires > Date.now()))
       return this.modelCache.value;
     if (this.modelsPending) return this.modelsPending;
-    if (this.working) throw error("GPT_BUSY", "Модели обновятся после текущего ответа.");
+    if (this.working || this.libraryBusy)
+      throw error("GPT_BUSY", "Модели обновятся после текущего ответа.");
     this.modelsPending = this.loadModels();
     try {
       return await this.modelsPending;
@@ -522,7 +576,16 @@ export class GptService {
     const streamController = new AbortController();
     let monitor: ReturnType<typeof setInterval> | undefined;
     try {
-      if (this.modelsPending) await this.modelsPending;
+      const connection = await this.connection(true);
+      if (connection.state !== "healthy") return;
+      if (this.modelsPending) {
+        try {
+          await this.modelsPending;
+        } catch {
+          this.compatibilityFailure = true;
+          return;
+        }
+      }
       const job = this.job(jobId);
       this.update(jobId, { status: "preparing" });
       preparing = "session";
@@ -530,7 +593,12 @@ export class GptService {
       else await this.json("/bridge/sessions/new", {});
       if (this.job(jobId).status === "cancelled") return;
       preparing = "settings";
-      await this.json("/settings", { model: job.model, effort: job.effort });
+      const selected = await this.json("/settings", { model: job.model, effort: job.effort });
+      if (selected.model !== job.model || String(selected.effort) !== job.effort)
+        throw error(
+          "GPT_SETTINGS_NOT_CONFIRMED",
+          "Не удалось подтвердить выбранные модель и режим.",
+        );
       preparing = "attachments";
       await this.json("/bridge/composer/attachments/clear", {});
       const files: string[] = [];
@@ -665,6 +733,7 @@ export class GptService {
       }
       if (!done && this.job(jobId).status !== "cancelled") throw Error("GPT_STREAM_ENDED");
     } catch {
+      if (!dispatched && preparing === "settings") this.compatibilityFailure = true;
       if (!done && this.job(jobId).status !== "cancelled")
         this.update(jobId, {
           status: dispatched ? "unknown" : "failed",
@@ -681,11 +750,19 @@ export class GptService {
       streamController.abort();
       this.working = false;
       this.releaseCompletion?.();
-      if (!this.stopped) void this.pump();
+      if (!this.stopped) {
+        clearTimeout(this.recoveryTimer);
+        this.recoveryTimer = setTimeout(
+          () => void this.pump(),
+          this.job(jobId).status === "queued" ? 10000 : 0,
+        );
+        this.recoveryTimer.unref();
+      }
     }
   }
   async close() {
     this.stopped = true;
+    clearTimeout(this.recoveryTimer);
     this.lifetime.abort();
     await this.completion;
   }
@@ -728,11 +805,8 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
       nextOffset: page.nextOffset,
     };
   });
-  app.get("/api/gpt/status", async () => ({
-    configured: service.available(),
-    ...(service.available() ? await service.json("/status") : {}),
-    connectUrl: "/gpt-connect",
-  }));
+  app.get("/api/gpt/status", async () => service.connection());
+  app.post("/api/gpt/reconnect", async () => service.reconnect());
   app.get("/api/gpt/models", async () => service.models());
   app.get("/api/gpt/conversations", async (req) => {
     const q = z
