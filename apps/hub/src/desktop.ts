@@ -164,7 +164,7 @@ export function registerDesktop(
           );
         if (body.releaseDesktop !== body.confirmStopTasks)
           throw new HubError(400, "CONFIRM_STOP_REQUIRED", "Подтверди закрытие настольного Codex.");
-        if (body.releaseDesktop) {
+        if (body.releaseDesktop && desktopState.running) {
           store.setPreferences({
             desktopReturns: { ...pendingReturns(), [m.id]: { id: key, requestedAt: Date.now() } },
           });

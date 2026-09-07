@@ -1942,3 +1942,20 @@ hr.pane-divider {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+.web-handoff-dialog {
+  width: min(28rem, calc(100% - 2rem));
+  padding: 1.2rem;
+}
+.web-handoff-dialog h2 {
+  margin-top: 0;
+}
+.web-handoff-dialog .desktop-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.web-handoff-dialog button {
+  min-height: 44px;
+  flex: 1;
+}

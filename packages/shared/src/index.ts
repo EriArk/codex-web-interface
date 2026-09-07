@@ -172,8 +172,9 @@ export interface NavigationState {
 export const isActiveThread = (status: string): boolean =>
   ["starting", "running", "waiting_approval"].includes(status);
 export const hasUnreadCompletion = (
-  thread: Pick<ThreadActivity, "completedSeq" | "seenSeq">,
-): boolean => thread.completedSeq > thread.seenSeq;
+  thread: Pick<ThreadActivity, "completedSeq" | "seenSeq"> &
+    Partial<Pick<ThreadActivity, "status">>,
+): boolean => !isActiveThread(thread.status ?? "") && thread.completedSeq > thread.seenSeq;
 export function compareActivity(a: ProjectActivity, b: ProjectActivity): number {
   const rank = (p: ProjectActivity) => (p.active ? 0 : p.unread ? 1 : 2);
   return (

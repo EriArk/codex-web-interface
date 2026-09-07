@@ -27,6 +27,7 @@ import "./taskBoundary.css";
 import type { Approval, Message, Result, TurnSettings } from "./types";
 import { UpdateNotice } from "./UpdateNotice";
 import type { ChatState } from "./useWorkspace";
+import { useWebHandoff } from "./WebHandoff";
 
 const positions = new Map<string, number>();
 const MessageText = memo(function MessageText({
@@ -210,6 +211,7 @@ function ApprovalCard({
   );
 }
 export function Chat({
+  machineId,
   projectId,
   threadId,
   state,
@@ -234,6 +236,7 @@ export function Chat({
 }: {
   completion?: ThreadActivity;
   canMarkSeen: boolean;
+  machineId?: string;
   projectId: string;
   threadId: string;
   state: ChatState;
@@ -254,6 +257,7 @@ export function Chat({
   onReconnect: () => void;
   onLatest: () => void;
 }) {
+  const handoff = useWebHandoff(machineId, threadId);
   const queue = useMessageQueue(threadId);
   const options = useTurnSettings(projectId, threadId, state.thread.settings);
   const attachments = useAttachments(threadId),
@@ -346,6 +350,7 @@ export function Chat({
   const [draft, setDraft] = useState(""),
     [newMessages, setNewMessages] = useState(false);
   const active = ["running", "starting", "waiting_approval"].includes(state.thread.status);
+  const external = state.thread.activitySource === "external";
   useEffect(() => {
     try {
       setDraft(sessionStorage.getItem(`codex-draft-${threadId}`) ?? "");
@@ -397,25 +402,23 @@ export function Chat({
       (!draft.trim() && !attachments.files.length) ||
       busy ||
       queue.busy ||
-      (active && !queue.state.available) ||
+      handoff.pending ||
+      (active && !external && !queue.state.available) ||
       attachments.busy ||
       options.saving ||
       state.loading ||
       !options.selection
     )
       return;
-    const value = draft;
+    const value = draft,
+      selection = options.selection,
+      fileIds = attachments.files.map((f) => f.id);
     if (
-      await (active
-        ? queue.add(
-            value,
-            attachments.files.map((f) => f.id),
-          )
-        : onSend(
-            value,
-            options.selection,
-            attachments.files.map((f) => f.id),
-          ))
+      await handoff.run((returned) =>
+        active && !external && !returned
+          ? queue.add(value, fileIds)
+          : onSend(value, selection, fileIds),
+      )
     ) {
       saveDraft("");
       attachments.clear();
@@ -681,6 +684,7 @@ export function Chat({
       {detailsOpen && (sending || queue.busy || active) && (
         <TurnDetails threadId={threadId} turnId={state.thread.activeTurnId} />
       )}
+      {handoff.panel}
       {sendError && (
         <div className="send-error" role="alert">
           <span>{sendError}</span>
@@ -709,7 +713,7 @@ export function Chat({
         }}
         onDrop={(e) => {
           e.preventDefault();
-          if (!busy && !queue.busy) void attachments.add(e.dataTransfer.files);
+          if (!busy && !handoff.pending && !queue.busy) void attachments.add(e.dataTransfer.files);
         }}
         onSubmit={(e) => {
           e.preventDefault();
@@ -722,7 +726,7 @@ export function Chat({
         />
         <AttachmentList
           files={attachments.files}
-          disabled={busy || queue.busy || attachments.busy}
+          disabled={busy || handoff.pending || queue.busy || attachments.busy}
           onRemove={(id) => void attachments.remove(id)}
         />
         {(attachments.error || attachments.busy) && (
@@ -737,7 +741,7 @@ export function Chat({
             type="file"
             multiple
             aria-label="Выбрать файлы или изображения"
-            disabled={!threadId || busy || queue.busy || attachments.busy}
+            disabled={!threadId || busy || handoff.pending || queue.busy || attachments.busy}
             onChange={(e) => {
               if (e.target.files) void attachments.add(e.target.files);
               e.target.value = "";
@@ -749,7 +753,12 @@ export function Chat({
               className="icon-button attach-button"
               aria-label="Добавить файлы или изображения"
               disabled={
-                !threadId || busy || queue.busy || attachments.busy || attachments.files.length >= 8
+                !threadId ||
+                busy ||
+                handoff.pending ||
+                queue.busy ||
+                attachments.busy ||
+                attachments.files.length >= 8
               }
               onClick={() => fileInput.current?.click()}
             >
@@ -770,7 +779,8 @@ export function Chat({
             onPaste={(e) => {
               if (e.clipboardData.files.length) {
                 e.preventDefault();
-                if (!busy && !queue.busy) void attachments.add(e.clipboardData.files);
+                if (!busy && !handoff.pending && !queue.busy)
+                  void attachments.add(e.clipboardData.files);
               }
             }}
             rows={2}
@@ -778,7 +788,7 @@ export function Chat({
             onChange={(e) => saveDraft(e.target.value)}
             placeholder={threadId ? "Что нужно сделать?" : "Создай диалог, чтобы начать"}
             aria-label="Сообщение Codex"
-            disabled={!threadId}
+            disabled={!threadId || handoff.pending}
             maxLength={32000}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -806,7 +816,8 @@ export function Chat({
                 (!draft.trim() && !attachments.files.length) ||
                 busy ||
                 queue.busy ||
-                (active && !queue.state.available) ||
+                handoff.pending ||
+                (active && !external && !queue.state.available) ||
                 attachments.busy ||
                 state.loading ||
                 options.loading ||
