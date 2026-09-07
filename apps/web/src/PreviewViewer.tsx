@@ -5,13 +5,22 @@ import { Icon } from "./icons";
 import type { Result } from "./types";
 import "./preview.css";
 
-export function PreviewViewer({ result, onClose }: { result: Result; onClose: () => void }) {
+export function PreviewViewer({
+  result,
+  onClose,
+  embedded = false,
+}: {
+  result: Result;
+  onClose: () => void;
+  embedded?: boolean;
+}) {
   const dialog = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false),
     [error, setError] = useState(""),
     [wide, setWide] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (embedded) return;
     const root = document.getElementById("root"),
       focused = document.activeElement as HTMLElement | null;
     const prior = root?.inert ?? false;
@@ -21,14 +30,14 @@ export function PreviewViewer({ result, onClose }: { result: Result; onClose: ()
       if (root) root.inert = prior;
       focused?.focus();
     };
-  }, []);
+  }, [embedded]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: The retry counter deliberately reloads a failed document.
   useEffect(() => {
     let disposed = false;
     setReady(false);
     setError("");
     const path = result.payload.url ?? "";
-    if (!/^\/api\/previews\/[0-9a-f]{64}$/.test(path)) {
+    if (!/^\/api\/(?:gpt\/)?previews\/[0-9a-f]{64}$/.test(path)) {
       setError("Демо недоступно.");
       return;
     }
@@ -43,20 +52,20 @@ export function PreviewViewer({ result, onClose }: { result: Result; onClose: ()
       disposed = true;
     };
   }, [result.payload.url, attempt]);
-  return createPortal(
-    <div className="preview-overlay">
+  const content = (
+    <div className={embedded ? "preview-embedded" : "preview-overlay"}>
       <div
         ref={dialog}
-        className="preview-viewer"
+        className={embedded ? "preview-inline-viewer" : "preview-viewer"}
         role="dialog"
-        aria-modal="true"
+        aria-modal={embedded ? undefined : true}
         aria-label={result.title}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();
           }
-          if (event.key === "Tab") {
+          if (!embedded && event.key === "Tab") {
             const items = dialog.current?.querySelectorAll<HTMLElement>("button, iframe");
             const first = items?.[0],
               last = items?.[items.length - 1];
@@ -70,20 +79,27 @@ export function PreviewViewer({ result, onClose }: { result: Result; onClose: ()
           }
         }}
       >
-        <div className="viewer-toolbar">
-          <strong>{result.title}</strong>
-          <button
-            type="button"
-            className="secondary"
-            aria-pressed={wide}
-            onClick={() => setWide(!wide)}
-          >
-            {wide ? "По ширине" : "960 px"}
-          </button>
-          <button type="button" className="icon-button" aria-label="Закрыть демо" onClick={onClose}>
-            <Icon name="close" />
-          </button>
-        </div>
+        {!embedded && (
+          <div className="viewer-toolbar">
+            <strong>{result.title}</strong>
+            <button
+              type="button"
+              className="secondary"
+              aria-pressed={wide}
+              onClick={() => setWide(!wide)}
+            >
+              {wide ? "По ширине" : "960 px"}
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Закрыть демо"
+              onClick={onClose}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+        )}
         <div className="preview-stage" data-wide={wide}>
           {!ready && (
             <div className="empty-state" role="status">
@@ -116,7 +132,7 @@ export function PreviewViewer({ result, onClose }: { result: Result; onClose: ()
           )}
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
+  return embedded ? content : createPortal(content, document.body);
 }

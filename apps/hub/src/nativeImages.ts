@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readMachineImage } from "@codex-web/machines";
-import { type HubConfig, HubError, type MachineConfig } from "@codex-web/shared";
+import {
+  type HubConfig,
+  HubError,
+  isNativeImageSource,
+  type MachineConfig,
+} from "@codex-web/shared";
 import sharp from "sharp";
 import { Artifacts } from "./artifacts.js";
 import type { Store } from "./store.js";
@@ -35,12 +40,8 @@ export class NativeImages {
     this.artifacts = new Artifacts(config.hub.resultsPath, store);
   }
   register(threadId: string, messageId: string, source: string): MessageImage | undefined {
-    if (!source || source.length > 12 * 1024 * 1024) return;
-    const inline = /^data:image\/(png|jpe?g|webp|gif|avif);base64,[A-Za-z0-9+/]+={0,2}$/.test(
-      source,
-    );
-    if (!inline && !/\.(png|jpe?g|webp|gif|avif|tiff?|heic|heif)$/i.test(source)) return;
-    if (!inline && !/^(?:[a-z]:[\\/]|\/)/i.test(source)) return;
+    if (!isNativeImageSource(source)) return;
+    const inline = source.startsWith("data:");
     const key = createHash("sha256").update(source).digest("hex");
     const old = this.store.db
       .prepare("SELECT id,name FROM native_images WHERE threadId=? AND messageId=? AND sourceKey=?")

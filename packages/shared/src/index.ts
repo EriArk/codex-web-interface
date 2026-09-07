@@ -274,3 +274,5 @@ export type {
   GptProgress,
   GptProject,
 } from "./gpt.js";
+
+export * from "./results.js";

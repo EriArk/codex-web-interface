@@ -1,4 +1,9 @@
-import { hasUnreadCompletion, type ThreadActivity } from "@codex-web/shared";
+import {
+  hasUnreadCompletion,
+  isNativeImageSource,
+  type ResultCategory,
+  type ThreadActivity,
+} from "@codex-web/shared";
 import {
   type FormEvent,
   Fragment,
@@ -24,11 +29,31 @@ import { UpdateNotice } from "./UpdateNotice";
 import type { ChatState } from "./useWorkspace";
 
 const positions = new Map<string, number>();
-const MessageText = memo(function MessageText({ text }: { text: string }) {
+const MessageText = memo(function MessageText({
+  text,
+  onImages,
+}: {
+  text: string;
+  onImages?: () => void;
+}) {
   return (
     <Markdown
       components={{
         pre: CollapsibleCode,
+        ...(onImages
+          ? {
+              img: ({ node, ...props }) =>
+                isNativeImageSource(String(node?.properties.src ?? props.src ?? "")) ? (
+                  <button type="button" className="result-chip" onClick={onImages}>
+                    <Icon name="image" size={16} />
+                    Изображение в результатах
+                    <Icon name="chevron" size={14} />
+                  </button>
+                ) : (
+                  <img {...props} alt={props.alt ?? ""} loading="lazy" />
+                ),
+            }
+          : {}),
         a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
       }}
     >
@@ -225,7 +250,7 @@ export function Chat({
   onCreate: () => void;
   onDecision: (id: string, d: "accept" | "decline") => void;
   onAnswer: (id: string, a: Record<string, string[]>) => void;
-  onResult: (id: string) => void;
+  onResult: (id: string, category?: ResultCategory) => void;
   onReconnect: () => void;
   onLatest: () => void;
 }) {
@@ -505,7 +530,12 @@ export function Chat({
                       <CopyButton text={message.text} />
                     </div>
                     <div className="message-body">
-                      <MessageText text={message.text} />
+                      <MessageText
+                        text={message.text}
+                        onImages={
+                          message.role === "assistant" ? () => onResult("", "images") : undefined
+                        }
+                      />
                       {!message.text && !message.attachments?.length && (
                         <span className="typing">•••</span>
                       )}

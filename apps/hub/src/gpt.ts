@@ -7,6 +7,7 @@ import {
   type GptModels,
   type HubConfig,
   HubError,
+  resultCategorySchema,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
 import sharp from "sharp";
@@ -21,6 +22,7 @@ import {
   gptProjects,
 } from "./gpt-history.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
+import { gptResults, resultPage } from "./gpt-results.js";
 import {
   type EntityAction,
   type EntityKind,
@@ -28,6 +30,7 @@ import {
   Library,
   libraryMutation,
 } from "./library.js";
+import { assertPreviewFrame, Previews, previewCsp } from "./previews.js";
 import type { Store } from "./store.js";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -55,6 +58,7 @@ export class GptService {
   private modelCache: { value: GptModels; expires: number } | undefined;
   private readonly token: string;
   readonly root: string;
+  readonly previews: Previews;
   constructor(
     readonly config: HubConfig,
     readonly store: Store,
@@ -62,6 +66,9 @@ export class GptService {
     this.library = new Library(store, "gpt");
     this.token = config.gpt ? (process.env[config.gpt.tokenSecret] ?? "") : "";
     this.root = join(config.hub.resultsPath, "gpt");
+    this.previews = new Previews(join(config.hub.resultsPath, "previews"), store, () => {
+      throw error("GPT_PREVIEW_SOURCE", "Демо недоступно.");
+    });
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     // Never replay an ambiguous native submission after a Hub restart.
     store.db
@@ -759,6 +766,51 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
       .get(p.id);
     service.library.assertExists("thread", p.id);
     return service.historyCache.page(p.id, q, running ? 3000 : 15000);
+  });
+  app.get("/api/gpt/conversations/:id/results", async (req) => {
+    const p = z.object({ id }).parse(req.params);
+    const q = z
+      .object({ category: resultCategorySchema.default("all"), before: id.optional() })
+      .parse(req.query);
+    service.library.assertExists("thread", p.id);
+    const snapshot = await service.historyCache.snapshot(p.id);
+    return {
+      ...resultPage(gptResults(p.id, snapshot.items, service.previews), q.category, q.before),
+      sourceRevision: snapshot.lineage,
+    };
+  });
+  app.get("/api/gpt/conversations/:id/results/:resultId", async (req) => {
+    const p = z.object({ id, resultId: id }).parse(req.params);
+    service.library.assertExists("thread", p.id);
+    const item = gptResults(p.id, await service.historyCache.messages(p.id), service.previews).find(
+      (row) => row.id === p.resultId,
+    );
+    if (!item) throw error("RESULT_NOT_FOUND", "Результат не найден.", 404);
+    return item;
+  });
+  const gptPreview = async (previewId: string) => {
+    const scope = service.previews.thread(previewId);
+    if (!scope.startsWith("gpt:")) throw error("PREVIEW_NOT_FOUND", "Демо не найдено.", 404);
+    service.library.assertExists("thread", scope.slice(4));
+    return service.previews.document(previewId);
+  };
+  app.get("/api/gpt/previews/:id/ready", async (req) => {
+    await gptPreview(z.object({ id: z.string().regex(/^[0-9a-f]{64}$/) }).parse(req.params).id);
+    return { ready: true };
+  });
+  app.get("/api/gpt/previews/:id", async (req, reply) => {
+    assertPreviewFrame(req.headers);
+    const html = await gptPreview(
+      z.object({ id: z.string().regex(/^[0-9a-f]{64}$/) }).parse(req.params).id,
+    );
+    return reply
+      .header("Content-Security-Policy", previewCsp)
+      .removeHeader("X-Frame-Options")
+      .header("Cache-Control", "private, no-store")
+      .header("Referrer-Policy", "no-referrer")
+      .header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+      .type("text/html; charset=utf-8")
+      .send(html);
   });
   app.get("/api/gpt/jobs", async (req) => {
     const q = z
