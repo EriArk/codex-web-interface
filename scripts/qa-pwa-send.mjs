@@ -33,7 +33,7 @@ for(const [engine,type] of [["chromium",chromium],["webkit",webkit]]) {
   await input.fill("Черновик переживёт обновление");
   await page.getByLabel("Выбрать файлы или изображения",{exact:true}).setInputFiles({name:"update-note.txt",mimeType:"text/plain",buffer:Buffer.from("saved upload")});
   await page.getByRole("button",{name:"Удалить update-note.txt",exact:true}).waitFor();
-  await writeFile(versionPath,JSON.stringify({...JSON.parse(originalVersion.toString()),styles:["/assets/release-next.css"]}));
+  await writeFile(versionPath,JSON.stringify({...JSON.parse(originalVersion.toString()),id:"c".repeat(64)}));
   await page.clock.fastForward(61000);
   await expect(page.locator(".update-notice")).toBeVisible();
   await expect(input).toHaveValue("Черновик переживёт обновление");
