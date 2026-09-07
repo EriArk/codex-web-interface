@@ -177,6 +177,23 @@ test("GPT sends survive client closure, serialize jobs, reject conflicting retri
   send(streams[0], { type: "diagnostic.anything", token: "PRIVATE_TOKEN" });
   send(streams[0], { type: "answer.snapshot", text: "Visible answer" });
   await waitUntil(() => service.job(first).answer === "Visible answer");
+  send(streams[0], {
+    type: "assistant.progress.snapshot",
+    source: "tab.observation",
+    items: [
+      {
+        id: "stage-1",
+        source: "cot-v5",
+        kind: "thinking",
+        visible: true,
+        active: true,
+        text: "Проверяю варианты",
+        token: "PRIVATE_TOKEN",
+      },
+    ],
+  });
+  await waitUntil(() => service.job(first).progress?.length === 1);
+  assert.equal(service.job(first).progress[0].text, "Проверяю варианты");
   assert.doesNotMatch(JSON.stringify(service.jobs()), /PRIVATE_/);
   send(streams[0], { type: "request.done", session: { id: "native-chat" }, artifacts: [] });
   streams[0].end();

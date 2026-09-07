@@ -256,4 +256,13 @@ export interface Attachment {
   createdAt: string;
 }
 
-export type { GptConversation, GptFile, GptJob, GptMessage, GptModels, GptProject } from "./gpt.js";
+export type {
+  GptConversation,
+  GptFile,
+  GptHistoryPage,
+  GptJob,
+  GptMessage,
+  GptModels,
+  GptProgress,
+  GptProject,
+} from "./gpt.js";

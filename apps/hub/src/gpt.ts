@@ -11,6 +11,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import sharp from "sharp";
 import { z } from "zod";
+import { GptHistoryCache } from "./gpt-cache.js";
 import {
   gptCatalog,
   gptCompletion,
@@ -19,6 +20,7 @@ import {
   gptProjectConversations,
   gptProjects,
 } from "./gpt-history.js";
+import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import type { Store } from "./store.js";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -32,6 +34,9 @@ type Json = Record<string, any>;
 const active = ["queued", "preparing", "running"];
 const error = (code: string, message: string, status = 409) => new HubError(status, code, message);
 export class GptService {
+  readonly historyCache = new GptHistoryCache(async (id) =>
+    gptHistory(await this.json("/conversation?id=" + encodeURIComponent(id))),
+  );
   private working = false;
   private stopped = false;
   private readonly lifetime = new AbortController();
@@ -135,6 +140,7 @@ export class GptService {
           status: row.status as GptJob["status"],
           createdAt: Number(row.createdAt),
           updatedAt: Number(row.updatedAt),
+          summaryOnly: true,
           text: "",
           files: [],
           model: "",
@@ -163,6 +169,12 @@ export class GptService {
       effort: row.effort,
       status: row.status,
       answer: row.answer,
+      progress: JSON.parse(
+        String(
+          this.store.db.prepare("SELECT value FROM gpt_job_progress WHERE jobId=?").get(row.id)
+            ?.value ?? "[]",
+        ),
+      ),
       assets: JSON.parse(row.assets),
       createdAt: Number(row.createdAt),
       updatedAt: Number(row.updatedAt),
@@ -273,6 +285,10 @@ export class GptService {
     return this.job(jobId);
   }
   private update(jobId: string, values: Json) {
+    if (values.status && ["completed", "cancelled", "unknown", "failed"].includes(values.status)) {
+      const nativeId = this.job(jobId).nativeId;
+      if (nativeId) this.historyCache.invalidate(nativeId);
+    }
     const columns = Object.keys(values);
     this.store.db
       .prepare(
@@ -363,6 +379,7 @@ export class GptService {
               "/conversation?id=" + encodeURIComponent(native.nativeId),
             );
             if (this.stopped || done) return;
+            this.historyCache.seed(native.nativeId, gptHistory(history));
             const completion = gptCompletion(history, current.text, current.createdAt);
             if (!completion.complete || this.job(jobId).status === "cancelled") return;
             const assets = [
@@ -419,7 +436,20 @@ export class GptService {
             continue;
           }
           if (done || this.job(jobId).status === "cancelled") continue;
-          // Whitelist public output. Never persist or forward adapter diagnostics, thinking or tokens.
+          const progress = gptProgress(event);
+          if (progress.length) {
+            const previous = this.job(jobId).progress ?? [];
+            const value = JSON.stringify(mergeGptProgress(previous, progress));
+            if (value !== JSON.stringify(previous)) {
+              this.store.db
+                .prepare(
+                  "INSERT INTO gpt_job_progress VALUES(?,?) ON CONFLICT(jobId) DO UPDATE SET value=excluded.value",
+                )
+                .run(jobId, value);
+              this.update(jobId, { status: "running" });
+            }
+          }
+          // Whitelist public output. Never persist or forward adapter diagnostics, raw thinking or tokens.
           if (event.type === "request.started" && gptId(event.requestId))
             this.update(jobId, { requestId: event.requestId });
           if (event.type === "prompt.sent") this.update(jobId, { submitted: 1, status: "running" });
@@ -503,13 +533,26 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
   });
   app.get("/api/gpt/conversations/:id/messages", async (req) => {
     const p = z.object({ id }).parse(req.params),
-      q = z.object({ before: id.optional() }).parse(req.query);
-    const list = gptHistory(await service.json("/conversation?id=" + encodeURIComponent(p.id)));
-    const before = q.before ? list.findIndex((message) => message.id === q.before) : list.length;
-    if (before < 0) throw error("GPT_HISTORY_CHANGED", "История изменилась. Обнови чат.");
-    const start = Math.max(0, before - 20),
-      items = list.slice(start, before);
-    return { items, nextBefore: start > 0 ? items[0]?.id : null };
+      q = z
+        .object({
+          before: id.optional(),
+          known: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          anchor: id.optional(),
+          prefix: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        })
+        .parse(req.query);
+    const running = !!store.db
+      .prepare(
+        "SELECT 1 FROM gpt_jobs WHERE nativeId=? AND status IN ('queued','preparing','running') LIMIT 1",
+      )
+      .get(p.id);
+    return service.historyCache.page(p.id, q, running ? 3000 : 15000);
   });
   app.get("/api/gpt/jobs", async (req) => {
     const q = z

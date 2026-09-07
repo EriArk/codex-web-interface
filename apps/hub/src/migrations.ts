@@ -84,6 +84,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 6,
+    name: "chatgpt-visible-progress",
+    up(db) {
+      db.exec(
+        "CREATE TABLE gpt_job_progress(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id) ON DELETE CASCADE, value TEXT NOT NULL)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

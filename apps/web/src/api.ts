@@ -36,7 +36,12 @@ export async function api<T>(
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "OFFLINE", "Нет связи с сервером. Проверь подключение.");
   }
-  if (response.status === 401 && path !== "/auth/login") unauthorized();
+  if (response.status === 401 && path !== "/auth/login") {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("private-session-ended"));
+    unauthorized();
+  }
+  if (response.ok && path === "/auth/logout")
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("private-session-ended"));
   let value: { error?: { code?: string; message?: string } };
   try {
     value = await response.json();
