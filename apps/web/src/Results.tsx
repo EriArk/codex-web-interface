@@ -9,6 +9,7 @@ import { ResultInspector } from "./ResultInspector";
 import "./resultCategories.css";
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
@@ -182,7 +183,17 @@ export function Results({
               )}
               {r.type === "plan" && (
                 <div className="result-plan">
-                  <Markdown components={{ pre: CollapsibleCode }}>{r.payload.text ?? ""}</Markdown>
+                  <Markdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      pre: CollapsibleCode,
+                      a: ({ node: _node, ...props }) => (
+                        <a {...props} target="_blank" rel="noopener noreferrer" />
+                      ),
+                    }}
+                  >
+                    {r.payload.text ?? ""}
+                  </Markdown>
                 </div>
               )}
               {r.payload.command && (

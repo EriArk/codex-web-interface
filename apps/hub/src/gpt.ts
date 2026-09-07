@@ -24,6 +24,7 @@ import {
   gptProjectConversations,
   gptProjects,
 } from "./gpt-history.js";
+import { gptLinkedText } from "./gpt-links.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { gptResults, resultPage } from "./gpt-results.js";
 import {
@@ -740,7 +741,10 @@ export class GptService {
             this.update(jobId, { requestId: event.requestId });
           if (event.type === "prompt.sent") this.update(jobId, { submitted: 1, status: "running" });
           if (event.type === "answer.snapshot" && typeof event.text === "string")
-            this.update(jobId, { answer: event.text.slice(0, 500000), status: "running" });
+            this.update(jobId, {
+              answer: gptLinkedText(event.text, {}).slice(0, 500000),
+              status: "running",
+            });
           if (event.type === "request.done") {
             const assets: GptFile[] = (Array.isArray(event.artifacts) ? event.artifacts : [])
               .filter((a: Json) => gptId(a.id))

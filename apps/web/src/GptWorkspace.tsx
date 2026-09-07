@@ -10,6 +10,7 @@ import type {
 } from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { AccountControls } from "./AccountControls";
 import { api, messageOf } from "./api";
 import { ClientPicker } from "./ClientPicker";
@@ -66,9 +67,17 @@ const Files = memo(function Files({ files }: { files: GptFile[] }) {
 const Text = memo(function Text({ value }: { value: string }) {
   return (
     <Markdown
+      remarkPlugins={[remarkGfm]}
       components={{
         pre: CollapsibleCode,
-        a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+        a: ({ node: _node, ...props }) => (
+          <a
+            {...props}
+            className={props.title === "Источник" ? "source-link" : undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        ),
       }}
     >
       {value}
