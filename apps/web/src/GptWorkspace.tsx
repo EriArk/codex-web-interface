@@ -1,6 +1,7 @@
 import type { GptConversation, GptFile, GptJob, GptModels, GptProject } from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import { AccountControls } from "./AccountControls";
 import { api, messageOf } from "./api";
 import { ClientPicker } from "./ClientPicker";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -16,6 +17,7 @@ import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { type Theme, themes } from "./theme";
+import type { Session } from "./types";
 import { useGptHistory } from "./useGptHistory";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
@@ -72,10 +74,14 @@ export function GptWorkspace({
   onCodex,
   theme,
   onTheme,
+  onSession,
+  onLogout,
 }: {
   onCodex: () => void;
   theme: Theme;
   onTheme: (theme: Theme) => void;
+  onSession: (session: Session) => void;
+  onLogout: () => void;
 }) {
   const [items, setItems] = useState<GptConversation[]>(gptCache.items),
     [projects, setProjects] = useState<GptProject[]>(gptCache.projects),
@@ -1033,6 +1039,7 @@ export function GptWorkspace({
         <a className="primary" href="/gpt-connect">
           Подключение ChatGPT
         </a>
+        <AccountControls onSession={onSession} onLogout={onLogout} />
       </dialog>
     </div>
   );

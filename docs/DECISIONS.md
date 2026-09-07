@@ -357,3 +357,10 @@ ChatGPT chat archive, rename and deletion and chat/project pins use the current 
 Schema 7 adds library_entities, private Hub metadata for pins, project archives, names and deletion tombstones. Tombstones prevent stale browser/catalog snapshots from recreating deleted entries. All mutations use authenticated Hub routes, strict allowlists and idempotency keys. Active/queued/uncertain work blocks destructive changes; queue writes are serialized with catalog changes. Source files, authentication credentials and execution topology remain unchanged.
 
 Validation includes disposable native Codex project/chat lifecycles, empty-chat reconnect, a disposable ChatGPT project/chat lifecycle, native pin-limit rejection and unpin, mock race/guard tests and Chromium/WebKit phone/tablet visual checks.
+
+
+## 2026-09-07 — Owner password lifecycle without additional account services
+
+Both client modes share password change and global sign-out in Settings. Normal login remains one password. Password change revokes old sessions and issues a fresh session/CSRF pair to the initiating browser, preserving its chat and drafts. It does not interrupt native work or change writer ownership.
+
+Schema 8 adds a credential revision and a single expiring recovery-token hash. The local maintenance CLI writes a private, one-use, 15-minute URL; only token redemption is available through the authenticated-origin website. No email/phone service, default password or network token-issuance endpoint is added. The optional GPT login gateway watches Hub session revocation and must be restarted after the matching Hub is deployed; its persistent browser remains running. Offline snapshot restoration invalidates sessions and recovery links.

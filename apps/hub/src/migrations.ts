@@ -102,6 +102,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 8,
+    name: "owner-credential-recovery",
+    up(db) {
+      db.exec(
+        "CREATE TABLE auth_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL DEFAULT 0, recoveryHash TEXT, recoveryExpires INTEGER); INSERT INTO auth_state(id) VALUES(1)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

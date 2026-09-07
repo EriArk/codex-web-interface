@@ -88,17 +88,119 @@ export class Auth {
     if (typeof header !== "string" || !equalSecret(header, s.csrf))
       throw new HubError(403, "CSRF_DENIED", "Обнови страницу и повтори действие");
   }
-  async login(password: string, reply: FastifyReply): Promise<Record<string, unknown>> {
-    const row = this.store.db
+  private revision(): number {
+    return Number(
+      this.store.db.prepare("SELECT revision FROM auth_state WHERE id=1").get()?.revision,
+    );
+  }
+  private credentials() {
+    return this.store.db
       .prepare("SELECT passwordHash FROM users WHERE username=?")
       .get(this.config.auth.username);
-    let valid = false;
+  }
+  private async matches(password: string, digest: unknown): Promise<boolean> {
     try {
-      valid = await verify(String(row?.passwordHash ?? this.dummyHash), password);
+      return await verify(String(digest ?? this.dummyHash), password);
     } catch {
-      valid = false;
+      return false;
     }
-    if (!valid || !row) throw new HubError(401, "LOGIN_FAILED", "Неверный пароль");
+  }
+  private revoke(): void {
+    this.store.db.exec(
+      "DELETE FROM sessions; DELETE FROM bootstrap; UPDATE auth_state SET revision=revision+1,recoveryHash=NULL,recoveryExpires=NULL WHERE id=1",
+    );
+  }
+  private transaction<T>(run: () => T): T {
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      const value = run();
+      this.store.db.exec("COMMIT");
+      return value;
+    } catch (error) {
+      this.store.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+  async changePassword(
+    req: FastifyRequest,
+    currentPassword: string,
+    password: string,
+    reply: FastifyReply,
+  ) {
+    const revision = this.revision(),
+      previous = this.credentials();
+    if (!previous || !(await this.matches(currentPassword, previous.passwordHash)))
+      throw new HubError(403, "PASSWORD_MISMATCH", "Текущий пароль неверный");
+    const digest = await hashPassword(password);
+    return this.transaction(() => {
+      this.session(req);
+      if (
+        this.revision() !== revision ||
+        this.credentials()?.passwordHash !== previous.passwordHash
+      )
+        throw new HubError(
+          409,
+          "CREDENTIALS_CHANGED",
+          "Пароль уже изменён. Войди с новым паролем.",
+        );
+      this.store.db
+        .prepare("UPDATE users SET passwordHash=? WHERE username=?")
+        .run(digest, this.config.auth.username);
+      this.revoke();
+      return this.issue(reply);
+    });
+  }
+  async recover(token: string, password: string, reply: FastifyReply) {
+    const revision = this.revision(),
+      check = () => {
+        const row = this.store.db
+          .prepare("SELECT recoveryHash,recoveryExpires FROM auth_state WHERE id=1")
+          .get();
+        if (
+          !this.configured() ||
+          !row?.recoveryHash ||
+          Number(row.recoveryExpires) <= Date.now() ||
+          !equalSecret(tokenHash(token), String(row.recoveryHash))
+        )
+          throw new HubError(
+            403,
+            "RECOVERY_LINK_INVALID",
+            "Ссылка восстановления истекла или уже использована",
+          );
+      };
+    check();
+    const digest = await hashPassword(password);
+    return this.transaction(() => {
+      check();
+      if (this.revision() !== revision)
+        throw new HubError(
+          409,
+          "RECOVERY_LINK_INVALID",
+          "Ссылка восстановления уже недействительна",
+        );
+      this.store.db
+        .prepare("UPDATE users SET passwordHash=? WHERE username=?")
+        .run(digest, this.config.auth.username);
+      this.revoke();
+      return this.issue(reply);
+    });
+  }
+  logoutAll(req: FastifyRequest, reply: FastifyReply) {
+    this.session(req);
+    this.transaction(() => this.revoke());
+    this.clearCookie(reply);
+  }
+  async login(password: string, reply: FastifyReply): Promise<Record<string, unknown>> {
+    const revision = this.revision(),
+      row = this.credentials();
+    const valid = await this.matches(password, row?.passwordHash);
+    if (
+      !valid ||
+      !row ||
+      this.revision() !== revision ||
+      this.credentials()?.passwordHash !== row.passwordHash
+    )
+      throw new HubError(401, "LOGIN_FAILED", "Неверный пароль");
     return this.issue(reply);
   }
   private issue(reply: FastifyReply): Record<string, unknown> {
@@ -121,13 +223,16 @@ export class Auth {
   logout(req: FastifyRequest, reply: FastifyReply): string {
     const session = this.session(req);
     this.store.db.prepare("DELETE FROM sessions WHERE tokenHash=?").run(session.tokenHash);
+    this.clearCookie(reply);
+    return session.tokenHash;
+  }
+  private clearCookie(reply: FastifyReply) {
     reply.clearCookie(this.cookieName, {
       path: "/",
       secure: this.config.hub.secureCookies,
       httpOnly: true,
       sameSite: "strict",
     });
-    return session.tokenHash;
   }
   install(app: FastifyInstance): void {
     app.addHook("onRequest", async (req, reply) => {
@@ -135,7 +240,11 @@ export class Auth {
       if (!path.startsWith("/api/")) return;
       reply.header("Cache-Control", "no-store");
       if (path === "/api/health" || path === "/api/auth/status") return;
-      if (path === "/api/auth/login" || path === "/api/auth/setup") {
+      if (
+        path === "/api/auth/login" ||
+        path === "/api/auth/setup" ||
+        path === "/api/auth/recover"
+      ) {
         this.requireOrigin(req);
         return;
       }

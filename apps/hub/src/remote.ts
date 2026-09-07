@@ -160,6 +160,7 @@ export function connectRemote(
     }
   });
   socket.on("message", (data, isBinary) => {
+    if (closed || socket.readyState !== 1) return;
     if (isBinary || !ready) {
       socket.close(1008, "Invalid remote input");
       close();

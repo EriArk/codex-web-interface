@@ -1,0 +1,50 @@
+.account-controls {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.account-controls .account-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 44px;
+}
+.account-controls form {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.account-controls label {
+  font-size: 14px;
+}
+.account-controls input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 8px 10px;
+}
+.account-controls p {
+  font-size: 14px;
+  margin: 8px 0;
+  color: var(--muted);
+}
+.account-exit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+.account-exit button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  text-align: left;
+}

@@ -1,4 +1,8 @@
+import type { Session } from "./types";
+
 let csrf = "";
+let sessionRevision = 0;
+let sessionRotation: Promise<void> | undefined;
 let unauthorized = () => {};
 export class ApiError extends Error {
   constructor(
@@ -11,12 +15,15 @@ export class ApiError extends Error {
 }
 export function configureApi(token: string, onUnauthorized: () => void): void {
   csrf = token;
+  sessionRevision++;
   unauthorized = onUnauthorized;
 }
 export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal; raw?: Blob } = {},
 ): Promise<T> {
+  if (sessionRotation && path !== "/auth/password") await sessionRotation;
+  const requestSession = sessionRevision;
   const headers: Record<string, string> = {};
   if (options.raw) headers["Content-Type"] = "application/octet-stream";
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
@@ -36,11 +43,13 @@ export async function api<T>(
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "OFFLINE", "Нет связи с сервером. Проверь подключение.");
   }
-  if (response.status === 401 && path !== "/auth/login") {
+  if (response.status === 401 && sessionRotation && path !== "/auth/password")
+    await sessionRotation;
+  if (response.status === 401 && path !== "/auth/login" && requestSession === sessionRevision) {
     if (typeof window !== "undefined") window.dispatchEvent(new Event("private-session-ended"));
     unauthorized();
   }
-  if (response.ok && path === "/auth/logout")
+  if (response.ok && (path === "/auth/logout" || path === "/auth/logout-all"))
     if (typeof window !== "undefined") window.dispatchEvent(new Event("private-session-ended"));
   let value: { error?: { code?: string; message?: string } };
   try {
@@ -66,3 +75,25 @@ export async function api<T>(
 }
 export const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : "Не удалось выполнить действие";
+
+export async function changePassword(
+  currentPassword: string,
+  password: string,
+  onSession: (session: Session) => void,
+) {
+  if (sessionRotation) throw new ApiError(409, "PASSWORD_CHANGE_BUSY", "Пароль уже сохраняется");
+  let release = () => {};
+  sessionRotation = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    const session = await api<Session>("/auth/password", {
+      method: "POST",
+      body: { currentPassword, password },
+    });
+    onSession(session);
+  } finally {
+    sessionRotation = undefined;
+    release();
+  }
+}

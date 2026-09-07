@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AccountControls } from "./AccountControls";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
 import { DesktopControl } from "./DesktopControl";
@@ -76,8 +77,16 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null),
     [loading, setLoading] = useState(true),
     [requiresSetup, setRequiresSetup] = useState(false),
+    [recovering, setRecovering] = useState(() =>
+      new URLSearchParams(location.hash.slice(1)).has("recover"),
+    ),
     [error, setError] = useState("");
   useViewport();
+  useEffect(() => {
+    const update = () => setRecovering(new URLSearchParams(location.hash.slice(1)).has("recover"));
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
   const login = useCallback((value: Session) => {
     configureApi(value.csrf, () => setSession(null));
     setSession(value);
@@ -87,7 +96,7 @@ export default function App() {
       try {
         const status = await api<{ requiresSetup: boolean }>("/auth/status");
         setRequiresSetup(status.requiresSetup);
-        if (!status.requiresSetup) {
+        if (!status.requiresSetup && !new URLSearchParams(location.hash.slice(1)).has("recover")) {
           try {
             login(await api<Session>("/auth/session"));
           } catch {
@@ -119,18 +128,20 @@ export default function App() {
         </button>
       </div>
     );
-  if (!session)
+  if (!session || recovering)
     return (
       <Login
         requiresSetup={requiresSetup}
         onLogin={(value) => {
           setRequiresSetup(false);
+          setRecovering(false);
           login(value);
         }}
       />
     );
   return (
     <Workspace
+      onSession={login}
       onLogout={() => {
         setSession(null);
         for (const key of Object.keys(sessionStorage))
@@ -140,7 +151,13 @@ export default function App() {
     />
   );
 }
-function Workspace({ onLogout }: { onLogout: () => void }) {
+function Workspace({
+  onLogout,
+  onSession,
+}: {
+  onLogout: () => void;
+  onSession: (session: Session) => void;
+}) {
   const [client, setClient] = useState<"codex" | "gpt">(
     readPreference("client", "codex") === "gpt" ? "gpt" : "codex",
   );
@@ -639,7 +656,13 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           </div>
         }
       >
-        <GptWorkspace onCodex={() => setClient("codex")} theme={theme} onTheme={setTheme} />
+        <GptWorkspace
+          onCodex={() => setClient("codex")}
+          theme={theme}
+          onTheme={setTheme}
+          onSession={onSession}
+          onLogout={onLogout}
+        />
       </Suspense>
     );
   return (
@@ -963,19 +986,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           <Icon name="activity" />
           Активность диалога
         </button>
-        <button
-          type="button"
-          className="text-button logout"
-          onClick={() =>
-            void action(async () => {
-              await api("/auth/logout", { method: "POST" });
-              onLogout();
-            })
-          }
-        >
-          <Icon name="logout" />
-          Выйти
-        </button>
+        <AccountControls onSession={onSession} onLogout={onLogout} />
         <p className="small muted">Для установки на iPhone: Поделиться → На экран «Домой».</p>
       </dialog>
     </div>
