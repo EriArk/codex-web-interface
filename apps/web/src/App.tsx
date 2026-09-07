@@ -1,3 +1,4 @@
+import type { ResultCategory } from "@codex-web/shared";
 import {
   type CSSProperties,
   lazy,
@@ -12,13 +13,13 @@ import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
 import { DesktopControl } from "./DesktopControl";
 import { type LibraryChange, libraryEvent } from "./EntityMenu";
-
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectNavigation } from "./ProjectNavigation";
 import { Remote } from "./Remote";
-import { ActivityPane, Results } from "./Results";
+import { ResultFeed } from "./ResultFeed";
+import { ActivityPane } from "./Results";
 import { applyTheme, cachedTheme, themes } from "./theme";
 import type {
   Activity,
@@ -204,11 +205,19 @@ function Workspace({
   }, [rightHidden]);
   const [machine, setMachine] = useState<"checking" | "online" | "offline">("checking");
   const [results, setResults] = useState<Result[]>([]),
-    [resultCursor, setResultCursor] = useState<number | null>(null),
     [activity, setActivity] = useState<Activity[]>([]),
     [activityCursor, setActivityCursor] = useState<number | null>(null);
+  const [resultCount, setResultCount] = useState(0);
+  const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
+  const [resultFocusVersion, setResultFocusVersion] = useState(0);
   const [focusResult, setFocusResult] = useState(""),
     [focusTurn, setFocusTurn] = useState("");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new conversation clears its predecessor's result navigation.
+  useEffect(() => {
+    setFocusResult("");
+    setResultFocusVersion(0);
+    setResultCategory("all");
+  }, [threadId]);
   const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "38")));
   const root = useRef<HTMLDivElement>(null),
     settingsDialog = useRef<HTMLDialogElement>(null),
@@ -345,15 +354,15 @@ function Workspace({
     const request = ++resultRequest.current;
     if (!threadId) {
       setResults([]);
-      setResultCursor(null);
+      setResultCount(0);
       return;
     }
-    const data = await api<{ items: Result[]; nextBefore: number | null }>(
+    const data = await api<{ items: Result[]; nextBefore: number | null; counts: { all: number } }>(
       `/threads/${threadId}/results`,
     );
     if (request !== resultRequest.current || selectionRef.current.threadId !== threadId) return;
     setResults(data.items);
-    setResultCursor(data.nextBefore);
+    setResultCount(data.counts.all);
   }, [threadId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Result events invalidate the current page.
   useEffect(() => {
@@ -493,7 +502,9 @@ function Workspace({
       setBusy(false);
     }
   };
-  const showResult = (id: string) => {
+  const showResult = (id: string, category: ResultCategory = "all") => {
+    setResultCategory(category);
+    setResultFocusVersion((v) => v + 1);
     setRightHidden(false);
     setFocusResult(id);
     setView("results");
@@ -642,9 +653,7 @@ function Workspace({
     >
       <Icon name={icon} />
       <span>{label}</span>
-      {name === "results" && results.length > 0 && (
-        <span className="tab-count">{results.length}</span>
-      )}
+      {name === "results" && resultCount > 0 && <span className="tab-count">{resultCount}</span>}
     </button>
   );
   if (client === "gpt")
@@ -861,22 +870,15 @@ function Workspace({
             {tab("activity", "Активность", "activity")}
             {tab("remote", "Remote", "remote")}
           </div>
-          <Results
+          <ResultFeed
+            key={threadId}
+            endpoint={threadId ? "/threads/" + threadId + "/results" : ""}
+            revision={String(state.revision) + ":" + results.map((r) => r.id).join(",")}
             onOverlayChange={setResultOverlay}
-            results={results}
             visible={view === "results" || view === "chat"}
             focusId={focusResult}
-            busy={busy}
-            hasMore={!!resultCursor}
-            onOlder={() =>
-              void action(async () => {
-                const data = await api<{ items: Result[]; nextBefore: number | null }>(
-                  `/threads/${threadId}/results?before=${resultCursor}`,
-                );
-                setResults((old) => [...old, ...data.items]);
-                setResultCursor(data.nextBefore);
-              })
-            }
+            focusCategory={resultCategory}
+            focusVersion={resultFocusVersion}
             onTurn={(id) => void showTurn(id).catch((e) => setNotice(messageOf(e)))}
           />
           <ActivityPane

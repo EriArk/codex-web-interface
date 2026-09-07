@@ -4,16 +4,27 @@ import { HubError } from "@codex-web/shared";
 
 const hash = (items: GptMessage[]) =>
   createHash("sha256").update(JSON.stringify(items)).digest("hex");
-type Entry = { items: GptMessage[]; revision: string; checkedAt: number; bytes: number };
+type Entry = {
+  items: GptMessage[];
+  revision: string;
+  checkedAt: number;
+  bytes: number;
+  lineage: number;
+};
 export class GptHistoryCache {
   private entries = new Map<string, Entry>();
+  private nextLineage = 0;
   private pending = new Map<string, Promise<Entry>>();
   constructor(
     private load: (id: string) => Promise<GptMessage[]>,
     private now = Date.now,
   ) {}
   seed(id: string, items: GptMessage[]) {
+    const previous = this.entries.get(id);
+    const sameBranch =
+      previous && previous.items.every((message, index) => items[index]?.id === message.id);
     const value = {
+      lineage: sameBranch ? previous.lineage : ++this.nextLineage,
       items,
       revision: hash(items),
       checkedAt: this.now(),
@@ -29,7 +40,8 @@ export class GptHistoryCache {
     return value;
   }
   invalidate(id: string) {
-    this.entries.delete(id);
+    const entry = this.entries.get(id);
+    if (entry) entry.checkedAt = Number.NEGATIVE_INFINITY;
   }
   private async get(id: string, ttl: number) {
     const pending = this.pending.get(id);
@@ -43,6 +55,12 @@ export class GptHistoryCache {
     } finally {
       this.pending.delete(id);
     }
+  }
+  async snapshot(id: string, ttl = 15000) {
+    return this.get(id, ttl);
+  }
+  async messages(id: string, ttl = 15000): Promise<GptMessage[]> {
+    return (await this.get(id, ttl)).items;
   }
   async page(
     id: string,

@@ -94,24 +94,7 @@ export interface History {
   hasMore: boolean;
   lastSeq: number;
 }
-export interface Result {
-  id: string;
-  turnId: string | null;
-  title: string;
-  type: string;
-  createdAt: string;
-  payload: {
-    text?: string;
-    url?: string;
-    width?: number;
-    height?: number;
-    sourcePath?: string;
-    command?: string;
-    exitCode?: number;
-    status?: string;
-    changes?: { path: string; kind: string; diff: string }[];
-  };
-}
+export type { ResultItem as Result } from "@codex-web/shared";
 export interface Activity {
   seq: number;
   type: string;

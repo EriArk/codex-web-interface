@@ -338,3 +338,10 @@ Before mobile support is considered complete, the same core workflow must also w
 - Defer issue #6 project-root restrictions pending the owner's decision; preserve the existing project workflow.
 - Physical-device verification continues through the owner's everyday iPhone/iPad usage and reported fixes. Do not claim a separate completed formal hardware acceptance pass.
 - Continue GPT recovery (#30), conservative storage maintenance (#5), and interactive preview isolation verification (#29), retaining features and the existing password-only experience.
+
+## Owner-requested categorized results (2026-09-07)
+
+- Codex and GPT share Results categories: All, Images, Demos, Files and Work. Filter before paginating so older media does not require loading technical logs.
+- Generated images, interactive demos and downloadable assistant files belong in Results, with compact links from conversation messages. User uploads remain visible in the chat.
+- Selecting media opens a Preview tab; allow expansion and return without discarding the demo's local state or chat state.
+- Keep message and block copy controls available in both modes, including collapsed code.

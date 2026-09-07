@@ -295,9 +295,13 @@ History restoration must not replace newer WebSocket messages. A fresh second cl
 
 ### Interactive design previews
 
-HTML demo cards open a single large viewer over the workspace. The close action stays in its top toolbar; mobile fills the viewport and respects safe areas. Fit-to-width is the default, with an optional 960px canvas for designs meant for a wider display. Navigation and chat state remain mounted underneath. The demo receives no access to the surrounding app or its credentials.
+HTML demo cards open the selected Preview tab in Results. A header action expands the viewer over the workspace; its close action stays in the top toolbar. Mobile expansion fills the viewport and respects safe areas. Fit-to-width is the default, with an optional 960px canvas in the expanded viewer. Switching Results categories keeps the selected inline demo mounted, preserving its local controls. Navigation and chat state remain mounted underneath. The demo receives no access to the surrounding app or its credentials.
 
 
 ### Copy controls
 
 Codex and GPT message headers expose a small copy icon with a 44px touch target. Code/text blocks have a separate copy control available while collapsed, and Results commands/diffs can be copied independently. Copy uses the current message text or exact block contents, without interface labels. A brief check mark confirms success; a failed browser clipboard operation stays visible and allows retry. Keyboard focus, selection and composer drafts are preserved.
+
+### Results categories
+
+Both clients use one shared Results feed with All, Images, Demos, Files and Work filters. The horizontal category strip keeps the active tab visible and uses 44px controls. Counts cover the conversation, while each category loads 20 records at a time. Native GPT branch changes replace stale results. User uploads remain in conversation messages; assistant files/images get compact result links. Images retain their original colors in every theme. Preview supports images, isolated HTML demos and bounded UTF-8 text files, with downloads for other file types.

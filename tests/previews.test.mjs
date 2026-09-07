@@ -3,7 +3,13 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { Previews, previewCsp, previewSources } from "../apps/hub/dist/previews.js";
+import {
+  assertPreviewFrame,
+  Previews,
+  previewCsp,
+  previewFrameSources,
+  previewSources,
+} from "../apps/hub/dist/previews.js";
 import { Store } from "../apps/hub/dist/store.js";
 import {
   PREVIEW_LIMIT,
@@ -120,4 +126,20 @@ test("native HTML blocks, local links and file changes become stable isolated re
     store.close();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("preview documents require an authenticated same-origin iframe boundary", () => {
+  assert.doesNotThrow(() =>
+    assertPreviewFrame({ "sec-fetch-dest": "iframe", "sec-fetch-site": "same-origin" }),
+  );
+  for (const headers of [
+    {},
+    { "sec-fetch-dest": "document", "sec-fetch-site": "same-origin" },
+    { "sec-fetch-dest": "iframe", "sec-fetch-site": "cross-site" },
+  ])
+    assert.throws(() => assertPreviewFrame(headers), { code: "PREVIEW_FRAME_REQUIRED" });
+  assert.deepEqual(previewFrameSources("https://example.test/"), [
+    "https://example.test/api/previews/",
+    "https://example.test/api/gpt/previews/",
+  ]);
 });

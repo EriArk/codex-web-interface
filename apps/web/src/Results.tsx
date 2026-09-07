@@ -1,3 +1,12 @@
+import {
+  emptyResultCounts,
+  type ResultCategory,
+  type ResultCounts,
+  resultCategory,
+} from "@codex-web/shared";
+import { ResultFilters } from "./ResultFilters";
+import { ResultInspector } from "./ResultInspector";
+import "./resultCategories.css";
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -6,6 +15,12 @@ import { Icon } from "./icons";
 import { PreviewViewer } from "./PreviewViewer";
 import type { Activity, Result } from "./types";
 export function Results({
+  focusVersion = 0,
+  onRetry,
+  category = "all",
+  onCategory = () => {},
+  counts = emptyResultCounts(),
+  error = "",
   onOverlayChange,
   results,
   visible,
@@ -15,6 +30,12 @@ export function Results({
   onOlder,
   onTurn,
 }: {
+  focusVersion?: number;
+  onRetry?: () => void;
+  category?: ResultCategory;
+  onCategory?: (category: ResultCategory) => void;
+  counts?: ResultCounts;
+  error?: string;
   onOverlayChange: (open: boolean) => void;
   results: Result[];
   visible: boolean;
@@ -22,12 +43,17 @@ export function Results({
   busy: boolean;
   hasMore: boolean;
   onOlder: () => void;
-  onTurn: (id: string) => void;
+  onTurn?: (id: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
-    [preview, setPreview] = useState<Result | null>(null);
-  useEffect(() => onOverlayChange(!!image || !!preview), [image, preview, onOverlayChange]);
+    [preview, setPreview] = useState<Result | null>(null),
+    [inspected, setInspected] = useState<Result | null>(null),
+    [inspecting, setInspecting] = useState(false);
+  useEffect(() => {
+    onOverlayChange(!!image || !!preview);
+    return () => onOverlayChange(false);
+  }, [image, preview, onOverlayChange]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Newly loaded result cards must be focused after rendering.
   useEffect(() => {
     if (visible && focusId)
@@ -37,6 +63,13 @@ export function Results({
           ?.scrollIntoView({ block: "center" }),
       );
   }, [focusId, visible, results]);
+  const inspect = (result: Result) => {
+    setInspected(result);
+    setInspecting(true);
+  };
+  useEffect(() => {
+    if (focusId || focusVersion) setInspecting(false);
+  }, [focusId, focusVersion]);
   return (
     <section className="results-pane pane" data-visible={visible} aria-label="Результаты">
       <div className="pane-heading">
@@ -44,23 +77,50 @@ export function Results({
           <Icon name="results" />
           Результаты
         </span>
-        {results.length > 0 && <span className="small muted">{results.length}</span>}
+        {counts.all > 0 && <span className="small muted">{counts.all}</span>}
       </div>
-      <div className="pane-scroll" ref={ref}>
-        {!results.length && (
+      <ResultFilters
+        category={category}
+        counts={counts}
+        preview={inspecting}
+        onChange={(next) => {
+          setInspecting(false);
+          onCategory(next);
+        }}
+        onPreview={inspected ? () => setInspecting(true) : undefined}
+      />
+      {error && (
+        <div className="results-error" role="status">
+          {error}
+          {onRetry && (
+            <button type="button" className="secondary" onClick={onRetry}>
+              Повторить
+            </button>
+          )}
+        </div>
+      )}
+      <div className="result-preview-slot" hidden={!inspecting}>
+        {inspected && (
+          <ResultInspector
+            result={inspected}
+            onClose={() => setInspecting(false)}
+            onExpand={() =>
+              inspected.type === "image" ? setImage(inspected) : setPreview(inspected)
+            }
+          />
+        )}
+      </div>
+      <div className="pane-scroll" ref={ref} hidden={inspecting}>
+        {!results.some((r) => category === "all" || resultCategory(r.type) === category) && (
           <div className="empty-state">
             <div className="empty-symbol">
               <Icon name="results" size={29} />
             </div>
-            <h2>Здесь появится результат.</h2>
+            <h2>{busy ? "Загружаем…" : "Пока нет результатов."}</h2>
           </div>
         )}
         {results
-          .toSorted(
-            (a, b) =>
-              Number(["image", "preview"].includes(b.type)) -
-              Number(["image", "preview"].includes(a.type)),
-          )
+          .filter((r) => category === "all" || resultCategory(r.type) === category)
           .map((r) => (
             <article className={`result-card result-${r.type}`} key={r.id} data-result={r.id}>
               <div className="result-title">
@@ -90,7 +150,7 @@ export function Results({
                 <button
                   type="button"
                   className="screenshot-preview"
-                  onClick={() => setImage(r)}
+                  onClick={() => inspect(r)}
                   aria-label="Открыть снимок"
                 >
                   <img
@@ -106,9 +166,18 @@ export function Results({
                 <button
                   type="button"
                   className="secondary result-demo-open"
-                  onClick={() => setPreview(r)}
+                  onClick={() => inspect(r)}
                 >
                   <Icon name="remote" /> Открыть демо <Icon name="chevron" size={16} />
+                </button>
+              )}
+              {(r.type === "file" || r.type === "artifact") && r.payload.url && (
+                <button
+                  type="button"
+                  className="secondary result-file-link"
+                  onClick={() => inspect(r)}
+                >
+                  <Icon name="file" /> Открыть файл
                 </button>
               )}
               {r.type === "plan" && (
@@ -130,7 +199,7 @@ export function Results({
                   <pre>{change.diff || "Сводка изменений без текстового diff"}</pre>
                 </details>
               ))}
-              {r.turnId && (
+              {r.turnId && onTurn && (
                 <button
                   type="button"
                   className="result-origin"
@@ -153,7 +222,7 @@ export function Results({
         <div className="image-viewer" role="dialog" aria-modal="true" aria-label="Просмотр снимка">
           <div className="viewer-toolbar">
             <span>{image.title}</span>
-            <a className="secondary" href={image.payload.url} download="screenshot.png">
+            <a className="secondary" href={image.payload.url} download={image.title}>
               Скачать
             </a>
             <button

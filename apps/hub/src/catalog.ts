@@ -638,11 +638,50 @@ export class Catalog {
       createdAt: "",
     };
   }
+  observeImages(
+    thread: ThreadRecord,
+    turnId: string | null,
+    item: Record<string, unknown>,
+  ): string[] {
+    const sources: string[] = [];
+    if (item.type === "mcpToolCall") {
+      for (const block of array(obj(item.result).content).slice(0, 8)) {
+        if (
+          block.type === "image" &&
+          typeof block.data === "string" &&
+          typeof block.mimeType === "string"
+        )
+          sources.push("data:" + block.mimeType + ";base64," + block.data);
+        const resource = obj(block.resource);
+        if (
+          block.type === "resource" &&
+          typeof resource.blob === "string" &&
+          typeof resource.mimeType === "string" &&
+          resource.mimeType.startsWith("image/")
+        )
+          sources.push("data:" + resource.mimeType + ";base64," + resource.blob);
+      }
+    }
+    if (item.type === "agentMessage")
+      for (const match of str(item.text).matchAll(/!\[[^\]\n]*\]\((?:<([^>\n]+)>|([^\s)]+))\)/g))
+        if (sources.length < 8) sources.push(match[1] || match[2] || "");
+    const results: string[] = [];
+    for (const source of sources) {
+      const image = this.images.register(thread.id, "result:" + str(item.id, 200), source);
+      if (!image) continue;
+      const id = this.store.result(thread.id, turnId, "image:" + image.id, "image", image.name, {
+        url: image.url,
+      });
+      if (id) results.push(id);
+    }
+    return results;
+  }
   private result(thread: ThreadRecord, entry: Record<string, unknown>) {
     const item = obj(entry.item),
       id = str(item.id, 200),
       turn = str(entry.turnId, 100) || null;
     this.previews.observe(thread, turn, item);
+    this.observeImages(thread, turn, item);
     if (item.type === "fileChange")
       this.store.result(thread.id, turn, id, "diff-summary", "Изменения файлов", {
         changes: array(item.changes).map((c) => ({

@@ -1,0 +1,207 @@
+import {
+  emptyResultCounts,
+  type ResultCategory,
+  type ResultItem,
+  type ResultPage,
+  resultCategory,
+} from "@codex-web/shared";
+import { useEffect, useRef, useState } from "react";
+import { ApiError, api, messageOf } from "./api";
+import { Results } from "./Results";
+
+export function ResultFeed({
+  endpoint,
+  revision,
+  visible,
+  focusId = "",
+  focusCategory = "all",
+  focusVersion = 0,
+  extras = [],
+  onTurn,
+  onOverlayChange,
+}: {
+  endpoint: string;
+  revision: string | number;
+  visible: boolean;
+  focusId?: string;
+  focusCategory?: ResultCategory;
+  focusVersion?: number;
+  extras?: ResultItem[];
+  onTurn?: (id: string) => void;
+  onOverlayChange: (open: boolean) => void;
+}) {
+  const [focused, setFocused] = useState<ResultItem | null>(null);
+  const [sourceRevision, setSourceRevision] = useState<number | undefined>(undefined);
+  const sourceRef = useRef<number | undefined>(undefined),
+    fullyLoaded = useRef(false),
+    loadedIds = useRef<string[]>([]);
+  const [retry, setRetry] = useState(0);
+  const [category, setCategory] = useState<ResultCategory>("all");
+  const [items, setItems] = useState<ResultItem[]>([]),
+    [counts, setCounts] = useState(emptyResultCounts);
+  const [cursor, setCursor] = useState<string | number | null>(null);
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const generation = useRef(0);
+  // Each response belongs to the exact conversation and category that requested it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The retry button deliberately repeats the same read.
+  useEffect(() => {
+    const current = ++generation.current;
+    setItems([]);
+    fullyLoaded.current = false;
+    loadedIds.current = [];
+    setCursor(null);
+    setError("");
+    if (!endpoint) {
+      setCounts(emptyResultCounts());
+      return;
+    }
+    setBusy(true);
+    void api<ResultPage>(endpoint + "?category=" + category)
+      .then((data) => {
+        if (current !== generation.current) return;
+        setItems(data.items);
+        loadedIds.current = data.items.map((item) => item.id);
+        fullyLoaded.current = data.nextBefore === null;
+        sourceRef.current = data.sourceRevision;
+        setSourceRevision(data.sourceRevision);
+        setCounts(data.counts);
+        setCursor(data.nextBefore);
+      })
+      .catch((e) => {
+        if (current === generation.current) setError(messageOf(e));
+      })
+      .finally(() => {
+        if (current === generation.current) setBusy(false);
+      });
+    return () => {
+      generation.current++;
+    };
+  }, [endpoint, category, retry]);
+  const revisionSeen = useRef(revision);
+  useEffect(() => {
+    if (revisionSeen.current === revision) return;
+    revisionSeen.current = revision;
+    if (!endpoint) return;
+    const task = setTimeout(() => {
+      const current = ++generation.current;
+      void api<ResultPage>(endpoint + "?category=" + category)
+        .then((data) => {
+          if (current !== generation.current) return;
+          setCounts(data.counts);
+          const replaced =
+            data.sourceRevision !== undefined && data.sourceRevision !== sourceRef.current;
+          const overlap = data.items.some((item) => loadedIds.current.includes(item.id));
+          if (replaced || (!overlap && data.nextBefore !== null)) {
+            // A changed native branch or a missed burst needs a fresh contiguous page.
+            setItems(data.items);
+            setCursor(data.nextBefore);
+            setFocused(null);
+            loadedIds.current = data.items.map((item) => item.id);
+            fullyLoaded.current = data.nextBefore === null;
+          } else {
+            setItems((old) => [
+              ...data.items,
+              ...old.filter((row) => !data.items.some((next) => next.id === row.id)),
+            ]);
+            loadedIds.current = [
+              ...new Set([...data.items.map((item) => item.id), ...loadedIds.current]),
+            ];
+            if (!fullyLoaded.current) setCursor((old) => old ?? data.nextBefore);
+          }
+          sourceRef.current = data.sourceRevision;
+          setSourceRevision(data.sourceRevision);
+          setError("");
+          setBusy(false);
+        })
+        .catch((e) => {
+          if (current === generation.current) {
+            setError(messageOf(e));
+            setBusy(false);
+          }
+        });
+    }, 250);
+    return () => clearTimeout(task);
+  }, [revision, endpoint, category]);
+  useEffect(() => {
+    if (focusVersion) setCategory(focusCategory);
+  }, [focusVersion, focusCategory]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reopening the same result is an explicit navigation request.
+  useEffect(() => {
+    setFocused(null);
+    if (!focusId || !endpoint) return;
+    let disposed = false;
+    void api<ResultItem>(endpoint + "/" + encodeURIComponent(focusId))
+      .then((item) => {
+        if (!disposed) setFocused(item);
+      })
+      .catch((e) => {
+        if (!disposed) setError(messageOf(e));
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [focusId, focusVersion, endpoint]);
+  const older = async () => {
+    if (cursor === null || busy || !endpoint) return;
+    const current = ++generation.current,
+      before = cursor;
+    setBusy(true);
+    try {
+      const data = await api<ResultPage>(
+        endpoint + "?category=" + category + "&before=" + encodeURIComponent(before),
+      );
+      if (current !== generation.current) return;
+      if (data.sourceRevision !== undefined && data.sourceRevision !== sourceRef.current) {
+        setRetry((value) => value + 1);
+        return;
+      }
+      setItems((old) => [...new Map([...old, ...data.items].map((row) => [row.id, row])).values()]);
+      setCounts(data.counts);
+      loadedIds.current = [
+        ...new Set([...loadedIds.current, ...data.items.map((item) => item.id)]),
+      ];
+      fullyLoaded.current = data.nextBefore === null;
+      setCursor(data.nextBefore);
+      setError("");
+    } catch (e) {
+      if (current === generation.current) {
+        if (e instanceof ApiError && e.code === "RESULTS_CHANGED") setRetry((value) => value + 1);
+        else setError(messageOf(e));
+      }
+    } finally {
+      if (current === generation.current) setBusy(false);
+    }
+  };
+  const all = [
+    ...new Map(
+      [...(focused ? [focused] : []), ...extras, ...items].map((row) => [row.id, row]),
+    ).values(),
+  ];
+  const totals = { ...counts };
+  totals.all = Math.max(totals.all, all.length);
+  for (const key of ["images", "demos", "files", "work"] as const)
+    totals[key] = Math.max(
+      totals[key],
+      all.filter((row) => resultCategory(row.type) === key).length,
+    );
+  return (
+    <Results
+      key={sourceRevision ?? 0}
+      results={all}
+      visible={visible}
+      focusId={focusId}
+      busy={busy}
+      hasMore={cursor !== null}
+      onOlder={() => void older()}
+      onTurn={onTurn}
+      onOverlayChange={onOverlayChange}
+      category={category}
+      onCategory={setCategory}
+      counts={totals}
+      error={error}
+      focusVersion={focusVersion}
+      onRetry={() => setRetry((v) => v + 1)}
+    />
+  );
+}

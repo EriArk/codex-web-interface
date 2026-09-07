@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   type Attachment,
   compareThreadActivity,
+  emptyResultCounts,
   HubError,
   type HubEvent,
   hasUnreadCompletion,
@@ -13,6 +14,8 @@ import {
   type NavigationState,
   NotSubmittedError,
   type ProjectActivity,
+  type ResultCategory,
+  resultCategory,
   type ThreadActivity,
   type TurnSettings,
 } from "@codex-web/shared";
@@ -392,14 +395,41 @@ export class Store {
       );
     return r.changes ? id : undefined;
   }
-  results(threadId: string, before = Number.MAX_SAFE_INTEGER): Record<string, unknown> {
+  results(
+    threadId: string,
+    before = Number.MAX_SAFE_INTEGER,
+    category: ResultCategory = "all",
+  ): Record<string, unknown> {
+    const buckets = this.db
+      .prepare("SELECT type,count(*) AS count FROM results WHERE threadId=? GROUP BY type")
+      .all(threadId);
+    const counts = emptyResultCounts();
+    for (const row of buckets) {
+      counts.all += Number(row.count);
+      counts[resultCategory(String(row.type))] += Number(row.count);
+    }
+    const types = buckets
+      .filter((row) => category === "all" || resultCategory(String(row.type)) === category)
+      .map((row) => String(row.type));
+    if (!types.length) return { items: [], counts, nextBefore: null };
     const rows = this.db
       .prepare(
-        "SELECT rowid AS cursor,* FROM results WHERE threadId=? AND rowid<? ORDER BY rowid DESC LIMIT 21",
+        "SELECT rowid AS cursor,* FROM results WHERE threadId=? AND rowid<? AND type IN (" +
+          types.map(() => "?").join(",") +
+          ") ORDER BY rowid DESC LIMIT 21",
       )
-      .all(threadId, before);
-    const items = rows.slice(0, 20).map((r) => ({ ...r, payload: JSON.parse(String(r.payload)) }));
-    return { items, nextBefore: rows.length > 20 ? rows[19]?.cursor : null };
+      .all(threadId, before, ...types);
+    const items = rows
+      .slice(0, 20)
+      .map((row) => ({ ...row, payload: JSON.parse(String(row.payload)) }));
+    return { items, counts, nextBefore: rows.length > 20 ? rows[19]?.cursor : null };
+  }
+  resultById(threadId: string, id: string) {
+    const row = this.db
+      .prepare("SELECT * FROM results WHERE threadId=? AND id=?")
+      .get(threadId, id);
+    if (!row) throw new HubError(404, "RESULT_NOT_FOUND", "Результат не найден.");
+    return { ...row, payload: JSON.parse(String(row.payload)) };
   }
   preferences(): Record<string, unknown> {
     const row = this.db.prepare("SELECT value FROM preferences WHERE id=1").get();

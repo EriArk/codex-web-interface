@@ -1,6 +1,12 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { type HubConfig, HubError, type HubEvent, turnSettingsSchema } from "@codex-web/shared";
+import {
+  type HubConfig,
+  HubError,
+  type HubEvent,
+  resultCategorySchema,
+  turnSettingsSchema,
+} from "@codex-web/shared";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -16,7 +22,7 @@ import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { registerGpt } from "./gpt.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { registerNavigation } from "./navigation.js";
-import { previewCsp } from "./previews.js";
+import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
 import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
@@ -73,6 +79,7 @@ export async function createApp(
         connectSrc: ["'self'"],
         fontSrc: ["'self'"],
         frameAncestors: ["'none'"],
+        frameSrc: previewFrameSources(config.hub.publicBaseUrl),
         objectSrc: ["'none'"],
         baseUri: ["'none'"],
         upgradeInsecureRequests: config.hub.secureCookies ? [] : null,
@@ -381,7 +388,15 @@ export async function createApp(
   app.get("/api/threads/:id/results", async (req) => {
     const id = paramId(req);
     sessions.thread(id);
-    return store.results(id, page(req).before);
+    const category = z
+      .object({ category: resultCategorySchema.default("all") })
+      .parse(req.query).category;
+    return store.results(id, page(req).before, category);
+  });
+  app.get("/api/threads/:id/results/:resultId", async (req) => {
+    const p = z.object({ id: idSchema, resultId: idSchema }).parse(req.params);
+    sessions.thread(p.id);
+    return store.resultById(p.id, p.resultId);
   });
   app.get("/api/threads/:id/progress", async (req) => {
     const id = paramId(req),
@@ -513,6 +528,7 @@ export async function createApp(
     return { ready: true };
   });
   app.get("/api/previews/:id", async (req, reply) => {
+    assertPreviewFrame(req.headers);
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));
     const document = await sessions.catalog.previews.document(id);

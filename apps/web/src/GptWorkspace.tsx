@@ -1,4 +1,12 @@
-import type { GptConversation, GptFile, GptJob, GptModels, GptProject } from "@codex-web/shared";
+import type {
+  GptConversation,
+  GptFile,
+  GptJob,
+  GptModels,
+  GptProject,
+  ResultCategory,
+  ResultItem,
+} from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { AccountControls } from "./AccountControls";
@@ -17,6 +25,7 @@ import { GptProgress } from "./GptProgress";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
+import { ResultFeed } from "./ResultFeed";
 import { type Theme, themes } from "./theme";
 import type { Session } from "./types";
 import { useGptHistory } from "./useGptHistory";
@@ -64,6 +73,36 @@ const Text = memo(function Text({ value }: { value: string }) {
     </Markdown>
   );
 });
+function ResponseResults({
+  text,
+  files,
+  onOpen,
+}: {
+  text: string;
+  files: GptFile[];
+  onOpen: (category: ResultCategory) => void;
+}) {
+  const demo = /(?:^|\n)(?:\x60{3}|~{3})html[ \t]*\r?\n[\s\S]*?\r?\n(?:\x60{3}|~{3})(?=\s|$)/i.test(
+    text,
+  );
+  if (!files.length && !demo) return null;
+  const category = demo
+    ? files.length
+      ? "all"
+      : "demos"
+    : files.every((file) => file.image)
+      ? "images"
+      : files.every((file) => !file.image)
+        ? "files"
+        : "all";
+  return (
+    <button type="button" className="result-chip" onClick={() => onOpen(category)}>
+      <Icon name="results" size={16} />
+      Результаты ответа
+      <Icon name="chevron" size={14} />
+    </button>
+  );
+}
 function cachedId() {
   try {
     return localStorage.getItem("gpt-conversation") ?? "";
@@ -411,6 +450,15 @@ export function GptWorkspace({
       setSelected(pendingNew.nativeId);
     }
   }, [pendingNew?.nativeId]);
+  const [, setResultOverlay] = useState(false);
+  const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
+  const [resultFocusVersion, setResultFocusVersion] = useState(0);
+  const openResults = (category: ResultCategory = "all") => {
+    setResultCategory(category);
+    setResultFocusVersion((v) => v + 1);
+    setRightHidden(false);
+    setView("results");
+  };
   const jobElements = currentJobs
     .filter((job) => showGptJob(job, messages))
     .map((job) => {
@@ -444,7 +492,7 @@ export function GptWorkspace({
               <div className="message-body">
                 {!isActive(job) && !!job.progress?.length && <GptProgress items={job.progress} />}
                 <Text value={job.answer} />
-                <Files files={job.assets} />
+                <ResponseResults text={job.answer} files={job.assets} onOpen={openResults} />
               </div>
             </article>
           )}
@@ -696,14 +744,18 @@ export function GptWorkspace({
       </button>
     </div>
   );
-  const resultFiles = [
-    ...new Map(
-      [
-        ...messages.flatMap((m) => (m.role === "assistant" ? m.files : [])),
-        ...currentJobs.flatMap((j) => j.assets),
-      ].map((file) => [file.id, file]),
-    ).values(),
-  ];
+  const resultExtras: ResultItem[] = currentJobs
+    .filter((job) => showGptJob(job, messages))
+    .flatMap((job) =>
+      job.assets.map((file) => ({
+        id: file.id,
+        turnId: null,
+        type: file.image ? "image" : "file",
+        title: file.name,
+        createdAt: new Date(job.updatedAt).toISOString(),
+        payload: { url: file.url, mime: file.mime },
+      })),
+    );
   return (
     <div
       className={"workspace gpt-workspace " + (navCollapsed ? "nav-collapsed" : "")}
@@ -850,7 +902,15 @@ export function GptWorkspace({
                         )
                         .map((job) => <GptProgress key={job.id} items={job.progress ?? []} />)}
                     <Text value={message.text} />
-                    <Files files={message.files} />
+                    {message.role === "user" ? (
+                      <Files files={message.files} />
+                    ) : (
+                      <ResponseResults
+                        text={message.text}
+                        files={message.files}
+                        onOpen={openResults}
+                      />
+                    )}
                   </div>
                 </article>
               ))}
@@ -967,17 +1027,22 @@ export function GptWorkspace({
           </div>
         </section>
         <div className="support-pane gpt-results">
-          <div className="support-tabs">
-            <button type="button" className="active">
-              <Icon name="results" size={16} /> Результаты
-            </button>
-          </div>
-          <div className="gpt-result-scroll">
-            <Files files={resultFiles} />
-            {!resultFiles.length && (
-              <p className="gpt-empty">Здесь появятся изображения и файлы.</p>
-            )}
-          </div>
+          <ResultFeed
+            key={selected || createdJob}
+            endpoint={
+              selected ? "/gpt/conversations/" + encodeURIComponent(selected) + "/results" : ""
+            }
+            revision={
+              messages.map((m) => m.id + ":" + m.text.length).join(",") +
+              ":" +
+              currentJobs.map((j) => j.updatedAt).join(",")
+            }
+            visible={view === "results" || view === "chat"}
+            onOverlayChange={setResultOverlay}
+            focusCategory={resultCategory}
+            focusVersion={resultFocusVersion}
+            extras={resultExtras}
+          />
         </div>
       </main>
       <nav className="mobile-tabs">

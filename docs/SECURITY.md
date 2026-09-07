@@ -277,3 +277,9 @@ Schema 8 records a credential revision and one expiring SHA-256 recovery-token d
 The local maintenance CLI is the only recovery-link issuer. It requires the configured database and a private output file, retains the password-only product model and issues no network-accessible reset request capability. The link expires after 15 minutes and is consumed with a transactional recheck. Credential revision checks prevent an in-flight old-password login from issuing a session after global revocation. Restoration invalidates all sessions and reset links.
 
 Revocation disconnects chat/navigation/Remote streams and the optional GPT browser gateway; it never transfers execution ownership, interrupts native work or replays pending prompts. The gateway's session watch transmits only readiness and closes on revocation or connection/heartbeat loss.
+
+### Interactive preview navigation boundary
+
+The app's parent CSP restricts frames to its authenticated `/api/previews/` and `/api/gpt/previews/` routes. Demo responses require browser Fetch Metadata identifying a same-origin iframe load; direct document navigation is rejected. The child retains an opaque-origin `sandbox allow-scripts`, blocks connections, external resources, forms, nested frames and objects, and receives no same-origin privilege. Local JavaScript remains interactive. Parent frame policy also blocks self-navigation and redirects out of preview routes, which a child-only connect policy does not cover. GPT inline demos use a conversation-scoped preview record, without resolving a Windows machine or opening a preview server.
+
+`tests/preview-isolation.browser.mjs` exercises navigation, redirects, links, downloads, popups, forms, subresources, nested content, network APIs and parent/credential access in Chromium and WebKit. This is browser enforcement for normal clients, not authentication based on unforgeable request headers; the usual session and scope checks still protect both preview APIs.

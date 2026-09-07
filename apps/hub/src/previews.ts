@@ -6,6 +6,14 @@ import { HubError, type MachineConfig } from "@codex-web/shared";
 import { previewControls } from "./previewControls.js";
 import type { Store, ThreadRecord } from "./store.js";
 
+export const previewFrameSources = (origin: string) => [
+  origin.replace(/\/$/, "") + "/api/previews/",
+  origin.replace(/\/$/, "") + "/api/gpt/previews/",
+];
+export function assertPreviewFrame(headers: Record<string, unknown>) {
+  if (headers["sec-fetch-dest"] !== "iframe" || headers["sec-fetch-site"] !== "same-origin")
+    throw new HubError(403, "PREVIEW_FRAME_REQUIRED", "Открой демо из результатов.");
+}
 export const previewCsp =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts";
 type Source = { title: string; path?: string; html?: string };
@@ -58,6 +66,22 @@ export class Previews {
     readonly store: Store,
     private target: (threadId: string) => { machine: MachineConfig; root: string },
   ) {}
+  inline(scope: string, itemId: string, html: string): string | undefined {
+    if (!html || Buffer.byteLength(html) > PREVIEW_LIMIT) return;
+    const source = { title: "Интерактивное демо", html };
+    const id = createHash("sha256")
+      .update(JSON.stringify([scope, itemId, source]))
+      .digest("hex");
+    if (
+      !this.store.db.prepare("SELECT 1 FROM html_previews WHERE id=?").get(id) &&
+      Number(this.store.db.prepare("SELECT count(*) AS n FROM html_previews").get()?.n) >= 2000
+    )
+      return;
+    this.store.db
+      .prepare("INSERT OR IGNORE INTO html_previews VALUES(?,?,?,?)")
+      .run(id, scope, JSON.stringify(source), new Date().toISOString());
+    return id;
+  }
   observe(thread: ThreadRecord, turnId: string | null, item: Record<string, unknown>): string[] {
     const results: string[] = [];
     for (const source of previewSources(item)) {
@@ -113,10 +137,12 @@ export class Previews {
         html = await readFile(file, "utf8");
       } catch {
         const source = JSON.parse(String(row.source)) as Source;
-        const target = this.target(String(row.threadId));
         const bytes = source.html
           ? Buffer.from(source.html)
-          : await readMachinePreview(target.machine, target.root, source.path ?? "");
+          : await (async () => {
+              const target = this.target(String(row.threadId));
+              return readMachinePreview(target.machine, target.root, source.path ?? "");
+            })();
         if (bytes.length > PREVIEW_LIMIT)
           throw new HubError(413, "PREVIEW_TOO_LARGE", "Демо больше 2 МБ.");
         html = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
