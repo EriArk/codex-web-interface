@@ -578,6 +578,18 @@ export class GptService {
     void this.pump();
     return this.job(jobId);
   }
+  async dismiss(jobId: string) {
+    const job = this.job(jobId);
+    if (["queued", "preparing", "running"].includes(job.status)) return this.cancel(jobId);
+    if (job.status === "cancelled") return job;
+    if (["failed", "unknown"].includes(job.status)) {
+      this.update(jobId, { status: "cancelled", error: "" });
+      return this.job(jobId);
+    }
+    if (job.status === "completed") return job;
+    this.update(jobId, { status: "cancelled", error: "" });
+    return this.job(jobId);
+  }
   async pump() {
     if (
       this.working ||
@@ -945,6 +957,9 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
   }));
   app.post("/api/gpt/jobs/:id/resolve", async (req) => ({
     job: service.resolve(z.object({ id: uuid }).parse(req.params).id),
+  }));
+  app.post("/api/gpt/jobs/:id/dismiss", async (req) => ({
+    job: await service.dismiss(z.object({ id: uuid }).parse(req.params).id),
   }));
   app.post("/api/gpt/uploads", { bodyLimit: 25 * 1024 * 1024 }, async (req, reply) => {
     const { name } = z.object({ name: z.string() }).parse(req.query);

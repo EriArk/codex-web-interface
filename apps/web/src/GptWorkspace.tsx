@@ -570,6 +570,22 @@ export function GptWorkspace({
       if (input.current) input.current.value = "";
     }
   };
+  const dismissJob = async (job: GptJob) => {
+    try {
+      const data = await api<{ job: GptJob }>(`/gpt/jobs/${job.id}/dismiss`, {
+        method: "POST",
+      });
+      setJobs((old) => mergeGptJobs(old, [data.job]));
+      if (!selected && createdJob === job.id) {
+        setCreatedJob("");
+        try {
+          sessionStorage.removeItem("gpt-draft-" + (job.nativeId ?? "job:" + job.id));
+        } catch {}
+      }
+    } catch (e) {
+      setNotice(messageOf(e));
+    }
+  };
   const pendingNew = jobs.find((job) => !selected && job.nativeId && job.id === createdJob);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Carry the current draft only when this job acquires its native chat.
   useEffect(() => {
@@ -852,19 +868,38 @@ export function GptWorkspace({
             (job) => !search || job.text.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
           )
           .map((job) => (
-            <button
+            <div
+              className={"entity-row" + (!selected && createdJob === job.id ? " selected" : "")}
               key={job.id}
-              type="button"
-              className={"nav-thread" + (!selected && createdJob === job.id ? " selected" : "")}
-              onClick={() => choose("", job.id)}
             >
-              <Icon name="chat" />
-              <span>
-                {job.text.slice(0, 60) || "Новая отправка"}
-                <small>{titles[job.status]}</small>
-              </span>
-              {isActive(job) && <span className="spinner" aria-hidden="true" />}
-            </button>
+              <button
+                className={"nav-thread" + (!selected && createdJob === job.id ? " selected" : "")}
+                type="button"
+                onClick={() => choose("", job.id)}
+              >
+                <Icon name="chat" />
+                <span>
+                  {job.text.slice(0, 60) || "Новая отправка"}
+                  <small>{titles[job.status]}</small>
+                </span>
+                {isActive(job) && <span className="spinner" aria-hidden="true" />}
+              </button>
+              {(job.status === "queued" || job.status === "failed" || job.status === "unknown") && (
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Удалить из очереди"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void action(async () => {
+                      await dismissJob(job);
+                    });
+                  }}
+                >
+                  <Icon name="close" size={17} />
+                </button>
+              )}
+            </div>
           ))}
         {filtered.filter((c) => !projects.some((p) => p.id === c.projectId)).map(navThread)}
         {offset !== null && (

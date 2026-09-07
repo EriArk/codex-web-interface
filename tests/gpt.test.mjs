@@ -339,3 +339,89 @@ test("GPT preparation errors preserve text and files, explain the failed step an
     delete process.env.GPT_PREPARATION_TEST_TOKEN;
   }
 });
+
+test("GPT dismiss marks queued and failed jobs as cancelled without losing their payload", async () => {
+  const root = mkdtempSync(join(tmpdir(), "gpt-dismiss-")),
+    store = new Store(":memory:");
+  const config = configSchema.parse({
+    hub: {
+      publicBaseUrl: "https://codex.example.test",
+      databasePath: ":memory:",
+      resultsPath: root,
+    },
+    auth: {},
+    machines: [],
+    projects: [],
+  });
+  const service = new GptService(config, store),
+    insert =
+      "INSERT INTO gpt_jobs(id,fingerprint,nativeId,text,files,model,effort,status,answer,assets,createdAt,updatedAt,error,requestId,submitted) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+  const now = Date.now(),
+    queued = randomUUID(),
+    failed = randomUUID(),
+    completed = randomUUID();
+  store.db.prepare(insert).run(
+    queued,
+    "fingerprint",
+    null,
+    "Queued",
+    "[]",
+    "Latest",
+    "2",
+    "queued",
+    "",
+    "[]",
+    now,
+    now,
+    "",
+    null,
+    0,
+  );
+  store.db.prepare(insert).run(
+    failed,
+    "fingerprint",
+    null,
+    "Failed",
+    "[]",
+    "Latest",
+    "2",
+    "failed",
+    "",
+    "[]",
+    now,
+    now,
+    "Temporary failure",
+    null,
+    0,
+  );
+  store.db.prepare(insert).run(
+    completed,
+    "fingerprint",
+    null,
+    "Done",
+    "[]",
+    "Latest",
+    "2",
+    "completed",
+    "Reply",
+    "[]",
+    now,
+    now,
+    "",
+    null,
+    0,
+  );
+
+  const queuedJob = await service.dismiss(queued),
+    failedJob = await service.dismiss(failed),
+    completedJob = await service.dismiss(completed);
+
+  assert.equal(queuedJob.status, "cancelled");
+  assert.equal(failedJob.status, "cancelled");
+  assert.equal(service.job(completed).status, "completed");
+  assert.equal(completedJob.status, "completed");
+
+  service.close();
+  store.close();
+  rmSync(root, { recursive: true, force: true });
+});
