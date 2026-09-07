@@ -192,6 +192,8 @@ export function GptWorkspace({
     setNotice,
   );
   selectedRef.current = selected;
+  useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
+  useProjectSwipe(settingsRef, settings, () => setSettings(false), "close");
   useProjectSwipe(root, !drawer && !settings, () => setDrawer(true));
   const action = useCallback(async (fn: () => Promise<void>) => {
     try {
@@ -388,8 +390,14 @@ export function GptWorkspace({
     saveGptCache();
   }, [jobs, items, projects, models, model, effort, offset]);
   useEffect(() => {
-    if (settings) settingsRef.current?.showModal();
-    else settingsRef.current?.close();
+    if (settings) {
+      const panel = settingsRef.current;
+      if (panel) {
+        panel.tabIndex = -1;
+        panel.showModal();
+        panel.focus({ preventScroll: true });
+      }
+    } else settingsRef.current?.close();
   }, [settings]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll refs returned by the history hook are stable.
   useEffect(() => {
@@ -700,7 +708,7 @@ export function GptWorkspace({
         </span>
         <button
           type="button"
-          className="icon-button mobile-only"
+          className="icon-button mobile-only panel-close"
           aria-label="Закрыть проекты"
           data-drawer-close
           onClick={() => setDrawer(false)}
@@ -1182,7 +1190,7 @@ export function GptWorkspace({
           <h2>Настройки</h2>
           <button
             type="button"
-            className="icon-button"
+            className="icon-button panel-close"
             aria-label="Закрыть настройки"
             onClick={() => setSettings(false)}
           >

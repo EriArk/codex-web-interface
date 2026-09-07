@@ -350,3 +350,5 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - When sending to a computer-owned Codex conversation, offer a concise modal to continue on the website. After explicit confirmation, use the existing verified desktop-release action and send the preserved text/files once in the same chat. Cancel/failure/navigation must preserve the draft and never replay an uncertain send.
 - Suppress old unread-completion badges while that same thread is active. A project may show both indicators only for different threads.
+
+- Drawer and Settings close controls stay compact and unframed with 44px touch targets. Focus the panel on opening instead of highlighting the close button or activating the client picker; retain keyboard focus visibility. Leftward touch swipes close either panel in Codex/GPT while preserving vertical scroll and input gestures.
