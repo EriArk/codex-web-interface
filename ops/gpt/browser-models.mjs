@@ -10,10 +10,14 @@ async function picker(page){
  return content;
 }
 async function closePicker(page){
- const toggle=page.getByTestId('composer-intelligence-picker-content').locator('[role="menuitem"][aria-expanded="true"]');
- if(await toggle.count()===1)await toggle.click({timeout:1500}).catch(()=>{});
- await page.keyboard.press('Escape');
- await page.getByTestId('composer-intelligence-picker-content').waitFor({state:'hidden',timeout:3000});
+ const content=page.getByTestId('composer-intelligence-picker-content');
+ // Advanced-view controls may remain mounted outside the visible menu. Escape
+ // closes the native popover without waiting on an inaccessible hidden toggle.
+ for(let attempt=0;attempt<2&&await content.isVisible();attempt++){
+  await page.keyboard.press('Escape');
+  await content.waitFor({state:'hidden',timeout:1200}).catch(()=>{});
+ }
+ if(await content.isVisible())throw Error('GPT_MODEL_MENU_NOT_CLOSED');
 }
 async function readPower(content){
  const slider=content.locator('[role="slider"]');
@@ -30,7 +34,7 @@ async function selectPower(content,value){
  if(!Number.isInteger(value)||value<power.min||value>power.max)throw Error('GPT_POWER_UNAVAILABLE');
  for(let attempt=0;attempt<8&&power.value!==value;attempt++){
   const current=power.value;
-  await content.locator('[role="menuitem"][aria-keyshortcuts*="ArrowLeft"]').press(value<current?'ArrowLeft':'ArrowRight');
+  await content.locator('[role="menuitem"][aria-keyshortcuts*="ArrowLeft"]').press(value<current?'ArrowLeft':'ArrowRight',{timeout:2500});
   await content.page().waitForFunction(previous=>{
    const slider=document.querySelector('[data-testid="composer-intelligence-picker-content"] [role="slider"]');
    return slider&&Number(slider.getAttribute('aria-valuenow'))!==previous;
@@ -41,11 +45,15 @@ async function selectPower(content,value){
  return power;
 }
 async function openModels(content){
- const toggle=content.locator('[role="menuitem"][aria-expanded]');
- if(await toggle.count()!==1)throw Error('GPT_MODEL_TOGGLE_CHANGED');
- if(await toggle.getAttribute('aria-expanded')!=='true')await toggle.click();
- await content.getByTestId('composer-model-picker-slider-advanced-view').waitFor({state:'visible',timeout:3000});
- return content.getByTestId('composer-model-picker-slider-advanced-view').getByRole('menuitemradio');
+ const view=content.getByTestId('composer-model-picker-slider-advanced-view');
+ if(!await view.count()||await view.getAttribute('data-active')!=='true'){
+  const toggle=content.locator('[role="menuitem"][aria-expanded]:visible');
+  await toggle.waitFor({state:'visible',timeout:2500});
+  if(await toggle.count()!==1)throw Error('GPT_MODEL_TOGGLE_CHANGED');
+  await toggle.click({timeout:2500});
+ }
+ await view.waitFor({state:'visible',timeout:3000});
+ return view.getByRole('menuitemradio');
 }
 export async function readModels(page){
  const content=await picker(page);
@@ -63,7 +71,7 @@ export async function readModels(page){
   return {ok:true,models,efforts,currentModel:models.find(m=>m.selected).id,currentEffort:String(initial.value)};
  }finally{await closePicker(page)}
 }
-export async function selectModels(page,{model,effort}){
+async function selectModelsOnce(page,{model,effort}){
  if(model){
   const content=await picker(page);
   try{
@@ -73,7 +81,7 @@ export async function selectModels(page,{model,effort}){
    const index=labels.findIndex(label=>label.trim()===model);
    if(index<0)throw Error('GPT_MODEL_UNAVAILABLE');
    const target=option.nth(index);
-   if(await target.getAttribute('aria-checked')!=='true')await target.click();
+   if(await target.getAttribute('aria-checked')!=='true')await target.click({timeout:2500});
   }finally{await closePicker(page)}
  }
  if(effort!==undefined&&effort!==''){
@@ -88,4 +96,15 @@ export async function selectModels(page,{model,effort}){
   if(selected.length!==1||(model&&selected[0]!==model)||(effort!==undefined&&effort!==''&&String(power.value)!==String(effort)))throw Error('GPT_SETTINGS_NOT_CONFIRMED');
   return {model:selected[0],effort:String(power.value)};
  }finally{await closePicker(page)}
+}
+
+// Retrying explicit settings is idempotent; this function never submits a prompt.
+export async function selectModels(page,settings){
+ for(let attempt=0;attempt<2;attempt++){
+  try{return await selectModelsOnce(page,settings)}
+  catch(error){
+   await closePicker(page).catch(()=>{});
+   if(attempt||/GPT_(MODEL|POWER)_UNAVAILABLE/.test(String(error?.message)))throw error;
+  }
+ }
 }
