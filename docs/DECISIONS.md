@@ -322,3 +322,11 @@ The shared web shell provides native chat history, send/progress, file/image inp
 ## Interactive self-contained HTML Results (2026-09-06)
 
 The owner requested the interactive design studies used in TrainerOs. Support them as authenticated, bounded HTML artifacts with an opaque-origin sandbox, sourced from structured HTML resources/file changes or explicit assistant HTML blocks/local file links. Keep Windows private and fetch only within the selected project. This is an artifact viewer, not a general reverse proxy to development servers. Native chat order is authoritative; the live Hub supplement inserts only unpersisted messages at matching sequence anchors and must not promote older-page records to the tail.
+
+## GPT continuity and public progress (2026-09-07)
+
+Retain the visited GPT pages, native job state and reader position across chat/client switches. A bounded same-tab session cache restores the view after a brief navigation or reload; it is used only after Hub authentication, expires after 30 minutes and is cleared on logout or a rejected session. In-flight responses cannot repopulate a cleared cache or overwrite a newer request. No account tokens, signed asset URLs or private native records enter this cache.
+
+The Hub coalesces canonical history reads and keeps only normalized public messages in a bounded memory cache. Latest-page requests carry a revision and a prefix fingerprint. Unchanged history returns no messages; ordinary completion retains explicitly loaded older pages, while a native branch edit invalidates an incompatible prefix. First reads and older-page fetches remain 20 messages. Background revalidation updates native changes without clearing the pane.
+
+Persist up to 24 short public progress labels per Hub GPT job in schema 6. Accept only structured DOM-observation items from the pinned adapter's visible cot/shimmer/transition controls. The expandable composer panel retains prior stages; completed stages remain collapsible near the answer. Raw thinking snapshots, native analysis/thought content, tool internals and diagnostics remain excluded. Some native models expose only a generic Thinking label; do not fabricate a more detailed reasoning trace.

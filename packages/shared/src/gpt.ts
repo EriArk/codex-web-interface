@@ -38,8 +38,24 @@ export interface GptJob {
   effort: string;
   status: "queued" | "preparing" | "running" | "completed" | "failed" | "unknown" | "cancelled";
   answer: string;
+  progress?: GptProgress[];
+  summaryOnly?: boolean;
   assets: GptFile[];
   createdAt: number;
   updatedAt: number;
   error: string;
+}
+
+export interface GptProgress {
+  id: string;
+  text: string;
+  state: "active" | "completed";
+}
+export interface GptHistoryPage {
+  items: GptMessage[];
+  nextBefore: string | null;
+  revision: string;
+  prefix: string;
+  notModified: boolean;
+  retainOlder: boolean;
 }

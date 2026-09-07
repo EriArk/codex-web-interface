@@ -1,19 +1,15 @@
-import type {
-  GptConversation,
-  GptFile,
-  GptJob,
-  GptMessage,
-  GptModels,
-  GptProject,
-} from "@codex-web/shared";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { GptConversation, GptFile, GptJob, GptModels, GptProject } from "@codex-web/shared";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { api, messageOf } from "./api";
 import { ClientPicker } from "./ClientPicker";
 import { CollapsibleCode } from "./CollapsibleCode";
-import { showGptJob } from "./gptState";
+import { GptProgress } from "./GptProgress";
+import { gptCache, saveGptCache } from "./gptCache";
+import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { type Theme, themes } from "./theme";
+import { useGptHistory } from "./useGptHistory";
 import { useProjectSwipe } from "./useProjectSwipe";
 import "./gpt.css";
 
@@ -27,7 +23,7 @@ const titles: Record<GptJob["status"], string> = {
   unknown: "Нужна проверка",
   cancelled: "Остановлено",
 };
-function Files({ files }: { files: GptFile[] }) {
+const Files = memo(function Files({ files }: { files: GptFile[] }) {
   return (
     <div className="gpt-files">
       {files.map((file) => (
@@ -44,8 +40,8 @@ function Files({ files }: { files: GptFile[] }) {
       ))}
     </div>
   );
-}
-function Text({ value }: { value: string }) {
+});
+const Text = memo(function Text({ value }: { value: string }) {
   return (
     <Markdown
       components={{
@@ -56,7 +52,7 @@ function Text({ value }: { value: string }) {
       {value}
     </Markdown>
   );
-}
+});
 function cachedId() {
   try {
     return localStorage.getItem("gpt-conversation") ?? "";
@@ -73,17 +69,15 @@ export function GptWorkspace({
   theme: Theme;
   onTheme: (theme: Theme) => void;
 }) {
-  const [items, setItems] = useState<GptConversation[]>([]),
-    [projects, setProjects] = useState<GptProject[]>([]),
-    [offset, setOffset] = useState<number | null>(null);
+  const [items, setItems] = useState<GptConversation[]>(gptCache.items),
+    [projects, setProjects] = useState<GptProject[]>(gptCache.projects),
+    [offset, setOffset] = useState<number | null>(gptCache.offset);
   const [createdJob, setCreatedJob] = useState("");
-  const [selected, setSelected] = useState(cachedId),
-    [messages, setMessages] = useState<GptMessage[]>([]),
-    [before, setBefore] = useState<string | null>(null);
-  const [jobs, setJobs] = useState<GptJob[]>([]),
-    [models, setModels] = useState<GptModels | null>(null),
-    [model, setModel] = useState(""),
-    [effort, setEffort] = useState("");
+  const [selected, setSelected] = useState(cachedId);
+  const [jobs, setJobs] = useState<GptJob[]>(gptCache.jobs),
+    [models, setModels] = useState<GptModels | null>(gptCache.models),
+    [model, setModel] = useState(gptCache.model),
+    [effort, setEffort] = useState(gptCache.effort);
   const [text, setText] = useState(""),
     [files, setFiles] = useState<GptFile[]>([]),
     [busy, setBusy] = useState(false),
@@ -94,24 +88,24 @@ export function GptWorkspace({
     [view, setView] = useState<"chat" | "results">("chat");
   const [search, setSearch] = useState(""),
     [ready, setReady] = useState(false),
-    [loading, setLoading] = useState(false),
     [rightHidden, setRightHidden] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const root = useRef<HTMLDivElement>(null),
     drawerRef = useRef<HTMLDialogElement>(null),
     settingsRef = useRef<HTMLDialogElement>(null),
-    scroll = useRef<HTMLDivElement>(null),
     input = useRef<HTMLInputElement>(null),
     messageList = useRef<HTMLDivElement>(null),
     userScrollUntil = useRef(0);
   const selectedRef = useRef(selected),
-    request = useRef(0),
     sendKey = useRef<{ signature: string; key: string } | null>(null),
     sending = useRef(false),
     draftLoaded = useRef("");
-  const sticky = useRef(true),
-    previousJobs = useRef<GptJob[]>([]);
+  const previousJobs = useRef<GptJob[]>(gptCache.jobs);
+  const { messages, before, loading, scroll, sticky, history, rememberScroll } = useGptHistory(
+    selected,
+    setNotice,
+  );
   selectedRef.current = selected;
   useProjectSwipe(root, !drawer && !settings, () => setDrawer(true));
   const action = useCallback(async (fn: () => Promise<void>) => {
@@ -121,45 +115,18 @@ export function GptWorkspace({
       setNotice(messageOf(e));
     }
   }, []);
-  const catalog = useCallback(async (append = false, next = 0) => {
+  const catalog = useCallback(async (append = false, next = 0, force = true) => {
+    if (!append && !force && Date.now() - gptCache.catalogAt < 30000) return;
     const data = await api<{ items: GptConversation[]; nextOffset: number | null }>(
       "/gpt/conversations?offset=" + next,
     );
-    setItems((old) =>
-      append
-        ? [...new Map([...old, ...data.items].map((c) => [c.id, c])).values()]
-        : [
-            ...new Map(
-              [...old.filter((c) => c.projectId), ...data.items].map((c) => [c.id, c]),
-            ).values(),
-          ],
+    gptCache.catalogAt = Date.now();
+    setItems((old) => [...new Map([...old, ...data.items].map((c) => [c.id, c])).values()]);
+    setOffset((old) =>
+      !append && next === 0 && old !== null
+        ? Math.max(old, data.nextOffset ?? 0) || null
+        : data.nextOffset,
     );
-    setOffset(data.nextOffset);
-  }, []);
-  const history = useCallback(async (id: string, older?: string) => {
-    if (!id) return;
-    const generation = ++request.current;
-    setLoading(true);
-    try {
-      const data = await api<{ items: GptMessage[]; nextBefore: string | null }>(
-        "/gpt/conversations/" +
-          encodeURIComponent(id) +
-          "/messages" +
-          (older ? "?before=" + encodeURIComponent(older) : ""),
-      );
-      if (generation !== request.current || selectedRef.current !== id) return;
-      const oldHeight = scroll.current?.scrollHeight ?? 0;
-      setMessages((old) =>
-        older ? [...new Map([...data.items, ...old].map((m) => [m.id, m])).values()] : data.items,
-      );
-      setBefore(data.nextBefore);
-      if (older)
-        requestAnimationFrame(() => {
-          if (scroll.current) scroll.current.scrollTop += scroll.current.scrollHeight - oldHeight;
-        });
-    } finally {
-      if (generation === request.current) setLoading(false);
-    }
   }, []);
   useEffect(() => {
     let disposed = false;
@@ -171,32 +138,30 @@ export function GptWorkspace({
         setNotice("Подключение GPT ещё не настроено.");
         return;
       }
-      await catalog();
-      const result = await api<GptModels>("/gpt/models");
+      await catalog(false, 0, false);
+      const result = gptCache.models ?? (await api<GptModels>("/gpt/models"));
       if (disposed) return;
       setModels(result);
-      setModel(result.currentModel);
-      setEffort(result.currentEffort);
+      setModel((old) => old || result.currentModel);
+      setEffort((old) => old || result.currentEffort);
     });
-    void api<{ items: GptProject[]; conversations: GptConversation[] }>("/gpt/projects")
-      .then((data) => {
-        if (!disposed) {
-          setProjects(data.items);
-          setItems((old) => [
-            ...new Map([...old, ...data.conversations].map((c) => [c.id, c])).values(),
-          ]);
-        }
-      })
-      .catch(() => {});
+    if (Date.now() - gptCache.projectsAt >= 30000)
+      void api<{ items: GptProject[]; conversations: GptConversation[] }>("/gpt/projects")
+        .then((data) => {
+          if (!disposed) {
+            gptCache.projectsAt = Date.now();
+            setProjects(data.items);
+            setItems((old) => [
+              ...new Map([...old, ...data.conversations].map((c) => [c.id, c])).values(),
+            ]);
+          }
+        })
+        .catch(() => {});
     return () => {
       disposed = true;
     };
   }, [catalog, action]);
   useEffect(() => {
-    ++request.current;
-    setMessages([]);
-    setBefore(null);
-    sticky.current = true;
     try {
       if (selected) localStorage.setItem("gpt-conversation", selected);
       else localStorage.removeItem("gpt-conversation");
@@ -209,8 +174,7 @@ export function GptWorkspace({
     }
     draftLoaded.current = selected;
     sendKey.current = null;
-    if (selected) void history(selected).catch((e) => setNotice(messageOf(e)));
-  }, [selected, history]);
+  }, [selected]);
   useEffect(() => {
     if (draftLoaded.current === selected)
       try {
@@ -223,7 +187,7 @@ export function GptWorkspace({
     let disposed = false,
       timer: ReturnType<typeof setTimeout>;
     let polling = false,
-      stamp = 0;
+      stamp = gptCache.stamps[selected || createdJob] ?? 0;
     const poll = async () => {
       if (polling || disposed) return;
       clearTimeout(timer);
@@ -234,21 +198,19 @@ export function GptWorkspace({
         if (createdJob) query.set("watch", createdJob);
         const data = await api<{ items: GptJob[]; stamp: number }>("/gpt/jobs?" + query);
         stamp = data.stamp;
+        gptCache.stamps[selected || createdJob] = stamp;
         if (disposed) return;
         const completed = data.items.some(
           (job) =>
             job.status === "completed" &&
             previousJobs.current.some((old) => old.id === job.id && isActive(old)),
         );
-        setJobs((old) =>
-          [...new Map([...old, ...data.items].map((job) => [job.id, job])).values()].slice(-100),
-        );
-        previousJobs.current = [
-          ...new Map([...previousJobs.current, ...data.items].map((job) => [job.id, job])).values(),
-        ].slice(-100);
+        setJobs((old) => mergeGptJobs(old, data.items));
+        previousJobs.current = mergeGptJobs(previousJobs.current, data.items);
         if (completed) {
           void catalog().catch(() => {});
-          if (selectedRef.current) void history(selectedRef.current).catch(() => {});
+          if (selectedRef.current)
+            void history(selectedRef.current, undefined, true).catch(() => {});
         }
       } catch {
         /* The composer reports network errors; polling resumes after reconnect. */
@@ -268,6 +230,10 @@ export function GptWorkspace({
     };
   }, [catalog, history, selected, createdJob]);
   useEffect(() => {
+    Object.assign(gptCache, { jobs, items, projects, models, model, effort, offset });
+    saveGptCache();
+  }, [jobs, items, projects, models, model, effort, offset]);
+  useEffect(() => {
     if (drawer) drawerRef.current?.showModal();
     else drawerRef.current?.close();
   }, [drawer]);
@@ -275,6 +241,7 @@ export function GptWorkspace({
     if (settings) settingsRef.current?.showModal();
     else settingsRef.current?.close();
   }, [settings]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll refs returned by the history hook are stable.
   useEffect(() => {
     if (!messageList.current) return;
     const observer = new ResizeObserver(() => {
@@ -292,6 +259,7 @@ export function GptWorkspace({
     if (sticky.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [messages, currentJobs.map((j) => j.answer + j.status).join("")]);
   const choose = (id: string) => {
+    rememberScroll();
     setCreatedJob("");
     setSelected(id);
     setDrawer(false);
@@ -396,6 +364,7 @@ export function GptWorkspace({
                 <b>GPT</b>
               </div>
               <div className="message-body">
+                {!isActive(job) && !!job.progress?.length && <GptProgress items={job.progress} />}
                 <Text value={job.answer} />
                 <Files files={job.assets} />
               </div>
@@ -409,7 +378,7 @@ export function GptWorkspace({
                   type="button"
                   onClick={() =>
                     void action(async () => {
-                      if (job.nativeId) await history(job.nativeId);
+                      if (job.nativeId) await history(job.nativeId, undefined, true);
                       await api("/gpt/jobs/" + job.id + "/resolve", { method: "POST" });
                     })
                   }
@@ -667,12 +636,14 @@ export function GptWorkspace({
               userScrollUntil.current = performance.now() + 1500;
             }}
             onScroll={() => {
-              if (scroll.current && performance.now() < userScrollUntil.current)
+              if (scroll.current && performance.now() < userScrollUntil.current) {
                 sticky.current =
                   scroll.current.scrollHeight -
                     scroll.current.scrollTop -
                     scroll.current.clientHeight <
                   120;
+                rememberScroll();
+              }
             }}
           >
             <div ref={messageList}>
@@ -702,6 +673,28 @@ export function GptWorkspace({
                     <b>{message.role === "user" ? "Вы" : "GPT"}</b>
                   </div>
                   <div className="message-body">
+                    {message.role === "assistant" &&
+                      currentJobs
+                        .filter(
+                          (job) =>
+                            !isActive(job) &&
+                            job.progress?.length &&
+                            messages.some(
+                              (m) =>
+                                m.role === "user" &&
+                                m.text === job.text &&
+                                m.createdAt * 1000 >= job.createdAt - 30000,
+                            ) &&
+                            messages.findIndex((m) => m.id === message.id) ===
+                              messages.findIndex(
+                                (m) =>
+                                  m.role === "user" &&
+                                  m.text === job.text &&
+                                  m.createdAt * 1000 >= job.createdAt - 30000,
+                              ) +
+                                1,
+                        )
+                        .map((job) => <GptProgress key={job.id} items={job.progress ?? []} />)}
                     <Text value={message.text} />
                     <Files files={message.files} />
                   </div>
@@ -712,22 +705,17 @@ export function GptWorkspace({
           </div>
           <div className="gpt-composer-wrap">
             {active && (
-              <div className="gpt-progress" role="status">
-                <span className="spinner" />
-                <span>{titles[active.status]}</span>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Остановить GPT"
-                  onClick={() =>
-                    void action(async () => {
-                      await api("/gpt/jobs/" + active.id + "/cancel", { method: "POST" });
-                    })
-                  }
-                >
-                  <Icon name="stop" />
-                </button>
-              </div>
+              <GptProgress
+                key={active.id}
+                items={active.progress ?? []}
+                running
+                label={titles[active.status]}
+                onStop={() =>
+                  void action(async () => {
+                    await api("/gpt/jobs/" + active.id + "/cancel", { method: "POST" });
+                  })
+                }
+              />
             )}
             <form
               className="gpt-composer"
