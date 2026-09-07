@@ -387,7 +387,7 @@ export class GptService {
       const selected = row.nativeId === (nativeId ?? null) || row.id === watch;
       if (selected) count++;
       if (Number(row.updatedAt) < after) return [];
-      if (selected && count <= 20) return [this.job(String(row.id))];
+      if (row.id === watch || (selected && count <= 20)) return [this.job(String(row.id))];
       return [
         {
           id: String(row.id),
