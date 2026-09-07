@@ -73,7 +73,7 @@ const server=createServer(async(req,res)=>{
    if(health.activeRequests?.length){res.writeHead(409).end('{}');return;}
    for(const id of body.ids) {
     const response=await fetch('http://127.0.0.1:8080/files/'+id,{method:'DELETE',headers,signal:AbortSignal.timeout(5000)});
-    await response.body?.cancel();if(!response.ok)throw Error('GPT_UPLOAD_RELEASE_FAILED');
+    await response.body?.cancel();if(!response.ok&&response.status!==404)throw Error('GPT_UPLOAD_RELEASE_FAILED');
    }
    res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}));
   }catch{res.writeHead(409).end('{}');}

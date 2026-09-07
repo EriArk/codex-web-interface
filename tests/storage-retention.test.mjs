@@ -204,6 +204,11 @@ test("GPT adapter retains more than ten referenced artifacts and serializes stor
       this.index.artifacts[id] = { size: Buffer.byteLength(input.content) };
       return { id };
     }
+    async remove(id) {
+      await new Promise((r) => setTimeout(r, 5));
+      delete this.index.files[id];
+      return true;
+    }
     async pruneArtifacts() {
       this.index.artifacts = {};
       return ["lost"];
@@ -220,6 +225,10 @@ test("GPT adapter retains more than ten referenced artifacts and serializes stor
   ]);
   assert.equal(uploads.filter((r) => r.status === "fulfilled").length, 1);
   assert.equal(uploads.filter((r) => r.status === "rejected").length, 1);
+  // A completed transport retirement and the next upload must serialize index writes.
+  const first = uploads.find((r) => r.status === "fulfilled").value;
+  await Promise.all([files.remove(first.id), files.putUpload({ content: "next" })]);
+  assert.equal(Object.keys(files.index.files).length, 1);
 });
 
 test("GPT transport retirement retries after restart without replaying prompts or retiring uncertain jobs", async () => {

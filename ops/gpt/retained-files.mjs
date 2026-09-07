@@ -27,6 +27,11 @@ export function retainedFileStore(Base,{uploadBytes,artifactBytes}=storageLimits
   }
   async importLocalPath(input) {return this.storageWrite("upload",(await stat(input.filePath)).size,()=>super.importLocalPath(input));}
   async importArtifactPath(input) {return this.storageWrite("artifact",(await stat(input.filePath)).size,()=>super.importArtifactPath(input),input.artifactId);}
+  async remove(fileId) {
+   const task=this.storageQueue.catch(()=>{}).then(()=>super.remove(fileId));
+   this.storageQueue=task.catch(()=>{});
+   return task;
+  }
   async pruneArtifacts() { return []; }
  };
 }
