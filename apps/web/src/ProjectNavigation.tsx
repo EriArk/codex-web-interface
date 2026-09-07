@@ -222,6 +222,7 @@ export function ProjectNavigation({
           type="button"
           className="icon-button mobile-only"
           aria-label="Закрыть проекты"
+          data-drawer-close
           onClick={onClose}
         >
           <Icon name="close" />

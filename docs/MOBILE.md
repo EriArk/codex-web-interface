@@ -282,6 +282,7 @@ During a turn, Send becomes Add to queue. An independently scrolling compact que
 ### Compact workflow controls
 
 - The compact project drawer also opens with a single-finger rightward swipe starting within 28 CSS px of the workspace's left edge. Require at least 64 px of horizontal movement; cancel vertical, leftward, slow, cancelled and multi-touch gestures. Inputs, links/buttons, overlays and Remote do not activate this gesture. The hamburger remains available.
+- Keep the gesture connected after switching Codex/GPT, including a page initially opened in GPT. Opening the drawer focuses its close control, never the native client selector. Use one shared slide-in/slide-out transition with a fading backdrop; retain modal focus until closing finishes. Short tab, disclosure and panel transitions share the same motion rules across themes. Respect reduced motion and keep streaming history and Remote stationary.
 - The composer has a 44 px normal/full access picker with short labels. No extra explanation of future-turn timing is displayed.
 - The turn-status row opens and collapses an eight-item recent-work panel with independent scroll and a maximum 28dvh/240px height. Keep Stop reachable while composing or transferring attachments. Accepted Steer receipts remain visible until inserted into the conversation.
 - Settings offers manual desktop handoff/return and a separately confirmed hard restart. Read-only navigation never silently returns a released machine to web control.

@@ -17,6 +17,7 @@ import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { type Theme, themes } from "./theme";
 import { useGptHistory } from "./useGptHistory";
+import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
 import "./gpt.css";
 
@@ -99,7 +100,7 @@ export function GptWorkspace({
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const root = useRef<HTMLDivElement>(null),
-    drawerRef = useRef<HTMLDialogElement>(null),
+    drawerRef = useProjectDrawer(drawer),
     settingsRef = useRef<HTMLDialogElement>(null),
     input = useRef<HTMLInputElement>(null),
     messageList = useRef<HTMLDivElement>(null),
@@ -305,10 +306,6 @@ export function GptWorkspace({
     Object.assign(gptCache, { jobs, items, projects, models, model, effort, offset });
     saveGptCache();
   }, [jobs, items, projects, models, model, effort, offset]);
-  useEffect(() => {
-    if (drawer) drawerRef.current?.showModal();
-    else drawerRef.current?.close();
-  }, [drawer]);
   useEffect(() => {
     if (settings) settingsRef.current?.showModal();
     else settingsRef.current?.close();
@@ -572,6 +569,7 @@ export function GptWorkspace({
           type="button"
           className="icon-button mobile-only"
           aria-label="Закрыть проекты"
+          data-drawer-close
           onClick={() => setDrawer(false)}
         >
           <Icon name="close" />
@@ -997,7 +995,15 @@ export function GptWorkspace({
           <span>ChatGPT</span>
         </a>
       </nav>
-      <dialog className="project-sheet" ref={drawerRef} onCancel={() => setDrawer(false)}>
+      <dialog
+        className="project-sheet"
+        aria-label="Проекты и диалоги"
+        ref={drawerRef}
+        onCancel={(event) => {
+          event.preventDefault();
+          setDrawer(false);
+        }}
+      >
         <div className="sheet-content">{navigation}</div>
       </dialog>
       <dialog className="gpt-settings" ref={settingsRef} onCancel={() => setSettings(false)}>
