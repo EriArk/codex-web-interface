@@ -8,6 +8,7 @@ import "./themes.css";
 import "./compact.css";
 import "./queue.css";
 import "./messageImages.css";
+import "./motion.css";
 
 applyTheme(cachedTheme());
 const root = document.getElementById("root");

@@ -1,0 +1,65 @@
+/* Shared, brief motion; streaming messages and Remote remain stationary. */
+@media (prefers-reduced-motion: no-preference) {
+  :is(
+    .icon-button,
+    .send-button,
+    .entity-row,
+    .entity-actions > button,
+    .mobile-tabs > button,
+    .mobile-tabs > a,
+    .support-tabs > button,
+    .nav-mobile-switch > button,
+    .nav-thread,
+    .nav-project,
+    .access-picker
+  ) {
+    transition:
+      background-color 140ms ease,
+      color 140ms ease,
+      border-color 140ms ease;
+  }
+  .project-chevron,
+  .turn-status-toggle .details-chevron,
+  .gpt-progress-toggle > svg:last-child {
+    transition: transform 160ms ease;
+  }
+  .project-sheet[open]::backdrop {
+    animation: backdrop-appear 180ms ease both;
+  }
+  .project-sheet[data-closing="true"]::backdrop {
+    animation: backdrop-disappear 160ms ease both;
+  }
+  :is(.entity-dialog, .archive-dialog, .settings-dialog, .gpt-settings, .project-dialog)[open] {
+    animation: panel-appear 160ms ease-out;
+  }
+  .turn-details,
+  .gpt-progress-details {
+    animation: panel-appear 140ms ease-out;
+  }
+}
+@keyframes backdrop-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes backdrop-disappear {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes panel-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

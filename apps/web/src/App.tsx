@@ -33,6 +33,7 @@ import type {
 } from "./types";
 import { UsageLimits } from "./UsageLimits";
 import { useNavigation } from "./useNavigation";
+import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
 import { useWorkspace } from "./useWorkspace";
 
@@ -194,10 +195,15 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "38")));
   const root = useRef<HTMLDivElement>(null),
     settingsDialog = useRef<HTMLDialogElement>(null),
-    drawerDialog = useRef<HTMLDialogElement>(null);
+    drawerDialog = useProjectDrawer(drawer);
   useProjectSwipe(
     root,
-    view !== "remote" && !drawer && !settings && !createProject && !resultOverlay,
+    client === "codex" &&
+      view !== "remote" &&
+      !drawer &&
+      !settings &&
+      !createProject &&
+      !resultOverlay,
     () => setDrawer(true),
   );
   const { state, older, reconnect, refresh } = useWorkspace(threadId);
@@ -358,10 +364,6 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     if (settings) settingsDialog.current?.showModal();
     else settingsDialog.current?.close();
   }, [settings]);
-  useEffect(() => {
-    if (drawer) drawerDialog.current?.showModal();
-    else drawerDialog.current?.close();
-  }, [drawer]);
   const selectThread = (id: string, owner = projectId) => {
     if (owner !== projectId) {
       setProjectId(owner);
@@ -901,7 +903,15 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           await loadThreads(p.id);
         }}
       />
-      <dialog className="project-sheet" ref={drawerDialog} onCancel={() => setDrawer(false)}>
+      <dialog
+        className="project-sheet"
+        aria-label="Проекты и диалоги"
+        ref={drawerDialog}
+        onCancel={(event) => {
+          event.preventDefault();
+          setDrawer(false);
+        }}
+      >
         <div className="sheet-content">{navigation}</div>
       </dialog>
       <dialog className="settings-dialog" ref={settingsDialog} onCancel={() => setSettings(false)}>
