@@ -511,16 +511,20 @@ export class GptService {
     let dispatched = false,
       done = false,
       checking = false;
+    let preparing: "session" | "settings" | "attachments" = "settings";
     const streamController = new AbortController();
     let monitor: ReturnType<typeof setInterval> | undefined;
     try {
       if (this.modelsPending) await this.modelsPending;
       const job = this.job(jobId);
       this.update(jobId, { status: "preparing" });
+      preparing = "session";
       if (job.nativeId) await this.json("/bridge/sessions/select", { sessionId: job.nativeId });
       else await this.json("/bridge/sessions/new", {});
       if (this.job(jobId).status === "cancelled") return;
+      preparing = "settings";
       await this.json("/settings", { model: job.model, effort: job.effort });
+      preparing = "attachments";
       await this.json("/bridge/composer/attachments/clear", {});
       const files: string[] = [];
       for (const file of job.files) {
@@ -659,7 +663,11 @@ export class GptService {
           status: dispatched ? "unknown" : "failed",
           error: dispatched
             ? "ChatGPT не подтвердил завершение. Проверь чат перед повторной отправкой."
-            : "Не удалось подготовить отправку. Текст и файлы сохранены.",
+            : preparing === "settings"
+              ? "Не удалось выбрать модель или режим в ChatGPT. Текст и файлы сохранены."
+              : preparing === "session"
+                ? "Не удалось открыть чат в ChatGPT. Текст и файлы сохранены."
+                : "Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены.",
         });
     } finally {
       if (monitor) clearInterval(monitor);

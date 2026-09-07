@@ -255,3 +255,76 @@ test("old GPT outbox entries never appear after the latest native messages", () 
   assert.equal(showGptJob(job, messages, 180000), false);
   assert.equal(showGptJob({ ...job, status: "queued" }, messages, 180000), true);
 });
+
+test("GPT preparation errors preserve text and files, explain the failed step and never replay a send", async () => {
+  const root = mkdtempSync(join(tmpdir(), "gpt-preparation-error-")),
+    requests = [];
+  const server = createServer(async (req, res) => {
+    for await (const chunk of req) {
+    }
+    requests.push(req.url);
+    res.writeHead(req.url === "/settings" ? 409 : 200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify(
+        req.url === "/settings" ? { error: "PRIVATE_UPSTREAM_DIAGNOSTIC" } : { ok: true },
+      ),
+    );
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  process.env.GPT_PREPARATION_TEST_TOKEN = "fixture-token";
+  const store = new Store(":memory:"),
+    service = new GptService(
+      configSchema.parse({
+        hub: {
+          publicBaseUrl: "https://codex.example.test",
+          databasePath: ":memory:",
+          resultsPath: root,
+        },
+        auth: {},
+        machines: [],
+        projects: [],
+        gpt: {
+          endpoint: "http://127.0.0.1:" + server.address().port,
+          tokenSecret: "GPT_PREPARATION_TEST_TOKEN",
+        },
+      }),
+      store,
+    );
+  try {
+    const file = await service.put("example.txt", Buffer.from("keep these bytes")),
+      key = randomUUID();
+    const input = {
+      nativeId: null,
+      text: "Keep this question",
+      files: [file.id],
+      model: "Latest",
+      effort: "2",
+    };
+    service.enqueue(key, input);
+    await waitUntil(() => service.job(key).status === "failed");
+    const job = service.job(key);
+    assert.equal(job.text, input.text);
+    assert.equal(job.files[0].id, file.id);
+    assert.match(job.error, /модель или режим/);
+    assert.doesNotMatch(JSON.stringify(job), /PRIVATE_UPSTREAM/);
+    assert.equal(
+      store.db.prepare("SELECT submitted FROM gpt_jobs WHERE id=?").get(key).submitted,
+      0,
+    );
+    assert(!requests.includes("/bridge/chat"));
+    assert(!requests.includes("/bridge/files"));
+    const count = requests.length;
+    service.enqueue(key, input);
+    await service.pump();
+    assert.equal(requests.length, count);
+    assert.equal(service.upload(file.id).bytes, 16);
+  } finally {
+    await service.close();
+    store.close();
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    rmSync(root, { recursive: true, force: true });
+    delete process.env.GPT_PREPARATION_TEST_TOKEN;
+  }
+});

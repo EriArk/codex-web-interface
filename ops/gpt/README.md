@@ -34,3 +34,12 @@ The profile survives container restarts. Its exclusive lock and fixed hostname p
 The browser bridge is https://github.com/DrA1ex/chatgpt-bridge, MIT license, revision 96802cc0d2ea0b7449cf465f8adb3c228decd297. Its repository and license remain in the browser image. This revision avoids an unavailable optional ZIP dependency in the subsequent release. Only the minimal browser runtime is used, not its workflow manager or Codex RPC layer.
 
 Compatibility patches are explicit and fail the image build if pinned attachment source changes. They enforce attachment readiness, support image-only filename chips/native renames and restrict removal to actual attachment controls. Model/power selection uses the current accessible ChatGPT menu and is verified before sending. Consumer UI changes may require an adapter update.
+
+
+## New-chat preparation and recovery
+
+Before applying model/power settings, session preparation verifies the selected browser client, target conversation URL and usable composer. An already-empty new chat is reused without clicking New again. A lost extension acknowledgement is accepted only when that exact navigation effect is independently confirmed; the navigation command is never automatically replayed. An unconfirmed or busy target stops preparation before prompt submission.
+
+Model selection checks the active advanced view before touching its toggle, closes the menu using Escape and permits one bounded recovery attempt for an interrupted menu. The chosen model and power are read back before sending. This retries explicit settings only, never the chat prompt. Failed preparation keeps the text/files and identifies whether conversation opening, settings or attachments failed.
+
+Regression coverage: `tests/gpt-preparation.test.mjs` and `tests/gpt.test.mjs`; the opt-in `tests/gpt-preparation.browser.mjs` exercises Chromium/WebKit with isolated ChatGPT DOM fixtures and no network. The real-account acceptance used two distinct disposable new conversations with Latest/High and verified their replies before deleting only those fixtures.
