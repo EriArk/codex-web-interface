@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
   chmod,
@@ -410,6 +410,9 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
       db.prepare(
         "UPDATE gpt_jobs SET status='unknown',error=? WHERE status IN ('queued','preparing','running')",
       ).run("Восстановлено из резервной копии. Проверь ответ в ChatGPT перед повторной отправкой.");
+      db.exec(
+        "UPDATE auth_state SET revision=revision+1,recoveryHash=NULL,recoveryExpires=NULL WHERE id=1",
+      );
       inspectDatabase(db);
     } finally {
       db.close();
@@ -428,6 +431,38 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
     await rm(staging, { recursive: true, force: true });
   }
 }
+export async function createRecoveryLink(config: HubConfig, output: string) {
+  if (!isAbsolute(output)) fail("UNSAFE_FILE", "Use an absolute private recovery file path");
+  await privateDirectory(dirname(output));
+  if (!(await lstat(config.hub.databasePath)).isFile())
+    fail("UNSAFE_FILE", "Expected an existing Hub database");
+  const db = new DatabaseSync(config.hub.databasePath);
+  let written = false;
+  try {
+    if (inspectDatabase(db) !== SCHEMA_VERSION)
+      fail("DB_SCHEMA_UNSUPPORTED", "Run the matching updated Hub before creating a recovery link");
+    if (!db.prepare("SELECT 1 FROM users WHERE username=?").get(config.auth.username))
+      fail("OWNER_NOT_CONFIGURED", "Use first enrollment for an unconfigured installation");
+    const revision = db.prepare("SELECT revision FROM auth_state WHERE id=1").get()?.revision;
+    const token = randomBytes(32).toString("base64url"),
+      expires = Date.now() + 15 * 60000;
+    const url = new URL(config.hub.publicBaseUrl);
+    url.hash = new URLSearchParams({ recover: token }).toString();
+    await writeFile(output, url.href + "\n", { mode: 0o600, flag: "wx" });
+    written = true;
+    const updated = db
+      .prepare("UPDATE auth_state SET recoveryHash=?,recoveryExpires=? WHERE id=1 AND revision=?")
+      .run(createHash("sha256").update(token).digest("hex"), expires, revision ?? -1);
+    if (!updated.changes)
+      fail("CREDENTIALS_CHANGED", "Access changed during recovery-link creation; try again");
+    return { path: output, expiresAt: new Date(expires).toISOString() };
+  } catch (error) {
+    if (written) await rm(output, { force: true });
+    throw error;
+  } finally {
+    db.close();
+  }
+}
 async function cli() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -436,6 +471,7 @@ async function cli() {
       destination: { type: "string" },
       snapshot: { type: "string" },
       target: { type: "string" },
+      output: { type: "string" },
       keep: { type: "string" },
       revision: { type: "string" },
       "private-file": { type: "string", multiple: true },
@@ -467,10 +503,13 @@ async function cli() {
   } else if (operation === "restore" && values.snapshot && values.target) {
     await restoreSnapshot(values.snapshot, values.target);
     console.log(JSON.stringify({ ok: true, sessionsRevoked: true }));
+  } else if (operation === "recovery" && values.config && values.output) {
+    const link = await createRecoveryLink(loadConfig(values.config), values.output);
+    console.log(JSON.stringify({ ok: true, ...link }));
   } else
     fail(
       "USAGE",
-      "Use backup --config PATH --destination PRIVATE_DIR; verify --snapshot DIR; restore --snapshot DIR --target NEW_PRIVATE_DIR",
+      "Use backup --config PATH --destination PRIVATE_DIR; verify --snapshot DIR; restore --snapshot DIR --target NEW_PRIVATE_DIR; recovery --config PATH --output PRIVATE_FILE",
     );
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -93,3 +93,26 @@ The report checks Hub HTTP, SQLite schema/usage, private-path access, disk space
 Machine labels are anonymous indexes. Reports omit configured Windows paths, hostnames, account names, project names, tokens, prompts and raw RPC/SSH errors. The canonical public origin and numeric versions/counts are included. Human and JSON forms use the same normalized checks; no telemetry is sent.
 
 A successful metadata probe is not proof of the full turn contract. Codex 0.153.4 is the exercised Windows version; other versions receive a verification warning. The native compatibility gate is implemented; per-machine allowed project roots remain issue #6.
+
+
+## Password change, logout and local recovery
+
+Codex and GPT Settings share the same account controls. **Change password** asks for the current and new passwords; the new password retains the enrollment policy (at least 12 characters, Argon2id). It revokes every old session and gives the initiating browser a fresh cookie and CSRF token. **Sign out all devices** revokes all sessions including the initiating browser. Neither action stops native Codex work, queued prompts or durable GPT sends.
+
+For a forgotten password, log into the Hub host as its service owner and create a private one-use link using the matching application version and the existing database:
+
+```bash
+node apps/hub/dist/maintenance.js recovery \
+  --config /srv/codex-web/config.json \
+  --output /srv/codex-web/private-recovery/link.txt
+```
+
+Use a new absolute output filename. The directory must be private (0700), without symlinks; the tool creates it if absent and creates the file exclusively with mode 0600. For a container installation run the same command from the matching Hub image (its entry file is `dist/maintenance.js`), with the existing database mounted writable and the private output directory mounted; no network access is needed for issuance. Do not run first enrollment again or delete the database.
+
+The command prints only the output path and expiry time. Read the link from that private file and open it in the normal browser. The token is in a URL fragment, so it does not enter normal HTTP access logs. Issuing a link requires local filesystem access; the website has no API to issue one. Browser redemption accepts only the issued secret with the configured Origin. The form sets a new password and logs that browser in, revoking previous sessions and clearing the fragment.
+
+Links expire after 15 minutes; only the latest link works. Redemption is atomic and single-use. Changing the password or signing out all devices also invalidates outstanding links. Remove the private link file after use. No email, phone, recovery question or fixed backup password is involved.
+
+Session revocation closes navigation/chat streams, Windows Remote and the separate GPT connection page. The GPT gateway maintains an authenticated Hub watch and closes its Remote connection on revocation, Hub disconnect or heartbeat loss. Deploy the matching Hub first, then restart only the optional `codex-web-gpt-login.service` gateway; the persistent ChatGPT browser and active model jobs do not need a restart.
+
+Recovery leaves native IDs, history, files and settings intact. Snapshot restoration always invalidates recovery links as well as sessions, preventing an older snapshot from bringing a consumed link back to life.

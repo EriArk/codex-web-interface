@@ -176,6 +176,83 @@ export async function createApp(
     closeSession(auth.logout(req, reply));
     return { ok: true };
   });
+  const closeAllSessions = () => {
+    for (const socket of sockets.keys()) socket.close(1008, "Session ended");
+  };
+  app.post(
+    "/api/auth/password",
+    { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const body = z
+        .object({
+          currentPassword: z.string().min(1).max(1024),
+          password: z.string().min(12).max(1024),
+        })
+        .strict()
+        .parse(req.body);
+      const result = await auth.changePassword(req, body.currentPassword, body.password, reply);
+      closeAllSessions();
+      return result;
+    },
+  );
+  app.post(
+    "/api/auth/logout-all",
+    { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      z.object({})
+        .strict()
+        .parse(req.body ?? {});
+      auth.logoutAll(req, reply);
+      closeAllSessions();
+      return { ok: true };
+    },
+  );
+  app.post(
+    "/api/auth/recover",
+    { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const body = z
+        .object({
+          token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+          password: z.string().min(12).max(1024),
+        })
+        .strict()
+        .parse(req.body);
+      const result = await auth.recover(body.token, body.password, reply);
+      closeAllSessions();
+      return result;
+    },
+  );
+  // The private GPT gateway watches only its own session, not owner data.
+  app.get(
+    "/api/auth/watch",
+    {
+      websocket: true,
+      preValidation: async (req) => {
+        auth.requireOrigin(req);
+        auth.session(req);
+      },
+    },
+    (socket, req) => {
+      sockets.set(socket, auth.session(req).tokenHash);
+      socket.send(JSON.stringify({ type: "session.ready" }));
+      const timer = setInterval(() => {
+        try {
+          auth.session(req);
+          socket.ping();
+        } catch {
+          socket.close(1008, "Session expired");
+        }
+      }, 25000);
+      timer.unref();
+      socket.once("close", () => {
+        clearInterval(timer);
+        sockets.delete(socket);
+      });
+      socket.on("error", () => socket.close());
+      socket.on("message", () => socket.close(1008, "Read-only stream"));
+    },
+  );
   app.post("/api/library/codex/:kind/:id", async (req) => {
     const params = z
       .object({ kind: z.enum(["thread", "project"]), id: idSchema })

@@ -7,7 +7,7 @@ import test from "node:test";
 import { CodexClient } from "../packages/codex/dist/index.js";
 
 const source = await readFile(new URL("../apps/web/src/api.ts", import.meta.url), "utf8");
-const { api, configureApi } = await import(
+const { api, configureApi, changePassword } = await import(
   "data:text/javascript;base64," +
     Buffer.from(stripTypeScriptTypes(source, { mode: "transform" })).toString("base64")
 );
@@ -108,5 +108,45 @@ test("copying draft attachments preserves originals and rejects attachments from
   } finally {
     store.close();
     await rm(root, { recursive: true });
+  }
+});
+
+test("password rotation gates new writes and ignores a delayed 401 from the previous session", async () => {
+  const original = globalThis.fetch;
+  let expired = 0,
+    writeHeaders;
+  configureApi("old", () => expired++);
+  const pending = () => {
+    let resolve;
+    const promise = new Promise((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const old = pending(),
+    rotation = pending();
+  try {
+    globalThis.fetch = async (url, options) => {
+      if (url === "/api/slow") return old.promise;
+      if (url === "/api/auth/password") return rotation.promise;
+      writeHeaders = options.headers;
+      return new Response('{"ok":true}', { status: 200 });
+    };
+    const slow = api("/slow");
+    const observed = assert.rejects(slow, { status: 401 });
+    const changing = changePassword("current", "new password value", (s) =>
+      configureApi(s.csrf, () => expired++),
+    );
+    const write = api("/preferences", { method: "PATCH", body: { theme: "classic-dark" } });
+    assert.equal(writeHeaders, undefined);
+    old.resolve(new Response('{"error":{"code":"LOGIN_REQUIRED"}}', { status: 401 }));
+    rotation.resolve(
+      new Response('{"authenticated":true,"csrf":"fresh","expires":1}', { status: 200 }),
+    );
+    await changing;
+    await observed;
+    await write;
+    assert.equal(expired, 0);
+    assert.equal(writeHeaders["X-CSRF-Token"], "fresh");
+  } finally {
+    globalThis.fetch = original;
   }
 });

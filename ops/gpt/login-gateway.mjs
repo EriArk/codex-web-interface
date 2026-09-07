@@ -1,3 +1,4 @@
+import {watchHubSession} from './session-watch.mjs';
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -30,8 +31,12 @@ server.on('upgrade',async(req,socket,head)=>{
  if(new URL(req.url,'http://localhost').pathname!=='/gpt-connect/remote'||req.headers.origin!==origin||!(await auth(req))){socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');return}
  if(wss.clients.size>=2){socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n');return}
  wss.handleUpgrade(req,socket,head,ws=>{
-  const close=connectRemote(ws,{protocol:'vnc',parameters:{hostname:process.env.GPT_VNC_HOST??'codex-web-gpt-connect',port:'5900',password:vncPassword,'read-only':'false','disable-copy':'true','disable-paste':'true','enable-sftp':'false','enable-audio':'false','color-depth':'24',cursor:'local'}},{width:480,height:900});
-  const timer=setInterval(async()=>{if(!(await auth(req)))close()},30000);timer.unref();ws.once('close',()=>clearInterval(timer));
+  let close;
+  const stopWatch=watchHubSession(hub,origin,req.headers.cookie,()=>{
+   if(ws.readyState!==1)return;
+   close=connectRemote(ws,{protocol:'vnc',parameters:{hostname:process.env.GPT_VNC_HOST??'codex-web-gpt-connect',port:'5900',password:vncPassword,'read-only':'false','disable-copy':'true','disable-paste':'true','enable-sftp':'false','enable-audio':'false','color-depth':'24',cursor:'local'}},{width:480,height:900});
+  },()=>{close?.();ws.close(1008,'Session ended');});
+  ws.once('close',()=>{stopWatch();close?.();});
  });
 });
 server.listen(Number(process.env.GPT_GATEWAY_PORT??8787),'127.0.0.1');

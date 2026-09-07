@@ -2,6 +2,11 @@ import { type FormEvent, useEffect, useState } from "react";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { Session } from "./types";
+
+const readLink = () => {
+  const hash = new URLSearchParams(location.hash.slice(1));
+  return { token: hash.get("recover") ?? hash.get("setup"), recovery: hash.has("recover") };
+};
 export function Login({
   requiresSetup,
   onLogin,
@@ -13,27 +18,30 @@ export function Login({
     [confirmation, setConfirmation] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [token, setToken] = useState(() =>
-    new URLSearchParams(location.hash.slice(1)).get("setup"),
-  );
+  const [link, setLink] = useState(readLink);
+  const { token, recovery } = link,
+    settingPassword = requiresSetup || recovery;
   useEffect(() => {
-    const update = () => setToken(new URLSearchParams(location.hash.slice(1)).get("setup"));
+    const update = () => setLink(readLink());
     window.addEventListener("hashchange", update);
     return () => window.removeEventListener("hashchange", update);
   }, []);
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    if (requiresSetup && password !== confirmation) {
+    if (settingPassword && password !== confirmation) {
       setError("Пароли не совпадают");
       return;
     }
     setBusy(true);
     try {
-      const session = await api<Session>(requiresSetup ? "/auth/setup" : "/auth/login", {
-        method: "POST",
-        body: requiresSetup ? { token, password } : { password },
-      });
+      const session = await api<Session>(
+        recovery ? "/auth/recover" : requiresSetup ? "/auth/setup" : "/auth/login",
+        {
+          method: "POST",
+          body: settingPassword ? { token, password } : { password },
+        },
+      );
       setPassword("");
       setConfirmation("");
       history.replaceState(null, "", location.pathname);
@@ -56,29 +64,39 @@ export function Login({
         <div className="eyebrow">
           <Icon name="lock" size={14} /> Личное пространство
         </div>
-        <h1>{requiresSetup ? "Начнём с твоего пароля." : "Твои проекты ждут."}</h1>
+        <h1>
+          {recovery
+            ? "Новый пароль."
+            : requiresSetup
+              ? "Начнём с твоего пароля."
+              : "Твои проекты ждут."}
+        </h1>
         <p className="muted">
-          {requiresSetup
+          {settingPassword
             ? "Задай пароль для входа с телефона, планшета и компьютера."
             : "Один пароль — и ты снова в работе."}
         </p>
-        {requiresSetup && !token ? (
-          <div className="notice">Открой личную ссылку первого входа, чтобы задать пароль.</div>
+        {settingPassword && !token ? (
+          <div className="notice">
+            {recovery
+              ? "Открой действующую ссылку восстановления."
+              : "Открой личную ссылку первого входа, чтобы задать пароль."}
+          </div>
         ) : (
           <form onSubmit={submit}>
-            <label htmlFor="password">{requiresSetup ? "Придумай пароль" : "Пароль"}</label>
+            <label htmlFor="password">{settingPassword ? "Придумай пароль" : "Пароль"}</label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoComplete={requiresSetup ? "new-password" : "current-password"}
+              autoComplete={settingPassword ? "new-password" : "current-password"}
               required
-              minLength={requiresSetup ? 12 : 1}
+              minLength={settingPassword ? 12 : 1}
               maxLength={1024}
-              placeholder={requiresSetup ? "Не менее 12 символов" : "Введи свой пароль"}
+              placeholder={settingPassword ? "Не менее 12 символов" : "Введи свой пароль"}
             />
-            {requiresSetup && (
+            {settingPassword && (
               <>
                 <label htmlFor="confirm-password">Повтори пароль</label>
                 <input
@@ -99,7 +117,7 @@ export function Login({
               </p>
             )}
             <button type="submit" className="primary login-submit" disabled={busy}>
-              {busy ? "Подключаемся…" : requiresSetup ? "Сохранить и войти" : "Войти"}
+              {busy ? "Подключаемся…" : settingPassword ? "Сохранить и войти" : "Войти"}
               <Icon name="chevron" />
             </button>
           </form>
