@@ -166,7 +166,13 @@ export function GptWorkspace({
   const [items, setItems] = useState<GptConversation[]>(gptCache.items),
     [projects, setProjects] = useState<GptProject[]>(gptCache.projects),
     [offset, setOffset] = useState<number | null>(gptCache.offset);
-  const [createdJob, setCreatedJob] = useState("");
+  const [createdJob, setCreatedJob] = useState(() => {
+    try {
+      return sessionStorage.getItem("gpt-created-job") || "";
+    } catch {
+      return "";
+    }
+  });
   const [selected, setSelected] = useState(cachedId);
   const [jobs, setJobs] = useState<GptJob[]>(gptCache.jobs),
     [models, setModels] = useState<GptModels | null>(gptCache.models),
@@ -194,7 +200,12 @@ export function GptWorkspace({
   const selectedRef = useRef(selected),
     sendKey = useRef<{ signature: string; key: string } | null>(null),
     sending = useRef(false),
-    draftLoaded = useRef("");
+    draftLoaded = useRef(""),
+    skipDraftSave = useRef(false),
+    navigationVersion = useRef(0);
+  const draftScope = selected || (createdJob ? "job:" + createdJob : "");
+  const draftScopeRef = useRef(draftScope);
+  draftScopeRef.current = draftScope;
   const previousJobs = useRef<GptJob[]>(gptCache.jobs);
   const { messages, before, loading, scroll, sticky, history, rememberScroll } = useGptHistory(
     selected,
@@ -326,28 +337,37 @@ export function GptWorkspace({
       disposed = true;
     };
   }, [catalog, action]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     try {
       if (selected) localStorage.setItem("gpt-conversation", selected);
       else localStorage.removeItem("gpt-conversation");
-      const draft = JSON.parse(sessionStorage.getItem("gpt-draft-" + selected) ?? "{}");
+      const draft = JSON.parse(sessionStorage.getItem("gpt-draft-" + draftScope) ?? "{}");
       setText(typeof draft.text === "string" ? draft.text : "");
       setFiles(Array.isArray(draft.files) ? draft.files : []);
     } catch {
       setText("");
       setFiles([]);
     }
-    draftLoaded.current = selected;
+    draftLoaded.current = draftScope;
+    skipDraftSave.current = true;
     sendKey.current = null;
-  }, [selected]);
+    try {
+      if (!selected && createdJob) sessionStorage.setItem("gpt-created-job", createdJob);
+      else sessionStorage.removeItem("gpt-created-job");
+    } catch {}
+  }, [selected, createdJob, draftScope]);
   useEffect(() => {
-    if (draftLoaded.current === selected)
+    if (skipDraftSave.current) {
+      skipDraftSave.current = false;
+      return;
+    }
+    if (draftLoaded.current === draftScope)
       try {
-        sessionStorage.setItem("gpt-draft-" + selected, JSON.stringify({ text, files }));
+        sessionStorage.setItem("gpt-draft-" + draftScope, JSON.stringify({ text, files }));
       } catch {
         /* Optional draft cache. */
       }
-  }, [selected, text, files]);
+  }, [draftScope, text, files]);
   useEffect(() => {
     let disposed = false,
       timer: ReturnType<typeof setTimeout>;
@@ -459,16 +479,18 @@ export function GptWorkspace({
     };
   }, [connection?.canSend, models]);
   const currentJobs = jobs
-    .filter((job) => (selected ? job.nativeId === selected : job.nativeId === null))
+    .filter((job) => (selected ? job.nativeId === selected : job.id === createdJob))
     .sort((a, b) => a.createdAt - b.createdAt);
   const active = currentJobs.find(isActive);
   // biome-ignore lint/correctness/useExhaustiveDependencies: New content scrolls only while the reader follows the latest reply.
   useLayoutEffect(() => {
     if (sticky.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [messages, currentJobs.map((j) => j.answer + j.status).join("")]);
-  const choose = (id: string) => {
+  const choose = (id: string, jobId = "") => {
+    navigationVersion.current++;
+    sendKey.current = null;
     rememberScroll();
-    setCreatedJob("");
+    setCreatedJob(jobId);
     setSelected(id);
     setDrawer(false);
     setView("chat");
@@ -476,6 +498,8 @@ export function GptWorkspace({
   };
   const send = async () => {
     if (sending.current || uploading || !model || (!text.trim() && !files.length)) return;
+    const version = navigationVersion.current,
+      sourceDraft = draftScope;
     sending.current = true;
     setBusy(true);
     setNotice("");
@@ -489,19 +513,26 @@ export function GptWorkspace({
         body,
         key: sendKey.current.key,
       });
-      if (!selected && selectedRef.current === selected) setCreatedJob(data.job.id);
+      try {
+        const key = "gpt-draft-" + sourceDraft;
+        const saved = JSON.parse(sessionStorage.getItem(key) ?? "{}");
+        if (
+          saved.text === body.text &&
+          JSON.stringify((saved.files ?? []).map((f: GptFile) => f.id)) ===
+            JSON.stringify(body.files)
+        )
+          sessionStorage.removeItem(key);
+      } catch {}
+      if (!selected && navigationVersion.current === version) setCreatedJob(data.job.id);
       setJobs((old) => [data.job, ...old.filter((j) => j.id !== data.job.id)]);
-      if (selectedRef.current === selected) {
+      if (navigationVersion.current === version) {
         setText("");
         setFiles([]);
         sendKey.current = null;
         sticky.current = true;
-      } else
-        try {
-          sessionStorage.removeItem("gpt-draft-" + selected);
-        } catch {}
+      }
     } catch (e) {
-      setNotice(messageOf(e));
+      if (navigationVersion.current === version) setNotice(messageOf(e));
     } finally {
       sending.current = false;
       setBusy(false);
@@ -509,6 +540,8 @@ export function GptWorkspace({
   };
   const attach = async (list: FileList | null) => {
     if (!list) return;
+    const sourceDraft = draftScope,
+      version = navigationVersion.current;
     setUploading(true);
     setNotice("");
     try {
@@ -518,10 +551,11 @@ export function GptWorkspace({
           "/gpt/uploads?name=" + encodeURIComponent(file.name),
           { method: "POST", raw: file },
         );
-        if (selectedRef.current === selected) setFiles((old) => [...old, data.file]);
+        if (navigationVersion.current === version && draftScopeRef.current === sourceDraft)
+          setFiles((old) => [...old, data.file]);
         else
           try {
-            const key = "gpt-draft-" + selected,
+            const key = "gpt-draft-" + sourceDraft,
               draft = JSON.parse(sessionStorage.getItem(key) ?? "{}");
             sessionStorage.setItem(
               key,
@@ -537,8 +571,12 @@ export function GptWorkspace({
     }
   };
   const pendingNew = jobs.find((job) => !selected && job.nativeId && job.id === createdJob);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Carry the current draft only when this job acquires its native chat.
   useEffect(() => {
     if (pendingNew?.nativeId) {
+      try {
+        sessionStorage.setItem("gpt-draft-" + pendingNew.nativeId, JSON.stringify({ text, files }));
+      } catch {}
       setCreatedJob("");
       setSelected(pendingNew.nativeId);
     }
@@ -804,6 +842,30 @@ export function GptWorkspace({
             <Icon name="plus" />
           </button>
         </div>
+        {jobs
+          .filter(
+            (job) =>
+              !job.nativeId &&
+              (job.status !== "cancelled" || !!job.answer || job.assets.length > 0),
+          )
+          .filter(
+            (job) => !search || job.text.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+          )
+          .map((job) => (
+            <button
+              key={job.id}
+              type="button"
+              className={"nav-thread" + (!selected && createdJob === job.id ? " selected" : "")}
+              onClick={() => choose("", job.id)}
+            >
+              <Icon name="chat" />
+              <span>
+                {job.text.slice(0, 60) || "Новая отправка"}
+                <small>{titles[job.status]}</small>
+              </span>
+              {isActive(job) && <span className="spinner" aria-hidden="true" />}
+            </button>
+          ))}
         {filtered.filter((c) => !projects.some((p) => p.id === c.projectId)).map(navThread)}
         {offset !== null && (
           <button
