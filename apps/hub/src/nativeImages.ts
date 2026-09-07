@@ -37,7 +37,11 @@ export class NativeImages {
     private store: Store,
     private machine: (threadId: string) => MachineConfig,
   ) {
-    this.artifacts = new Artifacts(config.hub.resultsPath, store);
+    this.artifacts = new Artifacts(
+      config.hub.resultsPath,
+      store,
+      config.hub.storage?.artifactBytes,
+    );
   }
   register(threadId: string, messageId: string, source: string): MessageImage | undefined {
     if (!isNativeImageSource(source)) return;

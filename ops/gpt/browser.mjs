@@ -64,6 +64,21 @@ const server=createServer(async(req,res)=>{
   }catch{res.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'GPT_SESSION_NOT_READY'}))}
   return;
  }
+ if(req.method==='POST'&&url.pathname==='/uploads/release'){
+  try {
+   const body=await readJson(req,4096);
+   if(!Array.isArray(body.ids)||body.ids.length>8||body.ids.some(id=>typeof id!=='string'||!/^file_[a-f0-9]{20}$/.test(id)))throw Error('GPT_UPLOAD_IDS_INVALID');
+   const headers={Authorization:'Bearer '+token};
+   const health=await(await fetch('http://127.0.0.1:8080/health',{headers,signal:AbortSignal.timeout(5000)})).json();
+   if(health.activeRequests?.length){res.writeHead(409).end('{}');return;}
+   for(const id of body.ids) {
+    const response=await fetch('http://127.0.0.1:8080/files/'+id,{method:'DELETE',headers,signal:AbortSignal.timeout(5000)});
+    await response.body?.cancel();if(!response.ok&&response.status!==404)throw Error('GPT_UPLOAD_RELEASE_FAILED');
+   }
+   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}));
+  }catch{res.writeHead(409).end('{}');}
+  return;
+ }
  if(url.pathname.startsWith('/bridge/')){await proxyBridge(req,res,url.pathname,token);return}
  if(req.method==='GET'&&url.pathname==='/asset'){
   const id=url.searchParams.get('id')??'';

@@ -1,3 +1,4 @@
+import {retainedFileStore} from './retained-files.mjs';
 import {readFileSync} from 'node:fs';
 import {createServer} from 'node:http';
 process.env.HOST='127.0.0.1';
@@ -19,7 +20,8 @@ const {setLogEnabled}=await import('/opt/bridge/src/logger.js');
 setLogEnabled(false);
 const events=new EventBus({limit:200});
 const hub=new BrowserExtensionHub(events);
-const files=new FileStore();
+const RetainedFiles=retainedFileStore(FileStore);
+const files=new RetainedFiles();
 const bridge=new BrowserBridge(hub,files,events,{autoOpenTab:false,publicBaseUrl:'http://127.0.0.1:8080'});
 const server=createServer(createApp(bridge,files,events));
 hub.attach(server);

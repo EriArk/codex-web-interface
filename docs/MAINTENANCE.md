@@ -116,3 +116,5 @@ Links expire after 15 minutes; only the latest link works. Redemption is atomic 
 Session revocation closes navigation/chat streams, Windows Remote and the separate GPT connection page. The GPT gateway maintains an authenticated Hub watch and closes its Remote connection on revocation, Hub disconnect or heartbeat loss. Deploy the matching Hub first, then restart only the optional `codex-web-gpt-login.service` gateway; the persistent ChatGPT browser and active model jobs do not need a restart.
 
 Recovery leaves native IDs, history, files and settings intact. Snapshot restoration always invalidates recovery links as well as sessions, preventing an older snapshot from bringing a consumed link back to life.
+
+Storage quotas and conservative weekly compaction: [Storage](STORAGE.md).

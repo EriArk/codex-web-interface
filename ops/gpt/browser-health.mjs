@@ -1,4 +1,5 @@
-import { lstatSync } from "node:fs";
+import {storageLimits} from './retained-files.mjs';
+import { lstatSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 export const bridgeRevision = "96802cc0d2ea0b7449cf465f8adb3c228decd297";
 export function privateState() {
@@ -32,5 +33,21 @@ export async function readConnectorHealth({health,pages,privateState:storage}) {
  const login=challenge?"unknown":await target.evaluate(async()=>{
   try {const response=await fetch("/api/auth/session",{credentials:"include",cache:"no-store",signal:AbortSignal.timeout(8000)});if(response.status===401||response.status===403)return "required";if(!response.ok)return "unknown";const session=await response.json();return typeof session.accessToken==="string"?"authenticated":"required";}catch{return "unknown";}
  });
- return connectorReport({health:state,login,challenge,controls:await inspectComposer(target),privateState:storage});
+ return {...connectorReport({health:state,login,challenge,controls:await inspectComposer(target),privateState:storage}),storage:bridgeStorage()};
+}
+
+export function bridgeStorage() {
+ const limits=storageLimits();
+ const value={uploadBytes:0,artifactBytes:0,uploadLimit:limits.uploadBytes,artifactLimit:limits.artifactBytes,partial:false};
+ try {
+  const path="/data/bridge/index.json",info=lstatSync(path);
+  if(!info.isFile()||info.isSymbolicLink()||info.size>32*1024**2)throw Error();
+  const index=JSON.parse(readFileSync(path,"utf8"));
+  for(const [kind,key] of [["files","uploadBytes"],["artifacts","artifactBytes"]]) {
+   const entries=Object.values(index[kind]??{});
+   if(entries.length>100000)throw Error();
+   for(const item of entries){const bytes=Number(item?.size);if(!Number.isSafeInteger(bytes)||bytes<0)throw Error();value[key]+=bytes;}
+  }
+ }catch{value.partial=true;}
+ return value;
 }

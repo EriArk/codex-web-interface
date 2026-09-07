@@ -11,7 +11,15 @@ export const gptConnectionStateSchema = z.enum([
   "unavailable",
 ]);
 export type GptConnectionState = z.infer<typeof gptConnectionStateSchema>;
+const connectorStorage = z.object({
+  uploadBytes: z.number().nonnegative(),
+  artifactBytes: z.number().nonnegative(),
+  uploadLimit: z.number().positive(),
+  artifactLimit: z.number().positive(),
+  partial: z.boolean(),
+});
 export const gptConnectorReportSchema = z.object({
+  storage: connectorStorage.optional(),
   contract: z.literal(1),
   bridgeRevision: z.literal(GPT_BRIDGE_REVISION),
   bridgeVersion: z.literal("6.3.14"),
@@ -38,6 +46,7 @@ export interface GptConnection {
   bridgeVersion?: string;
   extensionProtocol?: number;
   privateState?: GptConnectorReport["privateState"];
+  storage?: z.infer<typeof connectorStorage>;
   activeJobs: number;
   unknownJobs: number;
   connectUrl: "/gpt-connect";
@@ -85,6 +94,7 @@ export function normalizeGptConnection(raw: unknown, configured = true): GptConn
           bridgeVersion: parsed.data.bridgeVersion,
           extensionProtocol: parsed.data.extensionProtocol,
           privateState: parsed.data.privateState,
+          storage: parsed.data.storage,
         }
       : {}),
     activeJobs: 0,

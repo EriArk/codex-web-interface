@@ -111,6 +111,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 9,
+    name: "storage-maintenance-receipts",
+    up(db) {
+      db.exec(
+        "CREATE TABLE gpt_staged_uploads(jobId TEXT NOT NULL REFERENCES gpt_jobs(id) ON DELETE CASCADE,fileId TEXT NOT NULL,createdAt INTEGER NOT NULL,PRIMARY KEY(jobId,fileId)); CREATE INDEX events_compaction ON events(threadId,turnId,type,seq)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

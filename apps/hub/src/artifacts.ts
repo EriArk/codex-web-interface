@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HubError } from "@codex-web/shared";
+import { defaultStoragePolicy, HubError } from "@codex-web/shared";
 import type { Store } from "./store.js";
 export class Artifacts {
   constructor(
     readonly root: string,
     readonly store: Store,
+    readonly maxBytes = defaultStoragePolicy.artifactBytes,
   ) {
     mkdirSync(root, { recursive: true, mode: 0o700 });
   }
@@ -27,6 +28,15 @@ export class Artifacts {
       height = data.readUInt32BE(20);
     if (!width || !height || width > 8192 || height > 8192 || width * height > 32000000)
       throw new HubError(400, "INVALID_IMAGE", "Размер снимка не поддерживается");
+    const used = Number(
+      this.store.db.prepare("SELECT coalesce(sum(bytes),0) AS bytes FROM artifacts").get()?.bytes,
+    );
+    if (used + data.length > this.maxBytes)
+      throw new HubError(
+        507,
+        "ARTIFACT_STORAGE_FULL",
+        "Хранилище результатов заполнено. Сохранённые файлы доступны.",
+      );
     const id = randomUUID();
     writeFileSync(join(this.root, `${id}.png`), data, { flag: "wx", mode: 0o600 });
     this.store.db

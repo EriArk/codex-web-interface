@@ -20,6 +20,7 @@ import { ProjectNavigation } from "./ProjectNavigation";
 import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
 import { ActivityPane } from "./Results";
+import { StorageUsage } from "./StorageUsage";
 import { applyTheme, cachedTheme, themes } from "./theme";
 import type {
   Activity,
@@ -988,6 +989,7 @@ function Workspace({
           <Icon name="activity" />
           Активность диалога
         </button>
+        <StorageUsage visible={settings} />
         <AccountControls onSession={onSession} onLogout={onLogout} />
         <p className="small muted">Для установки на iPhone: Поделиться → На экран «Домой».</p>
       </dialog>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { storagePolicySchema } from "./storage.js";
 
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);
 const machine = z
@@ -63,6 +64,7 @@ export const configSchema = z
       resultsPath: z.string().min(1),
       codexIdleTimeoutMinutes: z.number().int().min(1).max(1440).default(30),
       secureCookies: z.boolean().default(true),
+      storage: storagePolicySchema,
     }),
     gpt: z
       .object({
@@ -276,3 +278,5 @@ export type {
 } from "./gpt.js";
 export * from "./gpt-connection.js";
 export * from "./results.js";
+
+export * from "./storage.js";

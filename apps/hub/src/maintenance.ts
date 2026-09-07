@@ -159,7 +159,17 @@ function requiredResults(db: DatabaseSync): string[] {
         fail("INVALID_FILE_ID", "Invalid stored GPT upload identifier");
       paths.push("gpt/" + String(row.id));
     }
-  return paths;
+  if (hasTable(db, "gpt_jobs"))
+    for (const row of db.prepare("SELECT files FROM gpt_jobs").all()) {
+      const files = JSON.parse(String(row.files));
+      if (!Array.isArray(files)) fail("INVALID_FILE_ID", "Invalid GPT job files");
+      for (const file of files) {
+        const id = typeof file === "string" ? file : file?.id;
+        if (!uuid.test(String(id))) fail("INVALID_FILE_ID", "Invalid GPT job file identifier");
+        paths.push("gpt/" + id);
+      }
+    }
+  return [...new Set(paths)];
 }
 function hasTable(db: DatabaseSync, table: string): boolean {
   return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
@@ -248,6 +258,7 @@ export async function createSnapshot(
     keep?: number;
     revision?: string;
     privateFiles?: { name: string; path: string }[];
+    extraResultFiles?: string[];
   } = {},
 ): Promise<string> {
   const keep = options.keep ?? 7;
@@ -279,7 +290,7 @@ export async function createSnapshot(
     try {
       db.exec("PRAGMA journal_mode=DELETE");
       version = inspectDatabase(db);
-      paths = requiredResults(db);
+      paths = [...requiredResults(db), ...(options.extraResultFiles ?? [])];
       previews = previewIds(db);
     } finally {
       db.close();

@@ -12,6 +12,7 @@ import type { HubConfig, MachineConfig } from "@codex-web/shared";
 import { normalizeGptConnection } from "@codex-web/shared";
 import { loadConfig } from "./config.js";
 import { SCHEMA_VERSION, schemaVersion } from "./migrations.js";
+import { storageReport } from "./storage.js";
 
 type State = "ok" | "warning" | "error" | "skipped";
 type Check = { boundary: string; state: State; code: string };
@@ -277,6 +278,21 @@ export async function collectDiagnostics(
   } else add("gpt", "skipped", config.gpt ? "NETWORK_PROBES_SKIPPED" : "GPT_DISABLED");
   gpt.activeJobs = gptActive;
   gpt.unknownJobs = gptUnknown;
+  let storageDetail: Awaited<ReturnType<typeof storageReport>> | undefined;
+  try {
+    const db = new DatabaseSync(config.hub.databasePath, { readOnly: true });
+    try {
+      storageDetail = await storageReport(config, db);
+    } finally {
+      db.close();
+    }
+    if (storageDetail.partial || storageDetail.missingFiles)
+      add("storage", "warning", "STORAGE_INVENTORY_NEEDS_REVIEW");
+    if (storageDetail.buckets.some((bucket) => bucket.warning))
+      add("storage", "warning", "STORAGE_APPROACHING_LIMIT");
+  } catch {
+    add("storage", "warning", "STORAGE_REPORT_UNAVAILABLE");
+  }
   const machines = [];
   for (const [index, machine] of config.machines.entries()) {
     const boundary = "machine-" + (index + 1);
@@ -406,7 +422,7 @@ export async function collectDiagnostics(
     publicOrigin: config.hub.publicBaseUrl,
     secureCookies: config.hub.secureCookies,
     schemaVersion: schema,
-    storage: { databaseBytes, resultsBytes, sizePartial, freeBytes },
+    storage: { databaseBytes, resultsBytes, sizePartial, freeBytes, detail: storageDetail },
     machines,
     gpt,
     checks,

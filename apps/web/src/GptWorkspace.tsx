@@ -27,6 +27,7 @@ import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { ResultFeed } from "./ResultFeed";
+import { StorageUsage } from "./StorageUsage";
 import { type Theme, themes } from "./theme";
 import type { Session } from "./types";
 import { useGptHistory } from "./useGptHistory";
@@ -1215,6 +1216,7 @@ export function GptWorkspace({
             {connection?.state === "login_required" ? "Войти в ChatGPT" : "Подключение ChatGPT"}
           </a>
         </section>
+        <StorageUsage visible={settings} />
         <AccountControls onSession={onSession} onLogout={onLogout} />
       </dialog>
     </div>
