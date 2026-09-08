@@ -149,7 +149,11 @@ export default function App() {
       onLogout={() => {
         setSession(null);
         for (const key of Object.keys(sessionStorage))
-          if (key.startsWith("codex-draft-") || key.startsWith("gpt-draft-"))
+          if (
+            key.startsWith("codex-draft-") ||
+            key.startsWith("gpt-draft-") ||
+            key.startsWith("codex-pending-send:")
+          )
             sessionStorage.removeItem(key);
       }}
     />

@@ -36,10 +36,3 @@ export function clearAcknowledgedSend(scope: string): void {
       sessionStorage.removeItem(prefix + scope);
   } catch {}
 }
-if (typeof window !== "undefined")
-  window.addEventListener("private-session-ended", () => {
-    try {
-      for (const key of Object.keys(sessionStorage))
-        if (key.startsWith(prefix)) sessionStorage.removeItem(key);
-    } catch {}
-  });

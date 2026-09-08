@@ -116,6 +116,8 @@ try {
       await button.click();
       await expect.poll(() => attempts.length).toBe(1);
       await expect(button).toBeEnabled();
+      // Reauthentication clears message caches, but keeps the existing draft and its receipt together.
+      await page.evaluate(() => window.dispatchEvent(new Event("private-session-ended")));
       await page.reload();
       await expect(editor).toHaveValue("Audit: same preserved draft");
       await expect(button).toBeEnabled();
