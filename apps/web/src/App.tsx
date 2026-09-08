@@ -1135,6 +1135,15 @@ function Workspace({
           sendError={sendError}
           writeBlocked={writeBlocked}
           visible={view !== "overview" && (wide || view === "chat")}
+          speechVisible={
+            !drawer &&
+            !settings &&
+            !machinePanel &&
+            !notebook &&
+            !createProject &&
+            !remoteImmersive &&
+            !resultOverlay
+          }
           canMarkSeen={
             view !== "overview" &&
             !pendingNotebookResult &&

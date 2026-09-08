@@ -401,3 +401,6 @@ Both sidebars expose “План”, defaulting to the current project with an A
 The project title and an entry inside each expanded project open its overview. Project expansion and inline chat navigation remain intact. A confirmed empty Codex project gets an overview with New conversation instead of a blank chat. Continue, Plan, recent Results, pinned context and cached machine/Git state link back to their real modules. iPhone uses one vertical feed above the existing three tabs; iPad keeps the left navigation beside a spacious main view.
 
 The chat remains mounted with its draft, while read receipts/presence are suppressed when Home covers it. Opening a Result from Home does not briefly acknowledge an unseen phone chat. Empty-project selection stores an explicit null thread preference, preventing a previously selected project’s thread from reappearing on reload.
+
+
+Assistant messages expose a speaker icon next to Copy. During reading it becomes Pause (then Resume), with a separate Stop icon; all targets remain 44px. Read-aloud belongs to the current device and stops when leaving the chat or opening another workspace view. Unavailable local voices disable the action; synthesis failures are shown beside the control without changing the chat, draft or run.

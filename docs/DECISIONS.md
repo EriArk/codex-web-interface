@@ -446,3 +446,10 @@ Task rows survive project/thread deletion and are part of normal snapshots. Ther
 Home is a bounded read over existing module storage, not another dashboard database. It returns up to four conversations, four tasks, four Results, three notes and three saved references. It does not read conversation bodies, mark work seen, contact a native writer or run diagnostics. Only already captured Hub images can become thumbnails; native/signed image sources remain explicit Result links.
 
 Git summaries are cached after the existing explicit Files/Git action and bound to the configured project directory. Health/Git states include check timestamps and become stale after one minute. GPT Home consumes the native catalog already loaded by its client plus Hub-owned project context; unavailable native modules are omitted instead of triggering additional consumer-browser reads.
+
+
+## 2026-09-08 — Local message read-aloud (#76)
+
+Codex and GPT assistant messages share a client-only SpeechSynthesis controller. Playback starts inside a user tap, selects a locally supplied system voice (`localService`), and never sends text to a Hub or external TTS endpoint. Empty/unavailable voice lists disable the control until `voiceschanged`; unsupported browsers omit it. Public message Markdown is parsed to prose, excluding code blocks, HTML, images and URL destinations. Long prose is queued as bounded paragraph/sentence chunks, one native utterance at a time.
+
+Pause/resume keeps the current native utterance. Cancellation generations reject late terminal callbacks, another message replaces the current queue, and leaving a conversation/view or closing the page cancels its speech. Changes in backend execution or connectivity do not own playback state. The spoken text is a snapshot of the visible public answer at the tap; subsequent streaming never auto-replays it. No hidden reasoning or Activity payload enters the controller. Voice/rate preferences and sentence highlighting remain follow-ups.

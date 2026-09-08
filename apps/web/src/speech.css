@@ -1,0 +1,44 @@
+.message-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  margin-block: -6px;
+}
+.speech-control {
+  display: inline-flex;
+  position: relative;
+}
+.speech-control .speech-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+}
+.speech-control .speech-button:hover,
+.speech-control .speech-button:focus-visible,
+.speech-control[data-speech-state="speaking"] .speech-button,
+.speech-control[data-speech-state="paused"] .speech-button {
+  color: var(--accent);
+}
+.speech-error {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-end: 0;
+  z-index: 4;
+  width: max-content;
+  max-width: 220px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
