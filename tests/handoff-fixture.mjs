@@ -12,7 +12,11 @@ import { capabilityReply } from "./fixtures.mjs";
 
 export const origin = "https://handoff.test";
 export const settings = { model: "qa-model", effort: "high", mode: "default", access: "workspace" };
-export async function handoffFixture(publicOrigin = origin, webRoot = resolve("apps/web/dist")) {
+export async function handoffFixture(
+  publicOrigin = origin,
+  webRoot = resolve("apps/web/dist"),
+  appOptions = {},
+) {
   const root = await mkdtemp(join(tmpdir(), "codex-handoff-"));
   const config = configSchema.parse({
     hub: {
@@ -73,11 +77,12 @@ export async function handoffFixture(publicOrigin = origin, webRoot = resolve("a
   const setupToken = randomBytes(32).toString("base64url");
   let running = true,
     operation = null;
-  const { app } = await createApp(config, {
+  const { app, push } = await createApp(config, {
     store,
     sessions,
     setupToken,
     webRoot,
+    ...appOptions,
     desktopTransport: async (_m, action, id) => {
       desktopCalls.push(action);
       if (action === "ForceRelease") {
@@ -93,11 +98,12 @@ export async function handoffFixture(publicOrigin = origin, webRoot = resolve("a
       return { available: true, running, activityKnown: true, activeTasks: 0, operation };
     },
   });
+  const password = "Isolated handoff " + randomUUID();
   const enrolled = await app.inject({
     method: "POST",
     url: "/api/auth/setup",
     headers: { origin: publicOrigin },
-    payload: { token: setupToken, password: "Isolated handoff " + randomUUID() },
+    payload: { token: setupToken, password },
   });
   assert.equal(enrolled.statusCode, 200);
   const cookie = enrolled.headers["set-cookie"].split(";")[0];
@@ -105,12 +111,14 @@ export async function handoffFixture(publicOrigin = origin, webRoot = resolve("a
   const headers = { origin: publicOrigin, cookie, "x-csrf-token": session.json().csrf };
   return {
     app,
+    push,
     store,
     sessions,
     thread,
     calls,
     desktopCalls,
     headers,
+    password,
     finishTurn: () => {
       rpc.emit("notification", "turn/completed", {
         threadId: thread.codexThreadId,

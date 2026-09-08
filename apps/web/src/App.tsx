@@ -16,6 +16,7 @@ import { type LibraryChange, libraryEvent } from "./EntityMenu";
 import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
+import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectNavigation } from "./ProjectNavigation";
 import { completePendingSend, pendingSendKey } from "./pendingSend";
@@ -86,6 +87,20 @@ export default function App() {
     ),
     [error, setError] = useState("");
   useViewport();
+  useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.data?.type !== "notification.open" || !/^[a-f0-9]{32}$/.test(String(event.data.id)))
+        return;
+      history.replaceState(
+        history.state,
+        "",
+        location.pathname + location.search + "#notification=" + event.data.id,
+      );
+      window.dispatchEvent(new Event("hashchange"));
+    };
+    navigator.serviceWorker?.addEventListener("message", receive);
+    return () => navigator.serviceWorker?.removeEventListener("message", receive);
+  }, []);
   useEffect(() => {
     const update = () => setRecovering(new URLSearchParams(location.hash.slice(1)).has("recover"));
     window.addEventListener("hashchange", update);
@@ -241,6 +256,50 @@ function Workspace({
     () => setDrawer(true),
   );
   const { state, older, reconnect, refresh } = useWorkspace(threadId);
+  useNotificationPresence(
+    "codex",
+    threadId,
+    client === "codex" && view === "chat" && !settings && !drawer,
+  );
+  const [notificationTarget, setNotificationTarget] = useState<NotificationTarget | undefined>();
+  const notificationHandled = useCallback(() => setNotificationTarget(undefined), []);
+  const notificationVersion = useRef(0);
+  useEffect(() => {
+    if (!initialized) return;
+    let disposed = false;
+    const open = (id: string) => {
+      if (!/^[a-f0-9]{32}$/.test(id)) return;
+      const version = ++notificationVersion.current;
+      void api<Omit<NotificationTarget, "id">>("/push/open/" + id, { timeoutMs: 10000 })
+        .then((target) => {
+          if (disposed || version !== notificationVersion.current) return;
+          setDrawer(false);
+          setSettings(false);
+          setView("chat");
+          setClient(target.client);
+          if (target.client === "gpt") setNotificationTarget({ ...target, id });
+          else if (target.threadId && target.projectId) {
+            // The target can be older than the first catalog page; do not replace it with page[0].
+            threadRequest.current++;
+            setProjectId(target.projectId);
+            setThreadId(target.threadId);
+            setThreads([]);
+          }
+          if (new URLSearchParams(location.hash.slice(1)).get("notification") === id)
+            history.replaceState(history.state, "", location.pathname + location.search);
+        })
+        .catch((e) => {
+          if (!disposed) setNotice(messageOf(e));
+        });
+    };
+    const hash = () => open(new URLSearchParams(location.hash.slice(1)).get("notification") || "");
+    hash();
+    window.addEventListener("hashchange", hash);
+    return () => {
+      disposed = true;
+      window.removeEventListener("hashchange", hash);
+    };
+  }, [initialized]);
   const storedProject = projects.find((p) => p.id === projectId);
   const project = storedProject
     ? {
@@ -677,6 +736,8 @@ function Workspace({
           }
         >
           <GptWorkspace
+            notificationTarget={notificationTarget}
+            onNotificationHandled={notificationHandled}
             onCodex={() => setClient("codex")}
             theme={theme}
             onTheme={setTheme}
@@ -1001,6 +1062,7 @@ function Workspace({
           <Icon name="activity" />
           Активность диалога
         </button>
+        <Notifications visible={settings} />
         <StorageUsage visible={settings} />
         <AccountControls onSession={onSession} onLogout={onLogout} />
         <p className="small muted">Для установки на iPhone: Поделиться → На экран «Домой».</p>

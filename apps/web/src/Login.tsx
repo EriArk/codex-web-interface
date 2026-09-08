@@ -44,7 +44,13 @@ export function Login({
       );
       setPassword("");
       setConfirmation("");
-      history.replaceState(null, "", location.pathname);
+      const notification = new URLSearchParams(location.hash.slice(1)).get("notification") || "";
+      history.replaceState(
+        null,
+        "",
+        location.pathname +
+          (/^[a-f0-9]{32}$/.test(notification) ? "#notification=" + notification : ""),
+      );
       onLogin(session);
     } catch (e) {
       setError(messageOf(e));

@@ -726,11 +726,15 @@ export class Catalog {
     if (cached && cached.until > Date.now()) return cached.value;
     const value = this.fetchHistory(thread, before, turnId);
     if (this.pages.size > 80) this.pages.delete(this.pages.keys().next().value ?? "");
-    this.pages.set(cacheKey, { until: Date.now() + (before ? 3600000 : 4000), value });
+    // Slow native reads must remain shared while pending. Start the cache TTL after completion.
+    const entry = { until: Number.POSITIVE_INFINITY, value };
+    this.pages.set(cacheKey, entry);
     try {
-      return await value;
+      const page = await value;
+      entry.until = Date.now() + (before ? 3600000 : 4000);
+      return page;
     } catch (error) {
-      this.pages.delete(cacheKey);
+      if (this.pages.get(cacheKey) === entry) this.pages.delete(cacheKey);
       throw error;
     }
   }
@@ -766,8 +770,15 @@ export class Catalog {
     }
     const messages: MessageRecord[] = [];
     messages.push(...cursor.pending.splice(0, 20));
-    let more = !!cursor.rpc || !before;
-    for (let n = 0; n < 25 && messages.length < 20 && more; n++) {
+    let more = !!cursor.rpc || !before || cursor.offset === 0;
+    // Legacy turns/list may rescan a large rollout for every page (Books: ~8s per turn).
+    // Return the collected tail promptly; the native cursor retains every older item.
+    const deadline = performance.now() + 5000;
+    for (
+      let n = 0;
+      n < 25 && messages.length < 20 && more && (n === 0 || performance.now() < deadline);
+      n++
+    ) {
       let page: Record<string, unknown>;
       try {
         page = await rpc.request(

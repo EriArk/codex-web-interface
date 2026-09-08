@@ -522,7 +522,7 @@ export function Chat({
                   </button>
                 </div>
               )}
-              {!state.messages.length && (
+              {!state.messages.length && !state.hasMore && !state.error && (
                 <div className="empty-state chat-empty">
                   <div className="empty-symbol">
                     <Icon name="folder" size={30} />

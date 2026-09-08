@@ -322,6 +322,15 @@ export async function createSnapshot(
     for (const path of new Set(paths)) {
       await copyAt(config.hub.resultsPath, path, join(staging, "results", path));
     }
+    try {
+      await copyAt(
+        dirname(config.hub.databasePath),
+        "push-keys.json",
+        join(staging, "private", "push-keys.json"),
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     for (const file of options.privateFiles ?? []) {
       if (
         !/^(config\.(json|yaml|yml)|remote\.env|deploy\.env|ssh\/[\w.-]+|tunnel\/[\w.-]+)$/.test(
@@ -409,6 +418,8 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
       if (digest.sha256 !== entry.sha256 || digest.bytes !== entry.bytes)
         fail("SNAPSHOT_MISMATCH", "Snapshot changed during restore");
     }
+    if (manifest.files.some((entry) => entry.path === "private/push-keys.json"))
+      await copyAt(staging, "private/push-keys.json", join(staging, "push-keys.json"));
     await mkdir(join(staging, "results"), { recursive: true, mode: 0o700 });
     const db = new DatabaseSync(join(staging, "app.db"));
     try {
