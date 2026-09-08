@@ -229,8 +229,8 @@
     border-radius: 0;
   }
   :root .mobile-tabs {
-    min-height: calc(64px + max(8px, var(--safe-bottom) - 12px));
-    padding: 10px max(12px, var(--safe-right)) max(8px, var(--safe-bottom) - 12px)
+    min-height: calc(62px + max(6px, var(--safe-bottom) - 18px));
+    padding: 8px max(12px, var(--safe-right)) max(6px, var(--safe-bottom) - 18px)
       max(12px, var(--safe-left));
     gap: 6px;
     border-radius: 0 0 max(8px, var(--shell-bottom-radius) - 5px)
