@@ -364,3 +364,24 @@ Validation includes disposable native Codex project/chat lifecycles, empty-chat 
 Both client modes share password change and global sign-out in Settings. Normal login remains one password. Password change revokes old sessions and issues a fresh session/CSRF pair to the initiating browser, preserving its chat and drafts. It does not interrupt native work or change writer ownership.
 
 Schema 8 adds a credential revision and a single expiring recovery-token hash. The local maintenance CLI writes a private, one-use, 15-minute URL; only token redemption is available through the authenticated-origin website. No email/phone service, default password or network token-issuance endpoint is added. The optional GPT login gateway watches Hub session revocation and must be restarted after the matching Hub is deployed; its persistent browser remains running. Offline snapshot restoration invalidates sessions and recovery links.
+
+
+## 2026-09-08 — Desktop workspace dependency compatibility and explicit recovery
+
+Native resumed conversations may retain the desktop's dynamic tools. Hub handles the
+specific codex_app/load_workspace_dependencies call using the current machine's existing
+bundled runtime manifest and executable/plugin paths. This is read-only discovery over
+system SSH for Windows (or local filesystem on Linux); it is not an installer or an
+arbitrary command/path API. The native workspace_dependencies feature must be enabled.
+Other dynamic tools receive a normal failed tool response and a bounded Results entry;
+they do not poison transport status or suggest that reconnecting adds a missing tool.
+Only public tool results are normalized, never hidden reasoning or supplied raw arguments.
+The request/response contract follows the installed 0.153.4 schema and
+https://learn.chatgpt.com/docs/app-server (dynamicTools and item/tool/call).
+
+Restore conversation rechecks native turn status, including already-loaded unknown
+threads and excluded/empty resume turn arrays. It never replays user input. Pending,
+failure/retry, still-running and stopped/idle outcomes appear beside the composer.
+Notification navigation keeps its URL until the selected Codex conversation is durably
+saved; selection writes are serialized. GPT persists its existing local selection before
+consuming the URL. Both modes survive an immediate reload without taking a writer.

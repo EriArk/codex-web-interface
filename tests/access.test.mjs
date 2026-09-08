@@ -37,6 +37,7 @@ class Rpc extends EventEmitter {
     if (method === "account/read") return { account: {} };
     if (method === "thread/start") return { thread: { id: randomUUID() } };
     if (method === "thread/resume") return { thread: { turns: [] } };
+    if (method === "thread/turns/list") return { data: [], nextCursor: null };
     if (method === "thread/settings/update") {
       this.emit("notification", "thread/settings/updated", {
         threadId: p.threadId,

@@ -11,6 +11,7 @@ import {
 import { AccountControls } from "./AccountControls";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
+import type { RecoveryOutcome } from "./ConnectionRecovery";
 import { DesktopControl } from "./DesktopControl";
 import { type LibraryChange, libraryEvent } from "./EntityMenu";
 import { GptLoadBoundary } from "./GptLoadBoundary";
@@ -196,6 +197,11 @@ export default function App() {
     />
   );
 }
+function clearNotification(id: string) {
+  if (new URLSearchParams(location.hash.slice(1)).get("notification") === id)
+    history.replaceState(history.state, "", location.pathname + location.search);
+}
+
 function Workspace({
   onLogout,
   onSession,
@@ -284,7 +290,14 @@ function Workspace({
     client === "codex" && view === "chat" && !settings && !drawer,
   );
   const [notificationTarget, setNotificationTarget] = useState<NotificationTarget | undefined>();
-  const notificationHandled = useCallback(() => setNotificationTarget(undefined), []);
+  const notificationHandled = useCallback((id: string) => {
+    clearNotification(id);
+    setNotificationTarget(undefined);
+  }, []);
+  const notificationSelection = useRef<
+    { id: string; projectId: string; threadId: string } | undefined
+  >(undefined);
+  const selectionSave = useRef<Promise<unknown>>(Promise.resolve());
   const notificationVersion = useRef(0);
   useEffect(() => {
     if (!initialized) return;
@@ -302,13 +315,16 @@ function Workspace({
           if (target.client === "gpt") setNotificationTarget({ ...target, id });
           else if (target.threadId && target.projectId) {
             // The target can be older than the first catalog page; do not replace it with page[0].
+            notificationSelection.current = {
+              id,
+              projectId: target.projectId,
+              threadId: target.threadId,
+            };
             threadRequest.current++;
             setProjectId(target.projectId);
             setThreadId(target.threadId);
             setThreads([]);
           }
-          if (new URLSearchParams(location.hash.slice(1)).get("notification") === id)
-            history.replaceState(history.state, "", location.pathname + location.search);
         })
         .catch((e) => {
           if (!disposed) setNotice(messageOf(e));
@@ -433,10 +449,29 @@ function Workspace({
   }, [projectId]);
   useEffect(() => {
     if (!projectId) return;
-    void api("/preferences", {
-      method: "PATCH",
-      body: { projectId, ...(threadId ? { threadId } : {}), view },
-    }).catch(() => {});
+    // Keep the notification URL recoverable until this selection is durable.
+    // Serialize selection writes so a slow predecessor cannot replace the target.
+    const target = notificationSelection.current;
+    selectionSave.current = selectionSave.current
+      .catch(() => {})
+      .then(() =>
+        api("/preferences", {
+          method: "PATCH",
+          body: { projectId, ...(threadId ? { threadId } : {}), view },
+        }),
+      )
+      .then(() => {
+        if (
+          target &&
+          target === notificationSelection.current &&
+          target.projectId === projectId &&
+          target.threadId === threadId
+        ) {
+          clearNotification(target.id);
+          notificationSelection.current = undefined;
+        }
+      })
+      .catch(() => {});
   }, [projectId, threadId, view]);
   const resultRequest = useRef(0);
   const loadResults = useCallback(async () => {
@@ -571,24 +606,38 @@ function Workspace({
     setThreadGroups((groups) => ({ ...groups, [id]: data.threads }));
     if (data.warning) setNotice(data.warning);
   }, []);
-  const resume = async () => {
-    if (busy) return;
+  const resume = async (): Promise<RecoveryOutcome> => {
+    if (busy) return { ok: false, message: "Дождись завершения текущего действия." };
     setBusy(true);
     setNotice("");
     const selected = threadId;
     try {
-      await api(`/threads/${selected}/resume`, { method: "POST" });
-      if (selectionRef.current.threadId !== selected) return;
+      const restored = await api<Thread>(`/threads/${selected}/resume`, {
+        method: "POST",
+        timeoutMs: 60000,
+      });
+      if (selectionRef.current.threadId !== selected)
+        return { ok: true, message: "Диалог восстановлен." };
       setSendError("");
       setWriteBlocked(false);
-      setNotice("Диалог готов к работе через сайт. Можно отправлять сообщение.");
       // Recover access only: the owner decides when to send the preserved draft.
-      void refresh().catch(() => {});
+      await refresh().catch(() => {});
       reconnect();
+      if (restored.status === "unknown")
+        return { ok: false, message: "Состояние работы пока не подтверждено. Повтори проверку." };
+      return {
+        ok: true,
+        message:
+          restored.status === "running" || restored.status === "starting"
+            ? "Связь восстановлена. Codex продолжает работу."
+            : restored.status === "waiting_approval"
+              ? "Связь восстановлена. Codex ждёт ответа."
+              : "Диалог восстановлен. Чтобы продолжить задачу, отправь сообщение.",
+      };
     } catch (error) {
-      if (selectionRef.current.threadId !== selected) return;
-      setWriteBlocked(error instanceof ApiError && error.code === "THREAD_IN_USE");
-      setSendError(messageOf(error));
+      if (selectionRef.current.threadId === selected)
+        setWriteBlocked(error instanceof ApiError && error.code === "THREAD_IN_USE");
+      return { ok: false, message: messageOf(error) };
     } finally {
       setBusy(false);
     }
@@ -923,7 +972,7 @@ function Workspace({
             )
           }
           onResult={showResult}
-          onReconnect={() => void resume()}
+          onReconnect={resume}
           onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
         />
         <hr

@@ -211,3 +211,20 @@ in Chromium/WebKit. Native sharing is simulated in browser automation; physical 
 share-sheet acceptance remains the owner's normal device usage. Actual owner-provided
 Markdown, JSON, TXT, PDF, DOCX, XLSX, Python and ZIP artifacts were fetched through the
 private connector with successful status, nonzero content and SHA-256 checks.
+
+
+## 2026-09-08 — Recovery, desktop dynamic workspace tool and notification reload
+
+175 portable tests pass. New protocol regressions exercise readonly runtime lookup,
+argument/namespace rejection, normal failure for unknown tools, deduplicated redacted
+Results and native resume status after an empty excluded-turn response. A real Linux
+SSH probe found the owner's Windows bundled runtime 26.905.11957, Node/Python executables
+and document plugin paths without installing software or touching any conversation.
+Chromium and WebKit pass slow recovery, double-click guard, failure/retry, running/idle
+feedback, preserved drafts and zero prompt replay/restart. The notification test now
+holds preference writes across a cold reload and checks GPT immediate reload as well.
+Phone screenshots were inspected; physical iPhone/PWA acceptance remains owner usage.
+
+The earlier whole-host reboot had an unclean journal boundary; available logs did not
+establish power loss versus hard reset or host hang. These client recovery changes are
+not evidence of a repaired hardware/power cause.

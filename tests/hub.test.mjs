@@ -39,6 +39,7 @@ class FakeRpc extends EventEmitter {
     if (method === "account/read") return { account: { type: "chatgpt" } };
     if (method === "thread/start") return { thread: { id: randomUUID() } };
     if (method === "thread/resume") return { thread: { turns: [] } };
+    if (method === "thread/turns/list") return { data: [], nextCursor: null };
     if (method === "turn/start") {
       const turn = { id: randomUUID(), status: "inProgress" };
       this.emit("notification", "turn/started", { threadId: params.threadId, turn });
