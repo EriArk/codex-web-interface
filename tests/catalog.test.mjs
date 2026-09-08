@@ -466,3 +466,30 @@ test("attachment envelopes reconcile to the actual bound user message without du
     f.store.close();
   }
 });
+
+test("desktop catalog refresh cannot move a recently used conversation backwards", () => {
+  const store = new Store(":memory:");
+  const catalog = new Catalog(config, store, async () => {
+    throw Error("No transport expected");
+  });
+  try {
+    const project = catalog.projects().find((p) => p.id === "seed");
+    const raw = {
+      id: "stable-native",
+      cwd: project.workingDirectory,
+      name: "Existing",
+      createdAt: 100,
+      updatedAt: 1000,
+    };
+    const thread = catalog.importThread(project, raw);
+    assert.equal(store.thread(thread.id).updatedAt, new Date(1000 * 1000).toISOString());
+    store.setStatus(thread.id, "running", "live");
+    store.setStatus(thread.id, "completed");
+    const recent = store.thread(thread.id).updatedAt;
+    catalog.importThread(project, raw);
+    assert.equal(store.thread(thread.id).updatedAt, recent);
+    assert.equal(store.thread(thread.id).title, "Existing");
+  } finally {
+    store.close();
+  }
+});

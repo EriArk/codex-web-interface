@@ -508,7 +508,7 @@ export class Catalog {
           str(raw.historyMode, 40),
           Number(raw.updatedAt) || 0,
           iso(raw.createdAt),
-          iso(raw.updatedAt),
+          old && old.updatedAt > iso(raw.updatedAt) ? old.updatedAt : iso(raw.updatedAt),
           thread.id,
         );
       const settings = turnSettingsSchema.safeParse({
