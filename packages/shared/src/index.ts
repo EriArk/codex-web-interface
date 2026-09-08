@@ -285,5 +285,11 @@ export type {
   ProjectFileEntry,
   ProjectGit,
 } from "./inspector.js";
+export type {
+  DiagnosticCheck,
+  MachineHealth,
+  MachineProbe,
+  MachinesOverview,
+} from "./machineHealth.js";
 export * from "./results.js";
 export * from "./storage.js";

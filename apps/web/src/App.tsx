@@ -17,6 +17,7 @@ import { type LibraryChange, libraryEvent } from "./EntityMenu";
 import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
+import { MachineHealthPanel } from "./MachineHealth";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectFiles } from "./ProjectFiles";
@@ -257,6 +258,7 @@ function Workspace({
   const [results, setResults] = useState<Result[]>([]),
     [activity, setActivity] = useState<Activity[]>([]),
     [activityCursor, setActivityCursor] = useState<number | null>(null);
+  const [machinePanel, setMachinePanel] = useState(false);
   const [fileFocus, setFileFocus] = useState({ path: "", version: 0, projectId: "" });
   const [resultScope, setResultScope] = useState<"thread" | "project">("thread");
   const [libraryRevision, setLibraryRevision] = useState(0);
@@ -302,7 +304,7 @@ function Workspace({
   useNotificationPresence(
     "codex",
     threadId,
-    client === "codex" && view === "chat" && !settings && !drawer,
+    client === "codex" && view === "chat" && !settings && !drawer && !machinePanel,
   );
   const [notificationTarget, setNotificationTarget] = useState<NotificationTarget | undefined>();
   const notificationHandled = useCallback((id: string) => {
@@ -545,6 +547,22 @@ function Workspace({
     setView("chat");
     setFocusTurn("");
     setDrawer(false);
+  };
+  const openMachineProject = (id: string, remote: boolean) => {
+    if (!projects.some((p) => p.id === id))
+      void api<{ projects: Project[] }>("/projects")
+        .then((data) => setProjects(data.projects))
+        .catch((e) => setNotice(messageOf(e)));
+    setClient("codex");
+    setMachinePanel(false);
+    if (id !== projectId) {
+      setProjectId(id);
+      setThreads(threadGroups[id] ?? []);
+      setThreadId("");
+      void loadThreads(id).catch((e) => setNotice(messageOf(e)));
+    }
+    setView(remote ? "remote" : "chat");
+    if (remote) setRightHidden(false);
   };
   const newThread = (owner = projectId) =>
     void action(async () => {
@@ -837,6 +855,7 @@ function Workspace({
             notificationTarget={notificationTarget}
             onNotificationHandled={notificationHandled}
             onCodex={() => setClient("codex")}
+            onCodexProject={openMachineProject}
             theme={theme}
             onTheme={setTheme}
             onSession={onSession}
@@ -965,6 +984,7 @@ function Workspace({
           canMarkSeen={
             !drawer &&
             !settings &&
+            !machinePanel &&
             !createProject &&
             !remoteImmersive &&
             !resultOverlay &&
@@ -1246,11 +1266,31 @@ function Workspace({
             Файлы и Git проекта
           </button>
         )}
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            setSettings(false);
+            setMachinePanel(true);
+          }}
+        >
+          <Icon name="remote" />
+          Компьютеры
+        </button>
         <Notifications visible={settings} />
         <StorageUsage visible={settings} />
         <AccountControls onSession={onSession} onLogout={onLogout} />
         <p className="small muted">Для установки на iPhone: Поделиться → На экран «Домой».</p>
       </dialog>
+      <MachineHealthPanel
+        open={machinePanel}
+        onClose={() => setMachinePanel(false)}
+        onMaintenance={() => {
+          setMachinePanel(false);
+          setSettings(true);
+        }}
+        onProject={openMachineProject}
+      />
     </div>
   );
 }

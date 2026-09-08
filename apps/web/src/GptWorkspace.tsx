@@ -28,6 +28,7 @@ import { GptProgress } from "./GptProgress";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
+import { MachineHealthPanel } from "./MachineHealth";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
@@ -136,12 +137,14 @@ export function GptWorkspace({
   notificationTarget,
   onNotificationHandled,
   onCodex,
+  onCodexProject,
   theme,
   onTheme,
   onSession,
   onLogout,
 }: {
   onCodex: () => void;
+  onCodexProject?: (id: string, remote: boolean) => void;
   theme: Theme;
   onTheme: (theme: Theme) => void;
   notificationTarget?: NotificationTarget;
@@ -149,6 +152,7 @@ export function GptWorkspace({
   onSession: (session: Session) => void;
   onLogout: () => void;
 }) {
+  const [machinePanel, setMachinePanel] = useState(false);
   const connectionRequest = useRef(0);
   const [connection, setConnection] = useState<GptConnection | null>(null);
   const [checkingConnection, setCheckingConnection] = useState(false);
@@ -228,7 +232,7 @@ export function GptWorkspace({
   selectedRef.current = selected;
   useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
   useProjectSwipe(settingsRef, settings, () => setSettings(false), "close");
-  useProjectSwipe(root, !drawer && !settings, () => setDrawer(true));
+  useProjectSwipe(root, !drawer && !settings && !machinePanel, () => setDrawer(true));
   const action = useCallback(async (fn: () => Promise<void>) => {
     try {
       await fn();
@@ -629,7 +633,11 @@ export function GptWorkspace({
     }
   };
 
-  useNotificationPresence("gpt", selected || createdJob, view === "chat" && !drawer && !settings);
+  useNotificationPresence(
+    "gpt",
+    selected || createdJob,
+    view === "chat" && !drawer && !settings && !machinePanel,
+  );
   const handledNotification = useRef("");
   useEffect(() => {
     if (!notificationTarget || handledNotification.current === notificationTarget.id) return;
@@ -1434,10 +1442,30 @@ export function GptWorkspace({
             {connection?.state === "login_required" ? "Войти в ChatGPT" : "Подключение ChatGPT"}
           </a>
         </section>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            setSettings(false);
+            setMachinePanel(true);
+          }}
+        >
+          <Icon name="remote" />
+          Компьютеры
+        </button>
         <Notifications visible={settings} />
         <StorageUsage visible={settings} />
         <AccountControls onSession={onSession} onLogout={onLogout} />
       </dialog>
+      <MachineHealthPanel
+        open={machinePanel}
+        onClose={() => setMachinePanel(false)}
+        onProject={(id, remote) => {
+          setMachinePanel(false);
+          if (onCodexProject) onCodexProject(id, remote);
+          else onCodex();
+        }}
+      />
     </div>
   );
 }

@@ -29,7 +29,7 @@ export function sshFailure(stderr: string): string {
     return "SSH_AUTH_FAILED";
   return "SSH_UNREACHABLE";
 }
-async function sshProbe(machine: MachineConfig): Promise<string> {
+export async function sshProbe(machine: MachineConfig): Promise<string> {
   if (!machine.ssh) return "SSH_NOT_CONFIGURED";
   return new Promise((resolveResult) => {
     const script = "[Console]::Out.Write('CODEX_WEB_SSH_OK')";
@@ -79,7 +79,7 @@ async function sshProbe(machine: MachineConfig): Promise<string> {
     child.stdin.end();
   });
 }
-async function tcp(host: string, port: number): Promise<boolean> {
+export async function tcp(host: string, port: number): Promise<boolean> {
   return new Promise((resolveResult) => {
     const socket = createConnection({ host, port });
     let done = false;
