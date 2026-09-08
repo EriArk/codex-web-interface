@@ -334,6 +334,8 @@ export class Sessions extends EventEmitter {
       this.entityWrites.add(projectId);
       try {
         const r = await this.runtime(projectId);
+        const absent = new Set<string>(),
+          nativeArchived = new Set<string>();
         if ((action.action === "archive" && action.value) || action.action === "delete") {
           const targets = t ? [t] : this.store.threads(projectId);
           for (const row of targets) {
@@ -343,19 +345,52 @@ export class Sessions extends EventEmitter {
               ["running", "starting", "waiting_approval", "unknown"].includes(row.status)
             )
               throw new HubError(409, "ENTITY_BUSY", "Дождись завершения работы в этом чате.");
-            const result = await r.rpc.request("thread/read", {
-              threadId: row.codexThreadId,
-              includeTurns: false,
-            });
-            const status = record(record(result.thread).status);
-            if (status.type === "active" || status.type === "systemError")
-              throw new HubError(409, "ENTITY_BUSY", "Диалог сейчас занят. Обнови его состояние.");
-            const queue = row.archived
-              ? { data: [] }
-              : await r.rpc.request("thread/queue/list", {
+            const emptyWeb =
+              row.origin === "web" &&
+              !this.store.db.prepare("SELECT 1 FROM messages WHERE threadId=? LIMIT 1").get(row.id);
+            let missingRead = false;
+            try {
+              const result = await r.rpc.request("thread/read", {
+                threadId: row.codexThreadId,
+                includeTurns: false,
+              });
+              const status = record(record(result.thread).status);
+              if (status.type === "active" || status.type === "systemError")
+                throw new HubError(
+                  409,
+                  "ENTITY_BUSY",
+                  "Диалог сейчас занят. Обнови его состояние.",
+                );
+            } catch (error) {
+              if (
+                emptyWeb &&
+                error instanceof HubError &&
+                ["THREAD_NOT_LOADED", "THREAD_NOT_PERSISTED"].includes(error.code)
+              )
+                missingRead = true;
+              else throw error;
+            }
+            let queue: Record<string, any> = { data: [] };
+            if (!row.archived || missingRead) {
+              try {
+                queue = await r.rpc.request("thread/queue/list", {
                   threadId: row.codexThreadId,
                   limit: 100,
                 });
+              } catch (error) {
+                if (error instanceof HubError && error.code === "THREAD_ARCHIVED" && !missingRead)
+                  nativeArchived.add(row.id);
+                else if (
+                  emptyWeb &&
+                  error instanceof HubError &&
+                  error.code === "THREAD_NOT_PERSISTED"
+                )
+                  absent.add(row.id);
+                else throw error;
+              }
+            }
+            if (missingRead && !absent.has(row.id))
+              throw new HubError(409, "ENTITY_BUSY", "Не удалось подтвердить состояние диалога.");
             if (!Array.isArray(queue.data) || queue.data.length || queue.nextCursor)
               throw new HubError(
                 409,
@@ -377,8 +412,9 @@ export class Sessions extends EventEmitter {
           await r.rpc.request("thread/name/set", { threadId: t.codexThreadId, name: action.name });
           this.store.db.prepare("UPDATE threads SET title=? WHERE id=?").run(action.name, id);
         } else if (action.action === "archive") {
-          let localArchive = library.get("thread", t.codexThreadId)?.localArchive === true;
-          if (!localArchive) {
+          let localArchive =
+            absent.has(id) || library.get("thread", t.codexThreadId)?.localArchive === true;
+          if (!localArchive && !(action.value && nativeArchived.has(id))) {
             try {
               await r.rpc.request(action.value ? "thread/archive" : "thread/unarchive", {
                 threadId: t.codexThreadId,
@@ -407,7 +443,7 @@ export class Sessions extends EventEmitter {
           if (!localArchive) r.loaded.delete(id);
           this.catalog.invalidate(id);
         } else {
-          await r.rpc.request("thread/delete", { threadId: t.codexThreadId });
+          if (!absent.has(id)) await r.rpc.request("thread/delete", { threadId: t.codexThreadId });
           library.save("thread", t.codexThreadId, { name: "", localId: id, deleted: true });
           r.loaded.delete(id);
           this.catalog.invalidate(id);

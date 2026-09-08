@@ -41,7 +41,12 @@ const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const uuid = z.string().uuid();
 const settings = z.object({ model: z.string().min(1).max(120), effort: z.string().regex(/^\d$/) });
 const input = settings
-  .extend({ nativeId: id.nullable(), text: z.string().max(100000), files: z.array(uuid).max(8) })
+  .extend({
+    replacesJobId: uuid.optional(),
+    nativeId: id.nullable(),
+    text: z.string().max(100000),
+    files: z.array(uuid).max(8),
+  })
   .strict();
 type Input = z.infer<typeof input>;
 type Json = Record<string, any>;
@@ -395,6 +400,7 @@ export class GptService {
           status: row.status as GptJob["status"],
           createdAt: Number(row.createdAt),
           updatedAt: Number(row.updatedAt),
+          dismissed: this.library.get("thread", "outbox:" + row.id)?.deleted === true,
           summaryOnly: true,
           text: "",
           files: [],
@@ -417,6 +423,7 @@ export class GptService {
   private publicJob(row: Json): GptJob {
     return {
       id: row.id,
+      dismissed: this.library.get("thread", "outbox:" + row.id)?.deleted === true,
       nativeId: row.nativeId,
       text: row.text,
       files: JSON.parse(row.files),
@@ -440,6 +447,37 @@ export class GptService {
     const row = this.store.db.prepare("SELECT * FROM gpt_jobs WHERE id=?").get(jobId);
     if (!row) throw error("GPT_JOB_NOT_FOUND", "Отправка не найдена.", 404);
     return this.publicJob(row);
+  }
+  private assertDismissible(jobId: string) {
+    const job = this.job(jobId);
+    if (job.dismissed) return;
+    if (job.nativeId || !["failed", "cancelled", "completed"].includes(job.status))
+      throw error("GPT_JOB_BUSY", "Сначала дождись завершения или проверь состояние отправки.");
+  }
+  private dismissRecord(jobId: string) {
+    this.store.db
+      .prepare(
+        "INSERT INTO library_entities(client,kind,id,value) VALUES('gpt','thread',?,?) ON CONFLICT(client,kind,id) DO UPDATE SET value=excluded.value",
+      )
+      .run(
+        "outbox:" + jobId,
+        JSON.stringify({ id: "outbox:" + jobId, kind: "thread", name: "", deleted: true }),
+      );
+    // Keep the idempotency fingerprint so a delayed retry cannot resend a deleted item.
+    this.update(jobId, { text: "", files: "[]", answer: "", assets: "[]", error: "" });
+    this.store.db.prepare("DELETE FROM gpt_job_progress WHERE jobId=?").run(jobId);
+  }
+  dismiss(jobId: string) {
+    this.assertDismissible(jobId);
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.dismissRecord(jobId);
+      this.store.db.exec("COMMIT");
+    } catch (error) {
+      this.store.db.exec("ROLLBACK");
+      throw error;
+    }
+    return this.job(jobId);
   }
   upload(fileId: string): GptFile {
     const row = this.store.db.prepare("SELECT * FROM gpt_uploads WHERE id=?").get(fileId);
@@ -529,20 +567,35 @@ export class GptService {
         "GPT_CHECK_PREVIOUS",
         "Сначала проверь предыдущую отправку с неизвестным состоянием.",
       );
-    this.store.db
-      .prepare("INSERT INTO gpt_jobs VALUES(?,?,?,?,?,?,?,'queued','',?,?,?,'',NULL,0)")
-      .run(
-        jobId,
-        fingerprint,
-        value.nativeId,
-        value.text,
-        JSON.stringify(files),
-        value.model,
-        value.effort,
-        "[]",
-        Date.now(),
-        Date.now(),
-      );
+    if (value.replacesJobId) {
+      if (value.replacesJobId === jobId || value.nativeId)
+        throw error("GPT_INVALID_REPLACEMENT", "Обнови выбранную отправку.");
+      if (this.job(value.replacesJobId).dismissed)
+        throw error("GPT_JOB_DISMISSED", "Эта отправка уже удалена или заменена. Обнови список.");
+      this.assertDismissible(value.replacesJobId);
+    }
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.store.db
+        .prepare("INSERT INTO gpt_jobs VALUES(?,?,?,?,?,?,?,'queued','',?,?,?,'',NULL,0)")
+        .run(
+          jobId,
+          fingerprint,
+          value.nativeId,
+          value.text,
+          JSON.stringify(files),
+          value.model,
+          value.effort,
+          "[]",
+          Date.now(),
+          Date.now(),
+        );
+      if (value.replacesJobId) this.dismissRecord(value.replacesJobId);
+      this.store.db.exec("COMMIT");
+    } catch (error) {
+      this.store.db.exec("ROLLBACK");
+      throw error;
+    }
     void this.pump();
     return this.job(jobId);
   }
@@ -576,18 +629,6 @@ export class GptService {
       throw error("GPT_NOT_UNKNOWN", "Состояние уже определено.");
     this.update(jobId, { status: "cancelled", error: "" });
     void this.pump();
-    return this.job(jobId);
-  }
-  async dismiss(jobId: string) {
-    const job = this.job(jobId);
-    if (["queued", "preparing", "running"].includes(job.status)) return this.cancel(jobId);
-    if (job.status === "cancelled") return job;
-    if (["failed", "unknown"].includes(job.status)) {
-      this.update(jobId, { status: "cancelled", error: "" });
-      return this.job(jobId);
-    }
-    if (job.status === "completed") return job;
-    this.update(jobId, { status: "cancelled", error: "" });
     return this.job(jobId);
   }
   async pump() {
@@ -629,6 +670,8 @@ export class GptService {
         }
       }
       const job = this.job(jobId);
+      // The owner may cancel while the asynchronous connection/model checks are pending.
+      if (job.status !== "queued" || job.dismissed) return;
       this.update(jobId, { status: "preparing" });
       preparing = "session";
       if (job.nativeId) await this.json("/bridge/sessions/select", { sessionId: job.nativeId });
@@ -952,14 +995,17 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
       job: service.enqueue(uuid.parse(req.headers["idempotency-key"]), input.parse(req.body)),
     }),
   );
+  app.post("/api/gpt/jobs/:id/dismiss", async (req) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    return { job: service.dismiss(z.object({ id: uuid }).parse(req.params).id) };
+  });
   app.post("/api/gpt/jobs/:id/cancel", async (req) => ({
     job: await service.cancel(z.object({ id: uuid }).parse(req.params).id),
   }));
   app.post("/api/gpt/jobs/:id/resolve", async (req) => ({
     job: service.resolve(z.object({ id: uuid }).parse(req.params).id),
-  }));
-  app.post("/api/gpt/jobs/:id/dismiss", async (req) => ({
-    job: await service.dismiss(z.object({ id: uuid }).parse(req.params).id),
   }));
   app.post("/api/gpt/uploads", { bodyLimit: 25 * 1024 * 1024 }, async (req, reply) => {
     const { name } = z.object({ name: z.string() }).parse(req.query);

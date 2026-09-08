@@ -36,6 +36,7 @@ export interface GptModels {
   currentEffort: string;
 }
 export interface GptJob {
+  dismissed?: boolean;
   id: string;
   nativeId: string | null;
   text: string;

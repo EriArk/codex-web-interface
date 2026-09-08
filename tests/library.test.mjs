@@ -318,3 +318,39 @@ test("Empty Codex chats archive locally without inventing a native message", asy
   assert.equal(store.thread(thread.id).archived, 0);
   assert(!rpc.calls.some((c) => c.method === "thread/unarchive" || c.method === "turn/start"));
 });
+
+test("Empty web chats confirmed absent natively can be deleted without a rollout", async (t) => {
+  const { store, sessions, rpc, thread } = await codex(t);
+  store.db.prepare("UPDATE threads SET origin='web' WHERE id=?").run(thread.id);
+  const original = rpc.request.bind(rpc);
+  rpc.request = async (method, params) => {
+    if (method === "thread/read") throw new HubError(404, "THREAD_NOT_LOADED", "not loaded");
+    if (method === "thread/queue/list")
+      throw new HubError(404, "THREAD_NOT_PERSISTED", "no rollout");
+    return original(method, params);
+  };
+  await sessions.manageEntity("thread", thread.id, { action: "delete", confirm: true });
+  assert.throws(() => store.thread(thread.id));
+  assert(!rpc.calls.some((c) => c.method === "thread/delete" || c.method === "turn/start"));
+});
+test("Native archive status supersedes stale Hub status during explicit deletion", async (t) => {
+  const { store, sessions, rpc, thread } = await codex(t);
+  const original = rpc.request.bind(rpc);
+  rpc.request = async (method, params) => {
+    if (method === "thread/queue/list") throw new HubError(409, "THREAD_ARCHIVED", "archived");
+    return original(method, params);
+  };
+  await sessions.manageEntity("thread", thread.id, { action: "delete", confirm: true });
+  assert.throws(() => store.thread(thread.id));
+  assert.equal(rpc.calls.filter((c) => c.method === "thread/delete").length, 1);
+});
+test("An empty Hub record alone never authorizes deleting uncertain or imported native history", async (t) => {
+  const { store, sessions, rpc, thread } = await codex(t);
+  rpc.request = async () => {
+    throw new HubError(404, "THREAD_NOT_LOADED", "not loaded");
+  };
+  await assert.rejects(
+    sessions.manageEntity("thread", thread.id, { action: "delete", confirm: true }),
+  );
+  assert(store.thread(thread.id));
+});

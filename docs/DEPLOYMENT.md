@@ -41,7 +41,7 @@ Use elevated PowerShell for service/firewall installation. Supply your actual Hu
 .\ops\windows\Install-RemoteDesktop.ps1 -HubAddress HUB_LAN_IP -Installer C:\Private\tightvnc.msi -SecretFile C:\Private\remote.env
 ```
 
-Inspect each script's parameters before installation. The Companion runs with the user's limited interactive token. The VNC installer script checks the official package signature and refuses to silently overwrite an existing server. After a Codex update, verify its configured executable still exists.
+Inspect each script's parameters before installation. The Companion runs with the user's limited interactive token. The VNC installer script checks the official package signature and refuses to silently overwrite an existing server. For desktop-bundled Codex, Companion installation copies the complete selected runtime (Codex and its three helper executables) into its own versioned runtime directory and verifies SHA-256 hashes. Desktop updates cannot retire files underneath the independent App Server. Upgrades remain explicit: after active web work finishes, reinstall Companion with the current complete desktop bundle. Custom/standalone CLI paths remain unchanged. Older snapshots are retained because running App Servers may still use their helpers; incomplete staging directories can be reviewed after a failed installation.
 
 ## Start and first login
 

@@ -162,3 +162,14 @@ The chronology regression is reproduced with a long active turn where older Hub 
 Actual TrainerOs HTML was fetched from Windows through the bounded SSH reader and its hash checked. Chromium mouse and WebKit touch verify native demo tabs, material controls, phone fit/960px sizing, close/return to chat, and authenticated access. The sandbox blocks parent DOM, cookies, storage and network fetch. Browser screenshots on phone/tablet were inspected. Chromium's CDP touch path double-subtracts sandboxed cross-process iframe offsets, so touch acceptance uses WebKit; no compensating coordinate code is applied to the app. Playwright service-worker blocking is disabled for this fixture because its injected hook tries to access sandbox-denied navigator.serviceWorker.
 
 Final portable suite: 92 tests; production build, TypeScript, Biome (no errors), repository content guard and optional connector syntax checks. Physical iPhone/iPad Safari/PWA acceptance remains with the owner.
+
+
+## Recovery of interrupted outbox work — 2026-09-08
+
+Replaces the incomplete outbox change in 94bf034 with the recovered server work. Failed GPT submissions can be deleted with the shared confirmed menu or replaced atomically when resent. Dismissed records retain their idempotency fingerprint, cannot be replayed by a delayed retry, and disappear from other clients. Unknown outcomes require the existing explicit review; they cannot be dismissed as if cancelled. Cancellation during async preflight never reaches the native composer.
+
+Codex deletion now recognizes an empty web-created thread that has no native rollout after reconnect, and recognizes a native archive even when Hub metadata is stale. Nonempty/unconfirmed/active/queued chats retain their guards. Native error classification preserves actionable rejection messages.
+
+Windows Companion was still launching a desktop bundle whose helper executables had been retired by an application update. Installation now snapshots the complete explicitly selected desktop runtime and verifies hashes, leaving custom CLI paths unchanged. The live Companion was switched to the private snapshot; the owner's desktop process was not restarted.
+
+Validation: 150 Linux server/unit tests, build, typecheck, lint and tracked-file checks; Chromium/WebKit copy, GPT preparation/outbox, Remote input and 25 preview-isolation vectors; Windows PowerShell runtime pinning/cleanup/reinstall tests. A disposable native Windows conversation proved streamed output, a real command through the repaired tool host, text/image attachment preparation and recognition, and subsequent native deletion. An empty native web draft was also deleted after its original App Server closed. The actual deployed doctor confirms authenticated Codex, model/Plan discovery, GPT read/send readiness, private connector state, Remote and public HTTPS. Physical iPhone/iPad acceptance remains the owner's ongoing usage checks.

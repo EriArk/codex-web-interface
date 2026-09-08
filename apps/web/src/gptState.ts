@@ -1,6 +1,7 @@
 import type { GptHistoryPage, GptJob, GptMessage } from "@codex-web/shared";
 import type { GptCachedChat } from "./gptCache";
 export function showGptJob(job: GptJob, messages: GptMessage[], now = Date.now()): boolean {
+  if (job.dismissed) return false;
   if (["queued", "preparing", "running", "failed", "unknown"].includes(job.status)) return true;
   if (job.status === "cancelled" && !job.answer && !job.assets.length) return false;
   // Completed outbox entries must never append old messages below a paged native history.
@@ -27,9 +28,11 @@ export function mergeGptJobs(previous: GptJob[], incoming: GptJob[]): GptJob[] {
     if (old && old.updatedAt > job.updatedAt) continue;
     map.set(
       job.id,
-      job.summaryOnly && old && !old.summaryOnly
-        ? { ...old, status: job.status, nativeId: job.nativeId, updatedAt: job.updatedAt }
-        : job,
+      job.dismissed
+        ? { ...job, text: "", files: [], answer: "", assets: [], progress: [], error: "" }
+        : job.summaryOnly && old && !old.summaryOnly
+          ? { ...old, status: job.status, nativeId: job.nativeId, updatedAt: job.updatedAt }
+          : job,
     );
   }
   return [...map.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 100);
