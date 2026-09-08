@@ -161,6 +161,19 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 11,
+    name: "immutable_project_artifacts",
+    up(db) {
+      db.exec(`CREATE TABLE artifact_files(
+        id TEXT PRIMARY KEY REFERENCES artifacts(id), name TEXT NOT NULL,
+        sha256 TEXT NOT NULL, sourcePath TEXT NOT NULL, turnId TEXT
+      );
+      CREATE TABLE artifact_captures(id TEXT PRIMARY KEY, threadId TEXT NOT NULL REFERENCES threads(id),
+        turnId TEXT, path TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL, artifactId TEXT);
+      CREATE INDEX artifact_captures_thread ON artifact_captures(threadId);`);
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

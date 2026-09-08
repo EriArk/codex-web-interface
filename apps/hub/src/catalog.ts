@@ -8,6 +8,8 @@ import {
   type ProjectConfig,
   turnSettingsSchema,
 } from "@codex-web/shared";
+import { Artifacts } from "./artifacts.js";
+import { GeneratedArtifacts } from "./generatedArtifacts.js";
 import { type EntityAction, Library } from "./library.js";
 import { displayUserText, NativeImages } from "./nativeImages.js";
 import { Previews } from "./previews.js";
@@ -54,6 +56,7 @@ export class Catalog {
   readonly library: Library;
   readonly images: NativeImages;
   readonly previews: Previews;
+  readonly artifacts: GeneratedArtifacts;
   readonly errors = new Map<string, string>();
   constructor(
     readonly config: HubConfig,
@@ -76,6 +79,19 @@ export class Catalog {
         root: thread.workingDirectory || project.workingDirectory,
       };
     });
+    this.artifacts = new GeneratedArtifacts(
+      store,
+      new Artifacts(config.hub.resultsPath, store, config.hub.storage.artifactBytes),
+      (threadId) => {
+        const thread = store.thread(threadId),
+          project = this.projects().find((p) => p.id === thread.projectId);
+        if (!project) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект не найден.");
+        return {
+          machine: this.machine(project.machineId),
+          root: thread.workingDirectory || project.workingDirectory,
+        };
+      },
+    );
     store.db
       .prepare("DELETE FROM history_cursors WHERE createdAt<?")
       .run(Date.now() - 7 * 86400000);

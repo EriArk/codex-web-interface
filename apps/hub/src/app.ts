@@ -404,6 +404,35 @@ export async function createApp(
     if (thread.origin !== "desktop" && !thread.historyMode) return { version: 0 };
     return sessions.catalog.readThread(thread);
   });
+  app.get("/api/projects/:id/results", async (req) => {
+    const id = paramId(req);
+    sessions.project(id);
+    const category = z
+      .object({ category: resultCategorySchema.default("all") })
+      .parse(req.query).category;
+    return store.projectResults(id, page(req).before, category);
+  });
+  app.get("/api/projects/:id/results/:resultId", async (req) => {
+    const p = z.object({ id: idSchema, resultId: idSchema }).parse(req.params);
+    sessions.project(p.id);
+    const row = store.db
+      .prepare(
+        "SELECT r.threadId FROM results r JOIN threads t ON t.id=r.threadId WHERE r.id=? AND t.projectId=?",
+      )
+      .get(p.resultId, p.id);
+    if (!row) throw new HubError(404, "RESULT_NOT_FOUND", "Результат не найден.");
+    return store.resultById(String(row.threadId), p.resultId);
+  });
+  app.post("/api/artifact-captures/:id/retry", async (req, reply) => {
+    const id = z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .parse(paramId(req));
+    const capture = sessions.catalog.artifacts.get(id);
+    sessions.thread(capture.threadId);
+    void sessions.catalog.artifacts.capture(id).catch(() => {});
+    return reply.code(202).send({ status: sessions.catalog.artifacts.get(id).status });
+  });
   app.get("/api/threads/:id/results", async (req) => {
     const id = paramId(req);
     sessions.thread(id);
@@ -566,8 +595,16 @@ export async function createApp(
       artifact = artifacts.get(id);
     sessions.thread(artifact.threadId);
     return reply
-      .header("Content-Type", artifact.mime)
-      .header("Content-Disposition", 'inline; filename="screenshot.png"')
+      .header(
+        "Content-Type",
+        /^image\/(png|jpeg|webp|gif)$/.test(artifact.mime)
+          ? artifact.mime
+          : "application/octet-stream",
+      )
+      .header(
+        "Content-Disposition",
+        "attachment; filename*=UTF-8''" + encodeURIComponent(artifact.name),
+      )
       .header("X-Content-Type-Options", "nosniff")
       .send(artifact.data);
   });

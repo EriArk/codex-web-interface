@@ -162,3 +162,5 @@ export async function stageAttachment(
   const { transferWindowsAttachment } = await import("./attachment.js");
   return transferWindowsAttachment(machine, projectId, id, safeName, sourcePath, deadline);
 }
+
+export { PROJECT_FILE_LIMIT, projectFilePath, readProjectFile } from "./projectFile.js";

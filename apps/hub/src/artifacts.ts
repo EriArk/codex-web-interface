@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultStoragePolicy, HubError } from "@codex-web/shared";
@@ -44,11 +44,50 @@ export class Artifacts {
       .run(id, threadId, "image/png", data.length, new Date().toISOString());
     return { artifactId: id, url: `/api/artifacts/${id}`, width, height };
   }
-  get(id: string): { data: Buffer; mime: string; threadId: string } {
+  putFile(
+    threadId: string,
+    turnId: string | null,
+    name: string,
+    sourcePath: string,
+    mime: string,
+    data: Buffer,
+  ) {
+    if (data.length > 32 * 1024 * 1024)
+      throw new HubError(413, "ARTIFACT_TOO_LARGE", "Файл больше 32 МБ.");
+    const used = Number(
+      this.store.db.prepare("SELECT coalesce(sum(bytes),0) AS bytes FROM artifacts").get()?.bytes,
+    );
+    if (used + data.length > this.maxBytes)
+      throw new HubError(
+        507,
+        "ARTIFACT_STORAGE_FULL",
+        "Хранилище результатов заполнено. Сохранённые файлы доступны.",
+      );
+    const id = randomUUID(),
+      sha256 = createHash("sha256").update(data).digest("hex");
+    writeFileSync(join(this.root, id + ".bin"), data, { flag: "wx", mode: 0o600 });
+    this.store.db.exec("SAVEPOINT capture_artifact");
+    try {
+      this.store.db
+        .prepare("INSERT INTO artifacts VALUES(?,?,?,?,?)")
+        .run(id, threadId, mime, data.length, new Date().toISOString());
+      this.store.db
+        .prepare("INSERT INTO artifact_files VALUES(?,?,?,?,?)")
+        .run(id, name, sha256, sourcePath, turnId);
+      this.store.db.exec("RELEASE capture_artifact");
+    } catch (error) {
+      this.store.db.exec("ROLLBACK TO capture_artifact; RELEASE capture_artifact");
+      throw error;
+    }
+    return { artifactId: id, url: `/api/artifacts/${id}`, bytes: data.length, sha256, mime };
+  }
+  get(id: string): { data: Buffer; mime: string; threadId: string; name: string } {
     const row = this.store.db.prepare("SELECT * FROM artifacts WHERE id=?").get(id);
     if (!row) throw new HubError(404, "ARTIFACT_NOT_FOUND", "Файл не найден");
+    const file = this.store.db.prepare("SELECT name FROM artifact_files WHERE id=?").get(id);
     return {
-      data: readFileSync(join(this.root, `${id}.png`)),
+      data: readFileSync(join(this.root, `${id}.${file ? "bin" : "png"}`)),
+      name: file ? String(file.name) : "screenshot.png",
       mime: String(row.mime),
       threadId: String(row.threadId),
     };

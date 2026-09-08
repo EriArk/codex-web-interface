@@ -228,3 +228,15 @@ Phone screenshots were inspected; physical iPhone/PWA acceptance remains owner u
 The earlier whole-host reboot had an unclean journal boundary; available logs did not
 establish power loss versus hard reset or host hang. These client recovery changes are
 not evidence of a repaired hardware/power cause.
+
+
+## 2026-09-08 — Project Results library and artifact snapshots
+
+181 portable tests, including new source-intent/path/reparse/oversize cases, immutable
+bytes and checksums after source mutation, failure/restart/retry without duplicate cards,
+aggregate quota, authenticated downloads, project/category paging and backup verification.
+A real system-SSH read of Windows README.md matched the local SHA-256 exactly (5304 bytes).
+Chromium/WebKit phone/tablet workflows cover the project scope, category filtering, file
+preview, cross-chat origin, preserved drafts and zero writer acquisition. Screenshots cover
+all four themes and the requested brighter public commentary; these are browser checks,
+not a claim of a completed physical iPhone/iPad acceptance pass.

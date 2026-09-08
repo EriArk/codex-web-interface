@@ -64,6 +64,7 @@ jobs:
       - run: node tests/pinned-navigation.browser.mjs
       - run: node tests/push.browser.mjs
       - run: node tests/recovery.browser.mjs
+      - run: node tests/project-results.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs
 

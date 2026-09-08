@@ -424,6 +424,38 @@ export class Store {
       .map((row) => ({ ...row, payload: JSON.parse(String(row.payload)) }));
     return { items, counts, nextBefore: rows.length > 20 ? rows[19]?.cursor : null };
   }
+  projectResults(
+    projectId: string,
+    before = Number.MAX_SAFE_INTEGER,
+    category: ResultCategory = "all",
+  ) {
+    const buckets = this.db
+      .prepare(
+        "SELECT r.type,count(*) AS count FROM results r JOIN threads t ON t.id=r.threadId WHERE t.projectId=? GROUP BY r.type",
+      )
+      .all(projectId);
+    const counts = emptyResultCounts();
+    for (const row of buckets) {
+      counts.all += Number(row.count);
+      counts[resultCategory(String(row.type))] += Number(row.count);
+    }
+    const types = buckets
+      .filter((row) => category === "all" || resultCategory(String(row.type)) === category)
+      .map((row) => String(row.type));
+    if (!types.length) return { items: [], counts, nextBefore: null };
+    const rows = this.db
+      .prepare(
+        "SELECT r.rowid AS cursor,r.*,t.title AS threadTitle FROM results r JOIN threads t ON t.id=r.threadId WHERE t.projectId=? AND r.rowid<? AND r.type IN (" +
+          types.map(() => "?").join(",") +
+          ") ORDER BY r.rowid DESC LIMIT 21",
+      )
+      .all(projectId, before, ...types);
+    return {
+      items: rows.slice(0, 20).map((row) => ({ ...row, payload: JSON.parse(String(row.payload)) })),
+      counts,
+      nextBefore: rows.length > 20 ? rows[19]?.cursor : null,
+    };
+  }
   resultById(threadId: string, id: string) {
     const row = this.db
       .prepare("SELECT * FROM results WHERE threadId=? AND id=?")
