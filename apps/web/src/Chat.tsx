@@ -21,6 +21,7 @@ import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { CopyButton } from "./CopyButton";
+import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
 import { TurnDetails } from "./TurnDetails";
@@ -57,7 +58,14 @@ const MessageText = memo(function MessageText({
                 ),
             }
           : {}),
-        a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+        a: ({ node: _node, ...props }) =>
+          isDownloadUrl(props.href) ? (
+            <DownloadLink href={props.href} className="download-text">
+              {props.children}
+            </DownloadLink>
+          ) : (
+            <a {...props} target="_blank" rel="noopener noreferrer" />
+          ),
       }}
     >
       {text}

@@ -1,0 +1,51 @@
+.download-dialog {
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(var(--app-height, 100dvh) - 32px);
+  padding: 14px;
+  overflow: auto;
+}
+.download-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.download-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.download-heading .icon-button {
+  flex-shrink: 0;
+}
+.download-image {
+  display: block;
+  max-width: 100%;
+  max-height: 48dvh;
+  object-fit: contain;
+  margin: 0 auto 14px;
+}
+.download-actions {
+  display: flex;
+  justify-content: center;
+}
+.download-actions > * {
+  min-height: 44px;
+}
+button.download-text {
+  display: inline;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  min-height: 0;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.download-dialog:focus {
+  outline: none;
+}

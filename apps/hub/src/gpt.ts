@@ -27,6 +27,7 @@ import {
 import { gptLinkedText } from "./gpt-links.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { gptResults, resultPage } from "./gpt-results.js";
+import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 import {
   type EntityAction,
   type EntityKind,
@@ -54,7 +55,7 @@ const active = ["queued", "preparing", "running"];
 const error = (code: string, message: string, status = 409) => new HubError(status, code, message);
 export class GptService {
   readonly historyCache = new GptHistoryCache(async (id) =>
-    gptHistory(await this.json("/conversation?id=" + encodeURIComponent(id))),
+    gptHistory(await this.json("/conversation?id=" + encodeURIComponent(id)), id),
   );
   private working = false;
   private libraryBusy = false;
@@ -721,7 +722,7 @@ export class GptService {
               "/conversation?id=" + encodeURIComponent(native.nativeId),
             );
             if (this.stopped || done) return;
-            this.historyCache.seed(native.nativeId, gptHistory(history));
+            this.historyCache.seed(native.nativeId, gptHistory(history, native.nativeId));
             const completion = gptCompletion(history, current.text, current.createdAt);
             if (!completion.complete || this.job(jobId).status === "cancelled") return;
             const assets = [
@@ -859,6 +860,27 @@ export class GptService {
     clearInterval(this.storageTimer);
     this.lifetime.abort();
     await this.completion;
+  }
+  async sandboxFile(conversationId: string, messageId: string, key: string) {
+    const raw = await this.json("/conversation?id=" + encodeURIComponent(conversationId));
+    const message = gptHistory(raw, conversationId).find(
+      (m) => m.id === messageId && m.role === "assistant",
+    );
+    const file = message?.files.find((f) => f.id === key);
+    const node = Object.values(raw.mapping ?? {}).find(
+      (n: any) => (n.message?.id ?? n.id) === messageId,
+    ) as Json | undefined;
+    const body = (node?.message?.content?.parts ?? [])
+      .filter((p: unknown) => typeof p === "string")
+      .join("\n");
+    const path = gptSandboxFiles(body, conversationId, messageId).paths.get(key);
+    if (!file || !path) throw error("GPT_RESULT_NOT_FOUND", "Файл не найден в этом ответе.", 404);
+    const response = await this.response(
+      "/sandbox-file?" + new URLSearchParams({ conversationId, messageId, path }),
+      undefined,
+      60000,
+    );
+    return { file, response };
   }
   async asset(fileId: string) {
     return this.response("/asset?id=" + encodeURIComponent(fileId), undefined, 60000);
@@ -1024,6 +1046,36 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
     return reply
       .type(file.image ? file.mime : "application/octet-stream")
       .send(createReadStream(join(service.root, file.id)));
+  });
+  app.get("/api/gpt/downloads/:conversationId/:messageId/:key", async (req, reply) => {
+    const params = z
+      .object({
+        conversationId: id,
+        messageId: id,
+        key: z.string().regex(/^sandbox-[a-f0-9]{64}$/),
+      })
+      .parse(req.params);
+    const { file, response } = await service.sandboxFile(
+      params.conversationId,
+      params.messageId,
+      params.key,
+    );
+    if (!response.body) throw error("GPT_EMPTY_ASSET", "Файл недоступен. Попробуй ещё раз.", 503);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.length;
+      if (size > 32 * 1024 * 1024)
+        throw error("GPT_RESULT_TOO_LARGE", "Результат слишком большой.", 413);
+      chunks.push(Buffer.from(chunk));
+    }
+    return reply
+      .header(
+        "Content-Disposition",
+        "attachment; filename*=UTF-8''" + encodeURIComponent(file.name),
+      )
+      .type(file.mime)
+      .send(Buffer.concat(chunks));
   });
   app.get("/api/gpt/assets/:id", async (req, reply) => {
     const fileId = z

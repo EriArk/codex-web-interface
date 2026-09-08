@@ -189,3 +189,25 @@ and a lost native turn acknowledgement that cannot replay. Chromium/WebKit run t
 built application against an isolated HTTP Hub, exercising upload, cancel, confirmation,
 draft clearance, one native send and no restart. The browser check is included in CI.
 No live owner desktop handoff/restart is exercised.
+
+## GPT files and installed-PWA saving — 2026-09-08
+
+Canonical visible assistant sandbox links now resolve to conversation/message-scoped Hub
+downloads and appear in Files/Images Results. Download requests revalidate the current
+native branch and exact linked path. The private connector obtains native signed URLs
+inside the authenticated ChatGPT origin; only bounded binary content leaves it. No native
+credentials or signed asset URL is exposed to the client.
+
+Shared save controls fetch into a closable in-app dialog before a fresh tap invokes file
+sharing. Cancellation, slow transfers and errors preserve the workspace and draft. Ordinary
+download fallback uses a separate target and neutral binary MIME for executable documents;
+closing cancels preparation and releases object URLs/file buffers. WebKit requires fresh
+activation for sharing: https://webkit.org/blog/13862/the-user-activation-api/ . The reported
+installed-PWA trap is documented at https://bugs.webkit.org/show_bug.cgi?id=236943 .
+
+Tests cover normalization, path/branch scope, native URL handling, retry, close during
+download, cancelled share, exact file bytes/names, phone/tablet return and non-share fallback
+in Chromium/WebKit. Native sharing is simulated in browser automation; physical iPhone
+share-sheet acceptance remains the owner's normal device usage. Actual owner-provided
+Markdown, JSON, TXT, PDF, DOCX, XLSX, Python and ZIP artifacts were fetched through the
+private connector with successful status, nonzero content and SHA-256 checks.
