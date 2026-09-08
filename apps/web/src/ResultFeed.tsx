@@ -5,7 +5,7 @@ import {
   type ResultPage,
   resultCategory,
 } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ApiError, api, messageOf } from "./api";
 import { Results } from "./Results";
 
@@ -18,6 +18,7 @@ export function ResultFeed({
   focusVersion = 0,
   extras = [],
   onTurn,
+  toolbar,
   onOverlayChange,
 }: {
   endpoint: string;
@@ -27,7 +28,8 @@ export function ResultFeed({
   focusCategory?: ResultCategory;
   focusVersion?: number;
   extras?: ResultItem[];
-  onTurn?: (id: string) => void;
+  toolbar?: ReactNode;
+  onTurn?: (id: string, threadId?: string) => void;
   onOverlayChange: (open: boolean) => void;
 }) {
   const [focused, setFocused] = useState<ResultItem | null>(null);
@@ -195,6 +197,7 @@ export function ResultFeed({
       hasMore={cursor !== null}
       onOlder={() => void older()}
       onTurn={onTurn}
+      toolbar={toolbar}
       onOverlayChange={onOverlayChange}
       category={category}
       onCategory={setCategory}

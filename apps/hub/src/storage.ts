@@ -11,7 +11,7 @@ const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const disposable = new RegExp(
   "^(?:" +
     uuid +
-    "\\.png|uploads/" +
+    "\\.(?:png|bin)|uploads/" +
     uuid +
     "\\.(?:bin|jpg)|gpt/" +
     uuid +
@@ -20,6 +20,7 @@ const disposable = new RegExp(
 const terminal = "('idle','completed','interrupted','failed')";
 function blocked(db: DatabaseSync) {
   return (
+    !!db.prepare("SELECT 1 FROM artifact_captures WHERE status='capturing' LIMIT 1").get() ||
     !!db.prepare("SELECT 1 FROM threads WHERE status NOT IN " + terminal + " LIMIT 1").get() ||
     !!db
       .prepare(
@@ -94,7 +95,14 @@ async function inventory(root: string) {
 function references(db: DatabaseSync) {
   const required = new Set<string>(),
     optional = new Set<string>();
-  for (const row of db.prepare("SELECT id FROM artifacts").all()) required.add(row.id + ".png");
+  for (const row of db
+    .prepare(
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='artifact_files'").get()
+        ? "SELECT a.id, CASE WHEN f.id IS NULL THEN '.png' ELSE '.bin' END AS extension FROM artifacts a LEFT JOIN artifact_files f ON f.id=a.id"
+        : "SELECT id, '.png' AS extension FROM artifacts",
+    )
+    .all())
+    required.add(String(row.id) + String(row.extension));
   for (const row of db.prepare("SELECT id,image FROM attachments").all()) {
     required.add("uploads/" + row.id + ".bin");
     if (row.image) required.add("uploads/" + row.id + ".jpg");
@@ -179,7 +187,7 @@ export async function storageReport(
     ["database", databaseBytes, policy.databaseWarningBytes],
     [
       "artifacts",
-      sum((path) => new RegExp("^" + uuid + "\\.png$").test(path)),
+      sum((path) => new RegExp("^" + uuid + "\\.(?:png|bin)$").test(path)),
       policy.artifactBytes,
     ],
     [

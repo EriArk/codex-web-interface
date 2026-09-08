@@ -89,6 +89,9 @@ export class Sessions extends EventEmitter {
       runtime.touched = Date.now();
       return runtime.rpc;
     });
+    this.catalog.artifacts.onChange = (threadId, resultId, resultTurn) =>
+      this.emitEvent(threadId, "result.created", { id: resultId }, resultTurn);
+
     this.externalActivity = new ExternalActivity(
       config,
       store,
@@ -1428,6 +1431,7 @@ export class Sessions extends EventEmitter {
       const item = record(p.item),
         id = text(item.id),
         type = text(item.type);
+      this.catalog.artifacts.observe(t, turnId, item);
       for (const imageId of this.catalog.observeImages(t, turnId, item))
         this.emitEvent(t.id, "result.created", { id: imageId, type: "image" }, turnId);
       for (const previewId of this.catalog.previews.observe(t, turnId, item))
@@ -1556,5 +1560,6 @@ export class Sessions extends EventEmitter {
     }
     this.runtimes.clear();
     this.summaries.clear();
+    await this.catalog.artifacts.close();
   }
 }

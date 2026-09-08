@@ -144,9 +144,15 @@ async function tree(root: string, prefix = ""): Promise<string[]> {
 }
 function requiredResults(db: DatabaseSync): string[] {
   const paths: string[] = [];
-  for (const row of db.prepare("SELECT id FROM artifacts").all()) {
+  for (const row of db
+    .prepare(
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='artifact_files'").get()
+        ? "SELECT a.id, CASE WHEN f.id IS NULL THEN '.png' ELSE '.bin' END AS extension FROM artifacts a LEFT JOIN artifact_files f ON f.id=a.id"
+        : "SELECT id, '.png' AS extension FROM artifacts",
+    )
+    .all()) {
     if (!uuid.test(String(row.id))) fail("INVALID_FILE_ID", "Invalid stored artifact identifier");
-    paths.push(String(row.id) + ".png");
+    paths.push(String(row.id) + String(row.extension));
   }
   for (const row of db.prepare("SELECT id,image FROM attachments").all()) {
     if (!uuid.test(String(row.id))) fail("INVALID_FILE_ID", "Invalid stored attachment identifier");

@@ -256,6 +256,19 @@ function Workspace({
   const [results, setResults] = useState<Result[]>([]),
     [activity, setActivity] = useState<Activity[]>([]),
     [activityCursor, setActivityCursor] = useState<number | null>(null);
+  const [resultScope, setResultScope] = useState<"thread" | "project">("thread");
+  const [libraryRevision, setLibraryRevision] = useState(0);
+  const [pendingResultTurn, setPendingResultTurn] = useState<{
+    threadId: string;
+    turnId: string;
+  }>();
+  useEffect(() => {
+    if (resultScope !== "project" || !["results", "chat"].includes(view)) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") setLibraryRevision((v) => v + 1);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [resultScope, view]);
   const [resultCount, setResultCount] = useState(0);
   const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
@@ -643,6 +656,7 @@ function Workspace({
     }
   };
   const showResult = (id: string, category: ResultCategory = "all") => {
+    setResultScope("thread");
     setResultCategory(category);
     setResultFocusVersion((v) => v + 1);
     setRightHidden(false);
@@ -650,12 +664,14 @@ function Workspace({
     setView("results");
   };
   const showTurn = async (id: string) => {
+    const selected = threadId;
     if (!state.messages.some((m) => m.turnId === id)) {
       setNotice("Это сообщение выше в истории. Подгружаем нужный фрагмент…");
       // A bounded context request avoids downloading the whole conversation.
       const context = await api<History>(
         `/threads/${threadId}/history?turnId=${encodeURIComponent(id)}`,
       );
+      if (selectionRef.current.threadId !== selected) return;
       window.dispatchEvent(
         new CustomEvent("codex-focus-history", { detail: { threadId, history: context } }),
       );
@@ -665,6 +681,15 @@ function Workspace({
     setView("chat");
     requestAnimationFrame(() => setFocusTurn(id));
   };
+  // The destination history must mount before fetching an older result's turn context.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: This consumes each explicit navigation once after the selected history loads.
+  useEffect(() => {
+    if (!pendingResultTurn || state.loading || state.thread.id !== pendingResultTurn.threadId)
+      return;
+    const target = pendingResultTurn;
+    setPendingResultTurn(undefined);
+    void showTurn(target.turnId).catch((e) => setNotice(messageOf(e)));
+  }, [pendingResultTurn, state.loading, state.thread.id]);
   const refreshCatalog = useCallback(
     async (force = false) => {
       setSyncing(true);
@@ -1016,15 +1041,58 @@ function Workspace({
             {tab("remote", "Remote", "remote")}
           </div>
           <ResultFeed
-            key={threadId}
-            endpoint={threadId ? "/threads/" + threadId + "/results" : ""}
-            revision={String(state.revision) + ":" + results.map((r) => r.id).join(",")}
+            key={resultScope === "project" ? projectId : threadId}
+            endpoint={
+              resultScope === "project"
+                ? "/projects/" + projectId + "/results"
+                : threadId
+                  ? "/threads/" + threadId + "/results"
+                  : ""
+            }
+            revision={
+              String(state.revision) +
+              ":" +
+              libraryRevision +
+              ":" +
+              results.map((r) => r.id).join(",")
+            }
+            toolbar={
+              <fieldset className="result-scope" aria-label="Область результатов">
+                <button
+                  type="button"
+                  aria-pressed={resultScope === "thread"}
+                  onClick={() => {
+                    setFocusResult("");
+                    setResultScope("thread");
+                  }}
+                >
+                  Диалог
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={resultScope === "project"}
+                  onClick={() => {
+                    setFocusResult("");
+                    setResultScope("project");
+                  }}
+                >
+                  Весь проект
+                </button>
+              </fieldset>
+            }
             onOverlayChange={setResultOverlay}
             visible={view === "results" || view === "chat"}
             focusId={focusResult}
             focusCategory={resultCategory}
             focusVersion={resultFocusVersion}
-            onTurn={(id) => void showTurn(id).catch((e) => setNotice(messageOf(e)))}
+            onTurn={(id, source) => {
+              if (source && source !== threadId) {
+                threadRequest.current++;
+                setThreadId(source);
+                setView("chat");
+                setPendingResultTurn({ threadId: source, turnId: id });
+              } else void showTurn(id).catch((e) => setNotice(messageOf(e)));
+            }}
           />
           <ActivityPane
             items={activity}

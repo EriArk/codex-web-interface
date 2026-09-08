@@ -13,12 +13,19 @@ export function emptyResultCounts(): ResultCounts {
 }
 export interface ResultItem {
   id: string;
+  threadId?: string;
+  threadTitle?: string;
   turnId: string | null;
   title: string;
   type: string;
   createdAt: string;
   payload: {
     text?: string;
+    message?: string;
+    captureId?: string;
+    bytes?: number;
+    sha256?: string;
+    capturedAt?: string;
     url?: string;
     mime?: string;
     width?: number;

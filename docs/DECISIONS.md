@@ -385,3 +385,28 @@ failure/retry, still-running and stopped/idle outcomes appear beside the compose
 Notification navigation keeps its URL until the selected Codex conversation is durably
 saved; selection writes are serialized. GPT persists its existing local selection before
 consuming the URL. Both modes survive an immediate reload without taking a writer.
+
+
+## 2026-09-08 — Immutable project exports and cross-thread Results
+
+Schema 11 adds artifact_files (name, SHA-256, source/turn metadata) and artifact_captures
+(recoverable capture state). Only live completed public assistant file links and structured
+output-file changes create capture requests; no repository scan or automatic historical
+backfill is performed. Explicit links may publish unknown formats as download-only files;
+ambiguous source/config changes alone are not export intent. Secret-like paths and hidden
+directories are excluded. Existing native image and isolated HTML demo workflows remain.
+
+System SSH reads Windows bytes with project containment and rejection of reparse points.
+Linux uses canonical containment, no-follow file opening and a modification check. Each
+file is limited to 32 MiB, with one bounded transfer queue, a 16-request concurrency cap,
+5000 capture records and the existing aggregate artifact quota. Captured bytes are private
+immutable Hub copies; original machine paths stay in private metadata. Failed/interrupted
+copies remain visible and retry reads the current file version, dated at actual capture.
+No prompt is replayed. No software is installed and no public Windows listener is added.
+
+The existing artifact pool, storage reporting, orphan maintenance and backup/restore cover
+both legacy PNGs and new binary copies; maintenance waits while captures are pending.
+The project Results scope reads categorized pages of 20 across that project's chats and
+returns to the originating conversation/turn without acquiring a native writer. Thread
+Results remain the default. Public live Codex commentary uses a modestly stronger text
+contrast in the same theme tokens, as requested by the owner.

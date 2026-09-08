@@ -855,7 +855,7 @@ time {
   margin-left: 34px;
 }
 .commentary-message .message-body {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--ink) 35%, var(--muted));
   font-size: 13px;
 }
 .commentary-message {

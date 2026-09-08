@@ -4,11 +4,12 @@ import {
   type ResultCounts,
   resultCategory,
 } from "@codex-web/shared";
+import { ArtifactCapture } from "./ArtifactCapture";
 import { DownloadLink } from "./DownloadLink";
 import { ResultFilters } from "./ResultFilters";
 import { ResultInspector } from "./ResultInspector";
 import "./resultCategories.css";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -31,6 +32,7 @@ export function Results({
   hasMore,
   onOlder,
   onTurn,
+  toolbar,
 }: {
   focusVersion?: number;
   onRetry?: () => void;
@@ -45,7 +47,8 @@ export function Results({
   busy: boolean;
   hasMore: boolean;
   onOlder: () => void;
-  onTurn?: (id: string) => void;
+  onTurn?: (id: string, threadId?: string) => void;
+  toolbar?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
@@ -81,6 +84,7 @@ export function Results({
         </span>
         {counts.all > 0 && <span className="small muted">{counts.all}</span>}
       </div>
+      {toolbar}
       <ResultFilters
         category={category}
         counts={counts}
@@ -134,7 +138,7 @@ export function Results({
                 <div>
                   <h3>{r.title}</h3>
                   <time>
-                    {new Date(r.createdAt).toLocaleString("ru", {
+                    {new Date(r.payload.capturedAt || r.createdAt).toLocaleString("ru", {
                       day: "numeric",
                       month: "short",
                       hour: "2-digit",
@@ -182,6 +186,22 @@ export function Results({
                   <Icon name="file" /> Открыть файл
                 </button>
               )}
+              {r.type === "artifact" && !r.payload.url && r.payload.captureId && (
+                <ArtifactCapture
+                  id={r.payload.captureId}
+                  status={r.payload.status || "failed"}
+                  onComplete={onRetry}
+                />
+              )}
+              {r.type === "error" && r.payload.message && <p>{r.payload.message}</p>}
+              {r.payload.bytes !== undefined && (
+                <small className="muted result-file-size">
+                  {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
+                    r.payload.bytes / 1024,
+                  )}{" "}
+                  КБ
+                </small>
+              )}
               {r.type === "plan" && (
                 <div className="result-plan">
                   <Markdown
@@ -215,9 +235,10 @@ export function Results({
                 <button
                   type="button"
                   className="result-origin"
-                  onClick={() => onTurn(r.turnId ?? "")}
+                  onClick={() => onTurn(r.turnId ?? "", r.threadId)}
                 >
-                  <Icon name="chat" size={15} />К сообщению
+                  <Icon name="chat" size={15} />
+                  {r.threadTitle || "К сообщению"}
                   <Icon name="chevron" size={14} />
                 </button>
               )}
