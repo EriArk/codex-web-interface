@@ -278,6 +278,12 @@ export type {
   GptProject,
 } from "./gpt.js";
 export * from "./gpt-connection.js";
+export type {
+  InspectRequest,
+  ProjectDiff,
+  ProjectDirectory,
+  ProjectFileEntry,
+  ProjectGit,
+} from "./inspector.js";
 export * from "./results.js";
-
 export * from "./storage.js";

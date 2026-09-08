@@ -24,6 +24,7 @@ import { registerGpt } from "./gpt.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { registerNavigation } from "./navigation.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
+import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
 import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
@@ -570,6 +571,7 @@ export async function createApp(
       .send(image.data);
   });
   registerFilePreviews(app, auth);
+  registerProjectInspector(app, sessions);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));
@@ -645,7 +647,7 @@ export async function createApp(
           theme: z.enum(["organizer", "crt-green", "hitech-2000s", "classic-dark"]).optional(),
           projectId: idSchema.optional(),
           threadId: idSchema.optional(),
-          view: z.enum(["chat", "results", "remote", "activity"]).optional(),
+          view: z.enum(["chat", "results", "remote", "activity", "files"]).optional(),
         })
         .strict()
         .parse(req.body),

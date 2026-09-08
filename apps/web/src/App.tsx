@@ -19,6 +19,7 @@ import { Icon } from "./icons";
 import { Login } from "./Login";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { ProjectDialog } from "./ProjectDialog";
+import { ProjectFiles } from "./ProjectFiles";
 import { ProjectNavigation } from "./ProjectNavigation";
 import { completePendingSend, pendingSendKey } from "./pendingSend";
 import { Remote } from "./Remote";
@@ -256,6 +257,7 @@ function Workspace({
   const [results, setResults] = useState<Result[]>([]),
     [activity, setActivity] = useState<Activity[]>([]),
     [activityCursor, setActivityCursor] = useState<number | null>(null);
+  const [fileFocus, setFileFocus] = useState({ path: "", version: 0, projectId: "" });
   const [resultScope, setResultScope] = useState<"thread" | "project">("thread");
   const [libraryRevision, setLibraryRevision] = useState(0);
   const [pendingResultTurn, setPendingResultTurn] = useState<{
@@ -1037,11 +1039,33 @@ function Workspace({
         <div className="support-pane" id="support-panel">
           <div className="support-tabs">
             {tab("results", "Результаты", "results")}
+            {tab("files", "Файлы", "folder")}
             {tab("activity", "Активность", "activity")}
             {tab("remote", "Remote", "remote")}
           </div>
           <ResultFeed
-            key={resultScope === "project" ? projectId : threadId}
+            onFile={(raw) => {
+              const root = (project?.workingDirectory ?? "")
+                .replaceAll("\\", "/")
+                .replace(/\/$/, "");
+              let path = raw.replaceAll("\\", "/");
+              const matches = /^[A-Za-z]:/.test(root)
+                ? path.toLowerCase().startsWith(root.toLowerCase() + "/")
+                : path.startsWith(root + "/");
+              if (matches) path = path.slice(root.length + 1);
+              if (/^(?:\/|[A-Za-z]:)/.test(path)) {
+                setNotice("Файл находится вне выбранного проекта.");
+                return;
+              }
+              setFileFocus((v) => ({ path, version: v.version + 1, projectId }));
+              setRightHidden(false);
+              setView("files");
+            }}
+            key={
+              resultScope === "project"
+                ? `project-results:${projectId}`
+                : `thread-results:${threadId}`
+            }
             endpoint={
               resultScope === "project"
                 ? "/projects/" + projectId + "/results"
@@ -1093,6 +1117,13 @@ function Workspace({
                 setPendingResultTurn({ threadId: source, turnId: id });
               } else void showTurn(id).catch((e) => setNotice(messageOf(e)));
             }}
+          />
+          <ProjectFiles
+            key={`project-files:${projectId}`}
+            projectId={projectId}
+            visible={view === "files"}
+            focus={fileFocus}
+            onBack={() => setView("chat")}
           />
           <ActivityPane
             items={activity}
@@ -1201,6 +1232,20 @@ function Workspace({
           <Icon name="activity" />
           Активность диалога
         </button>
+        {project && !project.unassigned && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setRightHidden(false);
+              setView("files");
+              setSettings(false);
+            }}
+          >
+            <Icon name="folder" />
+            Файлы и Git проекта
+          </button>
+        )}
         <Notifications visible={settings} />
         <StorageUsage visible={settings} />
         <AccountControls onSession={onSession} onLogout={onLogout} />

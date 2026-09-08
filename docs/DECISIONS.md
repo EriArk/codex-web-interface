@@ -410,3 +410,12 @@ The project Results scope reads categorized pages of 20 across that project's ch
 returns to the originating conversation/turn without acquiring a native writer. Thread
 Results remain the default. Public live Codex commentary uses a modestly stronger text
 contrast in the same theme tokens, as requested by the owner.
+
+
+## Project Files/Git inspection (2026-09-08)
+
+- The owner requested the remaining small workspace modules. #36 adds read-only Files/Git through authenticated project contracts. Global #6 root policy remains deferred; these new reads are scoped to the selected configured project.
+- Directory and Git inspection run as fixed trusted code over existing system SSH into the configured private Windows Node runtime, or locally on Linux. They do not acquire a Codex writer or start Remote. The browser cannot supply a machine, executable, command or absolute root.
+- Directory pages contain up to 100 entries with a 5000-entry scan bound and an explicit search/path control. Parent traversal, symlink/reparse paths and known credential locations are refused; useful `.github` content remains browsable. File reads are limited to 32 MiB and reuse the PWA's closable file/share preview. SSH binary transfer avoids base64 expansion in Hub memory.
+- Git uses the configured environment's system executable outside the project, disables optional locks, fsmonitor, external diffs, text conversion, signatures and pagers. It does not fetch. Status, staged/working/new counts, summary, current branch, cached ahead/behind, 12 commits and a per-file diff are read-only. Diff output is bounded to 256 KiB and visibly marked if truncated. Invalid repository configuration is an error, not a clean/non-repository result.
+- Files is a wide support-pane tab and a secondary Settings screen on compact clients, with direct links from structured Results changes. The existing three mobile bottom tabs stay intact; drafts and running work remain mounted. Captured immutable artifacts stay available separately from the current source file.

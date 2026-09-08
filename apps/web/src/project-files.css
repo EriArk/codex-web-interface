@@ -1,0 +1,154 @@
+.project-files {
+  min-height: 0;
+  background: var(--paper);
+}
+.inspector-heading,
+.inspector-file-title,
+.inspector-actions,
+.inspector-path,
+.inspector-tabs,
+.inspector-git-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inspector-heading {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  min-height: 48px;
+}
+.inspector-heading strong {
+  flex: 1;
+}
+.inspector-tabs {
+  border-bottom: 1px solid var(--line);
+  padding: 0 10px;
+  gap: 4px;
+}
+.inspector-tabs button {
+  min-height: 44px;
+  flex: 1;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+}
+.inspector-tabs button.active {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.inspector-scroll {
+  overflow: auto;
+  min-height: 0;
+  padding: 12px;
+  overscroll-behavior: contain;
+}
+.inspector-path {
+  margin-bottom: 8px;
+}
+.inspector-path input {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  min-height: 44px;
+}
+.inspector-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
+.inspector-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.inspector-entry {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  min-height: 48px;
+  padding: 8px 4px;
+}
+.inspector-entry > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.inspector-entry small,
+.inspector-entry code {
+  color: var(--muted);
+  font-size: 12px;
+}
+.inspector-entry svg {
+  flex-shrink: 0;
+}
+.inspector-selected {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  border-radius: var(--radius);
+}
+.inspector-file-title strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.inspector-actions {
+  flex-wrap: wrap;
+}
+.inspector-actions .secondary {
+  min-height: 44px;
+}
+.inspector-diff {
+  max-height: 48dvh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 4;
+}
+.git-status {
+  white-space: pre;
+  min-width: 2ch;
+}
+.inspector-git-state {
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.inspector-git-state .muted {
+  width: 100%;
+  font-size: 13px;
+}
+.inspector-commits summary {
+  min-height: 44px;
+  padding: 12px 0;
+}
+.inspector-commits ul {
+  list-style: none;
+  padding: 0;
+}
+.inspector-commits li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+.inspector-commits time {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 11px;
+}
+.inspector-commits span {
+  overflow-wrap: anywhere;
+}

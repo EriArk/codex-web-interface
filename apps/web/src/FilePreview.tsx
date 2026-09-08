@@ -20,6 +20,9 @@ export function previewKind(file: File): "image" | "pdf" | "html" | "text" | "ca
   if (
     file.type.startsWith("text/") ||
     textExtensions.test(file.name) ||
+    /^(?:readme|license|licence|copying|makefile|dockerfile|\.gitignore|\.gitattributes|\.editorconfig)$/i.test(
+      file.name,
+    ) ||
     file.type === "application/json"
   )
     return "text";

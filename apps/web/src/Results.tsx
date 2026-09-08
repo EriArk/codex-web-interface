@@ -33,6 +33,7 @@ export function Results({
   onOlder,
   onTurn,
   toolbar,
+  onFile,
 }: {
   focusVersion?: number;
   onRetry?: () => void;
@@ -49,6 +50,7 @@ export function Results({
   onOlder: () => void;
   onTurn?: (id: string, threadId?: string) => void;
   toolbar?: ReactNode;
+  onFile?: (path: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
@@ -228,6 +230,12 @@ export function Results({
                     <CopyButton text={change.diff ?? ""} label="Копировать diff" />
                   </summary>
                   <small className="file-path">{change.path}</small>
+                  {onFile && (
+                    <button type="button" className="secondary" onClick={() => onFile(change.path)}>
+                      <Icon name="file" />
+                      Посмотреть файл
+                    </button>
+                  )}
                   <pre>{change.diff || "Сводка изменений без текстового diff"}</pre>
                 </details>
               ))}

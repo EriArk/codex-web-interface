@@ -39,11 +39,14 @@ export async function readProjectFile(
   machine: MachineConfig,
   root: string,
   input: string,
+  options: { rejectSymlinks?: boolean } = {},
 ): Promise<Buffer> {
   const path = projectFilePath(machine, root, input);
   if (machine.type === "local-linux") {
     const actualRoot = await realpath(root),
       actual = await realpath(path);
+    if (options.rejectSymlinks && (actualRoot !== posix.resolve(root) || actual !== path))
+      throw invalid();
     const relative = posix.relative(actualRoot, actual);
     if (!relative || relative === ".." || relative.startsWith("../") || posix.isAbsolute(relative))
       throw invalid();
@@ -74,7 +77,7 @@ export async function readProjectFile(
     // Reject junctions and symlinks all the way to the volume, including the configured root.
     "$check=$path; while($check){if(([IO.File]::GetAttributes($check) -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'REPARSE_POINT'}; $check=[IO.Path]::GetDirectoryName($check)}",
     "$f=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)",
-    "try {if($f.Length -gt 33554432){throw 'TOO_LARGE'}; $b=New-Object byte[] ([int]$f.Length); $n=0; while($n -lt $b.Length){$read=$f.Read($b,$n,$b.Length-$n); if($read -eq 0){throw 'TRUNCATED'}; $n+=$read}; [Console]::Out.Write([Convert]::ToBase64String($b))} finally {$f.Dispose()}",
+    "try {if($f.Length -gt 33554432){throw 'TOO_LARGE'}; $b=New-Object byte[] ([int]$f.Length); $n=0; while($n -lt $b.Length){$read=$f.Read($b,$n,$b.Length-$n); if($read -eq 0){throw 'TRUNCATED'}; $n+=$read}; [Console]::OpenStandardOutput().Write($b,0,$b.Length)} finally {$f.Dispose()}",
   ].join("; ");
   const child = spawn(
     "ssh",
@@ -98,14 +101,15 @@ export async function readProjectFile(
     { stdio: "pipe", detached: process.platform !== "win32", windowsHide: true },
   );
   return new Promise((resolve, reject) => {
-    let out = "",
+    const chunks: Buffer[] = [];
+    let size = 0,
       done = false;
     const finish = (ok: boolean) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
       stopProcess(child);
-      if (ok && /^[A-Za-z0-9+/]*={0,2}$/.test(out)) resolve(Buffer.from(out, "base64"));
+      if (ok) resolve(Buffer.concat(chunks, size));
       else
         reject(
           new HubError(
@@ -117,8 +121,9 @@ export async function readProjectFile(
     };
     const timer = setTimeout(() => finish(false), 30000);
     child.stdout.on("data", (chunk: Buffer) => {
-      out += chunk.toString("ascii");
-      if (out.length > Math.ceil(PROJECT_FILE_LIMIT / 3) * 4) finish(false);
+      size += chunk.length;
+      if (size > PROJECT_FILE_LIMIT) finish(false);
+      else chunks.push(chunk);
     });
     child.stderr.on("data", () => {});
     child.on("error", () => finish(false));
