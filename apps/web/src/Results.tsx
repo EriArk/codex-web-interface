@@ -4,6 +4,7 @@ import {
   type ResultCounts,
   resultCategory,
 } from "@codex-web/shared";
+import { DownloadLink } from "./DownloadLink";
 import { ResultFilters } from "./ResultFilters";
 import { ResultInspector } from "./ResultInspector";
 import "./resultCategories.css";
@@ -233,9 +234,9 @@ export function Results({
         <div className="image-viewer" role="dialog" aria-modal="true" aria-label="Просмотр снимка">
           <div className="viewer-toolbar">
             <span>{image.title}</span>
-            <a className="secondary" href={image.payload.url} download={image.title}>
+            <DownloadLink className="secondary" href={image.payload.url} name={image.title}>
               Скачать
-            </a>
+            </DownloadLink>
             <button
               type="button"
               className="icon-button"

@@ -16,6 +16,7 @@ import { api, messageOf } from "./api";
 import { ClientPicker } from "./ClientPicker";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
+import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import {
   EntityArchive,
   EntityMenu,
@@ -50,7 +51,7 @@ const Files = memo(function Files({ files }: { files: GptFile[] }) {
   return (
     <div className="gpt-files">
       {files.map((file) => (
-        <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer">
+        <DownloadLink key={file.id} href={file.url} name={file.name} className="gpt-file-download">
           {file.image ? (
             <img src={file.url} alt={file.name} loading="lazy" />
           ) : (
@@ -59,7 +60,7 @@ const Files = memo(function Files({ files }: { files: GptFile[] }) {
               <span>{file.name}</span>
             </>
           )}
-        </a>
+        </DownloadLink>
       ))}
     </div>
   );
@@ -70,14 +71,21 @@ const Text = memo(function Text({ value }: { value: string }) {
       remarkPlugins={[remarkGfm]}
       components={{
         pre: CollapsibleCode,
-        a: ({ node: _node, ...props }) => (
-          <a
-            {...props}
-            className={props.title === "Источник" ? "source-link" : undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-          />
-        ),
+        a: ({ node: _node, ...props }) =>
+          isDownloadUrl(props.href) ? (
+            <DownloadLink href={props.href} className="download-text">
+              {props.children}
+            </DownloadLink>
+          ) : !props.href ? (
+            <span>{props.children}</span>
+          ) : (
+            <a
+              {...props}
+              className={props.title === "Источник" ? "source-link" : undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          ),
       }}
     >
       {value}

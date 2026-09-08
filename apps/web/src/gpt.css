@@ -155,7 +155,8 @@
   gap: 10px;
   margin-top: 10px;
 }
-.gpt-files > a {
+.gpt-files > a,
+.gpt-files > .gpt-file-download {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -165,7 +166,8 @@
   overflow: hidden;
   padding: 10px;
 }
-.gpt-files > a:has(img) {
+.gpt-files > a:has(img),
+.gpt-files > .gpt-file-download:has(img) {
   padding: 0;
 }
 .gpt-files img {

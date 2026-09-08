@@ -1,6 +1,6 @@
 import type { GptConversation, GptFile, GptMessage, GptProject } from "@codex-web/shared";
-
 import { gptLinkedText } from "./gpt-links.js";
+import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 
 type Json = Record<string, any>;
 const record = (value: unknown): Json =>
@@ -45,7 +45,7 @@ export function gptProjects(value: unknown): GptProject[] {
     return gptId(id) && name ? [{ id, name }] : [];
   });
 }
-export function gptHistory(value: unknown): GptMessage[] {
+export function gptHistory(value: unknown, conversationId?: string): GptMessage[] {
   const data = record(value),
     mapping = record(data.mapping),
     nodes: Json[] = [],
@@ -81,7 +81,7 @@ export function gptHistory(value: unknown): GptMessage[] {
       return [];
     if (!["text", "multimodal_text"].includes(content.content_type)) return [];
     const parts = Array.isArray(content.parts) ? content.parts : [];
-    const body = generatedImage
+    let body = generatedImage
       ? ""
       : gptLinkedText(
           parts.filter((part: unknown) => typeof part === "string").join("\n"),
@@ -108,6 +108,15 @@ export function gptHistory(value: unknown): GptMessage[] {
       const pointer = text(p.asset_pointer),
         fileId = pointer.replace(/^(?:sediment|file-service):\/\//, "");
       add({ id: fileId, mime_type: "image/png", size: p.size_bytes, name: "Изображение" });
+    }
+    if (author.role === "assistant") {
+      const linked = gptSandboxFiles(
+        body,
+        conversationId ?? text(data.conversation_id ?? data.id),
+        text(message.id) || text(node.id),
+      );
+      body = linked.text;
+      for (const file of linked.files) files.set(file.id, file);
     }
     return body || files.size
       ? [

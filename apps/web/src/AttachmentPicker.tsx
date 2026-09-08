@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, messageOf } from "./api";
+import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
 import type { Attachment } from "./types";
 export const fileSize = (bytes: number) =>
@@ -164,13 +165,13 @@ export function AttachmentList({
                 </span>
               </button>
             ) : (
-              <a className="attachment-open" href={file.url} download={file.name}>
+              <DownloadLink className="attachment-open" href={file.url} name={file.name}>
                 <Icon name="folder" />
                 <span>
                   {file.name}
                   {file.bytes > 0 && <small>{fileSize(file.bytes)}</small>}
                 </span>
-              </a>
+              </DownloadLink>
             )}
             {onRemove && (
               <button
@@ -189,9 +190,9 @@ export function AttachmentList({
       <dialog className="attachment-preview" ref={dialog} onCancel={() => setPreview(null)}>
         <div className="viewer-toolbar">
           <span>{preview?.name}</span>
-          <a className="secondary" href={preview?.url} download={preview?.name}>
+          <DownloadLink className="secondary" href={preview?.url} name={preview?.name}>
             Скачать
-          </a>
+          </DownloadLink>
           <button
             type="button"
             className="icon-button"

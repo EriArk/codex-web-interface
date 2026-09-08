@@ -90,6 +90,16 @@ const server=createServer(async(req,res)=>{
   }catch{res.writeHead(503).end()}
   return;
  }
+ if(req.method==='GET'&&url.pathname==='/sandbox-file'){
+  const conversationId=url.searchParams.get('conversationId')??'',messageId=url.searchParams.get('messageId')??'',path=url.searchParams.get('path')??'';
+  if(!/^[a-zA-Z0-9_-]{1,100}$/.test(conversationId)||!/^[a-zA-Z0-9_-]{1,100}$/.test(messageId)||!path.startsWith('/mnt/data/')||path.length>2048||/[\\\x00-\x1f\x7f?#%]/.test(path)||path.slice(1).split('/').some(p=>!p||p==='.'||p==='..')){res.writeHead(400).end();return}
+  try{
+   const result=await readAsset(await activePage(),null,{conversationId,messageId,path});
+   if(result.status!==200){res.writeHead(result.status).end();return}
+   res.writeHead(200,{'Content-Type':result.mime}).end(Buffer.from(result.base64,'base64'));
+  }catch{res.writeHead(503).end()}
+  return;
+ }
  if(req.method==='POST'&&url.pathname==='/library'){
   try{
    const input=await readJson(req,4096);

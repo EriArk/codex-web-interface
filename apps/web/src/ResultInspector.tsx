@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { CopyButton } from "./CopyButton";
+import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
 import { PreviewViewer } from "./PreviewViewer";
 import type { Result } from "./types";
@@ -10,7 +11,7 @@ function TextFile({ result }: { result: Result }) {
   useEffect(() => {
     const controller = new AbortController();
     const path = result.payload.url ?? "";
-    if (!/^\/api\/(?:gpt\/(?:assets|results)\/|artifacts\/)[a-zA-Z0-9_-]+$/.test(path)) {
+    if (!isDownloadUrl(path)) {
       setError("Для просмотра скачай файл.");
       return;
     }
@@ -99,9 +100,9 @@ export function ResultInspector({
       ) : result.type === "image" ? (
         <>
           <img className="result-inspector-image" src={result.payload.url} alt={result.title} />
-          <a className="secondary" href={result.payload.url} download={result.title}>
+          <DownloadLink className="secondary" href={result.payload.url} name={result.title}>
             Скачать
-          </a>
+          </DownloadLink>
         </>
       ) : (
         <div className="result-inspector-file">
@@ -109,9 +110,9 @@ export function ResultInspector({
           {/^text\//.test(result.payload.mime ?? "") && (
             <TextFile key={result.id} result={result} />
           )}
-          <a className="secondary" href={result.payload.url} download={result.title}>
+          <DownloadLink className="secondary" href={result.payload.url} name={result.title}>
             Скачать файл
-          </a>
+          </DownloadLink>
         </div>
       )}
     </div>
