@@ -315,3 +315,101 @@
   font-size: 0.75em;
   max-width: 120px;
 }
+
+.notebook-modules {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.notebook-modules button {
+  min-height: 44px;
+  padding: 4px 14px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+}
+.notebook-modules button[aria-pressed="true"] {
+  color: var(--ink);
+  border-bottom: 2px solid var(--accent);
+}
+.task-filter {
+  width: 100%;
+  margin: 4px 0;
+}
+.task-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.task-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 110px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.task-fields :is(select, input) {
+  width: 100%;
+  min-width: 0;
+}
+.notebook-row[data-task="true"] {
+  display: flex;
+  align-items: center;
+}
+.notebook-row .task-complete {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  flex-shrink: 0;
+}
+.notebook-row[data-task="true"] > button:not(.task-complete) {
+  flex: 1;
+  min-width: 0;
+}
+.task-circle {
+  width: 18px;
+  height: 18px;
+  display: block;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+}
+.task-meta {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85em;
+  margin-top: 4px;
+}
+@media (max-width: 700px) {
+  .task-fields label {
+    min-width: 95px;
+  }
+  .task-fields input {
+    font-size: 16px;
+  }
+  .task-fields {
+    gap: 6px;
+  }
+  .notebook-modules {
+    padding: 0 10px;
+  }
+}
+
+@media (max-width: 700px) {
+  .task-fields label:last-child {
+    flex-basis: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .task-fields label:last-child input {
+    max-width: 180px;
+  }
+}

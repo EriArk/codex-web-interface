@@ -266,3 +266,9 @@ not a claim of a completed physical iPhone/iPad acceptance pass.
 - Existing full workspace snapshot/restore test now verifies note bodies/revisions/backlinks and generic pins alongside GPT uploads, HTML previews and native mappings.
 - Chromium/WebKit: phone editor, close/reload draft recovery, Markdown/copy blocks, concurrent edits, lost save acknowledgement/retry, pin navigation, destructive confirmation, unavailable links, landscape/wide geometry, GPT draft preservation and return to the original Codex chat. No thread resume/start or desktop handoff occurs.
 - Production installation is queued behind earlier verified idle deployments; these checks use isolated fixtures, not owner-device acceptance.
+
+## Lightweight Plan module — 2026-09-08
+
+- 202 portable tests: scoped CRUD/search/pagination, priorities, invalid/leap dates, local-date filtering, completion/reopen timestamps, revision conflicts, missing backlinks, auth/CSRF and full snapshot/restore retention.
+- Chromium/WebKit phone/tablet checks cover persisted task drafts and fields, completion/reopen, task pins, Result → task → exact Result navigation, and GPT chat draft continuity. The shared Notes browser regression is also retained.
+- Phone screenshot inspection found a clipped native date field; it now gets a full readable row. Builds and verification run on Linux using isolated fixtures; no owner task is interrupted. Deployment waits for idle after the preceding Notes release.

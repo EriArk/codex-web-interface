@@ -304,3 +304,15 @@ export type {
 export { notebookScopeSchema, notebookTargetSchema, noteWriteSchema } from "./notebook.js";
 export * from "./results.js";
 export * from "./storage.js";
+
+export {
+  type TaskFields,
+  type TaskRecord,
+  type TaskSummary,
+  type TasksPage,
+  type TaskWrite,
+  taskDueSchema,
+  taskFieldsSchema,
+  taskStatusSchema,
+  taskWriteSchema,
+} from "./tasks.js";

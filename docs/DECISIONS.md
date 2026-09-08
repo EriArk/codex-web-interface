@@ -434,3 +434,9 @@ contrast in the same theme tokens, as requested by the owner.
 Notes use schema 12 SQLite records with explicit saves, optimistic revisions and full-content idempotent retries. Global/project scopes work in both client modes. Browser drafts are bounded to 20 and remain separate from chat drafts; storage failure is visible and never silently evicts text. Server conflicts preserve the draft and require a choice.
 
 Generic workspace pins store references to notes, Codex/GPT chats and Results. They do not replace native ChatGPT chat pins. Missing targets stay visible as unavailable references; note text is never cascaded away. Notebook reads/mutations do not contact the GPT connector or load a Codex writer. GPT reference availability is unknown until the owner explicitly opens native history.
+
+## Lightweight project Plan (2026-09-08)
+
+Schema 13 stores owner-authored tasks separately from notes. Both modules share the editor, local draft recovery, explicit save/conflict flow and generic reference model. Tasks add todo/doing/blocked/done, priority 0–2 and an optional validated calendar date. “Today” includes overdue open tasks using the client’s local calendar date; completed items retain their completion timestamp until reopened. Quick status updates are revision-checked and do not replace task text.
+
+Task rows survive project/thread deletion and are part of normal snapshots. There is no automatic retention of completed owner text, native prompt submission, scheduler or full-calendar engine. Additional task context reaches Codex only when the owner explicitly writes a prompt; merely opening Plan never acquires a writer.

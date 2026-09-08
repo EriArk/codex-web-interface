@@ -186,6 +186,15 @@ export const migrations: readonly Migration[] = [
     `);
     },
   },
+  {
+    version: 13,
+    name: "workspace-tasks",
+    up(db) {
+      db.exec(
+        "CREATE TABLE workspace_tasks(id TEXT PRIMARY KEY,scopeKey TEXT NOT NULL,scope TEXT,title TEXT NOT NULL,body TEXT NOT NULL,search TEXT NOT NULL,links TEXT NOT NULL,revision INTEGER NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,status TEXT NOT NULL,priority INTEGER NOT NULL,dueAt TEXT,completedAt INTEGER); CREATE INDEX workspace_tasks_scope ON workspace_tasks(scopeKey,status,priority DESC,updatedAt DESC); CREATE INDEX workspace_tasks_done ON workspace_tasks(status,completedAt DESC)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

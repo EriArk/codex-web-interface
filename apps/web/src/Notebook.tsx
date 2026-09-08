@@ -4,8 +4,10 @@ import type {
   NotebookScope,
   NotebookTarget,
   NoteRecord,
+  NoteSummary,
   NotesPage,
   NoteWrite,
+  TaskFields,
 } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -17,7 +19,12 @@ import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { PinnedList } from "./PinnedList";
 import "./notebook.css";
-export type NotebookRequest = { scope: NotebookScope; target?: NotebookTarget };
+export type NotebookRequest = {
+  scope: NotebookScope;
+  target?: NotebookTarget;
+  mode?: "notes" | "tasks";
+  itemId?: string;
+};
 export type WorkspaceDestination = { target: NotebookLink; version: number };
 export const notebookKey = (scope: NotebookScope) =>
   scope ? `${scope.client}:${scope.projectId}` : "global";
@@ -25,9 +32,9 @@ export function cleanTarget(t: NotebookTarget): NotebookTarget {
   const { client, kind, id, title, projectId, threadId, turnId } = t;
   return { client, kind, id, title, projectId, threadId, turnId };
 }
-type Draft = NoteWrite & { id: string; changedAt: number; createdAt?: number; savedAt?: number };
-const prefix = "workspace-note-draft:";
-const drafts = (): Draft[] => {
+type Draft = NoteWrite &
+  Partial<TaskFields> & { id: string; changedAt: number; createdAt?: number; savedAt?: number };
+const drafts = (prefix: string): Draft[] => {
   const rows: Draft[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -46,26 +53,51 @@ const drafts = (): Draft[] => {
   }
   return rows.sort((a, b) => b.changedAt - a.changedAt);
 };
-const payload = (d: NoteWrite): NoteWrite => ({
-  scope: d.scope,
-  title: d.title,
-  body: d.body,
-  links: d.links.map(cleanTarget),
-  revision: d.revision,
-});
 export function NotebookPanel({
   request,
   onClose,
   onOpen,
+  onRequest,
 }: {
   request: NotebookRequest | undefined;
   onClose: () => void;
   onOpen: (target: NotebookLink) => void;
+  onRequest: (request: NotebookRequest) => void;
 }) {
+  const isTask = request?.mode === "tasks",
+    base = `/workspace/${isTask ? "tasks" : "notes"}`,
+    prefix = isTask ? "workspace-task-draft:" : "workspace-note-draft:";
+  const labels = {
+    title: isTask ? "План" : "Заметки и ссылки",
+    item: isTask ? "задача" : "заметка",
+    plural: isTask ? "задачи" : "заметки",
+    genitive: isTask ? "задач" : "заметок",
+  };
+  const [filter, setFilter] = useState("open");
+  const today = new Date(),
+    day = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, "0"),
+      String(today.getDate()).padStart(2, "0"),
+    ].join("-");
+  const taskQuery = isTask ? `&filter=${filter}&today=${day}` : "";
+  const payload = (d: NoteWrite & Partial<TaskFields>): NoteWrite & Partial<TaskFields> => ({
+    scope: d.scope,
+    title: d.title,
+    body: d.body,
+    links: d.links.map(cleanTarget),
+    revision: d.revision,
+    ...(isTask
+      ? { status: d.status ?? "todo", priority: d.priority ?? 1, dueAt: d.dueAt ?? null }
+      : {}),
+  });
   const dialog = useRef<HTMLDialogElement>(null),
     [scope, setScope] = useState("all"),
     [query, setQuery] = useState(""),
-    [page, setPage] = useState<NotesPage>({ items: [], nextOffset: null }),
+    [page, setPage] = useState<{
+      items: (NoteSummary & Partial<TaskFields>)[];
+      nextOffset: number | null;
+    }>({ items: [], nextOffset: null }),
     [pins, setPins] = useState<{ items: NotebookPin[]; nextOffset: number | null }>({
       items: [],
       nextOffset: null,
@@ -90,17 +122,17 @@ export function NotebookPanel({
   active.current = !!request;
   const refreshDrafts = useCallback(() => {
     try {
-      setLocal(drafts());
+      setLocal(drafts(prefix));
     } catch {
       setStorageError("Не удалось прочитать черновики на этом устройстве.");
     }
-  }, []);
+  }, [prefix]);
   const keep = (d: Draft) => {
     setEdit(d);
     setDirty(true);
     setStatus("");
     try {
-      if (!localStorage.getItem(prefix + d.id) && drafts().length >= 20)
+      if (!localStorage.getItem(prefix + d.id) && drafts(prefix).length >= 20)
         throw Error("Сохрани или удали один из 20 черновиков, чтобы освободить место.");
       localStorage.setItem(prefix + d.id, JSON.stringify(d));
       setStorageError("");
@@ -109,7 +141,7 @@ export function NotebookPanel({
       setStorageError(
         e instanceof Error && e.message.startsWith("Сохрани")
           ? e.message
-          : "Браузер не сохранил черновик. Сохрани заметку на сервер или скопируй текст перед закрытием.",
+          : "Браузер не сохранил черновик. Сохрани на сервер или скопируй текст перед закрытием.",
       );
     }
   };
@@ -142,7 +174,8 @@ export function NotebookPanel({
   useEffect(() => {
     const clear = () => {
       try {
-        for (const d of drafts()) localStorage.removeItem(prefix + d.id);
+        for (const key of ["workspace-note-draft:", "workspace-task-draft:"])
+          for (const d of drafts(key)) localStorage.removeItem(key + d.id);
       } catch {}
       setEdit(null);
       setLocal([]);
@@ -158,6 +191,7 @@ export function NotebookPanel({
     setEdit(null);
     setScope(notebookKey(request.scope));
     setQuery("");
+    setFilter("open");
     setError("");
     setStatus("");
     refreshDrafts();
@@ -177,7 +211,7 @@ export function NotebookPanel({
     const timer = setTimeout(() => {
       void Promise.all([
         api<NotesPage>(
-          `/workspace/notes?scope=${encodeURIComponent(scope)}&q=${encodeURIComponent(query)}`,
+          `${base}?scope=${encodeURIComponent(scope)}&q=${encodeURIComponent(query)}${taskQuery}`,
           { signal: controller.signal },
         ),
         api<typeof pins>(`/workspace/pins?scope=${encodeURIComponent(scope)}`, {
@@ -201,7 +235,7 @@ export function NotebookPanel({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [request, scope, query, revision]);
+  }, [request, scope, query, revision, base, taskQuery]);
   useEffect(() => {
     if (!request) return;
     const refresh = () => {
@@ -239,7 +273,7 @@ export function NotebookPanel({
     try {
       let cached: Draft | undefined;
       try {
-        cached = drafts().find((d) => d.id === id);
+        cached = drafts(prefix).find((d) => d.id === id);
       } catch {
         /* Server notes remain readable without browser storage. */
       }
@@ -247,7 +281,7 @@ export function NotebookPanel({
         select(cached, true);
         return;
       }
-      const note = await api<NoteRecord>(`/workspace/notes/${id}`);
+      const note = await api<NoteRecord>(`${base}/${id}`);
       if (g === generation.current && active.current)
         select(
           {
@@ -274,6 +308,7 @@ export function NotebookPanel({
       body: "",
       links: request?.target ? [cleanTarget(request.target)] : [],
       changedAt: Date.now(),
+      ...(isTask ? { status: "todo" as const, priority: 1, dueAt: null } : {}),
     };
     select(d, true);
     keep(d);
@@ -294,7 +329,7 @@ export function NotebookPanel({
     }
     await operation(async () => {
       try {
-        const value = await api<NoteRecord>(`/workspace/notes/${d.id}`, {
+        const value = await api<NoteRecord>(`${base}/${d.id}`, {
           method: "PUT",
           body: payload(d),
         });
@@ -321,10 +356,10 @@ export function NotebookPanel({
           e.status === 409
         ) {
           setError(e.message);
-          if (e.code === "NOTE_DELETED") setDeleted(true);
-          else if (e.code === "NOTE_CONFLICT") {
+          if (e.code === "NOTE_DELETED" || e.code === "TASK_DELETED") setDeleted(true);
+          else if (e.code === "NOTE_CONFLICT" || e.code === "TASK_CONFLICT") {
             try {
-              const current = await api<NoteRecord>(`/workspace/notes/${d.id}`);
+              const current = await api<NoteRecord>(`${base}/${d.id}`);
               if (g === generation.current) setConflict(current);
             } catch (readError) {
               if (g === generation.current) {
@@ -349,7 +384,7 @@ export function NotebookPanel({
       }
     });
   const open = async (t: NotebookTarget) => {
-    if (t.kind === "note") {
+    if (t.kind === (isTask ? "task" : "note")) {
       await load(t.id);
       return;
     }
@@ -364,6 +399,28 @@ export function NotebookPanel({
       onOpen(target);
     });
   };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit bookmarked item is opened once per panel request.
+  useEffect(() => {
+    if (request?.itemId) void load(request.itemId);
+  }, [request]);
+  const changeStatus = (n: NoteSummary & Partial<TaskFields>) =>
+    operation(async () => {
+      await api(`${base}/${n.id}/status`, {
+        method: "PATCH",
+        body: { revision: n.revision, status: n.status === "done" ? "todo" : "done" },
+      });
+      setRevision((v) => v + 1);
+      if (edit?.id === n.id && !dirty) {
+        const value = await api<NoteRecord>(`${base}/${n.id}`);
+        setEdit({
+          ...payload(value),
+          id: value.id,
+          changedAt: value.updatedAt,
+          createdAt: value.createdAt,
+          savedAt: value.updatedAt,
+        });
+      }
+    });
   if (!request) return null;
   const scopes = new Map<string, NotebookScope>([["global", null]]);
   if (request.scope) scopes.set(notebookKey(request.scope), request.scope);
@@ -382,7 +439,7 @@ export function NotebookPanel({
     <dialog
       ref={dialog}
       className="notebook-dialog"
-      aria-label="Заметки и ссылки"
+      aria-label={labels.title}
       tabIndex={-1}
       onCancel={(e) => {
         e.preventDefault();
@@ -391,17 +448,35 @@ export function NotebookPanel({
     >
       <header className="notebook-heading">
         <Icon name="file" />
-        <strong>Заметки и ссылки</strong>
+        <strong>{labels.title}</strong>
         <button
           type="button"
           className="icon-button"
           disabled={busy}
-          aria-label="Закрыть заметки"
+          aria-label={isTask ? "Закрыть план" : "Закрыть заметки"}
           onClick={onClose}
         >
           <Icon name="close" />
         </button>
       </header>
+      <div className="notebook-modules">
+        <button
+          type="button"
+          aria-pressed={!isTask}
+          disabled={busy}
+          onClick={() => onRequest({ ...request, mode: "notes", itemId: undefined })}
+        >
+          Заметки
+        </button>
+        <button
+          type="button"
+          aria-pressed={isTask}
+          disabled={busy}
+          onClick={() => onRequest({ ...request, mode: "tasks", itemId: undefined })}
+        >
+          План
+        </button>
+      </div>
       {(error || storageError) && (
         <div className="notice" role="alert">
           {error}
@@ -414,15 +489,15 @@ export function NotebookPanel({
         </p>
       )}
       <div className="notebook-layout" data-editing={!!edit}>
-        <aside className="notebook-list" aria-label="Список заметок">
+        <aside className="notebook-list" aria-label={isTask ? "Список задач" : "Список заметок"}>
           <div className="notebook-controls">
             <select
-              aria-label="Область заметок"
+              aria-label={isTask ? "Область задач" : "Область заметок"}
               value={scope}
               disabled={busy}
               onChange={(e) => setScope(e.target.value)}
             >
-              <option value="all">Все заметки</option>
+              <option value="all">{isTask ? "Все проекты" : "Все заметки"}</option>
               {[...scopes].map(([key, s]) => (
                 <option key={key} value={key}>
                   {s ? `${s.name} · ${s.client === "gpt" ? "GPT" : "Codex"}` : "Общие"}
@@ -433,7 +508,7 @@ export function NotebookPanel({
               type="button"
               className="icon-button"
               disabled={busy}
-              aria-label="Новая заметка"
+              aria-label={isTask ? "Новая задача" : "Новая заметка"}
               onClick={create}
             >
               <Icon name="plus" />
@@ -441,12 +516,28 @@ export function NotebookPanel({
           </div>
           <input
             type="search"
-            aria-label="Найти заметку"
-            placeholder="Найти заметку…"
+            aria-label={isTask ? "Найти задачу" : "Найти заметку"}
+            placeholder={isTask ? "Найти задачу…" : "Найти заметку…"}
             maxLength={200}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {isTask && (
+            <select
+              className="task-filter"
+              aria-label="Состояние задач"
+              value={filter}
+              disabled={busy}
+              onChange={(e) => setFilter(e.target.value)}
+            >
+              <option value="open">Открытые</option>
+              <option value="today">На сегодня</option>
+              <option value="doing">В работе</option>
+              <option value="blocked">Заблокировано</option>
+              <option value="done">Выполнено</option>
+              <option value="all">Все</option>
+            </select>
+          )}
           {request.target && (
             <button
               type="button"
@@ -506,7 +597,7 @@ export function NotebookPanel({
             </button>
           )}
           {filteredDrafts.length > 0 && (
-            <section aria-label="Черновики заметок">
+            <section aria-label={isTask ? "Черновики задач" : "Черновики заметок"}>
               <h3>Черновики</h3>
               {filteredDrafts.map((d) => (
                 <div className="notebook-row" key={d.id}>
@@ -524,15 +615,48 @@ export function NotebookPanel({
             </p>
           )}
           {page.items.map((n) => (
-            <div className="notebook-row" key={n.id} data-selected={edit?.id === n.id}>
+            <div
+              className="notebook-row"
+              key={n.id}
+              data-selected={edit?.id === n.id}
+              data-task={isTask}
+            >
+              {isTask && (
+                <button
+                  type="button"
+                  className="icon-button task-complete"
+                  aria-label={`${n.status === "done" ? "Вернуть в работу" : "Завершить"}: ${n.title}`}
+                  disabled={busy || (edit?.id === n.id && dirty)}
+                  onClick={() => void changeStatus(n)}
+                >
+                  {n.status === "done" ? <Icon name="check" /> : <span className="task-circle" />}
+                </button>
+              )}
               <button type="button" disabled={busy} onClick={() => void load(n.id)}>
                 <b>{n.title}</b>
-                <small>{n.excerpt || n.scope?.name || "Общая заметка"}</small>
+                {isTask && (
+                  <span className="task-meta">
+                    {n.status === "doing"
+                      ? "В работе"
+                      : n.status === "blocked"
+                        ? "Заблокировано"
+                        : n.status === "done"
+                          ? "Выполнено"
+                          : "Открыта"}
+                    {n.priority === 2 ? " · Важно" : ""}
+                    {n.dueAt ? ` · ${n.dueAt}` : ""}
+                  </span>
+                )}
+                <small>
+                  {n.excerpt || n.scope?.name || (isTask ? "Общая задача" : "Общая заметка")}
+                </small>
               </button>
             </div>
           ))}
           {!loading && !page.items.length && !filteredDrafts.length && (
-            <p className="muted">Пока нет заметок.</p>
+            <p className="muted">
+              {isTask ? "Задач в этом списке пока нет." : "Пока нет заметок."}
+            </p>
           )}
           {page.nextOffset !== null && (
             <button
@@ -542,7 +666,7 @@ export function NotebookPanel({
               onClick={() =>
                 void operation(async () => {
                   const next = await api<NotesPage>(
-                    `/workspace/notes?scope=${encodeURIComponent(scope)}&q=${encodeURIComponent(query)}&offset=${page.nextOffset}`,
+                    `${base}?scope=${encodeURIComponent(scope)}&q=${encodeURIComponent(query)}&offset=${page.nextOffset}${taskQuery}`,
                   );
                   setPage((old) => ({
                     items: [...old.items, ...next.items],
@@ -551,17 +675,20 @@ export function NotebookPanel({
                 })
               }
             >
-              Ещё заметки
+              {isTask ? "Ещё задачи" : "Ещё заметки"}
             </button>
           )}
         </aside>
-        <section className="notebook-editor" aria-label="Редактор заметки">
+        <section
+          className="notebook-editor"
+          aria-label={isTask ? "Редактор задачи" : "Редактор заметки"}
+        >
           {!edit ? (
             <div className="notebook-empty">
               <Icon name="file" size={40} />
-              <p>Идеи, решения и контекст проектов.</p>
+              <p>{isTask ? "Что нужно сделать дальше?" : "Идеи, решения и контекст проектов."}</p>
               <button type="button" className="primary" onClick={create}>
-                Создать заметку
+                {isTask ? "Создать задачу" : "Создать заметку"}
               </button>
             </div>
           ) : (
@@ -571,7 +698,7 @@ export function NotebookPanel({
                   type="button"
                   className="icon-button notebook-back"
                   disabled={busy}
-                  aria-label="К списку заметок"
+                  aria-label={isTask ? "К списку задач" : "К списку заметок"}
                   onClick={() => {
                     generation.current++;
                     setEdit(null);
@@ -583,28 +710,31 @@ export function NotebookPanel({
                   <Icon name="back" />
                 </button>
                 <select
-                  aria-label="Проект заметки"
+                  aria-label={isTask ? "Проект задачи" : "Проект заметки"}
                   disabled={busy}
                   value={notebookKey(edit.scope)}
                   onChange={(e) => change({ scope: scopes.get(e.target.value) ?? null })}
                 >
                   {[...scopes].map(([key, s]) => (
                     <option key={key} value={key}>
-                      {s ? s.name : "Общая заметка"}
+                      {s ? s.name : isTask ? "Общая задача" : "Общая заметка"}
                     </option>
                   ))}
                 </select>
-                <CopyButton text={edit.body} label="Копировать заметку" />
+                <CopyButton
+                  text={edit.body}
+                  label={isTask ? "Копировать задачу" : "Копировать заметку"}
+                />
                 <button
                   type="button"
                   className="icon-button"
                   disabled={busy || !edit.revision}
-                  aria-label="Закрепить заметку"
+                  aria-label={isTask ? "Закрепить задачу" : "Закрепить заметку"}
                   onClick={() =>
                     void pin(
                       {
                         client: edit.scope?.client ?? "codex",
-                        kind: "note",
+                        kind: isTask ? "task" : "note",
                         id: edit.id,
                         title: edit.title,
                       },
@@ -617,13 +747,54 @@ export function NotebookPanel({
               </div>
               <input
                 className="notebook-title"
-                aria-label="Название заметки"
+                aria-label={isTask ? "Название задачи" : "Название заметки"}
                 placeholder="Название"
                 maxLength={120}
                 value={edit.title}
                 disabled={busy}
                 onChange={(e) => change({ title: e.target.value })}
               />
+              {isTask && (
+                <div className="task-fields">
+                  <label>
+                    Статус
+                    <select
+                      aria-label="Статус задачи"
+                      value={edit.status ?? "todo"}
+                      disabled={busy}
+                      onChange={(e) => change({ status: e.target.value as TaskFields["status"] })}
+                    >
+                      <option value="todo">Открыта</option>
+                      <option value="doing">В работе</option>
+                      <option value="blocked">Заблокировано</option>
+                      <option value="done">Выполнено</option>
+                    </select>
+                  </label>
+                  <label>
+                    Приоритет
+                    <select
+                      aria-label="Приоритет задачи"
+                      value={edit.priority ?? 1}
+                      disabled={busy}
+                      onChange={(e) => change({ priority: Number(e.target.value) })}
+                    >
+                      <option value={0}>Низкий</option>
+                      <option value={1}>Обычный</option>
+                      <option value={2}>Высокий</option>
+                    </select>
+                  </label>
+                  <label>
+                    До
+                    <input
+                      type="date"
+                      aria-label="Срок задачи"
+                      value={edit.dueAt ?? ""}
+                      disabled={busy}
+                      onChange={(e) => change({ dueAt: e.target.value || null })}
+                    />
+                  </label>
+                </div>
+              )}
               <div className="notebook-mode">
                 <button type="button" aria-pressed={!preview} onClick={() => setPreview(false)}>
                   Текст
@@ -647,13 +818,13 @@ export function NotebookPanel({
                       ),
                     }}
                   >
-                    {edit.body || "*Пустая заметка*"}
+                    {edit.body || (isTask ? "*Без описания*" : "*Пустая заметка*")}
                   </Markdown>
                 </div>
               ) : (
                 <textarea
                   className="notebook-body"
-                  aria-label="Текст заметки"
+                  aria-label={isTask ? "Описание задачи" : "Текст заметки"}
                   placeholder="Запиши важное…"
                   maxLength={65536}
                   value={edit.body}
@@ -735,7 +906,8 @@ export function NotebookPanel({
               {confirmDelete ? (
                 <div className="notice" role="alert">
                   <p>
-                    Удалить {edit.revision ? "заметку" : "черновик"} «{edit.title || "Без названия"}
+                    Удалить {edit.revision ? (isTask ? "задачу" : "заметку") : "черновик"} «
+                    {edit.title || "Без названия"}
                     »?
                   </p>
                   <button
@@ -754,7 +926,7 @@ export function NotebookPanel({
                       void operation(async () => {
                         const id = edit.id;
                         if (edit.revision)
-                          await api(`/workspace/notes/${id}`, {
+                          await api(`${base}/${id}`, {
                             method: "DELETE",
                             body: { revision: edit.revision, confirm: true },
                           });
@@ -774,7 +946,7 @@ export function NotebookPanel({
                     type="button"
                     className="icon-button danger"
                     disabled={busy}
-                    aria-label="Удалить заметку"
+                    aria-label={isTask ? "Удалить задачу" : "Удалить заметку"}
                     onClick={() => setConfirmDelete(true)}
                   >
                     <Icon name="trash" />

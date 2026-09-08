@@ -691,6 +691,14 @@ function Workspace({
     setView("results");
   };
   const openNotebookTarget = (target: NotebookLink) => {
+    if (target.kind === "note" || target.kind === "task") {
+      setNotebook({
+        scope: notebook?.scope ?? null,
+        mode: target.kind === "task" ? "tasks" : "notes",
+        itemId: target.id,
+      });
+      return;
+    }
     setNotebook(undefined);
     if (target.client === "gpt") {
       setWorkspaceDestination({ target, version: Date.now() });
@@ -733,12 +741,14 @@ function Workspace({
       request={notebook}
       onClose={() => setNotebook(undefined)}
       onOpen={openNotebookTarget}
+      onRequest={setNotebook}
     />
   );
-  const openNotebook = () => {
+  const openNotebook = (mode: "notes" | "tasks" = "notes") => {
     setDrawer(false);
     setSettings(false);
     setNotebook({
+      mode,
       scope:
         project && !project.unassigned
           ? { client: "codex", projectId: project.id, name: project.name }
@@ -884,7 +894,8 @@ function Workspace({
       loading={!initialized || syncing}
       machine={machine}
       onExpand={expandProject}
-      onNotebook={openNotebook}
+      onNotebook={() => openNotebook()}
+      onPlan={() => openNotebook("tasks")}
       onThread={selectThread}
       onNewThread={newThread}
       onNewProject={() => {

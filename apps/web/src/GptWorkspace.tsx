@@ -579,10 +579,10 @@ export function GptWorkspace({
         : undefined,
     };
   };
-  const openNotebook = () => {
+  const openNotebook = (mode: "notes" | "tasks" = "notes") => {
     setDrawer(false);
     setSettings(false);
-    onNotebook?.(notebookContext());
+    onNotebook?.({ ...notebookContext(), mode });
   };
   const send = async () => {
     if (sending.current || uploading || !model || (!text.trim() && !files.length)) return;
@@ -1082,9 +1082,15 @@ export function GptWorkspace({
       </button>
       <EntityArchive client="gpt" />
       {onNotebook && (
-        <button type="button" className="nav-new-thread" onClick={openNotebook}>
+        <button type="button" className="nav-new-thread" onClick={() => openNotebook()}>
           <Icon name="file" />
           Заметки и ссылки
+        </button>
+      )}
+      {onNotebook && (
+        <button type="button" className="nav-new-thread" onClick={() => openNotebook("tasks")}>
+          <Icon name="check" />
+          План
         </button>
       )}
       <a className="nav-new-thread" href="/gpt-connect">
