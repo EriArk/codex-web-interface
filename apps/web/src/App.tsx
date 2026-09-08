@@ -665,6 +665,7 @@ function Workspace({
     const data = await api<{ threads: Thread[]; warning?: string }>(`/projects/${id}/threads`);
     setThreadGroups((groups) => ({ ...groups, [id]: data.threads }));
     if (data.warning) setNotice(data.warning);
+    return data.threads;
   }, []);
   const resume = async (): Promise<RecoveryOutcome> => {
     if (busy) return { ok: false, message: "Дождись завершения текущего действия." };

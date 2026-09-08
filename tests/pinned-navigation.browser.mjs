@@ -16,6 +16,7 @@ const items = Array.from({ length: 6 }, (_, i) => ({
   updatedAt: 10 + i,
 }));
 items.push({ id: "live", title: "Активный без закрепления", pinned: false, updatedAt: 50 });
+items.push({ id: "inactive", title: "Обычный неактивный", pinned: false, updatedAt: 60 });
 const server = createServer(async (req, res) => {
   const path = new URL(req.url, "http://fixture").pathname;
   const json = (data) => {
@@ -61,6 +62,15 @@ const server = createServer(async (req, res) => {
   if (path === "/api/gpt/jobs")
     return json({
       items: [
+        {
+          id: "pending-new",
+          status: "queued",
+          text: "Новая ожидающая отправка",
+          files: [],
+          assets: [],
+          createdAt: 51,
+          updatedAt: 51,
+        },
         {
           id: "job",
           nativeId: "live",
@@ -131,7 +141,23 @@ try {
           .getByRole("button", { name: /^Активный без закрепления/ })
           .filter({ visible: true });
         await expect(live).toBeVisible();
-        assert((await live.boundingBox()).y < (await panel.boundingBox()).y);
+        if (mode === "gpt") {
+          assert(
+            (await live.boundingBox()).y >=
+              (await panel.boundingBox()).y + (await panel.boundingBox()).height,
+          );
+          const pending = page
+            .getByRole("button", { name: /^Новая ожидающая отправка/ })
+            .filter({ visible: true });
+          assert(
+            (await pending.boundingBox()).y >=
+              (await panel.boundingBox()).y + (await panel.boundingBox()).height,
+          );
+          const inactive = page
+            .getByRole("button", { name: "Обычный неактивный", exact: true })
+            .filter({ visible: true });
+          assert((await live.boundingBox()).y < (await inactive.boundingBox()).y);
+        } else assert((await live.boundingBox()).y < (await panel.boundingBox()).y);
         await panel.getByRole("button", { name: "Показать все закреплённые" }).tap();
         await expect(panel.locator(".entity-row")).toHaveCount(6);
         await page.reload();

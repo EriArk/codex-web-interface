@@ -29,12 +29,16 @@ export function EntityMenu({
   active = false,
   outbox = false,
   onDone,
+  onNewThread,
+  newThreadDisabled = false,
 }: {
   client: "codex" | "gpt";
   entity: LibraryEntity;
   active?: boolean;
   outbox?: boolean;
   onDone?: () => void;
+  onNewThread?: () => void;
+  newThreadDisabled?: boolean;
 }) {
   const [page, setPage] = useState<"menu" | "rename" | "delete" | null>(null),
     [name, setName] = useState(entity.name),
@@ -142,6 +146,19 @@ export function EntityMenu({
             </div>
             {page === "menu" ? (
               <div className="entity-actions">
+                {client === "codex" && entity.kind === "project" && onNewThread && (
+                  <button
+                    type="button"
+                    disabled={busy || newThreadDisabled}
+                    onClick={() => {
+                      setPage(null);
+                      onNewThread();
+                    }}
+                  >
+                    <Icon name="plus" />
+                    Новый чат
+                  </button>
+                )}
                 {!outbox && (
                   <>
                     <button
