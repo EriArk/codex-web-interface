@@ -1,0 +1,386 @@
+import type {
+  NotebookLink,
+  NotebookScope,
+  NotebookTarget,
+  ProjectOverview as Overview,
+  OverviewThread,
+} from "@codex-web/shared";
+import { useEffect, useRef, useState } from "react";
+import { ActivityBadge } from "./ActivityBadge";
+import { api, messageOf } from "./api";
+import { Icon } from "./icons";
+import { cleanTarget, type NotebookRequest } from "./Notebook";
+import { PinnedList } from "./PinnedList";
+import "./project-overview.css";
+export function ProjectOverview({
+  scope,
+  onTarget,
+  onNotebook,
+  onNew,
+  onFiles,
+  onMachines,
+  onResults,
+  onRemote,
+  cachedThreads,
+}: {
+  scope: Exclude<NotebookScope, null>;
+  onTarget: (t: NotebookLink) => void;
+  onNotebook: (r: NotebookRequest) => void;
+  onNew?: () => void;
+  onFiles?: () => void;
+  onMachines?: () => void;
+  onResults?: () => void;
+  onRemote?: () => void;
+  cachedThreads?: OverviewThread[];
+}) {
+  const [data, setData] = useState<Overview | null>(null),
+    [error, setError] = useState(""),
+    [revision, setRevision] = useState(0),
+    [opening, setOpening] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh repeats a bounded cached overview read.
+  useEffect(() => {
+    const controller = new AbortController();
+    let busy = false;
+    setData(null);
+    setError("");
+    const refresh = async () => {
+      if (busy || document.hidden) return;
+      busy = true;
+      try {
+        const value = await api<Overview>(
+          `/workspace/overview?client=${scope.client}&projectId=${encodeURIComponent(scope.projectId)}`,
+          { signal: controller.signal },
+        );
+        if (!controller.signal.aborted) setData(value);
+      } catch (e) {
+        if (!controller.signal.aborted) setError(messageOf(e));
+      } finally {
+        busy = false;
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 30000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [scope.client, scope.projectId, revision]);
+  const pendingOpen = useRef<AbortController | null>(null);
+  useEffect(() => () => pendingOpen.current?.abort(), []);
+  const open = async (target: NotebookTarget) => {
+    if (opening) return;
+    const controller = new AbortController();
+    pendingOpen.current = controller;
+    setOpening(true);
+    setError("");
+    try {
+      const resolved = await api<NotebookLink>("/workspace/resolve", {
+        method: "POST",
+        body: cleanTarget(target),
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      if (resolved.availability === "missing")
+        throw Error("Источник удалён или недоступен. Ссылка сохранена.");
+      onTarget(resolved);
+    } catch (e) {
+      if (!controller.signal.aborted) setError(messageOf(e));
+    } finally {
+      if (!controller.signal.aborted) setOpening(false);
+    }
+  };
+  const threads = cachedThreads ?? data?.threads ?? [],
+    date = (time: number) =>
+      new Date(time).toLocaleString("ru", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+  return (
+    <section className="project-overview pane" aria-label={`Обзор проекта ${scope.name}`}>
+      <header className="project-overview-heading">
+        <div>
+          <small>Обзор проекта</small>
+          <h1>{scope.name}</h1>
+        </div>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Обновить обзор проекта"
+          onClick={() => setRevision((v) => v + 1)}
+        >
+          <Icon name="refresh" />
+        </button>
+      </header>
+      <div className="project-overview-scroll">
+        {error && (
+          <p className="notice" role="alert">
+            {error}
+          </p>
+        )}
+        {!data && !error && (
+          <p role="status">
+            <span className="spinner" /> Загружаю…
+          </p>
+        )}
+        {data && (
+          <div className="project-overview-grid">
+            <section className="overview-card overview-continue" aria-label="Продолжить работу">
+              <header>
+                <h2>Продолжить</h2>
+                {data.activity && (
+                  <ActivityBadge active={data.activity.active} unread={data.activity.unread} />
+                )}
+              </header>
+              {threads.slice(0, 4).map((t) => (
+                <button
+                  type="button"
+                  className="overview-row"
+                  key={t.id}
+                  disabled={opening}
+                  onClick={() =>
+                    void open({
+                      client: scope.client,
+                      kind: "thread",
+                      id: t.id,
+                      threadId: t.id,
+                      projectId: scope.projectId,
+                      title: t.title,
+                    })
+                  }
+                >
+                  <Icon name="chat" />
+                  <span>
+                    {t.title}
+                    {t.status === "unknown" && <small>Статус неизвестен</small>}
+                  </span>
+                  <ActivityBadge
+                    active={Number(t.active)}
+                    unread={Number(t.unread)}
+                    waiting={Number(t.status === "waiting_approval")}
+                  />
+                  <Icon name="chevron" size={15} />
+                </button>
+              ))}
+              {!threads.length && <p className="muted">Пока нет диалогов.</p>}
+              {onNew && (
+                <button type="button" className="secondary" onClick={onNew}>
+                  <Icon name="plus" />
+                  Новый диалог
+                </button>
+              )}
+            </section>
+            <section className="overview-card" aria-label="Текущие задачи">
+              <header>
+                <h2>Дальше по плану</h2>
+                <button type="button" onClick={() => onNotebook({ scope, mode: "tasks" })}>
+                  План <Icon name="chevron" size={14} />
+                </button>
+              </header>
+              {data.tasks.map((t) => (
+                <button
+                  type="button"
+                  className="overview-row"
+                  key={t.id}
+                  disabled={opening}
+                  onClick={() => onNotebook({ scope, mode: "tasks", itemId: t.id })}
+                >
+                  <span className="task-circle" />
+                  <span>
+                    {t.title}
+                    <small>
+                      {t.status === "doing"
+                        ? "В работе"
+                        : t.status === "blocked"
+                          ? "Заблокировано"
+                          : t.priority === 2
+                            ? "Высокий приоритет"
+                            : "Открыта"}
+                      {t.dueAt ? ` · ${t.dueAt}` : ""}
+                    </small>
+                  </span>
+                </button>
+              ))}
+              {!data.tasks.length && (
+                <button
+                  type="button"
+                  className="overview-row muted"
+                  onClick={() => onNotebook({ scope, mode: "tasks" })}
+                >
+                  <Icon name="plus" />
+                  Добавить задачу
+                </button>
+              )}
+            </section>
+            {data.results.length > 0 && (
+              <section className="overview-card overview-results" aria-label="Последние результаты">
+                <header>
+                  <h2>Последние результаты</h2>
+                  {onResults && (
+                    <button type="button" onClick={onResults}>
+                      Все <Icon name="chevron" size={14} />
+                    </button>
+                  )}
+                </header>
+                <div>
+                  {data.results.map((result) => (
+                    <button
+                      type="button"
+                      key={result.id}
+                      disabled={opening}
+                      className="overview-result"
+                      onClick={() =>
+                        void open({
+                          client: scope.client,
+                          kind: "result",
+                          id: result.id,
+                          threadId: result.threadId,
+                          turnId: result.turnId,
+                          projectId: scope.projectId,
+                          title: result.title,
+                        })
+                      }
+                    >
+                      {result.imageUrl ? (
+                        <img src={result.imageUrl} loading="lazy" alt="" />
+                      ) : (
+                        <Icon
+                          name={
+                            result.type === "image"
+                              ? "image"
+                              : result.type === "check"
+                                ? "check"
+                                : "file"
+                          }
+                          size={28}
+                        />
+                      )}
+                      <span>{result.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            <section className="overview-card" aria-label="Контекст проекта">
+              <header>
+                <h2>Под рукой</h2>
+                <button type="button" onClick={() => onNotebook({ scope })}>
+                  Заметки <Icon name="chevron" size={14} />
+                </button>
+              </header>
+              <PinnedList
+                items={data.pins}
+                active={() => false}
+                recent={(p) => p.createdAt}
+                storageKey={`overview:${scope.client}:${scope.projectId}`}
+                renderItem={(p) => (
+                  <button
+                    type="button"
+                    className="overview-row"
+                    key={p.id}
+                    disabled={opening || p.target.availability === "missing"}
+                    onClick={() => void open(p.target)}
+                  >
+                    <Icon name="pin" size={16} />
+                    <span>
+                      {p.target.title}
+                      {p.target.availability === "missing" && <small>Источник недоступен</small>}
+                    </span>
+                  </button>
+                )}
+              />
+              {data.notes
+                .filter(
+                  (n) => !data.pins.some((p) => p.target.kind === "note" && p.target.id === n.id),
+                )
+                .map((n) => (
+                  <button
+                    type="button"
+                    className="overview-row"
+                    key={n.id}
+                    onClick={() => onNotebook({ scope, itemId: n.id })}
+                  >
+                    <Icon name="file" size={16} />
+                    <span>{n.title}</span>
+                  </button>
+                ))}
+              {!data.pins.length && !data.notes.length && (
+                <button
+                  type="button"
+                  className="overview-row muted"
+                  onClick={() => onNotebook({ scope })}
+                >
+                  <Icon name="plus" />
+                  Добавить заметку
+                </button>
+              )}
+            </section>
+            {(data.machine || onFiles) && (
+              <section className="overview-card overview-system" aria-label="Состояние проекта">
+                <header>
+                  <h2>Состояние проекта</h2>
+                  {onMachines && (
+                    <button type="button" onClick={onMachines}>
+                      Компьютеры <Icon name="chevron" size={14} />
+                    </button>
+                  )}
+                </header>
+                {data.machine && (
+                  <div className="overview-machine">
+                    <Icon name="remote" />
+                    <div>
+                      <strong>{data.machine.name}</strong>
+                      <p>
+                        {data.machine.checkedAt
+                          ? `${data.machine.stale ? "Прошлая проверка" : "Проверено"}: ${date(data.machine.checkedAt)}`
+                          : "Ещё не проверен"}
+                      </p>
+                      {data.machine.checkedAt && (
+                        <small>
+                          {data.machine.online ? "SSH / хост доступен" : "Хост недоступен"} ·{" "}
+                          {data.machine.codex ? "Codex отвечает" : "Codex не подтверждён"}
+                        </small>
+                      )}
+                    </div>
+                    {data.machine.remoteAvailable && onRemote && (
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Remote проекта"
+                        onClick={onRemote}
+                      >
+                        <Icon name="expand" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                {onFiles && (
+                  <button type="button" className="overview-row" onClick={onFiles}>
+                    <Icon name="folder" />
+                    <span>
+                      {data.git
+                        ? data.git.repository
+                          ? `${data.git.branch ?? (data.git.detached ? "Detached HEAD" : "Git")} · ${data.git.dirty ? `Изменено: ${data.git.changed}` : "Без изменений"}`
+                          : "Папка без Git"
+                        : "Файлы и Git проекта"}
+                      {data.git && (
+                        <small>
+                          {data.git.stale ? "Прошлая проверка" : "Проверено"}:{" "}
+                          {date(data.git.checkedAt)}
+                        </small>
+                      )}
+                    </span>
+                    <Icon name="chevron" size={15} />
+                  </button>
+                )}
+              </section>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}

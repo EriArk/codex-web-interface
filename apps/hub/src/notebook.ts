@@ -147,18 +147,18 @@ export class Notebook {
     if (!row) throw new HubError(404, "NOTE_NOT_FOUND", "Заметка удалена или не найдена.");
     return this.note(row);
   }
-  list(scope: string, query: string, offset: number): NotesPage {
+  list(scope: string, query: string, offset: number, limit = 30): NotesPage {
     const search =
       "%" +
       normalized(query).replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_") +
       "%";
     const rows = this.db
       .prepare(
-        "SELECT id,scope,title,substr(body,1,160) AS excerpt,revision,createdAt,updatedAt FROM workspace_notes WHERE (?='all' OR scopeKey=?) AND search LIKE ? ESCAPE '\\' ORDER BY updatedAt DESC,id LIMIT 31 OFFSET ?",
+        "SELECT id,scope,title,substr(body,1,160) AS excerpt,revision,createdAt,updatedAt FROM workspace_notes WHERE (?='all' OR scopeKey=?) AND search LIKE ? ESCAPE '\\' ORDER BY updatedAt DESC,id LIMIT ? OFFSET ?",
       )
-      .all(scope, scope, search, offset);
+      .all(scope, scope, search, limit + 1, offset);
     return {
-      items: rows.slice(0, 30).map((row) => ({
+      items: rows.slice(0, limit).map((row) => ({
         id: String(row.id),
         scope: row.scope ? JSON.parse(String(row.scope)) : null,
         title: String(row.title),
@@ -167,7 +167,7 @@ export class Notebook {
         createdAt: Number(row.createdAt),
         updatedAt: Number(row.updatedAt),
       })),
-      nextOffset: rows.length > 30 ? offset + 30 : null,
+      nextOffset: rows.length > limit ? offset + limit : null,
     };
   }
   save(id: string, input: NoteWrite): NoteRecord {
@@ -266,20 +266,20 @@ export class Notebook {
     } else this.db.prepare("DELETE FROM workspace_pins WHERE id=?").run(id);
     return { id, pinned: value };
   }
-  pins(scope: string, offset: number) {
+  pins(scope: string, offset: number, limit = 30) {
     const rows = this.db
       .prepare(
-        "SELECT * FROM workspace_pins WHERE (?='all' OR scopeKey=?) ORDER BY createdAt DESC,id LIMIT 31 OFFSET ?",
+        "SELECT * FROM workspace_pins WHERE (?='all' OR scopeKey=?) ORDER BY createdAt DESC,id LIMIT ? OFFSET ?",
       )
-      .all(scope, scope, offset);
-    const items: NotebookPin[] = rows.slice(0, 30).map((row) => ({
+      .all(scope, scope, limit + 1, offset);
+    const items: NotebookPin[] = rows.slice(0, limit).map((row) => ({
       id: String(row.id),
       scope: row.scope ? JSON.parse(String(row.scope)) : null,
       target: this.resolve(JSON.parse(String(row.target))),
       createdAt: Number(row.createdAt),
       pinned: true,
     }));
-    return { items, nextOffset: rows.length > 30 ? offset + 30 : null };
+    return { items, nextOffset: rows.length > limit ? offset + limit : null };
   }
 }
 export function registerNotebook(app: FastifyInstance, sessions: Sessions) {

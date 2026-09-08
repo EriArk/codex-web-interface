@@ -1,6 +1,6 @@
 import { posix, win32 } from "node:path";
 import { inspectProject, readProjectFile } from "@codex-web/machines";
-import { HubError } from "@codex-web/shared";
+import { type CachedProjectGit, HubError, type ProjectGit } from "@codex-web/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Sessions } from "./sessions.js";
@@ -66,7 +66,39 @@ export function registerProjectInspector(app: FastifyInstance, sessions: Session
   app.get("/api/projects/:id/git", async (req) => {
     const { project, machine } = context(req);
     z.object({}).strict().parse(req.query);
-    return bounded(() => inspectProject(machine, project.workingDirectory, { op: "git" }));
+    try {
+      const git = (await bounded(() =>
+        inspectProject(machine, project.workingDirectory, { op: "git" }),
+      )) as ProjectGit;
+      const summary: CachedProjectGit = {
+        checkedAt: Date.now(),
+        root: project.workingDirectory,
+        repository: git.repository,
+        branch: git.branch,
+        detached: git.detached,
+        dirty: git.dirty,
+        changed: git.changes.length + (git.hiddenCount ?? 0),
+      };
+      sessions.store.setPreferences({
+        projectGit: {
+          ...((sessions.store.preferences().projectGit as Record<string, CachedProjectGit>) ?? {}),
+          [project.id]: summary,
+        },
+      });
+      return git;
+    } catch (error) {
+      const previous = (
+        sessions.store.preferences().projectGit as Record<string, CachedProjectGit>
+      )?.[project.id];
+      if (previous)
+        sessions.store.setPreferences({
+          projectGit: {
+            ...(sessions.store.preferences().projectGit as Record<string, CachedProjectGit>),
+            [project.id]: { ...previous, error: true },
+          },
+        });
+      throw error;
+    }
   });
   app.get("/api/projects/:id/git/diff", async (req) => {
     const { project, machine } = context(req),

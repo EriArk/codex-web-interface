@@ -440,3 +440,9 @@ Generic workspace pins store references to notes, Codex/GPT chats and Results. T
 Schema 13 stores owner-authored tasks separately from notes. Both modules share the editor, local draft recovery, explicit save/conflict flow and generic reference model. Tasks add todo/doing/blocked/done, priority 0–2 and an optional validated calendar date. “Today” includes overdue open tasks using the client’s local calendar date; completed items retain their completion timestamp until reopened. Quick status updates are revision-checked and do not replace task text.
 
 Task rows survive project/thread deletion and are part of normal snapshots. There is no automatic retention of completed owner text, native prompt submission, scheduler or full-calendar engine. Additional task context reaches Codex only when the owner explicitly writes a prompt; merely opening Plan never acquires a writer.
+
+## Project overview composed from real modules (2026-09-08)
+
+Home is a bounded read over existing module storage, not another dashboard database. It returns up to four conversations, four tasks, four Results, three notes and three saved references. It does not read conversation bodies, mark work seen, contact a native writer or run diagnostics. Only already captured Hub images can become thumbnails; native/signed image sources remain explicit Result links.
+
+Git summaries are cached after the existing explicit Files/Git action and bound to the configured project directory. Health/Git states include check timestamps and become stale after one minute. GPT Home consumes the native catalog already loaded by its client plus Hub-owned project context; unavailable native modules are omitted instead of triggering additional consumer-browser reads.

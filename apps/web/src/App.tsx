@@ -23,6 +23,7 @@ import { Notifications, type NotificationTarget, useNotificationPresence } from 
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectFiles } from "./ProjectFiles";
 import { ProjectNavigation } from "./ProjectNavigation";
+import { ProjectOverview } from "./ProjectOverview";
 import { completePendingSend, pendingSendKey } from "./pendingSend";
 import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
@@ -372,6 +373,19 @@ function Workspace({
   const selectedThread = threads.find((t) => t.id === threadId);
   const selectedThreadTitle =
     navigationState.state.threads.find((t) => t.id === threadId)?.title ?? selectedThread?.title;
+  useEffect(() => {
+    if (
+      initialized &&
+      project &&
+      !project.unassigned &&
+      !threadId &&
+      threadGroups[projectId]?.length === 0 &&
+      !state.loading &&
+      !busy &&
+      view === "chat"
+    )
+      setView("overview");
+  }, [initialized, project, projectId, threadGroups, threadId, state.loading, busy, view]);
   const action = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
     if (busy) return;
     setBusy(true);
@@ -385,7 +399,7 @@ function Workspace({
       setBusy(false);
     }
   };
-  const loadThreads = useCallback(async (id: string, selected?: string) => {
+  const loadThreads = useCallback(async (id: string, selected?: string | null) => {
     const request = ++threadRequest.current;
     const data = await api<{ threads: Thread[]; warning?: string }>(`/projects/${id}/threads`);
     if (request !== threadRequest.current) return;
@@ -393,11 +407,13 @@ function Workspace({
     setThreadGroups((groups) => ({ ...groups, [id]: data.threads }));
     if (data.warning) setNotice(data.warning);
     setThreadId((current) =>
-      selected && data.threads.some((t) => t.id === selected)
-        ? selected
-        : data.threads.some((t) => t.id === current)
-          ? current
-          : (data.threads[0]?.id ?? ""),
+      selected === null
+        ? ""
+        : selected && data.threads.some((t) => t.id === selected)
+          ? selected
+          : data.threads.some((t) => t.id === current)
+            ? current
+            : (data.threads[0]?.id ?? ""),
     );
   }, []);
   useEffect(() => {
@@ -405,7 +421,7 @@ function Workspace({
       try {
         const [{ projects: list }, prefs, machineList] = await Promise.all([
           api<{ projects: Project[] }>("/projects"),
-          api<{ projectId?: string; threadId?: string; theme?: Theme; view?: View }>(
+          api<{ projectId?: string; threadId?: string | null; theme?: Theme; view?: View }>(
             "/preferences",
           ),
           api<{ machines: Machine[] }>("/machines"),
@@ -419,7 +435,11 @@ function Workspace({
           ? (prefs.projectId ?? "")
           : (visible[0]?.id ?? "");
         setProjectId(id);
-        if (id) await loadThreads(id, prefs.threadId);
+        if (id)
+          await loadThreads(
+            id,
+            prefs.view === "overview" && !prefs.threadId ? null : (prefs.threadId ?? undefined),
+          );
         setInitialized(true);
       } catch (e) {
         setNotice(messageOf(e));
@@ -442,7 +462,7 @@ function Workspace({
     return () => query.removeEventListener("change", change);
   }, []);
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId || view === "overview") return;
     let disposed = false;
     setMachine("checking");
     void api<{ available: boolean; code?: string }>(`/projects/${projectId}/status`)
@@ -470,7 +490,7 @@ function Workspace({
     return () => {
       disposed = true;
     };
-  }, [projectId]);
+  }, [projectId, view]);
   useEffect(() => {
     if (!projectId) return;
     // Keep the notification URL recoverable until this selection is durable.
@@ -481,7 +501,7 @@ function Workspace({
       .then(() =>
         api("/preferences", {
           method: "PATCH",
-          body: { projectId, ...(threadId ? { threadId } : {}), view },
+          body: { projectId, threadId: threadId || null, view },
         }),
       )
       .then(() => {
@@ -690,6 +710,16 @@ function Workspace({
     setFocusResult(id);
     setView("results");
   };
+  const openProjectOverview = (id: string) => {
+    threadRequest.current++;
+    if (id !== projectId) {
+      setProjectId(id);
+      setThreadId("");
+      setThreads(threadGroups[id] ?? []);
+    }
+    setView("overview");
+    setDrawer(false);
+  };
   const openNotebookTarget = (target: NotebookLink) => {
     if (target.kind === "note" || target.kind === "task") {
       setNotebook({
@@ -896,6 +926,7 @@ function Workspace({
       onExpand={expandProject}
       onNotebook={() => openNotebook()}
       onPlan={() => openNotebook("tasks")}
+      onOverview={openProjectOverview}
       onThread={selectThread}
       onNewThread={newThread}
       onNewProject={() => {
@@ -942,6 +973,7 @@ function Workspace({
               onNotificationHandled={notificationHandled}
               onCodex={() => setClient("codex")}
               onCodexProject={openMachineProject}
+              onWorkspaceTarget={openNotebookTarget}
               onNotebook={setNotebook}
               notebookOpen={!!notebook}
               workspaceDestination={workspaceDestination}
@@ -976,13 +1008,21 @@ function Workspace({
         >
           <Icon name="menu" />
         </button>
-        <div className="header-project">
+        <button
+          type="button"
+          className="header-project overview-trigger"
+          aria-label="Обзор текущего проекта"
+          disabled={!project || project.unassigned}
+          onClick={() => project && openProjectOverview(project.id)}
+        >
           <span>
             <Icon name="folder" size={17} />
             {project?.name ?? "Рабочее пространство"}
           </span>
-          <small>{selectedThreadTitle ?? "Выбери диалог"}</small>
-        </div>
+          <small>
+            {view === "overview" ? "Обзор проекта" : (selectedThreadTitle ?? "Выбери диалог")}
+          </small>
+        </button>
         <div className="header-connection">
           <span
             className={
@@ -1062,6 +1102,30 @@ function Workspace({
         </div>
       )}
       <main className="workspace-content">
+        {view === "overview" && project && !project.unassigned && (
+          <ProjectOverview
+            key={projectId}
+            scope={{ client: "codex", projectId, name: project.name }}
+            onTarget={openNotebookTarget}
+            onNotebook={setNotebook}
+            onNew={() => newThread(projectId)}
+            onFiles={() => {
+              setView("files");
+              setRightHidden(false);
+            }}
+            onResults={() => {
+              setResultScope("project");
+              setFocusResult("");
+              setView("results");
+              setRightHidden(false);
+            }}
+            onMachines={() => setMachinePanel(true)}
+            onRemote={() => {
+              setView("remote");
+              setRightHidden(false);
+            }}
+          />
+        )}
         <Chat
           machineId={project?.machineId}
           projectId={projectId}
@@ -1070,8 +1134,10 @@ function Workspace({
           sending={sending}
           sendError={sendError}
           writeBlocked={writeBlocked}
-          visible={wide || view === "chat"}
+          visible={view !== "overview" && (wide || view === "chat")}
           canMarkSeen={
+            view !== "overview" &&
+            !pendingNotebookResult &&
             !drawer &&
             !settings &&
             !machinePanel &&

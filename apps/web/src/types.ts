@@ -1,7 +1,7 @@
 import type { Attachment, TurnSettings } from "@codex-web/shared";
 
 export type { Attachment, Capabilities, ModelOption, TurnSettings } from "@codex-web/shared";
-export type View = "chat" | "results" | "remote" | "activity" | "files";
+export type View = "chat" | "results" | "remote" | "activity" | "files" | "overview";
 export type { Theme } from "./theme";
 export interface Session {
   authenticated: boolean;
