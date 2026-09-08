@@ -29,3 +29,38 @@ try{
  assert.equal(sent.length,6);
  console.log('Pinned bridge verified: image-only, whitespace + images, text + images; truly empty rejected before dispatch.');
 }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
+
+// Exercise the pinned content-script observer with virtual time, including a
+// 26-second image acknowledgement. No second click is scheduled by the waiter.
+const { readFileSync } = await import('node:fs');
+const vm = await import('node:vm');
+let now=0, nextTimer=0, observer, turns=[];
+const timers=new Map();
+const document={querySelectorAll:()=>[],querySelector:()=>null,body:{}};
+const context=vm.createContext({document,console,Date:{now:()=>now},
+ setTimeout:(fn,ms)=>{timers.set(++nextTimer,{fn,at:now+ms});return nextTimer;},
+ clearTimeout:id=>timers.delete(id),
+ MutationObserver:class{constructor(fn){observer=fn;}observe(){}disconnect(){observer=null;}},
+});
+vm.runInContext(readFileSync('/opt/bridge/tools/chrome-bridge-extension/content/runtimeConfig.js','utf8'),context);
+vm.runInContext(readFileSync('/opt/bridge/tools/chrome-bridge-extension/content/composerCommands.js','utf8'),context);
+const config=context.ChatGptContentRuntimeConfig.DEFAULT_CONFIG;
+const api=context.ChatGptComposerCommands.createComposerCommands({
+ CONFIG:config,DOM_PARSER:{userTurnMatchesExpectedText:(actual,expected)=>!expected.trim()||actual===expected},
+ getTurnNodes:()=>turns,turnKey:turn=>turn.key,turnRole:turn=>turn.role,visibleText:turn=>turn.text,
+ isGenerating:()=>false,isVisible:()=>true,isPrimaryChatSurfaceElement:()=>true,diagnostic:()=>{},
+});
+assert.equal(api.resolveSubmissionAckTimeoutMs({}),60000);
+for(const message of ['', 'Describe these images']) {
+ turns=[];const waiter=api.createPromptSubmissionEvidenceWaiter({},new Set(),message,null,api.resolveSubmissionAckTimeoutMs({}));
+ let done=false;const result=waiter.wait().then(value=>{done=true;return value;});
+ now+=26000;await Promise.resolve();assert.equal(done,false);
+ turns=[{key:'image-user-'+now,role:'user',text:message}];observer();
+ const evidence=await result;assert.equal(evidence.confirmed,true);assert.equal(evidence.reason,'new_user_turn');assert.equal(evidence.waitedMs,26000);
+ assert.equal(timers.size,0);
+}
+turns=[];
+const uncertain=api.createPromptSubmissionEvidenceWaiter({},new Set(),'missing',null,60000).wait();
+now+=60000;for(const timer of [...timers.values()])if(timer.at<=now)timer.fn();
+assert.equal((await uncertain).confirmed,false);
+console.log('Pinned composer verified: late image-only/text+image acceptance, bounded unknown state without replay.');
