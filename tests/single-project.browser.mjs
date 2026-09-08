@@ -82,11 +82,19 @@ for (const [engine, type] of [
     const menu = page.locator(".entity-dialog[open]");
     assert.deepEqual(await menu.locator(".entity-actions > button").allTextContents(), [
       "Новый чат",
+      "Чат: Handoff chat",
       "Закрепить",
       "Переименовать",
       "Архивировать",
       "Удалить",
     ]);
+    await menu.getByRole("button", { name: "Чат: Handoff chat", exact: true }).click();
+    await expect(menu.getByRole("heading", { name: "Handoff chat", exact: true })).toBeVisible();
+    assert.equal(await menu.getByRole("button", { name: "Новый чат", exact: true }).count(), 0);
+    await menu.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect(menu.getByRole("heading", { name: "Удалить чат?", exact: true })).toBeVisible();
+    await menu.getByRole("button", { name: "Закрыть действия", exact: true }).click();
+    await group("project").getByRole("button", { name: "Действия: Project", exact: true }).click();
     await menu.getByRole("button", { name: "Новый чат", exact: true }).click();
     await expect(menu).toHaveCount(0);
     await expect(editor).toHaveValue("");

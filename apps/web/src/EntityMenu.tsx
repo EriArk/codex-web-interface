@@ -25,7 +25,8 @@ type Action =
   | { action: "delete"; confirm: true };
 export function EntityMenu({
   client,
-  entity,
+  entity: ownerEntity,
+  relatedThread,
   active = false,
   outbox = false,
   onDone,
@@ -34,12 +35,15 @@ export function EntityMenu({
 }: {
   client: "codex" | "gpt";
   entity: LibraryEntity;
+  relatedThread?: LibraryEntity;
   active?: boolean;
   outbox?: boolean;
   onDone?: () => void;
   onNewThread?: () => void;
   newThreadDisabled?: boolean;
 }) {
+  const [threadEntity, setThreadEntity] = useState<LibraryEntity | null>(null);
+  const entity = threadEntity ?? ownerEntity;
   const [page, setPage] = useState<"menu" | "rename" | "delete" | null>(null),
     [name, setName] = useState(entity.name),
     [busy, setBusy] = useState(false),
@@ -104,11 +108,12 @@ export function EntityMenu({
       <button
         type="button"
         className="icon-button entity-trigger"
-        aria-label={"Действия: " + entity.name}
+        aria-label={"Действия: " + ownerEntity.name}
         aria-haspopup="dialog"
         onClick={() => {
           setError("");
-          setName(entity.name);
+          setThreadEntity(null);
+          setName(ownerEntity.name);
           setPage("menu");
         }}
       >
@@ -159,6 +164,31 @@ export function EntityMenu({
                     Новый чат
                   </button>
                 )}
+                {threadEntity ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setThreadEntity(null);
+                      setName(ownerEntity.name);
+                    }}
+                  >
+                    <Icon name="back" />К проекту
+                  </button>
+                ) : client === "codex" && ownerEntity.kind === "project" && relatedThread ? (
+                  <button
+                    type="button"
+                    className="entity-related"
+                    disabled={busy}
+                    onClick={() => {
+                      setThreadEntity(relatedThread);
+                      setName(relatedThread.name);
+                    }}
+                  >
+                    <Icon name="chat" />
+                    <span>Чат: {relatedThread.name}</span>
+                  </button>
+                ) : null}
                 {!outbox && (
                   <>
                     <button

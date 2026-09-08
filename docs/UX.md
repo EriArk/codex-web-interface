@@ -410,3 +410,5 @@ GPT navigation keeps the pinned panel first as requested by the owner on 2026-09
 
 
 A Codex project containing one visible chat is a direct chat shortcut, without a redundant chevron or nested single-item list. Its project menu puts New chat first. Creating a second chat restores expansion in place. An initial unknown group may resolve its single chat on the same tap; stale loads cannot take navigation away from a newer selection or a closed drawer.
+
+The single hidden child keeps its own Pin/Rename/Archive/Delete actions under a named Chat entry in the project menu. The nested menu retains a snapshot of the selected chat identity: background list changes cannot retarget a chat confirmation to the project.

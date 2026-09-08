@@ -421,6 +421,17 @@ export function ProjectNavigation({
                       client="codex"
                       entity={{ id: p.id, kind: "project", name: p.name, pinned: p.pinned }}
                       active={summary(p).active > 0}
+                      relatedThread={
+                        list.length === 1 && list[0]
+                          ? {
+                              id: list[0].id,
+                              kind: "thread",
+                              name: list[0].title,
+                              projectId: p.id,
+                              pinned: list[0].pinned,
+                            }
+                          : undefined
+                      }
                       newThreadDisabled={busy}
                       onNewThread={() => {
                         ++openRequest.current;

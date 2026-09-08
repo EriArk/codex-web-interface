@@ -147,3 +147,13 @@
   min-height: 44px;
   width: 100%;
 }
+
+.entity-related > svg {
+  flex: none;
+}
+.entity-related > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
