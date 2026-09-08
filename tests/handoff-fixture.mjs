@@ -98,11 +98,12 @@ export async function handoffFixture(
       return { available: true, running, activityKnown: true, activeTasks: 0, operation };
     },
   });
+  const password = "Isolated handoff " + randomUUID();
   const enrolled = await app.inject({
     method: "POST",
     url: "/api/auth/setup",
     headers: { origin: publicOrigin },
-    payload: { token: setupToken, password: "Isolated handoff " + randomUUID() },
+    payload: { token: setupToken, password },
   });
   assert.equal(enrolled.statusCode, 200);
   const cookie = enrolled.headers["set-cookie"].split(";")[0];
@@ -117,6 +118,7 @@ export async function handoffFixture(
     calls,
     desktopCalls,
     headers,
+    password,
     finishTurn: () => {
       rpc.emit("notification", "turn/completed", {
         threadId: thread.codexThreadId,

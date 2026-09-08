@@ -161,6 +161,15 @@ for (const [engine, type] of [
     await disable.click();
     await expect(enable).toBeEnabled();
     assert.equal(f.store.db.prepare("SELECT count(*) n FROM push_subscriptions").get().n, 0);
+    // Cold notification URLs survive the ordinary password form after session expiry.
+    await context.clearCookies();
+    await page.goto(origin + "/#notification=" + back);
+    await page.reload();
+    await page.getByLabel("Пароль", { exact: true }).fill(f.password);
+    await page.getByRole("button", { name: "Войти", exact: true }).click();
+    await expect(editor).toHaveValue("Черновик должен сохраниться");
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
+    assert.equal(await page.evaluate(() => localStorage.getItem("codex-thread")), f.thread.id);
     // GPT uses the same device preferences and resolves the native branch without sending.
     const gptId = "c".repeat(32),
       nativeId = "native-gpt-test";
