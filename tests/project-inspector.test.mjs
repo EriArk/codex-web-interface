@@ -190,3 +190,31 @@ test("project inspection routes require auth, restrict paths and return exact bi
   );
   assert.equal(f.calls.filter((c) => ["thread/resume", "turn/start"].includes(c.method)).length, 0);
 });
+
+test("diff requires one file, including deleted files, and cannot expand a directory into hidden contents", async (t) => {
+  const root = await fixture(t);
+  command(root, "init", "-b", "main");
+  await mkdir(join(root, "folder"));
+  await writeFile(join(root, "folder/visible.txt"), "visible\n");
+  await writeFile(join(root, "folder/.env"), "PRIVATE\n");
+  command(root, "add", ".");
+  command(root, "commit", "-m", "baseline");
+  await assert.rejects(inspectorProbe(root, { op: "diff", path: "folder", staged: false }));
+  await assert.rejects(inspectorProbe(root, { op: "diff", path: ".", staged: false }));
+  await rm(join(root, "folder"), { recursive: true });
+  await assert.rejects(inspectorProbe(root, { op: "diff", path: "folder", staged: false }));
+  const deleted = await inspectorProbe(root, {
+    op: "diff",
+    path: "folder/visible.txt",
+    staged: false,
+  });
+  assert.match(deleted.text, /-visible/);
+  assert(!deleted.text.includes("PRIVATE"));
+  command(root, "add", "-u");
+  const staged = await inspectorProbe(root, {
+    op: "diff",
+    path: "folder/visible.txt",
+    staged: true,
+  });
+  assert.match(staged.text, /-visible/);
+});

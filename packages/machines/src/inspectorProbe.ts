@@ -207,7 +207,30 @@ export async function inspectorProbe(
     return inside(actualRoot, full) && !denied(relative(full)) ? relative(full) : null;
   };
   if (request.op === "diff") {
-    await scoped(request.path, true);
+    const requestedFile = await scoped(request.path, true);
+    try {
+      if (!(await fs.stat(requestedFile)).isFile()) fail();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const target = paths.relative(gitRoot, requestedFile).split(paths.sep).join("/");
+      const [index, head] = await Promise.all([
+        git(["ls-files", "--stage", "--full-name", "-z", "--", request.path], 32768),
+        git(["ls-tree", "--full-name", "-z", "HEAD", "--", request.path], 32768),
+      ]);
+      const exactFile = [index, head].some(
+        (result) =>
+          result.code === 0 &&
+          result.text
+            .split("\0")
+            .some(
+              (record) =>
+                /^100(?:644|755) /.test(record) &&
+                record.slice(record.indexOf("\t") + 1) === target,
+            ),
+      );
+      if (!exactFile) fail();
+    }
+
     const result = await git(
       [
         "diff",
