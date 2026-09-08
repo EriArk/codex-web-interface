@@ -77,6 +77,12 @@ for (const [engine, type] of [
       .last()
       .tap();
     const pane = page.getByRole("region", { name: "Результаты", exact: true });
+    for (let pass = 0; pass < 3; pass++) {
+      await pane.getByRole("button", { name: "Весь проект", exact: true }).tap();
+      await expect(page.locator(".result-scope")).toHaveCount(1);
+      await pane.getByRole("button", { name: "Диалог", exact: true }).tap();
+      await expect(page.locator(".result-scope")).toHaveCount(1);
+    }
     await pane.getByRole("button", { name: "Весь проект", exact: true }).tap();
     await expect(pane.getByRole("heading", { name: "Проверка 21", exact: true })).toBeVisible();
     await pane.getByRole("button", { name: /^Файлы/ }).tap();

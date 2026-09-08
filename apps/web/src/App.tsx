@@ -1061,7 +1061,11 @@ function Workspace({
               setRightHidden(false);
               setView("files");
             }}
-            key={resultScope === "project" ? projectId : threadId}
+            key={
+              resultScope === "project"
+                ? `project-results:${projectId}`
+                : `thread-results:${threadId}`
+            }
             endpoint={
               resultScope === "project"
                 ? "/projects/" + projectId + "/results"
@@ -1115,7 +1119,7 @@ function Workspace({
             }}
           />
           <ProjectFiles
-            key={projectId}
+            key={`project-files:${projectId}`}
             projectId={projectId}
             visible={view === "files"}
             focus={fileFocus}
