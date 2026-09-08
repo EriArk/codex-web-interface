@@ -1,4 +1,4 @@
-import type { ResultCategory } from "@codex-web/shared";
+import type { NotebookLink, ResultCategory } from "@codex-web/shared";
 import {
   type CSSProperties,
   lazy,
@@ -18,6 +18,7 @@ import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { MachineHealthPanel } from "./MachineHealth";
+import { NotebookPanel, type NotebookRequest, type WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectFiles } from "./ProjectFiles";
@@ -258,6 +259,12 @@ function Workspace({
   const [results, setResults] = useState<Result[]>([]),
     [activity, setActivity] = useState<Activity[]>([]),
     [activityCursor, setActivityCursor] = useState<number | null>(null);
+  const [notebook, setNotebook] = useState<NotebookRequest>();
+  const [workspaceDestination, setWorkspaceDestination] = useState<WorkspaceDestination>();
+  const [pendingNotebookResult, setPendingNotebookResult] = useState<{
+    threadId: string;
+    id: string;
+  }>();
   const [machinePanel, setMachinePanel] = useState(false);
   const [fileFocus, setFileFocus] = useState({ path: "", version: 0, projectId: "" });
   const [resultScope, setResultScope] = useState<"thread" | "project">("thread");
@@ -304,7 +311,7 @@ function Workspace({
   useNotificationPresence(
     "codex",
     threadId,
-    client === "codex" && view === "chat" && !settings && !drawer && !machinePanel,
+    client === "codex" && view === "chat" && !settings && !drawer && !machinePanel && !notebook,
   );
   const [notificationTarget, setNotificationTarget] = useState<NotificationTarget | undefined>();
   const notificationHandled = useCallback((id: string) => {
@@ -683,6 +690,71 @@ function Workspace({
     setFocusResult(id);
     setView("results");
   };
+  const openNotebookTarget = (target: NotebookLink) => {
+    setNotebook(undefined);
+    if (target.client === "gpt") {
+      setWorkspaceDestination({ target, version: Date.now() });
+      setClient("gpt");
+      return;
+    }
+    setClient("codex");
+    if (target.kind === "project") {
+      openMachineProject(target.id, false);
+      return;
+    }
+    if (target.kind === "file" && target.projectId) {
+      openMachineProject(target.projectId, false);
+      setFileFocus({ path: target.id, projectId: target.projectId, version: Date.now() });
+      setRightHidden(false);
+      setView("files");
+      return;
+    }
+    if (target.threadId) {
+      selectThread(target.threadId, target.projectId);
+      if (target.kind === "result")
+        setPendingNotebookResult({ threadId: target.threadId, id: target.id });
+      else if (target.turnId)
+        setPendingResultTurn({ threadId: target.threadId, turnId: target.turnId });
+    }
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Consume an explicit target once after its history mounts.
+  useEffect(() => {
+    if (
+      !pendingNotebookResult ||
+      state.loading ||
+      state.thread.id !== pendingNotebookResult.threadId
+    )
+      return;
+    showResult(pendingNotebookResult.id);
+    setPendingNotebookResult(undefined);
+  }, [pendingNotebookResult, state.loading, state.thread.id]);
+  const notebookPanel = (
+    <NotebookPanel
+      request={notebook}
+      onClose={() => setNotebook(undefined)}
+      onOpen={openNotebookTarget}
+    />
+  );
+  const openNotebook = () => {
+    setDrawer(false);
+    setSettings(false);
+    setNotebook({
+      scope:
+        project && !project.unassigned
+          ? { client: "codex", projectId: project.id, name: project.name }
+          : null,
+      target: threadId
+        ? {
+            client: "codex",
+            kind: "thread",
+            id: threadId,
+            threadId,
+            projectId,
+            title: state.thread.title || "Диалог Codex",
+          }
+        : undefined,
+    });
+  };
   const showTurn = async (id: string) => {
     const selected = threadId;
     if (!state.messages.some((m) => m.turnId === id)) {
@@ -812,6 +884,7 @@ function Workspace({
       loading={!initialized || syncing}
       machine={machine}
       onExpand={expandProject}
+      onNotebook={openNotebook}
       onThread={selectThread}
       onNewThread={newThread}
       onNewProject={() => {
@@ -843,26 +916,32 @@ function Workspace({
   );
   if (client === "gpt")
     return (
-      <GptLoadBoundary onCodex={() => setClient("codex")}>
-        <Suspense
-          fallback={
-            <div className="boot-screen">
-              <span className="spinner" />
-            </div>
-          }
-        >
-          <GptWorkspace
-            notificationTarget={notificationTarget}
-            onNotificationHandled={notificationHandled}
-            onCodex={() => setClient("codex")}
-            onCodexProject={openMachineProject}
-            theme={theme}
-            onTheme={setTheme}
-            onSession={onSession}
-            onLogout={onLogout}
-          />
-        </Suspense>
-      </GptLoadBoundary>
+      <>
+        {notebookPanel}
+        <GptLoadBoundary onCodex={() => setClient("codex")}>
+          <Suspense
+            fallback={
+              <div className="boot-screen">
+                <span className="spinner" />
+              </div>
+            }
+          >
+            <GptWorkspace
+              notificationTarget={notificationTarget}
+              onNotificationHandled={notificationHandled}
+              onCodex={() => setClient("codex")}
+              onCodexProject={openMachineProject}
+              onNotebook={setNotebook}
+              notebookOpen={!!notebook}
+              workspaceDestination={workspaceDestination}
+              theme={theme}
+              onTheme={setTheme}
+              onSession={onSession}
+              onLogout={onLogout}
+            />
+          </Suspense>
+        </GptLoadBoundary>
+      </>
     );
   return (
     <div
@@ -985,6 +1064,7 @@ function Workspace({
             !drawer &&
             !settings &&
             !machinePanel &&
+            !notebook &&
             !createProject &&
             !remoteImmersive &&
             !resultOverlay &&
@@ -1064,6 +1144,22 @@ function Workspace({
             {tab("remote", "Remote", "remote")}
           </div>
           <ResultFeed
+            onSaveLink={(r) =>
+              setNotebook({
+                scope: project
+                  ? { client: "codex", projectId: project.id, name: project.name }
+                  : null,
+                target: {
+                  client: "codex",
+                  kind: "result",
+                  id: r.id,
+                  title: r.title,
+                  threadId: r.threadId ?? threadId,
+                  projectId,
+                  turnId: r.turnId ?? undefined,
+                },
+              })
+            }
             onFile={(raw) => {
               const root = (project?.workingDirectory ?? "")
                 .replaceAll("\\", "/")
@@ -1282,6 +1378,7 @@ function Workspace({
         <AccountControls onSession={onSession} onLogout={onLogout} />
         <p className="small muted">Для установки на iPhone: Поделиться → На экран «Домой».</p>
       </dialog>
+      {notebookPanel}
       <MachineHealthPanel
         open={machinePanel}
         onClose={() => setMachinePanel(false)}

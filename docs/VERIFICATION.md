@@ -259,3 +259,10 @@ not a claim of a completed physical iPhone/iPad acceptance pass.
 - Six portable tests cover normalized layers, unavailable SSH/Companion, malformed/logged-out accounts, redaction, client cleanup, cached/stale/last-seen state, request deduplication, auth/CSRF and rejection of browser-supplied hosts/commands. Linux OS metrics require no SSH.
 - Real Windows probe confirmed SSH, Codex 0.153.4, Companion startup, native account/model responses and the configured Remote port. Fixed read-only CIM metrics returned memory/disk/CPU/boot time. The fresh protocol client did not load a conversation or invoke desktop maintenance.
 - Chromium/WebKit exercise phone/landscape/tablet, explicit checks and offline feedback, preserved draft, entry from both Codex and GPT, and returning to a Codex project. The ordinary overview performs no SSH probe. Physical device acceptance remains the owner's everyday usage.
+
+## Notes/Pins module — 2026-09-08
+
+- 198 portable tests pass, including Unicode/literal search, scoped CRUD/pagination, optimistic conflicts, lost-response idempotency, missing Result/thread/note links and auth/CSRF.
+- Existing full workspace snapshot/restore test now verifies note bodies/revisions/backlinks and generic pins alongside GPT uploads, HTML previews and native mappings.
+- Chromium/WebKit: phone editor, close/reload draft recovery, Markdown/copy blocks, concurrent edits, lost save acknowledgement/retry, pin navigation, destructive confirmation, unavailable links, landscape/wide geometry, GPT draft preservation and return to the original Codex chat. No thread resume/start or desktop handoff occurs.
+- Production installation is queued behind earlier verified idle deployments; these checks use isolated fixtures, not owner-device acceptance.

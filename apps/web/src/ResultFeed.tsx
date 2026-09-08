@@ -20,6 +20,7 @@ export function ResultFeed({
   onTurn,
   toolbar,
   onFile,
+  onSaveLink,
   onOverlayChange,
 }: {
   endpoint: string;
@@ -31,6 +32,7 @@ export function ResultFeed({
   extras?: ResultItem[];
   toolbar?: ReactNode;
   onFile?: (path: string) => void;
+  onSaveLink?: (result: ResultItem) => void;
   onTurn?: (id: string, threadId?: string) => void;
   onOverlayChange: (open: boolean) => void;
 }) {
@@ -201,6 +203,7 @@ export function ResultFeed({
       onTurn={onTurn}
       toolbar={toolbar}
       onFile={onFile}
+      onSaveLink={onSaveLink}
       onOverlayChange={onOverlayChange}
       category={category}
       onCategory={setCategory}

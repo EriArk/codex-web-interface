@@ -428,3 +428,9 @@ contrast in the same theme tokens, as requested by the owner.
 - Checks distinguish system SSH, installed CLI, private Companion/App Server startup, native account and model availability, the configured Remote port and the local Guacamole gateway. Fresh diagnostic App Servers run only initialize/account-read/model-list and are always closed; no thread is loaded/resumed, no prompt is sent and desktop control is untouched.
 - Cheap OS memory/project-drive/boot-time metrics are optional. Windows reads fixed CIM fields through existing SSH; Linux uses OS/statfs. Private paths, SSH/Remote credentials, native account details and raw errors do not enter the public report.
 - Opening diagnostics preserves chat/draft state and suppresses visible-chat acknowledgement while the dialog covers it. No deployment interrupts active owner work.
+
+## Hub-owned project context (2026-09-08)
+
+Notes use schema 12 SQLite records with explicit saves, optimistic revisions and full-content idempotent retries. Global/project scopes work in both client modes. Browser drafts are bounded to 20 and remain separate from chat drafts; storage failure is visible and never silently evicts text. Server conflicts preserve the draft and require a choice.
+
+Generic workspace pins store references to notes, Codex/GPT chats and Results. They do not replace native ChatGPT chat pins. Missing targets stay visible as unavailable references; note text is never cascaded away. Notebook reads/mutations do not contact the GPT connector or load a Codex writer. GPT reference availability is unknown until the owner explicitly opens native history.

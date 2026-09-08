@@ -24,6 +24,7 @@ import { registerGpt } from "./gpt.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
 import { registerNavigation } from "./navigation.js";
+import { registerNotebook } from "./notebook.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
 import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
@@ -575,6 +576,7 @@ export async function createApp(
   registerFilePreviews(app, auth);
   registerProjectInspector(app, sessions);
   registerMachineHealth(app, sessions, options.machineDiagnostics);
+  registerNotebook(app, sessions);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));
