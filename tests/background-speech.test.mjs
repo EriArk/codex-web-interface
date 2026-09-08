@@ -288,3 +288,45 @@ test("stopped audio cannot return through late creation, playback or error callb
   assert.equal(f.player.snapshot().id, "gpt:two");
   f.player.stop();
 });
+
+test("PWA caches only the workspace shell, never the protected Remote page or private audio", async () => {
+  const vm = await import("node:vm"),
+    { readFile } = await import("node:fs/promises");
+  const events = {},
+    cached = [];
+  let response;
+  vm.runInNewContext(await readFile(new URL("../apps/web/public/sw.js", import.meta.url), "utf8"), {
+    self: {
+      location: { origin: "https://app.test" },
+      addEventListener: (key, fn) => (events[key] = fn),
+    },
+    URL,
+    location: { origin: "https://app.test" },
+    console,
+    fetch: async () => ({ ok: true, clone: () => ({ shell: true }) }),
+    caches: { open: async () => ({ put: async (key, value) => cached.push({ key, value }) }) },
+  });
+  for (const path of [
+    "/gpt-connect?immersive=1",
+    "/gpt-connect/",
+    "/api/speech/id/audio",
+    "/api/results/file",
+  ]) {
+    events.fetch({
+      request: { url: "https://app.test" + path, method: "GET", mode: "navigate" },
+      respondWith: () => {
+        throw Error("Private route intercepted");
+      },
+    });
+  }
+  events.fetch({
+    request: { url: "https://app.test/", method: "GET", mode: "navigate" },
+    respondWith: (p) => {
+      response = p;
+    },
+  });
+  await response;
+  await tick();
+  assert.equal(cached.length, 1);
+  assert.equal(cached[0].key, "/");
+});
