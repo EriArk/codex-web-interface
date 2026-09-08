@@ -55,6 +55,7 @@ jobs:
       - run: node tests/copy-controls.browser.mjs
       - run: node tests/gpt-preparation.browser.mjs
       - run: node tests/gpt-outbox.browser.mjs
+      - run: node tests/turn-handoff.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs
 
