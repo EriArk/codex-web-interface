@@ -60,6 +60,8 @@ jobs:
       - run: node tests/reliability-codex.browser.mjs
       - run: node tests/turn-handoff.browser.mjs
       - run: node tests/downloads.browser.mjs
+      - run: node tests/file-preview.browser.mjs
+      - run: node tests/pinned-navigation.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs
 

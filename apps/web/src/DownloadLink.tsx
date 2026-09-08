@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { FilePreview } from "./FilePreview";
 import { Icon } from "./icons";
 import "./download.css";
 
@@ -177,9 +178,7 @@ export function DownloadLink({
                 <span className="spinner" /> Подготавливаю файл…
               </p>
             )}
-            {file && /^image\/(png|jpeg|gif|webp|avif)$/.test(file.type) && (
-              <img className="download-image" src={objectUrl} alt={file.name} />
-            )}
+            {file && <FilePreview key={file.name + retry} file={file} objectUrl={objectUrl} />}
             {error && <p role="alert">{error}</p>}
             {file ? (
               <div className="download-actions">

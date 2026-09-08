@@ -12,7 +12,7 @@ import { capabilityReply } from "./fixtures.mjs";
 
 export const origin = "https://handoff.test";
 export const settings = { model: "qa-model", effort: "high", mode: "default", access: "workspace" };
-export async function handoffFixture(publicOrigin = origin) {
+export async function handoffFixture(publicOrigin = origin, webRoot = resolve("apps/web/dist")) {
   const root = await mkdtemp(join(tmpdir(), "codex-handoff-"));
   const config = configSchema.parse({
     hub: {
@@ -77,7 +77,7 @@ export async function handoffFixture(publicOrigin = origin) {
     store,
     sessions,
     setupToken,
-    webRoot: resolve("apps/web/dist"),
+    webRoot,
     desktopTransport: async (_m, action, id) => {
       desktopCalls.push(action);
       if (action === "ForceRelease") {
