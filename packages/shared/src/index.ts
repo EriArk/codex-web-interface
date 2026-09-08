@@ -62,6 +62,7 @@ export const configSchema = z
       port: z.number().int().min(1).max(65535).default(8780),
       databasePath: z.string().min(1),
       resultsPath: z.string().min(1),
+      speechSocket: z.string().startsWith("/").max(200).optional(),
       codexIdleTimeoutMinutes: z.number().int().min(1).max(1440).default(30),
       secureCookies: z.boolean().default(true),
       storage: storagePolicySchema,

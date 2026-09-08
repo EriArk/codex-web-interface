@@ -2013,3 +2013,16 @@ hr.pane-divider {
   text-decoration: none;
   vertical-align: baseline;
 }
+
+.nav-brand > span {
+  flex: 1;
+  min-width: 0;
+}
+.nav-brand .nav-remote {
+  flex: 0 0 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -366,3 +366,8 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Codex inactive projects/chats retain their order through state polling, reconnect and viewing completion badges. Sort by real work recency, with active work still first; unread completion remains an indicator, not a separate sorting tier.
 - Native catalog refresh must not roll back a more recent Hub activity timestamp. Observed desktop activity uses its native event time rather than the time of the probe.
+
+## Owner-requested background read-aloud and Remote placement (2026-09-08)
+
+- Support reading a reply while the iPhone screen is locked through an optional local Linux speech worker and one private audio track. Keep system-voice fallback; actual iPhone verification remains the owner's physical-device check. Text/audio never goes to a third-party speech service.
+- Remove Remote from workspace tabs. Place an icon-only Remote shortcut beside the Codex/GPT branding in each sidebar. An explicit click connects and opens the full available viewport, with a clear way back and floating controls.

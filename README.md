@@ -71,3 +71,5 @@ Read [AGENTS.md](AGENTS.md), [decisions](docs/DECISIONS.md), [architecture](docs
 The Codex/GPT switch can connect a separately signed-in private ChatGPT browser on the Linux Hub. It shows the real account's conversations and projects, sends text/files/images, selects native models and power, and retrieves generated images. The protected original interface remains available for other native controls. See [installation and boundaries](ops/gpt/README.md).
 
 Self-contained HTML designs can appear as interactive Results from native HTML resources, HTML file changes, assistant HTML blocks or local project-file links. See [the artifact contract](docs/CODEX_INTEGRATION.md#interactive-html-result-contract). Previews run in an isolated frame and do not require a public Windows development server.
+
+Background read-aloud setup, limits and local voice attribution: [ops/speech/README.md](ops/speech/README.md).

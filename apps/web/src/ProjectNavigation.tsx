@@ -34,6 +34,7 @@ export function ProjectNavigation({
   onPlan,
   onOverview,
   onClient,
+  onRemote,
 }: {
   projects: Project[];
   activity: NavigationState;
@@ -54,6 +55,7 @@ export function ProjectNavigation({
   onPlan?: () => void;
   onOverview?: (id: string) => void;
   onClient?: (value: "codex" | "gpt") => void;
+  onRemote?: () => void;
 }) {
   const openRequest = useRef(0);
   const [section, setSection] = useState<"projects" | "threads">("projects");
@@ -245,6 +247,17 @@ export function ProjectNavigation({
       <div className="nav-brand">
         <img src="/icon.svg" width="32" height="32" alt="" />
         <span>{onClient ? <ClientPicker value="codex" onChange={onClient} /> : "codex"}</span>
+        {onRemote && (
+          <button
+            type="button"
+            className="icon-button nav-remote"
+            aria-label="Открыть Remote"
+            title="Remote"
+            onClick={onRemote}
+          >
+            <Icon name="remote" />
+          </button>
+        )}
         <button
           type="button"
           className="icon-button mobile-only panel-close"

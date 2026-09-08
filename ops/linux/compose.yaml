@@ -22,6 +22,7 @@ services:
       - "${CODEX_WEB_STATE}/config.json:/config/config.json:ro"
       - "${CODEX_WEB_STATE}/ssh:${CODEX_WEB_STATE}/ssh:ro"
       - "${CODEX_WEB_STATE}/data:${CODEX_WEB_STATE}/data"
+      - "${CODEX_WEB_STATE}/speech:/run/codex-speech:ro"
     depends_on: [guacd]
   guacd:
     image: guacamole/guacd:1.6.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f
@@ -72,3 +73,22 @@ services:
     ports: ["127.0.0.1:8786:8786"]
     volumes:
       - "${CODEX_WEB_STATE}/gpt:/data"
+
+  speech:
+    profiles: [speech]
+    image: codex-web-speech:${SPEECH_REVISION:-local}
+    build:
+      context: ../speech
+    container_name: codex-web-speech
+    restart: unless-stopped
+    init: true
+    network_mode: none
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    volumes:
+      - "${CODEX_WEB_STATE}/speech:/run/speech"
