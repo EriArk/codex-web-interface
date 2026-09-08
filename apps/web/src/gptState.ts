@@ -25,6 +25,8 @@ export function mergeGptJobs(previous: GptJob[], incoming: GptJob[]): GptJob[] {
   const map = new Map(previous.map((job) => [job.id, job]));
   for (const job of incoming) {
     const old = map.get(job.id);
+    // A response already in flight must not resurrect an explicitly deleted outbox item.
+    if (old?.dismissed && !job.dismissed) continue;
     if (old && old.updatedAt > job.updatedAt) continue;
     map.set(
       job.id,
