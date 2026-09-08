@@ -28,6 +28,7 @@ import { GptProgress } from "./GptProgress";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
+import { PinnedList } from "./PinnedList";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
 import { StorageUsage } from "./StorageUsage";
@@ -790,6 +791,8 @@ export function GptWorkspace({
         Number(!!b.pinned) - Number(!!a.pinned) ||
         b.updatedAt - a.updatedAt,
     );
+  const threadActive = (item: GptConversation) =>
+    jobs.some((job) => job.nativeId === item.id && isActive(job));
   const navigation = (
     <div className="navigation-inner">
       <div className="nav-brand">
@@ -825,24 +828,38 @@ export function GptWorkspace({
         />
       </div>
       <div className="gpt-nav-list">
-        {projects
-          .filter((p) => !p.archived && !p.deleted)
-          .sort(
-            (a, b) =>
-              Number(
-                jobs.some(
-                  (j) =>
-                    isActive(j) && items.some((t) => t.id === j.nativeId && t.projectId === b.id),
-                ),
-              ) -
+        <PinnedList
+          items={projects
+            .filter((p) => !p.archived && !p.deleted)
+            .sort(
+              (a, b) =>
                 Number(
                   jobs.some(
                     (j) =>
-                      isActive(j) && items.some((t) => t.id === j.nativeId && t.projectId === a.id),
+                      isActive(j) && items.some((t) => t.id === j.nativeId && t.projectId === b.id),
                   ),
-                ) || Number(!!b.pinned) - Number(!!a.pinned),
-          )
-          .map((project) => (
+                ) -
+                  Number(
+                    jobs.some(
+                      (j) =>
+                        isActive(j) &&
+                        items.some((t) => t.id === j.nativeId && t.projectId === a.id),
+                    ),
+                  ) ||
+                Number(!!b.pinned) - Number(!!a.pinned) ||
+                Math.max(0, ...items.filter((t) => t.projectId === b.id).map((t) => t.updatedAt)) -
+                  Math.max(0, ...items.filter((t) => t.projectId === a.id).map((t) => t.updatedAt)),
+            )}
+          storageKey="gpt-projects"
+          recent={(p) =>
+            items.reduce(
+              (last, t) => (t.projectId === p.id ? Math.max(last, t.updatedAt) : last),
+              0,
+            )
+          }
+          searching={!!search.trim()}
+          active={(p) => items.some((t) => t.projectId === p.id && threadActive(t))}
+          renderItem={(project) => (
             <section key={project.id}>
               <div className="entity-row">
                 <button
@@ -879,10 +896,19 @@ export function GptWorkspace({
                   )}
                 />
               </div>
-              {expanded.has(project.id) &&
-                filtered.filter((c) => c.projectId === project.id).map(navThread)}
+              {expanded.has(project.id) && (
+                <PinnedList
+                  items={filtered.filter((c) => c.projectId === project.id)}
+                  renderItem={navThread}
+                  active={threadActive}
+                  recent={(t) => t.updatedAt}
+                  storageKey={"gpt-project-" + project.id}
+                  searching={!!search.trim()}
+                />
+              )}
             </section>
-          ))}
+          )}
+        />
         <div className="nav-label">
           <span>Диалоги</span>
           <button
@@ -939,7 +965,14 @@ export function GptWorkspace({
               />
             </div>
           ))}
-        {filtered.filter((c) => !projects.some((p) => p.id === c.projectId)).map(navThread)}
+        <PinnedList
+          items={filtered.filter((c) => !projects.some((p) => p.id === c.projectId))}
+          renderItem={navThread}
+          active={threadActive}
+          recent={(t) => t.updatedAt}
+          storageKey="gpt-threads"
+          searching={!!search.trim()}
+        />
         {offset !== null && (
           <button
             type="button"

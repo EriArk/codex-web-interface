@@ -19,6 +19,7 @@ import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
+import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { registerNavigation } from "./navigation.js";
@@ -71,6 +72,9 @@ export async function createApp(
   await auth.prepare(options.setupToken);
   await app.register(cookie);
   await app.register(helmet, {
+    // Explicit OAC opt-in breaks painting/input in sandboxed frames in Chromium.
+    // Keep the opaque-origin sandbox, CSP, COOP and CORP; use browser-default clustering.
+    originAgentCluster: false,
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
@@ -533,6 +537,7 @@ export async function createApp(
       .header("Content-Disposition", 'inline; filename="image.png"')
       .send(image.data);
   });
+  registerFilePreviews(app, auth);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));

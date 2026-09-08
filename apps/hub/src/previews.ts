@@ -16,6 +16,13 @@ export function assertPreviewFrame(headers: Record<string, unknown>) {
 }
 export const previewCsp =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts";
+export function previewMarkup(html: string): string {
+  return (
+    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;min-height:100%;}body{padding:12px;box-sizing:border-box;background:#fff;color:#202624}</style>' +
+    previewControls +
+    html
+  );
+}
 type Source = { title: string; path?: string; html?: string };
 const obj = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -150,11 +157,7 @@ export class Previews {
         await writeFile(file, html, { mode: 0o600 });
       }
       // Prefix works for full documents as well as visualize-style HTML fragments.
-      return (
-        '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;min-height:100%;}body{padding:12px;box-sizing:border-box;background:#fff;color:#202624}</style>' +
-        previewControls +
-        html
-      );
+      return previewMarkup(html);
     })().finally(() => this.pending.delete(id));
     this.pending.set(id, action);
     return action;

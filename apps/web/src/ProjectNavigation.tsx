@@ -11,6 +11,7 @@ import { ActivityBadge } from "./ActivityBadge";
 import { ClientPicker } from "./ClientPicker";
 import { EntityArchive, EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
+import { PinnedList } from "./PinnedList";
 import type { Project, Thread } from "./types";
 
 export function ProjectNavigation({
@@ -181,6 +182,8 @@ export function ProjectNavigation({
       </div>
     );
   };
+  const threadActive = (t: Thread) =>
+    ["running", "starting", "waiting_approval"].includes(detail(t).status);
   const threadList = (p: Project) => {
     const list = groups[p.id];
     return (
@@ -195,7 +198,14 @@ export function ProjectNavigation({
             {errors[p.id]} Повторить
           </button>
         )}
-        {list?.filter((t) => matches(p.name) || matches(t.title)).map(renderThread)}
+        <PinnedList
+          items={(list ?? []).filter((t) => matches(p.name) || matches(t.title))}
+          renderItem={renderThread}
+          active={threadActive}
+          recent={(t) => Date.parse(detail(t).activityAt || detail(t).updatedAt) || 0}
+          storageKey={"codex-project-" + p.id}
+          searching={!!query.trim()}
+        />
         {list?.length === 0 && !pending.has(p.id) && (
           <p className="nav-empty">
             {p.unassigned ? "Пока нет чатов без проекта." : "В проекте пока нет диалогов."}
@@ -314,9 +324,15 @@ export function ProjectNavigation({
               Подключаем твои проекты…
             </p>
           )}
-          {folders
-            .filter((p) => matches(p.name) || groups[p.id]?.some((t) => matches(t.title)))
-            .map((p) => {
+          <PinnedList
+            items={folders.filter(
+              (p) => matches(p.name) || groups[p.id]?.some((t) => matches(t.title)),
+            )}
+            active={(p) => summary(p).active > 0}
+            recent={(p) => Date.parse(summary(p).activityAt || summary(p).updatedAt) || 0}
+            storageKey="codex-projects"
+            searching={!!query.trim()}
+            renderItem={(p) => {
               const open = expanded.has(p.id) || !!query.trim();
               return (
                 <div className="nav-project-group" key={p.id}>
@@ -364,7 +380,8 @@ export function ProjectNavigation({
                   {open && threadList(p)}
                 </div>
               );
-            })}
+            }}
+          />
           {query &&
             !folders.some(
               (p) => matches(p.name) || groups[p.id]?.some((t) => matches(t.title)),
@@ -377,19 +394,25 @@ export function ProjectNavigation({
         <section className="nav-threads">
           <div className="nav-label">Без проекта</div>
           <section className="standalone-thread-list" aria-label="Диалоги без проекта">
-            {standalone
-              .flatMap((p) => groups[p.id] ?? [])
-              .filter((t) => matches(t.title))
-              .sort(
-                (a, b) =>
-                  Number(["running", "starting", "waiting_approval"].includes(detail(b).status)) -
-                    Number(
-                      ["running", "starting", "waiting_approval"].includes(detail(a).status),
-                    ) ||
-                  Number(!!b.pinned) - Number(!!a.pinned) ||
-                  compareThreadActivity(detail(a), detail(b)),
-              )
-              .map(renderThread)}
+            <PinnedList
+              items={standalone
+                .flatMap((p) => groups[p.id] ?? [])
+                .filter((t) => matches(t.title))
+                .sort(
+                  (a, b) =>
+                    Number(["running", "starting", "waiting_approval"].includes(detail(b).status)) -
+                      Number(
+                        ["running", "starting", "waiting_approval"].includes(detail(a).status),
+                      ) ||
+                    Number(!!b.pinned) - Number(!!a.pinned) ||
+                    compareThreadActivity(detail(a), detail(b)),
+                )}
+              renderItem={renderThread}
+              active={threadActive}
+              recent={(t) => Date.parse(detail(t).activityAt || detail(t).updatedAt) || 0}
+              storageKey="codex-threads"
+              searching={!!query.trim()}
+            />
             {standalone.map((p) => (
               <button
                 key={p.id}

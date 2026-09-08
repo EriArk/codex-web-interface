@@ -1,8 +1,15 @@
 .download-dialog {
-  width: min(440px, calc(100vw - 24px));
-  max-height: calc(var(--app-height, 100dvh) - 32px);
+  width: min(640px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(
+    var(--app-height, 100dvh) -
+    32px -
+    env(safe-area-inset-top) -
+    env(safe-area-inset-bottom)
+  );
   padding: 14px;
-  overflow: auto;
+  overflow: hidden;
 }
 .download-heading {
   display: flex;
@@ -48,4 +55,101 @@ button.download-text {
 
 .download-dialog:focus {
   outline: none;
+}
+
+.download-heading,
+.download-actions {
+  flex-shrink: 0;
+}
+.download-heading {
+  margin-bottom: 0;
+}
+.file-preview {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  max-height: min(55dvh, 620px);
+}
+.download-image {
+  max-height: min(52dvh, 580px);
+  margin-bottom: 0;
+}
+.file-text {
+  margin: 0;
+  padding: 12px;
+  white-space: pre;
+  overflow: auto;
+  font:
+    13px / 1.5 ui-monospace,
+    monospace;
+  background: var(--surface);
+  border-radius: 8px;
+}
+.file-html {
+  width: 100%;
+  height: min(50dvh, 560px);
+  border: 0;
+  background: white;
+}
+.file-type-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 12px;
+}
+.file-type-card strong {
+  font:
+    600 24px ui-monospace,
+    monospace;
+}
+.file-type-card span,
+.file-preview-fallback {
+  opacity: 0.75;
+}
+.file-pdf canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: auto;
+}
+.file-pdf canvas[hidden] {
+  display: none;
+}
+.file-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+}
+.file-pages button {
+  min-width: 44px;
+  min-height: 44px;
+}
+@media (max-height: 500px) {
+  .download-dialog {
+    padding: 8px 12px;
+    gap: 6px;
+    max-height: calc(
+      var(--app-height, 100dvh) -
+      12px -
+      env(safe-area-inset-top) -
+      env(safe-area-inset-bottom)
+    );
+  }
+  .file-preview {
+    max-height: 44dvh;
+  }
+  .file-html {
+    height: 40dvh;
+  }
+}
+
+.download-dialog[open] {
+  display: flex;
+}
+.file-html {
+  display: block;
 }
