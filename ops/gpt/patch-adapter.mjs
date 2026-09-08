@@ -30,3 +30,12 @@ const guard="if (!request.message.trim()) throw new HttpError(400, 'No message p
 if(routes.split(guard).length!==3)throw Error('Pinned chat validation changed');
 writeFileSync(routesPath,routes.replaceAll(guard,"if (!request.message.trim() && !request.attachments.length) throw new HttpError(400, 'No message provided');"));
 execFileSync(process.execPath,['--check',routesPath],{stdio:'inherit'});
+
+// Native image processing can take tens of seconds after the one and only click.
+// Keep observing that submission, without changing the no-replay policy.
+const runtimePath='/opt/bridge/tools/chrome-bridge-extension/content/runtimeConfig.js';
+const runtime=readFileSync(runtimePath,'utf8');
+const ack='promptSubmitAckTimeoutMs: 4_000,';
+if(runtime.split(ack).length!==2)throw Error('Pinned submission acknowledgement timeout changed');
+writeFileSync(runtimePath,runtime.replace(ack,'promptSubmitAckTimeoutMs: 60_000,'));
+execFileSync(process.execPath,['--check',runtimePath],{stdio:'inherit'});
