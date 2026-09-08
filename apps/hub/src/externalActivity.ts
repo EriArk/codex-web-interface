@@ -109,7 +109,12 @@ export class ExternalActivity {
       )
       .run(row.turnId, status, row.updatedAt, row.updatedAt, id);
     if (changed || old.status !== status || old.activitySource !== "external") {
-      this.store.setStatus(id, status, active ? row.turnId : null);
+      this.store.setStatus(
+        id,
+        status,
+        active ? row.turnId : null,
+        new Date(Math.max(row.updatedAt, row.startedAt) * 1000).toISOString(),
+      );
       if (active && row.startedAt)
         this.store.db
           .prepare("UPDATE threads SET activityAt=? WHERE id=?")

@@ -360,3 +360,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Apply the same grouping to GPT project chat lists; retain Codex activity-first ordering. This is a GPT-specific update to the earlier activity-first presentation rule, not a change to native pins or execution.
 
 - A Codex project with one visible chat opens that chat directly from the project row. Its project action menu starts with New chat, followed by the existing Pin/Rename/Archive/Delete actions. Two or more chats restore inline expansion; preserve both the chat draft and the other project's pending work when navigating.
+
+
+## Owner-requested stable inactive navigation (2026-09-08)
+
+- Codex inactive projects/chats retain their order through state polling, reconnect and viewing completion badges. Sort by real work recency, with active work still first; unread completion remains an indicator, not a separate sorting tier.
+- Native catalog refresh must not roll back a more recent Hub activity timestamp. Observed desktop activity uses its native event time rather than the time of the probe.

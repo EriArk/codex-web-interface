@@ -176,7 +176,7 @@ export const hasUnreadCompletion = (
     Partial<Pick<ThreadActivity, "status">>,
 ): boolean => !isActiveThread(thread.status ?? "") && thread.completedSeq > thread.seenSeq;
 export function compareActivity(a: ProjectActivity, b: ProjectActivity): number {
-  const rank = (p: ProjectActivity) => (p.active ? 0 : p.unread ? 1 : 2);
+  const rank = (p: ProjectActivity) => (p.active ? 0 : 1);
   return (
     rank(a) - rank(b) ||
     (a.active && b.active

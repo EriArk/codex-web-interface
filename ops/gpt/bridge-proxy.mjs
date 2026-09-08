@@ -22,6 +22,15 @@ export async function proxyBridge(req,res,path,token){
    body.stream=true;
   }
   const response=await fetch('http://127.0.0.1:8080'+route,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:controller.signal});
+  // This exact error is emitted by the pinned route before streamChatResponse/sendRequest.
+  // Do not infer non-submission from arbitrary HTTP failures or a missing prompt.sent event.
+  if(route==='/chat'&&response.status===400){
+   let bytes='',size=0;
+   for await(const chunk of response.body){size+=chunk.length;if(size>4096)throw Error('GPT_ERROR_TOO_LARGE');bytes+=Buffer.from(chunk).toString('utf8')}
+   let rejected=false;try{rejected=JSON.parse(bytes).detail==='No message provided'}catch{}
+   res.writeHead(400,{'Content-Type':'application/json',...(rejected?{'X-Codex-Gpt-Dispatch':'not-submitted'}:{})});
+   res.end(JSON.stringify({error:rejected?'GPT_CHAT_NOT_SUBMITTED':'GPT_CHAT_FAILED'}));return;
+  }
   res.statusCode=response.status;
   for(const name of ['content-type','content-length','content-disposition']){const value=response.headers.get(name);if(value)res.setHeader(name,value)}
   for await(const chunk of response.body){

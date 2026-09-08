@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -448,4 +449,134 @@ test("GPT cancellation during connection preflight never reaches the native comp
   assert.equal(service.job(id).status, "cancelled");
   assert.equal(service.job(id).text, "Cancel me");
   assert.deepEqual(calls, [], "Cancelled preflight must not open a chat or submit a prompt");
+});
+
+test("GPT attachment-only sends preserve all files; proven preflight refusal is retryable but ambiguous failures never replay", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "gpt-images-"));
+  const store = new Store(":memory:");
+  const requests = [];
+  let outcome = "complete";
+  const server = createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    const body = raw ? JSON.parse(raw) : {};
+    requests.push({ path: req.url, body });
+    res.setHeader("Content-Type", "application/json");
+    if (req.url === "/status") return res.end(JSON.stringify(healthyConnection));
+    if (req.url === "/settings") return res.end(JSON.stringify(body));
+    if (req.url === "/bridge/files")
+      return res.end(JSON.stringify({ file: { id: "file_" + requests.length } }));
+    if (req.url === "/bridge/chat") {
+      if (outcome !== "complete") {
+        res.writeHead(
+          400,
+          outcome === "rejected" ? { "X-Codex-Gpt-Dispatch": "not-submitted" } : {},
+        );
+        return res.end(JSON.stringify({ error: "PRIVATE_DIAGNOSTIC" }));
+      }
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      return res.end(
+        [
+          { type: "request.started", requestId: "fixture-request" },
+          { type: "prompt.sent" },
+          { type: "answer.snapshot", text: "I see three images" },
+          { type: "request.done", session: { id: "fixture-chat" }, artifacts: [] },
+        ]
+          .map((event) => "data: " + JSON.stringify(event) + "\n\n")
+          .join(""),
+      );
+    }
+    res.end("{}");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  process.env.GPT_IMAGE_TEST_TOKEN = "fixture-token";
+  const service = new GptService(
+    configSchema.parse({
+      hub: { publicBaseUrl: "https://fixture.test", databasePath: ":memory:", resultsPath: root },
+      auth: {},
+      machines: [],
+      projects: [],
+      gpt: {
+        endpoint: "http://127.0.0.1:" + server.address().port,
+        tokenSecret: "GPT_IMAGE_TEST_TOKEN",
+      },
+    }),
+    store,
+  );
+  t.after(async () => {
+    await service.close();
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+    delete process.env.GPT_IMAGE_TEST_TOKEN;
+  });
+  const sharp = createRequire(new URL("../apps/hub/package.json", import.meta.url))("sharp");
+  const pixel = await sharp({
+    create: { width: 40, height: 30, channels: 3, background: "#128843" },
+  })
+    .png()
+    .toBuffer();
+  const files = await Promise.all([1, 2, 3].map((n) => service.put("image-" + n + ".png", pixel)));
+  const input = {
+    nativeId: "fixture-chat",
+    text: "",
+    files: files.map((file) => file.id),
+    model: "Latest",
+    effort: "2",
+  };
+  const first = randomUUID();
+  service.enqueue(first, input);
+  await waitUntil(() => service.job(first).status === "completed");
+  assert.equal(service.job(first).text, "");
+  assert.equal(service.job(first).files.length, 3);
+  assert.equal(service.job(first).answer, "I see three images");
+  const sent = requests.find((row) => row.path === "/bridge/chat").body;
+  assert.equal(sent.message, "");
+  assert.equal(sent.attachments.length, 3);
+  assert.equal(new Set(sent.attachments).size, 3);
+  assert(
+    requests
+      .filter((row) => row.path === "/bridge/files")
+      .every((row) => row.body.mime === "image/jpeg" && row.body.contentBase64.length > 0),
+  );
+  outcome = "rejected";
+  const rejected = randomUUID();
+  service.enqueue(rejected, input);
+  await waitUntil(() => service.job(rejected).status === "failed");
+  assert.match(service.job(rejected).error, /до отправки/);
+  assert.equal(
+    store.db.prepare("SELECT submitted FROM gpt_jobs WHERE id=?").get(rejected).submitted,
+    0,
+  );
+  assert.deepEqual(
+    service.job(rejected).files.map((f) => f.id),
+    input.files,
+  );
+  assert.doesNotMatch(JSON.stringify(service.job(rejected)), /PRIVATE_DIAGNOSTIC/);
+  await service.pump();
+  assert.equal(requests.filter((row) => row.path === "/bridge/chat").length, 2);
+  outcome = "ambiguous";
+  const ambiguous = randomUUID();
+  service.enqueue(ambiguous, { ...input, text: "Photos" });
+  await waitUntil(() => service.job(ambiguous).status === "unknown");
+  await service.pump();
+  assert.equal(requests.filter((row) => row.path === "/bridge/chat").length, 3);
+  assert.throws(() => service.enqueue(randomUUID(), input), /предыдущую отправку/);
+});
+
+test("canonical GPT completion accepts attachment-only turns without invented prompt text", () => {
+  const data = history();
+  data.mapping.user.message.content = {
+    content_type: "multimodal_text",
+    parts: [{ content_type: "image_asset_pointer", asset_pointer: "sediment://file_upload" }],
+  };
+  const completed = gptCompletion(data, "", 100000);
+  assert.equal(completed.complete, true);
+  assert.deepEqual(
+    completed.messages.map((m) => m.id),
+    ["image", "final"],
+  );
+  assert.equal(gptCompletion(data, "", 200000).complete, false);
 });

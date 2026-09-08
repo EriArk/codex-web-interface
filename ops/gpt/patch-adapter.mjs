@@ -21,3 +21,12 @@ replace("if (!isUsableButton(element)) return false;","if (element.disabled || e
 replace("if (!/(remove|delete|clear|close|dismiss|attachment|file|удал|убрать|очист|закры)/i.test(attrs)) return false;",String.raw`if (!element.closest('[role="group"][aria-label]') || !/^(remove file|remove attachment|delete file|удалить файл|удалить вложение)(?:\s|:|$)/i.test(attrs)) return false;`);
 writeFileSync(path,source);
 execFileSync(process.execPath,['--check',path],{stdio:'inherit'});
+
+// The extension accepts attachment-only prompts, but the pinned HTTP routes reject them.
+// Patch only the two native chat entry points; fail closed if the pinned source changes.
+const routesPath='/opt/bridge/src/routes.js';
+const routes=readFileSync(routesPath,'utf8');
+const guard="if (!request.message.trim()) throw new HttpError(400, 'No message provided');";
+if(routes.split(guard).length!==3)throw Error('Pinned chat validation changed');
+writeFileSync(routesPath,routes.replaceAll(guard,"if (!request.message.trim() && !request.attachments.length) throw new HttpError(400, 'No message provided');"));
+execFileSync(process.execPath,['--check',routesPath],{stdio:'inherit'});

@@ -199,3 +199,56 @@ test("a running thread hides its old unread badge without clearing the completio
     store.close();
   }
 });
+
+test("inactive projects keep their order across reconnect, idle probes and read receipts", () => {
+  const store = new Store(":memory:");
+  try {
+    const older = store.createThread("p", "older-stable", "Older");
+    const newer = store.createThread("q", "newer-stable", "Newer");
+    const oldAt = "2026-09-01T01:00:00.000Z",
+      newAt = "2026-09-02T01:00:00.000Z";
+    store.db.prepare("UPDATE threads SET updatedAt=? WHERE id=?").run(oldAt, older.id);
+    store.db.prepare("UPDATE threads SET updatedAt=? WHERE id=?").run(newAt, newer.id);
+    const order = () =>
+      store
+        .navigation(["p", "q"])
+        .projects.sort(compareActivity)
+        .map((p) => p.id);
+    assert.deepEqual(order(), ["q", "p"]);
+    const seq = store.append(
+      older.id,
+      "turn.completed",
+      { status: "completed" },
+      "old-finished",
+    ).seq;
+    assert.equal(store.navigation(["p"]).projects[0].unread, 1);
+    assert.deepEqual(order(), ["q", "p"], "unread markers must not reorder inactive projects");
+    for (const status of ["idle", "unknown", "idle", "completed", "idle"]) {
+      store.setStatus(older.id, status);
+      assert.equal(store.thread(older.id).updatedAt, oldAt);
+      assert.deepEqual(order(), ["q", "p"]);
+    }
+    store.markSeen(older.id, seq);
+    assert.deepEqual(order(), ["q", "p"]);
+    assert.equal(store.navigation(["p"]).projects[0].unread, 0);
+    store.setStatus(older.id, "running", "real-turn");
+    const began = store.thread(older.id).activityAt;
+    const changedAt = store.thread(older.id).updatedAt;
+    assert.deepEqual(order(), ["p", "q"]);
+    store.setStatus(older.id, "unknown", "real-turn");
+    store.setStatus(older.id, "running", "real-turn");
+    assert.equal(
+      store.thread(older.id).activityAt,
+      began,
+      "same running turn survives connection loss",
+    );
+    assert.equal(store.thread(older.id).updatedAt, changedAt);
+    store.setStatus(older.id, "completed");
+    const completedAt = store.thread(older.id).updatedAt;
+    store.setStatus(older.id, "idle");
+    assert.equal(store.thread(older.id).updatedAt, completedAt);
+    assert.deepEqual(order(), ["p", "q"], "real recent work keeps its recency after completion");
+  } finally {
+    store.close();
+  }
+});

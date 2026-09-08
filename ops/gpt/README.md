@@ -59,3 +59,9 @@ Doctor includes the normalized state, pinned versions, active/unknown counts and
 3. Confirm Hub jobs and native browser requests are idle. Stop only the optional browser container, preserve its private state directory, and take a stopped-profile backup if changing browser/profile format. Never run two Chromium instances against that profile.
 4. Start the versioned connector with the same fixed hostname, exclusive lock and user. Read `/status`, catalog/history and model choices through the protected contract. Login-required uses the ordinary connection page; unknown jobs stay unresolved.
 5. Deploy the matching Hub after its own active turns finish. Retain the prior image pair and normal Hub backup for rollback; never replay prompts as an upgrade check.
+
+## Attachment-only messages
+
+The pinned bridge's `/chat` and `/sessions/:id/messages` HTTP guards are patched to accept attachments without text, matching its native extension behavior. No placeholder prompt is inserted. Image normalization, attachment readiness and the exact file list remain enforced. The image build runs `verify-bridge.mjs` against the actual pinned router with an isolated fake writer; empty, whitespace-only and text-plus-three-image sends are checked without an account.
+
+Only the bridge's exact pre-dispatch validation refusal receives `X-Codex-Gpt-Dispatch: not-submitted` on the private connector contract. The Hub keeps that job failed with its text/files available for explicit retry. Other HTTP errors, stream errors and dropped confirmations remain unknown and are never replayed automatically. No adapter diagnostics are included in the public job.

@@ -182,6 +182,16 @@ export class GptService {
       });
       if (!response.ok) {
         await response.body?.cancel();
+        if (
+          path === "/bridge/chat" &&
+          response.status === 400 &&
+          response.headers.get("x-codex-gpt-dispatch") === "not-submitted"
+        )
+          throw error(
+            "GPT_CHAT_NOT_SUBMITTED",
+            "ChatGPT отклонил сообщение до отправки. Текст и файлы сохранены.",
+            400,
+          );
         if (path === "/library" && response.status === 429)
           throw error(
             "GPT_PIN_LIMIT",
@@ -824,18 +834,21 @@ export class GptService {
         if (pending.length > 2 * 1024 * 1024) throw Error("GPT_STREAM_LINE_TOO_LARGE");
       }
       if (!done && this.job(jobId).status !== "cancelled") throw Error("GPT_STREAM_ENDED");
-    } catch {
+    } catch (cause) {
+      const rejected = cause instanceof HubError && cause.code === "GPT_CHAT_NOT_SUBMITTED";
       if (!dispatched && preparing === "settings") this.compatibilityFailure = true;
       if (!done && this.job(jobId).status !== "cancelled")
         this.update(jobId, {
-          status: dispatched ? "unknown" : "failed",
-          error: dispatched
-            ? "ChatGPT не подтвердил завершение. Проверь чат перед повторной отправкой."
-            : preparing === "settings"
-              ? "Не удалось выбрать модель или режим в ChatGPT. Текст и файлы сохранены."
-              : preparing === "session"
-                ? "Не удалось открыть чат в ChatGPT. Текст и файлы сохранены."
-                : "Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены.",
+          status: dispatched && !rejected ? "unknown" : "failed",
+          error: rejected
+            ? cause.message
+            : dispatched
+              ? "ChatGPT не подтвердил завершение. Проверь чат перед повторной отправкой."
+              : preparing === "settings"
+                ? "Не удалось выбрать модель или режим в ChatGPT. Текст и файлы сохранены."
+                : preparing === "session"
+                  ? "Не удалось открыть чат в ChatGPT. Текст и файлы сохранены."
+                  : "Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены.",
         });
     } finally {
       if (monitor) clearInterval(monitor);

@@ -33,6 +33,7 @@ export interface ThreadRecord {
   historyMode?: string;
   sourceUpdatedAt?: number;
   activitySource?: string;
+  activityAt?: string | null;
   nativeObservedTurn?: string;
   nativeObservedStatus?: string;
   nativeObservedAt?: number;
@@ -108,7 +109,7 @@ export class Store {
     return (
       this.db
         .prepare(
-          "SELECT * FROM threads WHERE projectId=? AND archived=0 ORDER BY CASE WHEN status IN ('starting','running','waiting_approval') THEN 0 WHEN completedSeq>seenSeq THEN 1 ELSE 2 END, CASE WHEN status IN ('starting','running','waiting_approval') THEN activityAt ELSE updatedAt END DESC, id LIMIT 200",
+          "SELECT * FROM threads WHERE projectId=? AND archived=0 ORDER BY CASE WHEN status IN ('starting','running','waiting_approval') THEN 0 ELSE 1 END, CASE WHEN status IN ('starting','running','waiting_approval') THEN activityAt ELSE updatedAt END DESC, id LIMIT 200",
         )
         .all(projectId) as unknown as ThreadRecord[]
     ).map((t) => ({ ...t, settings: this.threadSettings(t.id) }));
@@ -151,13 +152,26 @@ export class Store {
       ...(row.image ? { previewUrl: `/api/attachments/${row.id}/preview` } : {}),
     } as unknown as Attachment;
   }
-  setStatus(id: string, status: string, turnId: string | null = null): void {
-    const now = new Date().toISOString();
+  setStatus(
+    id: string,
+    status: string,
+    turnId: string | null = null,
+    observedAt = new Date().toISOString(),
+  ): void {
+    const previous = this.thread(id);
+    // Reconnect, idle probes and read receipts are not new conversation activity.
+    const began =
+      isActiveThread(status) &&
+      !isActiveThread(previous.status) &&
+      (!turnId || turnId !== previous.activeTurnId || !previous.activityAt);
+    const ended =
+      isActiveThread(previous.status) &&
+      ["idle", "completed", "interrupted", "failed"].includes(status);
     this.db
       .prepare(
-        "UPDATE threads SET activityAt=CASE WHEN ? AND status NOT IN ('starting','running','waiting_approval') THEN ? ELSE activityAt END,status=?,activeTurnId=?,updatedAt=? WHERE id=?",
+        "UPDATE threads SET activityAt=CASE WHEN ? THEN ? ELSE activityAt END,status=?,activeTurnId=?,updatedAt=CASE WHEN ? THEN MAX(updatedAt,?) ELSE updatedAt END WHERE id=?",
       )
-      .run(Number(isActiveThread(status)), now, status, turnId, now, id);
+      .run(Number(began), observedAt, status, turnId, Number(began || ended), observedAt, id);
     this.changes.emit("navigation");
   }
   navigation(projectIds: string[]): NavigationState {
