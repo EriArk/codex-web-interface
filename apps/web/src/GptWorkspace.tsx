@@ -479,6 +479,7 @@ export function GptWorkspace({
     };
   }, [connection?.canSend, models]);
   const currentJobs = jobs
+    .filter((job) => !job.dismissed)
     .filter((job) => (selected ? job.nativeId === selected : job.id === createdJob))
     .sort((a, b) => a.createdAt - b.createdAt);
   const active = currentJobs.find(isActive);
@@ -496,6 +497,15 @@ export function GptWorkspace({
     setView("chat");
     setNotice("");
   };
+  useEffect(() => {
+    if (!selected && createdJob && jobs.some((job) => job.id === createdJob && job.dismissed)) {
+      try {
+        sessionStorage.removeItem("gpt-draft-job:" + createdJob);
+      } catch {}
+      navigationVersion.current++;
+      setCreatedJob("");
+    }
+  }, [selected, createdJob, jobs]);
   const send = async () => {
     if (sending.current || uploading || !model || (!text.trim() && !files.length)) return;
     const version = navigationVersion.current,
@@ -503,7 +513,22 @@ export function GptWorkspace({
     sending.current = true;
     setBusy(true);
     setNotice("");
-    const body = { nativeId: selected || null, text, files: files.map((f) => f.id), model, effort },
+    const replaced = selected
+      ? undefined
+      : currentJobs.find(
+          (job) =>
+            job.id === createdJob &&
+            !job.nativeId &&
+            ["failed", "cancelled", "completed"].includes(job.status),
+        );
+    const body = {
+        nativeId: selected || null,
+        text,
+        files: files.map((f) => f.id),
+        model,
+        effort,
+        ...(replaced ? { replacesJobId: replaced.id } : {}),
+      },
       signature = JSON.stringify(body);
     if (sendKey.current?.signature !== signature)
       sendKey.current = { signature, key: crypto.randomUUID() };
@@ -524,7 +549,16 @@ export function GptWorkspace({
           sessionStorage.removeItem(key);
       } catch {}
       if (!selected && navigationVersion.current === version) setCreatedJob(data.job.id);
-      setJobs((old) => [data.job, ...old.filter((j) => j.id !== data.job.id)]);
+      setJobs((old) => [
+        data.job,
+        ...old
+          .filter((j) => j.id !== data.job.id)
+          .map((job) =>
+            job.id === replaced?.id
+              ? { ...job, dismissed: true, text: "", files: [], answer: "", assets: [] }
+              : job,
+          ),
+      ]);
       if (navigationVersion.current === version) {
         setText("");
         setFiles([]);
@@ -568,22 +602,6 @@ export function GptWorkspace({
     } finally {
       setUploading(false);
       if (input.current) input.current.value = "";
-    }
-  };
-  const dismissJob = async (job: GptJob) => {
-    try {
-      const data = await api<{ job: GptJob }>(`/gpt/jobs/${job.id}/dismiss`, {
-        method: "POST",
-      });
-      setJobs((old) => mergeGptJobs(old, [data.job]));
-      if (!selected && createdJob === job.id) {
-        setCreatedJob("");
-        try {
-          sessionStorage.removeItem("gpt-draft-" + (job.nativeId ?? "job:" + job.id));
-        } catch {}
-      }
-    } catch (e) {
-      setNotice(messageOf(e));
     }
   };
   const pendingNew = jobs.find((job) => !selected && job.nativeId && job.id === createdJob);
@@ -861,6 +879,7 @@ export function GptWorkspace({
         {jobs
           .filter(
             (job) =>
+              !job.dismissed &&
               !job.nativeId &&
               (job.status !== "cancelled" || !!job.answer || job.assets.length > 0),
           )
@@ -868,13 +887,10 @@ export function GptWorkspace({
             (job) => !search || job.text.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
           )
           .map((job) => (
-            <div
-              className={"entity-row" + (!selected && createdJob === job.id ? " selected" : "")}
-              key={job.id}
-            >
+            <div className="entity-row" key={job.id}>
               <button
-                className={"nav-thread" + (!selected && createdJob === job.id ? " selected" : "")}
                 type="button"
+                className={"nav-thread" + (!selected && createdJob === job.id ? " selected" : "")}
                 onClick={() => choose("", job.id)}
               >
                 <Icon name="chat" />
@@ -884,21 +900,25 @@ export function GptWorkspace({
                 </span>
                 {isActive(job) && <span className="spinner" aria-hidden="true" />}
               </button>
-              {(job.status === "queued" || job.status === "failed" || job.status === "unknown") && (
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Удалить из очереди"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void action(async () => {
-                      await dismissJob(job);
-                    });
-                  }}
-                >
-                  <Icon name="close" size={17} />
-                </button>
-              )}
+              <EntityMenu
+                client="gpt"
+                outbox
+                entity={{ id: job.id, kind: "thread", name: job.text.slice(0, 120) || "Отправка" }}
+                active={isActive(job) || job.status === "unknown"}
+                onDone={() => {
+                  setJobs((old) =>
+                    old.map((item) =>
+                      item.id === job.id
+                        ? { ...item, dismissed: true, text: "", files: [], answer: "", assets: [] }
+                        : item,
+                    ),
+                  );
+                  try {
+                    sessionStorage.removeItem("gpt-draft-job:" + job.id);
+                  } catch {}
+                  if (!selected && createdJob === job.id) choose("");
+                }}
+              />
             </div>
           ))}
         {filtered.filter((c) => !projects.some((p) => p.id === c.projectId)).map(navThread)}

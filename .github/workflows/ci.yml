@@ -57,3 +57,15 @@ jobs:
       - run: node tests/gpt-outbox.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs
+
+  windows-runtime:
+    name: Companion runtime isolation
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check pinned runtime survives desktop cleanup
+        shell: powershell
+        run: ./tests/companion-runtime.tests.ps1

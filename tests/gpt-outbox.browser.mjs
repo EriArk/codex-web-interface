@@ -117,13 +117,31 @@ try {
             ...jobs[0],
             ...body,
             files: [],
-            id: "22222222-2222-4222-8222-222222222222",
+            id:
+              submissions === 1
+                ? "22222222-2222-4222-8222-222222222222"
+                : "33333333-3333-4333-8333-333333333333",
             status: "running",
             error: "",
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
+          if (body.replacesJobId) {
+            assert.equal(body.replacesJobId, jobs[0].id);
+            assert.deepEqual(body.files, ["file-old"]);
+            jobs[0] = { ...jobs[0], dismissed: true, text: "", files: [], updatedAt: Date.now() };
+            job.status = "failed";
+            job.error = "Preparation failed";
+          }
           jobs.push(job);
+          return route.fulfill({ json: { job } });
+        }
+        if (path.endsWith("/dismiss")) {
+          assert.deepEqual(route.request().postDataJSON(), { confirm: true });
+          const id = path.split("/").at(-2),
+            job = jobs.find((job) => job.id === id);
+          assert.equal(job.status, "failed");
+          Object.assign(job, { dismissed: true, text: "", files: [], updatedAt: Date.now() });
           return route.fulfill({ json: { job } });
         }
         return route.fulfill({ json: { items: [], conversations: [], nextOffset: null } });
@@ -151,7 +169,8 @@ try {
       await open();
       await page
         .locator(".project-sheet")
-        .getByRole("button", { name: /Old failed question/ })
+        .locator(".nav-thread")
+        .filter({ hasText: "Old failed question" })
         .tap();
       await expect(chat).toContainText("Preparation failed");
       await chat.getByRole("button", { name: "Вернуть в черновик" }).tap();
@@ -166,7 +185,8 @@ try {
       await open();
       await page
         .locator(".project-sheet")
-        .getByRole("button", { name: /Old failed question/ })
+        .locator(".nav-thread")
+        .filter({ hasText: "Old failed question" })
         .tap();
       await expect(draft).toHaveValue("Old failed question");
       await page.reload();
@@ -192,7 +212,8 @@ try {
       await open();
       await page
         .locator(".project-sheet")
-        .getByRole("button", { name: /Delayed new submission/ })
+        .locator(".nav-thread")
+        .filter({ hasText: "Delayed new submission" })
         .tap();
       await expect(chat).toContainText("Delayed new submission");
       await expect(page.locator(".project-sheet")).not.toBeVisible();
@@ -210,6 +231,50 @@ try {
       assert(Math.abs(box.width - 295) < 1);
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.screenshot({ path: `.local/qa-gpt-outbox/${name}.png` });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await newChat();
+      await open();
+      await page
+        .locator(".project-sheet .nav-thread")
+        .filter({ hasText: "Old failed question" })
+        .tap();
+      await expect(page.locator(".project-sheet")).not.toBeVisible();
+      await draft.fill("Revised question");
+      await page
+        .locator(".gpt-composer")
+        .getByRole("button", { name: "Отправить GPT", exact: true })
+        .tap();
+      await expect.poll(() => submissions).toBe(2);
+      releaseSend();
+      await expect(chat).toContainText("Revised question");
+      await expect(
+        page.locator(".desktop-nav .nav-thread").filter({ hasText: "Old failed question" }),
+      ).toHaveCount(0);
+      await open();
+      await page
+        .locator(".project-sheet")
+        .getByRole("button", { name: "Действия: Revised question", exact: true })
+        .tap();
+      const menu = page.locator(".entity-dialog");
+      await expect(menu.getByRole("button", { name: "Закрепить", exact: true })).toHaveCount(0);
+      await menu.getByRole("button", { name: "Удалить", exact: true }).tap();
+      await expect(menu.getByRole("heading", { name: "Удалить отправку?" })).toBeVisible();
+      await menu.getByRole("button", { name: "Отмена", exact: true }).tap();
+      assert(!jobs[2].dismissed);
+      await page
+        .locator(".project-sheet")
+        .getByRole("button", { name: "Действия: Revised question", exact: true })
+        .tap();
+      await menu.getByRole("button", { name: "Удалить", exact: true }).tap();
+      await menu.getByRole("button", { name: "Удалить", exact: true }).tap();
+      await expect(chat.locator(".gpt-job")).toHaveCount(0);
+      await page.reload();
+      await expect(
+        page
+          .locator(".desktop-nav .nav-thread")
+          .filter({ hasText: /Old failed question|Revised question/ }),
+      ).toHaveCount(0);
+      assert.equal(submissions, 2, "Deletion and reload never replay sends");
       console.log(
         JSON.stringify({
           browser: name,

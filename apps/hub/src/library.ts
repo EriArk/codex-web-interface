@@ -79,6 +79,9 @@ export async function libraryMutation<T>(run: () => Promise<T>): Promise<T> {
         "PROJECT_BUSY",
         "NATIVE_PROJECT_REQUIRED",
         "CODEX_METHOD_UNSUPPORTED",
+        "THREAD_NOT_LOADED",
+        "THREAD_NOT_PERSISTED",
+        "THREAD_ARCHIVED",
       ].includes(error.code)
     )
       throw new NotSubmittedError(error);

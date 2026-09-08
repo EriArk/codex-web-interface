@@ -121,3 +121,23 @@ test("GPT job summaries cannot erase retained answers and late snapshots cannot 
   assert.equal(result[0].status, "completed");
   assert.equal(mergeGptJobs(result, [old])[0].status, "completed");
 });
+
+test("Late GPT polling cannot resurrect a dismissed outbox item or its cached contents", () => {
+  const job = {
+    id: "deleted",
+    status: "failed",
+    text: "Old question",
+    files: [],
+    assets: [],
+    answer: "",
+    createdAt: 1,
+    updatedAt: 2,
+  };
+  const dismissed = mergeGptJobs([job], [{ ...job, dismissed: true }]);
+  assert.equal(dismissed[0].text, "");
+  const late = mergeGptJobs(dismissed, [{ ...job, updatedAt: 3 }]);
+  assert.equal(late[0].dismissed, true);
+  assert.equal(late[0].text, "");
+  assert.deepEqual(late[0].files, []);
+  assert.deepEqual(late[0].progress, []);
+});

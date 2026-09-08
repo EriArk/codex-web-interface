@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, messageOf } from "./api";
+import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import "./library.css";
 
@@ -27,11 +27,13 @@ export function EntityMenu({
   client,
   entity,
   active = false,
+  outbox = false,
   onDone,
 }: {
   client: "codex" | "gpt";
   entity: LibraryEntity;
   active?: boolean;
+  outbox?: boolean;
   onDone?: () => void;
 }) {
   const [page, setPage] = useState<"menu" | "rename" | "delete" | null>(null),
@@ -59,26 +61,36 @@ export function EntityMenu({
     setBusy(true);
     setError("");
     try {
-      await api("/library/" + client + "/" + entity.kind + "/" + encodeURIComponent(entity.id), {
-        method: "POST",
-        body: action,
-        key: attempt.current.key,
-      });
-      window.dispatchEvent(
-        new CustomEvent<LibraryChange>(libraryEvent, {
-          detail: {
-            ...entity,
-            ...action,
-            client,
-            name: action.action === "rename" ? action.name : entity.name,
-          },
-        }),
+      await api(
+        outbox
+          ? "/gpt/jobs/" + encodeURIComponent(entity.id) + "/dismiss"
+          : "/library/" + client + "/" + entity.kind + "/" + encodeURIComponent(entity.id),
+        {
+          method: "POST",
+          body: outbox ? { confirm: true } : action,
+          key: attempt.current.key,
+        },
       );
+      if (!outbox)
+        window.dispatchEvent(
+          new CustomEvent<LibraryChange>(libraryEvent, {
+            detail: {
+              ...entity,
+              ...action,
+              client,
+              name: action.action === "rename" ? action.name : entity.name,
+            },
+          }),
+        );
       setPage(null);
       attempt.current = { body: "", key: "" };
       onDone?.();
     } catch (e) {
-      setError(messageOf(e));
+      setError(
+        e instanceof ApiError && (e.status >= 500 || e.code === "INVALID_RESPONSE")
+          ? "Сервер не подтвердил действие. Обнови список и проверь результат."
+          : messageOf(e),
+      );
     } finally {
       setBusy(false);
     }
@@ -114,7 +126,8 @@ export function EntityMenu({
                 {page === "rename"
                   ? "Переименовать"
                   : page === "delete"
-                    ? "Удалить " + (entity.kind === "project" ? "проект?" : "чат?")
+                    ? "Удалить " +
+                      (outbox ? "отправку?" : entity.kind === "project" ? "проект?" : "чат?")
                     : entity.name}
               </h2>
               <button
@@ -129,26 +142,30 @@ export function EntityMenu({
             </div>
             {page === "menu" ? (
               <div className="entity-actions">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void submit({ action: "pin", value: !entity.pinned })}
-                >
-                  <Icon name="pin" />
-                  {entity.pinned ? "Открепить" : "Закрепить"}
-                </button>
-                <button type="button" disabled={busy} onClick={() => setPage("rename")}>
-                  <Icon name="edit" />
-                  Переименовать
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || active}
-                  onClick={() => void submit({ action: "archive", value: !entity.archived })}
-                >
-                  <Icon name="archive" />
-                  {entity.archived ? "Разархивировать" : "Архивировать"}
-                </button>
+                {!outbox && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void submit({ action: "pin", value: !entity.pinned })}
+                    >
+                      <Icon name="pin" />
+                      {entity.pinned ? "Открепить" : "Закрепить"}
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => setPage("rename")}>
+                      <Icon name="edit" />
+                      Переименовать
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || active}
+                      onClick={() => void submit({ action: "archive", value: !entity.archived })}
+                    >
+                      <Icon name="archive" />
+                      {entity.archived ? "Разархивировать" : "Архивировать"}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="entity-danger"
@@ -186,11 +203,13 @@ export function EntityMenu({
               <div className="entity-confirm">
                 <p className="entity-name">{entity.name}</p>
                 <p>
-                  {entity.kind === "project"
-                    ? client === "codex"
-                      ? "Проект исчезнет из Codex. Файлы на компьютере сохранятся, чаты останутся без проекта."
-                      : "Проект, его чаты и файлы будут удалены из ChatGPT. Восстановить их не получится."
-                    : "Чат будет удалён без возможности восстановления."}
+                  {outbox
+                    ? "Сохранённая отправка будет удалена. Сообщение не отправится."
+                    : entity.kind === "project"
+                      ? client === "codex"
+                        ? "Проект исчезнет из Codex. Файлы на компьютере сохранятся, чаты останутся без проекта."
+                        : "Проект, его чаты и файлы будут удалены из ChatGPT. Восстановить их не получится."
+                      : "Чат будет удалён без возможности восстановления."}
                 </p>
                 <div className="entity-footer">
                   <button type="button" disabled={busy} onClick={close}>

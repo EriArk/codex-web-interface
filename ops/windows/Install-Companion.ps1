@@ -6,12 +6,14 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptDirectory 'Copy-CompanionRuntime.ps1')
 if (-not $CodexCommand) { $CodexCommand = (Get-Command codex.exe -ErrorAction Stop).Source }
 $targetDirectory = Join-Path $env:LOCALAPPDATA 'CodexWeb\companion'
 $taskName = 'CodexWebCompanion'
 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($existingTask -and $existingTask.State -eq 'Running') { throw 'Stop the idle CodexWebCompanion task before reinstalling it.' }
 New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+$CodexCommand = Copy-CompanionRuntime -CodexCommand $CodexCommand -TargetDirectory $targetDirectory
 $source = Join-Path $scriptDirectory 'companion\CodexWebBridge.cs'
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $client = Join-Path $targetDirectory 'CodexWebBridge.exe'

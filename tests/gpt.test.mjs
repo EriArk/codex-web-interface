@@ -340,88 +340,112 @@ test("GPT preparation errors preserve text and files, explain the failed step an
   }
 });
 
-test("GPT dismiss marks queued and failed jobs as cancelled without losing their payload", async () => {
+test("GPT dismissed and replaced outbox items retain deduplication receipts without stale content", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "gpt-dismiss-")),
     store = new Store(":memory:");
-  const config = configSchema.parse({
-    hub: {
-      publicBaseUrl: "https://codex.example.test",
-      databasePath: ":memory:",
-      resultsPath: root,
-    },
-    auth: {},
-    machines: [],
-    projects: [],
+  process.env.GPT_DISMISS_TEST = "fixture";
+  const service = new GptService(
+    configSchema.parse({
+      hub: {
+        publicBaseUrl: "https://codex.example.test",
+        databasePath: ":memory:",
+        resultsPath: root,
+      },
+      auth: {},
+      machines: [],
+      projects: [],
+      gpt: { endpoint: "http://127.0.0.1:1", tokenSecret: "GPT_DISMISS_TEST" },
+    }),
+    store,
+  );
+  let pumps = 0;
+  service.pump = async () => {
+    pumps++;
+  };
+  t.after(async () => {
+    await service.close();
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+    delete process.env.GPT_DISMISS_TEST;
   });
-  const service = new GptService(config, store),
-    insert =
-      "INSERT INTO gpt_jobs(id,fingerprint,nativeId,text,files,model,effort,status,answer,assets,createdAt,updatedAt,error,requestId,submitted) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-  const now = Date.now(),
-    queued = randomUUID(),
-    failed = randomUUID(),
-    completed = randomUUID();
-  store.db.prepare(insert).run(
-    queued,
-    "fingerprint",
-    null,
-    "Queued",
-    "[]",
-    "Latest",
-    "2",
-    "queued",
-    "",
-    "[]",
-    now,
-    now,
-    "",
-    null,
-    0,
+  const body = { nativeId: null, text: "Saved question", files: [], model: "Latest", effort: "2" },
+    first = randomUUID();
+  service.enqueue(first, body);
+  store.db
+    .prepare("UPDATE gpt_jobs SET status='failed',error='Preparation failed' WHERE id=?")
+    .run(first);
+  const second = randomUUID(),
+    retry = { ...body, replacesJobId: first };
+  service.enqueue(second, retry);
+  assert(service.job(first).dismissed);
+  assert.equal(service.job(first).text, "");
+  assert.equal(service.job(second).text, body.text);
+  service.enqueue(second, retry);
+  service.enqueue(first, body);
+  assert.equal(pumps, 2, "Old idempotency keys never replay a dismissed send");
+  assert.throws(() => service.enqueue(randomUUID(), retry), { code: "GPT_JOB_DISMISSED" });
+  assert.equal(service.jobs().length, 2, "Another client cannot replace the same receipt twice");
+  await assert.rejects(async () => service.dismiss(second), { code: "GPT_JOB_BUSY" });
+  store.db.prepare("UPDATE gpt_jobs SET status='unknown' WHERE id=?").run(second);
+  await assert.rejects(async () => service.dismiss(second), { code: "GPT_JOB_BUSY" });
+  store.db.prepare("UPDATE gpt_jobs SET status='failed' WHERE id=?").run(second);
+  service.dismiss(second);
+  service.dismiss(second);
+  assert(
+    service
+      .updates(undefined, undefined, 0)
+      .items.every((job) => job.dismissed && !job.text && !job.files.length),
   );
-  store.db.prepare(insert).run(
-    failed,
-    "fingerprint",
-    null,
-    "Failed",
-    "[]",
-    "Latest",
-    "2",
-    "failed",
-    "",
-    "[]",
-    now,
-    now,
-    "Temporary failure",
-    null,
-    0,
+  assert.equal(pumps, 2, "Deletion never sends a prompt");
+});
+
+test("GPT cancellation during connection preflight never reaches the native composer", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "gpt-cancel-preflight-")),
+    store = new Store(":memory:");
+  process.env.GPT_CANCEL_TEST = "fixture";
+  const service = new GptService(
+    configSchema.parse({
+      hub: {
+        publicBaseUrl: "https://codex.example.test",
+        databasePath: ":memory:",
+        resultsPath: root,
+      },
+      auth: {},
+      machines: [],
+      projects: [],
+      gpt: { endpoint: "http://127.0.0.1:1", tokenSecret: "GPT_CANCEL_TEST" },
+    }),
+    store,
   );
-  store.db.prepare(insert).run(
-    completed,
-    "fingerprint",
-    null,
-    "Done",
-    "[]",
-    "Latest",
-    "2",
-    "completed",
-    "Reply",
-    "[]",
-    now,
-    now,
-    "",
-    null,
-    0,
-  );
-
-  const queuedJob = await service.dismiss(queued),
-    failedJob = await service.dismiss(failed),
-    completedJob = await service.dismiss(completed);
-
-  assert.equal(queuedJob.status, "cancelled");
-  assert.equal(failedJob.status, "cancelled");
-  assert.equal(service.job(completed).status, "completed");
-  assert.equal(completedJob.status, "completed");
-
-  service.close();
-  store.close();
-  rmSync(root, { recursive: true, force: true });
+  let ready;
+  service.connection = async () =>
+    new Promise((resolve) => {
+      ready = resolve;
+    });
+  const calls = [];
+  service.json = async (path) => {
+    calls.push(path);
+    throw Error("Unexpected native operation");
+  };
+  t.after(async () => {
+    ready?.({ state: "healthy" });
+    await service.close();
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+    delete process.env.GPT_CANCEL_TEST;
+  });
+  const id = randomUUID();
+  service.enqueue(id, {
+    nativeId: null,
+    text: "Cancel me",
+    files: [],
+    model: "Latest",
+    effort: "2",
+  });
+  await service.cancel(id);
+  ready({ state: "healthy" });
+  await service.close();
+  assert.equal(service.job(id).status, "cancelled");
+  assert.equal(service.job(id).text, "Cancel me");
+  assert.deepEqual(calls, [], "Cancelled preflight must not open a chat or submit a prompt");
 });
