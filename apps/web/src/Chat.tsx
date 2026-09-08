@@ -24,6 +24,7 @@ import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
+import { clearAcknowledgedSend, matchesPendingSend } from "./pendingSend";
 import { TurnDetails } from "./TurnDetails";
 import "./taskBoundary.css";
 import type { Approval, Message, Result, TurnSettings } from "./types";
@@ -403,17 +404,27 @@ export function Chat({
     setDraft(value);
     try {
       sessionStorage.setItem(`codex-draft-${threadId}`, value);
+      clearAcknowledgedSend("codex:" + threadId);
     } catch {
       /* Storage may be unavailable in private mode. */
     }
   };
+  const pendingRetry = matchesPendingSend(
+    "codex:" + threadId,
+    JSON.stringify({
+      threadId,
+      text: draft,
+      settings: options.selection,
+      attachments: attachments.files.map((f) => f.id),
+    }),
+  );
   const send = async () => {
     if (
       (!draft.trim() && !attachments.files.length) ||
       busy ||
       queue.busy ||
       handoff.pending ||
-      (active && !external && !queue.state.available) ||
+      (active && !external && !pendingRetry && !queue.state.available) ||
       attachments.busy ||
       options.saving ||
       state.loading ||
@@ -425,7 +436,7 @@ export function Chat({
       fileIds = attachments.files.map((f) => f.id);
     if (
       await handoff.run((returned) =>
-        active && !external && !returned
+        active && !external && !returned && !pendingRetry
           ? queue.add(value, fileIds)
           : onSend(value, selection, fileIds),
       )
@@ -827,7 +838,7 @@ export function Chat({
                 busy ||
                 queue.busy ||
                 handoff.pending ||
-                (active && !external && !queue.state.available) ||
+                (active && !external && !pendingRetry && !queue.state.available) ||
                 attachments.busy ||
                 state.loading ||
                 options.loading ||
@@ -835,12 +846,12 @@ export function Chat({
                 !options.selection ||
                 state.thread.status === "unknown"
               }
-              aria-label={active ? "Добавить в очередь" : "Отправить сообщение"}
+              aria-label={active && !pendingRetry ? "Добавить в очередь" : "Отправить сообщение"}
             >
               {sending || queue.busy ? (
                 <span className="spinner" />
               ) : (
-                <Icon name={active ? "plus" : "send"} />
+                <Icon name={active && !pendingRetry ? "plus" : "send"} />
               )}
             </button>
           )}

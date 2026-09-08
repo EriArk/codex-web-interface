@@ -28,6 +28,7 @@ import { GptProgress } from "./GptProgress";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
+import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
 import { StorageUsage } from "./StorageUsage";
 import { type Theme, themes } from "./theme";
@@ -206,7 +207,6 @@ export function GptWorkspace({
     messageList = useRef<HTMLDivElement>(null),
     userScrollUntil = useRef(0);
   const selectedRef = useRef(selected),
-    sendKey = useRef<{ signature: string; key: string } | null>(null),
     sending = useRef(false),
     draftLoaded = useRef(""),
     skipDraftSave = useRef(false),
@@ -358,7 +358,6 @@ export function GptWorkspace({
     }
     draftLoaded.current = draftScope;
     skipDraftSave.current = true;
-    sendKey.current = null;
     try {
       if (!selected && createdJob) sessionStorage.setItem("gpt-created-job", createdJob);
       else sessionStorage.removeItem("gpt-created-job");
@@ -372,6 +371,7 @@ export function GptWorkspace({
     if (draftLoaded.current === draftScope)
       try {
         sessionStorage.setItem("gpt-draft-" + draftScope, JSON.stringify({ text, files }));
+        clearAcknowledgedSend("gpt:" + draftScope);
       } catch {
         /* Optional draft cache. */
       }
@@ -379,6 +379,7 @@ export function GptWorkspace({
   useEffect(() => {
     let disposed = false,
       timer: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
     let polling = false,
       stamp = gptCache.stamps[selected || createdJob] ?? 0;
     const poll = async () => {
@@ -389,7 +390,10 @@ export function GptWorkspace({
         const query = new URLSearchParams({ after: String(stamp) });
         if (selected) query.set("nativeId", selected);
         if (createdJob) query.set("watch", createdJob);
-        const data = await api<{ items: GptJob[]; stamp: number }>("/gpt/jobs?" + query);
+        const data = await api<{ items: GptJob[]; stamp: number }>("/gpt/jobs?" + query, {
+          signal: controller.signal,
+          timeoutMs: 15000,
+        });
         stamp = data.stamp;
         gptCache.stamps[selected || createdJob] = stamp;
         if (disposed) return;
@@ -416,10 +420,15 @@ export function GptWorkspace({
       if (!document.hidden) void poll();
     };
     document.addEventListener("visibilitychange", resume);
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("online", resume);
     return () => {
       disposed = true;
       clearTimeout(timer);
+      controller.abort();
       document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("pageshow", resume);
+      window.removeEventListener("online", resume);
     };
   }, [catalog, history, selected, createdJob]);
   useEffect(() => {
@@ -497,7 +506,6 @@ export function GptWorkspace({
   }, [messages, currentJobs.map((j) => j.answer + j.status).join("")]);
   const choose = (id: string, jobId = "") => {
     navigationVersion.current++;
-    sendKey.current = null;
     rememberScroll();
     setCreatedJob(jobId);
     setSelected(id);
@@ -538,14 +546,15 @@ export function GptWorkspace({
         ...(replaced ? { replacesJobId: replaced.id } : {}),
       },
       signature = JSON.stringify(body);
-    if (sendKey.current?.signature !== signature)
-      sendKey.current = { signature, key: crypto.randomUUID() };
+    const receiptScope = "gpt:" + sourceDraft;
     try {
+      const key = pendingSendKey(receiptScope, signature);
       const data = await api<{ job: GptJob }>("/gpt/send", {
         method: "POST",
         body,
-        key: sendKey.current.key,
+        key,
       });
+      completePendingSend(receiptScope, key);
       try {
         const key = "gpt-draft-" + sourceDraft;
         const saved = JSON.parse(sessionStorage.getItem(key) ?? "{}");
@@ -553,8 +562,10 @@ export function GptWorkspace({
           saved.text === body.text &&
           JSON.stringify((saved.files ?? []).map((f: GptFile) => f.id)) ===
             JSON.stringify(body.files)
-        )
+        ) {
           sessionStorage.removeItem(key);
+          clearAcknowledgedSend(receiptScope);
+        }
       } catch {}
       if (!selected && navigationVersion.current === version) setCreatedJob(data.job.id);
       setJobs((old) => [
@@ -570,7 +581,6 @@ export function GptWorkspace({
       if (navigationVersion.current === version) {
         setText("");
         setFiles([]);
-        sendKey.current = null;
         sticky.current = true;
       }
     } catch (e) {

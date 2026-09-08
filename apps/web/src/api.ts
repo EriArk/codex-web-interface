@@ -18,7 +18,55 @@ export function configureApi(token: string, onUnauthorized: () => void): void {
   sessionRevision++;
   unauthorized = onUnauthorized;
 }
-export async function api<T>(
+type ApiOptions = {
+  method?: string;
+  body?: unknown;
+  key?: string;
+  signal?: AbortSignal;
+  raw?: Blob;
+  timeoutMs?: number;
+};
+export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const controller = new AbortController();
+  const write = !!options.method && options.method !== "GET";
+  const timeout = options.timeoutMs ?? (options.raw ? 180000 : write ? 135000 : 30000);
+  let expired = false;
+  const abort = () => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
+  let rejectAbort: () => void = () => {};
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectAbort = () =>
+      reject(controller.signal.reason ?? new DOMException("Aborted", "AbortError"));
+    if (controller.signal.aborted) rejectAbort();
+    else controller.signal.addEventListener("abort", rejectAbort, { once: true });
+  });
+  const timer = setTimeout(() => {
+    expired = true;
+    controller.abort(new DOMException("Request timed out", "TimeoutError"));
+  }, timeout);
+  try {
+    return await Promise.race([
+      request<T>(path, { ...options, signal: controller.signal }),
+      cancelled,
+    ]);
+  } catch (error) {
+    if (expired)
+      throw new ApiError(
+        0,
+        "REQUEST_TIMEOUT",
+        write
+          ? "Сервер не подтвердил действие вовремя. Черновик сохранён; проверь состояние перед повтором."
+          : "Сервер долго не отвечает. Повторяем подключение.",
+      );
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+    controller.signal.removeEventListener("abort", rejectAbort);
+  }
+}
+async function request<T>(
   path: string,
   options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal; raw?: Blob } = {},
 ): Promise<T> {
