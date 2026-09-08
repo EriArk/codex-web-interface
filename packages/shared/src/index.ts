@@ -302,9 +302,14 @@ export type {
   NoteWrite,
 } from "./notebook.js";
 export { notebookScopeSchema, notebookTargetSchema, noteWriteSchema } from "./notebook.js";
+export type {
+  CachedProjectGit,
+  OverviewResult,
+  OverviewThread,
+  ProjectOverview,
+} from "./overview.js";
 export * from "./results.js";
 export * from "./storage.js";
-
 export {
   type TaskFields,
   type TaskRecord,

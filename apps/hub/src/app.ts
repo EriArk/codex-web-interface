@@ -25,6 +25,7 @@ import { entityAction, libraryMutation } from "./library.js";
 import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
 import { registerNavigation } from "./navigation.js";
 import { registerNotebook } from "./notebook.js";
+import { registerProjectOverview } from "./overview.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
 import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
@@ -579,6 +580,7 @@ export async function createApp(
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerNotebook(app, sessions);
   registerWorkspaceTasks(app, sessions);
+  registerProjectOverview(app, sessions);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));
@@ -653,8 +655,8 @@ export async function createApp(
         .object({
           theme: z.enum(["organizer", "crt-green", "hitech-2000s", "classic-dark"]).optional(),
           projectId: idSchema.optional(),
-          threadId: idSchema.optional(),
-          view: z.enum(["chat", "results", "remote", "activity", "files"]).optional(),
+          threadId: idSchema.nullable().optional(),
+          view: z.enum(["chat", "results", "remote", "activity", "files", "overview"]).optional(),
         })
         .strict()
         .parse(req.body),

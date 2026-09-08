@@ -69,6 +69,7 @@ jobs:
       - run: node tests/machine-health.browser.mjs
       - run: node tests/notebook.browser.mjs
       - run: node tests/tasks.browser.mjs
+      - run: node tests/project-overview.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs
 

@@ -57,18 +57,25 @@ export class WorkspaceTasks {
     if (!row) throw new HubError(404, "TASK_NOT_FOUND", "Задача удалена или не найдена.");
     return this.record(row);
   }
-  list(scope: string, filter: string, q: string, offset: number, today: string): TasksPage {
+  list(
+    scope: string,
+    filter: string,
+    q: string,
+    offset: number,
+    today: string,
+    limit = 30,
+  ): TasksPage {
     const query =
       "%" +
       normalized(q).replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_") +
       "%";
     const rows = this.db
       .prepare(
-        "SELECT id,scope,title,substr(body,1,160) AS excerpt,revision,createdAt,updatedAt,status,priority,dueAt,completedAt FROM workspace_tasks WHERE (?='all' OR scopeKey=?) AND (?='all' OR (?='open' AND status!='done') OR (?='today' AND status!='done' AND dueAt<=?) OR status=?) AND search LIKE ? ESCAPE '\\' ORDER BY CASE WHEN status='done' THEN 1 ELSE 0 END, CASE WHEN status='done' THEN completedAt ELSE 0 END DESC, priority DESC, dueAt IS NULL, dueAt ASC,updatedAt DESC,id LIMIT 31 OFFSET ?",
+        "SELECT id,scope,title,substr(body,1,160) AS excerpt,revision,createdAt,updatedAt,status,priority,dueAt,completedAt FROM workspace_tasks WHERE (?='all' OR scopeKey=?) AND (?='all' OR (?='open' AND status!='done') OR (?='today' AND status!='done' AND dueAt<=?) OR status=?) AND search LIKE ? ESCAPE '\\' ORDER BY CASE WHEN status='done' THEN 1 ELSE 0 END, CASE WHEN status='done' THEN completedAt ELSE 0 END DESC, priority DESC, dueAt IS NULL, dueAt ASC,updatedAt DESC,id LIMIT ? OFFSET ?",
       )
-      .all(scope, scope, filter, filter, filter, today, filter, query, offset);
+      .all(scope, scope, filter, filter, filter, today, filter, query, limit + 1, offset);
     return {
-      items: rows.slice(0, 30).map((row) => ({
+      items: rows.slice(0, limit).map((row) => ({
         id: String(row.id),
         scope: row.scope ? JSON.parse(String(row.scope)) : null,
         title: String(row.title),
@@ -81,7 +88,7 @@ export class WorkspaceTasks {
         dueAt: row.dueAt ? String(row.dueAt) : null,
         completedAt: row.completedAt ? Number(row.completedAt) : null,
       })),
-      nextOffset: rows.length > 30 ? offset + 30 : null,
+      nextOffset: rows.length > limit ? offset + limit : null,
     };
   }
   save(id: string, input: TaskWrite) {

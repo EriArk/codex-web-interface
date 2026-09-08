@@ -5,6 +5,7 @@ import type {
   GptJob,
   GptModels,
   GptProject,
+  NotebookLink,
   ResultCategory,
   ResultItem,
 } from "@codex-web/shared";
@@ -32,6 +33,7 @@ import { MachineHealthPanel } from "./MachineHealth";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
+import { ProjectOverview } from "./ProjectOverview";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
 import { StorageUsage } from "./StorageUsage";
@@ -139,6 +141,7 @@ export function GptWorkspace({
   onNotificationHandled,
   onCodex,
   onCodexProject,
+  onWorkspaceTarget,
   onNotebook,
   notebookOpen = false,
   workspaceDestination,
@@ -149,6 +152,7 @@ export function GptWorkspace({
 }: {
   onCodex: () => void;
   onCodexProject?: (id: string, remote: boolean) => void;
+  onWorkspaceTarget?: (target: NotebookLink) => void;
   onNotebook?: (request: NotebookRequest) => void;
   notebookOpen?: boolean;
   workspaceDestination?: WorkspaceDestination;
@@ -159,6 +163,7 @@ export function GptWorkspace({
   onSession: (session: Session) => void;
   onLogout: () => void;
 }) {
+  const [overviewProject, setOverviewProject] = useState<GptProject | null>(null);
   const [machinePanel, setMachinePanel] = useState(false);
   const connectionRequest = useRef(0);
   const [connection, setConnection] = useState<GptConnection | null>(null);
@@ -211,7 +216,7 @@ export function GptWorkspace({
   const [notice, setNotice] = useState(""),
     [drawer, setDrawer] = useState(false),
     [settings, setSettings] = useState(false),
-    [view, setView] = useState<"chat" | "results">("chat");
+    [view, setView] = useState<"chat" | "results" | "overview">("chat");
   const [search, setSearch] = useState(""),
     [ready, setReady] = useState(false),
     [rightHidden, setRightHidden] = useState(false);
@@ -990,6 +995,20 @@ export function GptWorkspace({
                 />
               </div>
               {expanded.has(project.id) && (
+                <button
+                  type="button"
+                  className="nav-new-thread overview-nav"
+                  onClick={() => {
+                    setOverviewProject(project);
+                    setView("overview");
+                    setDrawer(false);
+                  }}
+                >
+                  <Icon name="folder" size={16} />
+                  Обзор проекта
+                </button>
+              )}
+              {expanded.has(project.id) && (
                 <PinnedList
                   items={filtered.filter((c) => c.projectId === project.id)}
                   renderItem={navThread}
@@ -1193,6 +1212,54 @@ export function GptWorkspace({
         </div>
       )}
       <main className="workspace-content">
+        {view === "overview" && overviewProject && (
+          <ProjectOverview
+            key={overviewProject.id}
+            scope={{ client: "gpt", projectId: overviewProject.id, name: overviewProject.name }}
+            cachedThreads={items
+              .filter((t) => t.projectId === overviewProject.id && !t.archived && !t.deleted)
+              .sort(
+                (a, b) =>
+                  Number(threadActive(b)) - Number(threadActive(a)) || b.updatedAt - a.updatedAt,
+              )
+              .slice(0, 4)
+              .map((t) => ({
+                id: t.id,
+                title: t.title,
+                active: threadActive(t),
+                unread: false,
+                status: threadActive(t) ? "running" : "idle",
+                updatedAt: new Date(t.updatedAt * 1000).toISOString(),
+              }))}
+            onNotebook={(r) => onNotebook?.(r)}
+            onTarget={(t) => {
+              if (t.kind === "note" || t.kind === "task") {
+                onNotebook?.({
+                  scope: {
+                    client: "gpt",
+                    projectId: overviewProject.id,
+                    name: overviewProject.name,
+                  },
+                  mode: t.kind === "task" ? "tasks" : "notes",
+                  itemId: t.id,
+                });
+                return;
+              }
+              if (t.client === "codex") {
+                if (onWorkspaceTarget) onWorkspaceTarget(t);
+                else if (t.projectId) onCodexProject?.(t.projectId, false);
+                return;
+              }
+              const id = t.threadId ?? t.id;
+              choose(id);
+              if (t.kind === "result") {
+                setWorkspaceResult(t.id);
+                setView("results");
+                setRightHidden(false);
+              }
+            }}
+          />
+        )}
         <section className="gpt-chat" hidden={view !== "chat"}>
           <div
             className="gpt-message-scroll"

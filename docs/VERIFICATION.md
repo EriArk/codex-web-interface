@@ -272,3 +272,9 @@ not a claim of a completed physical iPhone/iPad acceptance pass.
 - 202 portable tests: scoped CRUD/search/pagination, priorities, invalid/leap dates, local-date filtering, completion/reopen timestamps, revision conflicts, missing backlinks, auth/CSRF and full snapshot/restore retention.
 - Chromium/WebKit phone/tablet checks cover persisted task drafts and fields, completion/reopen, task pins, Result → task → exact Result navigation, and GPT chat draft continuity. The shared Notes browser regression is also retained.
 - Phone screenshot inspection found a clipped native date field; it now gets a full readable row. Builds and verification run on Linux using isolated fixtures; no owner task is interrupted. Deployment waits for idle after the preceding Notes release.
+
+## Project overview — 2026-09-08
+
+- Bounded-module tests verify active/unread counts, missing and empty project state, cached/offline machine and directory-bound Git summaries, auth and no native writer/desktop effects. Large technical output is excluded from the overview response. Native/signed image sources never become automatic thumbnails.
+- Chromium/WebKit verify phone and 13-inch tablet layout across the four themes, Notes/Plan/exact Result/thread navigation, unchanged unread state and chat drafts, empty-project reload, cached GPT project context and exact GPT-to-Codex reference navigation.
+- Screenshot review and regression fixed GPT composer visibility under Home. UI diagnostics use stored summaries, with no new project status probe when opening the overview. No physical-device acceptance or production installation is implied by fixture checks.

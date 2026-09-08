@@ -395,3 +395,9 @@ Hi-Tech uses a neutral silver chassis, dark panel seams, inset pale screens and 
 ## Plan
 
 Both sidebars expose “План”, defaulting to the current project with an All Projects choice. The compact list filters open/today/doing/blocked/completed tasks and offers one-tap completion/reopen. A spacious editor shares Notes’ Markdown, safe drafts and conflict handling, with status, priority and an optional date. On phones the date gets its own row so the day/month/year remains readable. Result reference actions can switch from Notes to Plan and create a linked task without copying output. Generic pinned references can reopen either module.
+
+## Project overview
+
+The project title and an entry inside each expanded project open its overview. Project expansion and inline chat navigation remain intact. A confirmed empty Codex project gets an overview with New conversation instead of a blank chat. Continue, Plan, recent Results, pinned context and cached machine/Git state link back to their real modules. iPhone uses one vertical feed above the existing three tabs; iPad keeps the left navigation beside a spacious main view.
+
+The chat remains mounted with its draft, while read receipts/presence are suppressed when Home covers it. Opening a Result from Home does not briefly acknowledge an unseen phone chat. Empty-project selection stores an explicit null thread preference, preventing a previously selected project’s thread from reappearing on reload.

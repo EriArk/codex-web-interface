@@ -32,6 +32,7 @@ export function ProjectNavigation({
   onSettings,
   onNotebook,
   onPlan,
+  onOverview,
   onClient,
 }: {
   projects: Project[];
@@ -51,6 +52,7 @@ export function ProjectNavigation({
   onSettings: () => void;
   onNotebook?: () => void;
   onPlan?: () => void;
+  onOverview?: (id: string) => void;
   onClient?: (value: "codex" | "gpt") => void;
 }) {
   const [section, setSection] = useState<"projects" | "threads">("projects");
@@ -381,6 +383,16 @@ export function ProjectNavigation({
                       active={summary(p).active > 0}
                     />
                   </div>
+                  {open && onOverview && (
+                    <button
+                      type="button"
+                      className="nav-new-thread overview-nav"
+                      onClick={() => onOverview(p.id)}
+                    >
+                      <Icon name="folder" size={16} />
+                      Обзор проекта
+                    </button>
+                  )}
                   {open && threadList(p)}
                 </div>
               );
