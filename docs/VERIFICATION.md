@@ -173,3 +173,19 @@ Codex deletion now recognizes an empty web-created thread that has no native rol
 Windows Companion was still launching a desktop bundle whose helper executables had been retired by an application update. Installation now snapshots the complete explicitly selected desktop runtime and verifies hashes, leaving custom CLI paths unchanged. The live Companion was switched to the private snapshot; the owner's desktop process was not restarted.
 
 Validation: 151 Linux server/unit tests, build, typecheck, lint and tracked-file checks; Chromium/WebKit copy, GPT preparation/outbox, Remote input and 25 preview-isolation vectors; Windows PowerShell runtime pinning/cleanup/reinstall tests. A disposable native Windows conversation proved streamed output, a real command through the repaired tool host, text/image attachment preparation and recognition, and subsequent native deletion. An empty native web draft was also deleted after its original App Server closed. The actual deployed doctor confirms authenticated Codex, model/Plan discovery, GPT read/send readiness, private connector state, Remote and public HTTPS. Physical iPhone/iPad acceptance remains the owner's ongoing usage checks.
+
+## Send-time web handoff receipt regression — 2026-09-08
+
+The first send from a desktop-owned conversation was stored as an uncertain command even
+though ownership rejected it before submission. Confirmation then reused the correctly
+preserved send key and hit COMMAND_OUTCOME_UNKNOWN. Check ownership before external
+activity and classify failures before the local message commit as NotSubmittedError;
+retain uncertain receipts once message commitment starts. No old unknown receipt is reset.
+
+Regression coverage uses the actual Hub routes and Store, with isolated native RPC and
+desktop process effects: desktop activity, repeated rejection/cancellation, ownership
+changing during preflight, the same native conversation and key with text/attachments,
+and a lost native turn acknowledgement that cannot replay. Chromium/WebKit run the full
+built application against an isolated HTTP Hub, exercising upload, cancel, confirmation,
+draft clearance, one native send and no restart. The browser check is included in CI.
+No live owner desktop handoff/restart is exercised.

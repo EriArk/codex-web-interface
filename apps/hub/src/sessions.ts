@@ -10,6 +10,7 @@ import {
   HubError,
   type HubEvent,
   type MachineConfig,
+  NotSubmittedError,
   type TurnSettings,
   turnSettingsSchema,
 } from "@codex-web/shared";
@@ -914,149 +915,161 @@ export class Sessions extends EventEmitter {
     settings?: TurnSettings,
     attachmentIds: string[] = [],
   ): Promise<Record<string, unknown>> {
-    let t = this.thread(id);
-    if (!(await this.owns(id))) await this.externalActivity.refresh();
-    t = this.thread(id);
-    if (t.activitySource === "external" && ["running", "waiting_approval"].includes(t.status))
-      throw new HubError(
-        409,
-        "THREAD_IN_USE",
-        "Codex работает в другом клиенте. Можно добавить сообщение в очередь; оно продолжит работу после текущего ответа.",
-      );
-    return this.locked(t.projectId, async () => {
-      const r = await this.runtime(t.projectId);
-      if (
-        [...r.active].some((activeId) => this.store.thread(activeId).projectId === t.projectId) ||
-        ["unknown", "starting", "running", "waiting_approval"].includes(
-          this.store.thread(id).status,
-        )
-      )
+    let committing = false;
+    try {
+      let t = this.thread(id);
+      this.assertWritable(t.projectId);
+      if (!(await this.owns(id))) await this.externalActivity.refresh();
+      t = this.thread(id);
+      if (t.activitySource === "external" && ["running", "waiting_approval"].includes(t.status))
         throw new HubError(
           409,
-          "PROJECT_BUSY",
-          "Сначала дождись завершения работы или восстанови диалог",
+          "THREAD_IN_USE",
+          "Codex работает в другом клиенте. Можно добавить сообщение в очередь; оно продолжит работу после текущего ответа.",
         );
-      const selection =
-        settings ??
-        this.store.threadSettings(id) ??
-        (await this.capabilities(t.projectId)).defaults;
-      const model = await this.validateSettings(t.projectId, selection);
-      // The Hub is the primary writer. Keep its loaded conversation between turns;
-      // releasing and reacquiring it here lets another App Server steal the writer.
-      if (
-        !r.loaded.has(id) &&
-        t.origin !== "desktop" &&
-        !t.sourceUpdatedAt &&
-        !this.store.db.prepare("SELECT 1 FROM messages WHERE threadId=? LIMIT 1").get(id)
-      ) {
-        // An unsent draft may disappear with its App Server. Recreate only that empty draft.
-        const fresh = await r.rpc.request("thread/start", {
-          cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
-          ...(this.project(t.projectId).sourceId
-            ? { projectId: this.project(t.projectId).sourceId }
-            : {}),
-          historyMode: "paginated",
-          ...threadAccess(selection.access),
-        });
-        const sourceId = text(record(fresh.thread).id);
-        if (!sourceId) throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не создал диалог");
-        this.store.db.prepare("UPDATE threads SET codexThreadId=? WHERE id=?").run(sourceId, id);
-        t.codexThreadId = sourceId;
-        r.loaded.add(id);
-      }
-      if (!r.loaded.has(id)) {
-        await r.rpc.request("thread/resume", {
-          threadId: t.codexThreadId,
-          cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
-          excludeTurns: true,
-          ...threadAccess(selection.access),
-        });
-        r.loaded.add(id);
-      }
-      const prepared = await this.attachments.prepare(
-        { ...this.config, projects: this.catalog.projects() },
-        id,
-        attachmentIds,
-        model.supportsImages,
-      );
-      try {
-        this.assertWritable(t.projectId);
-      } catch (error) {
-        prepared.release();
-        throw error;
-      }
-      this.catalog.invalidate(id);
-      const messageId = randomUUID();
-      try {
-        this.attachments.bind(id, messageId, prepared.files);
-      } catch (error) {
-        prepared.release();
-        throw error;
-      }
-      this.store.setThreadSettings(id, selection);
-      this.emitEvent(id, "thread.settings", { settings: selection });
-      r.active.add(id);
-      r.touched = Date.now();
-      this.store.db.prepare("UPDATE threads SET activitySource='hub' WHERE id=?").run(id);
-      this.store.setStatus(id, "starting");
-      this.emitEvent(id, "session.state", { status: "starting" });
-      this.emitEvent(id, "user.message", {
-        id: messageId,
-        text: prompt,
-        attachments: prepared.files.map((file) => ({ ...file, messageId })),
-        settings: selection,
-      });
-      if (t.title === "Новый диалог")
-        this.store.db
-          .prepare("UPDATE threads SET title=? WHERE id=?")
-          .run(
-            (prompt.trim() || prepared.files[0]?.name || "Вложения")
-              .replace(/\s+/g, " ")
-              .slice(0, 60),
-            id,
-          );
-      try {
-        const response = await r.rpc.request("turn/start", {
-          threadId: t.codexThreadId,
-          input: [...(prompt ? [{ type: "text", text: prompt }] : []), ...prepared.input],
-          clientUserMessageId: messageId,
-          ...turnAccess(selection.access),
-          model: selection.model,
-          effort: selection.effort,
-          ...(r.nativeModes
-            ? {
-                collaborationMode: {
-                  mode: selection.mode,
-                  settings: {
-                    model: selection.model,
-                    reasoning_effort: selection.effort,
-                    developer_instructions: null,
-                  },
-                },
-              }
-            : {}),
-        });
-        const turnId = text(record(response.turn).id);
-        if (!turnId)
+      return await this.locked(t.projectId, async () => {
+        const r = await this.runtime(t.projectId);
+        if (
+          [...r.active].some((activeId) => this.store.thread(activeId).projectId === t.projectId) ||
+          ["unknown", "starting", "running", "waiting_approval"].includes(
+            this.store.thread(id).status,
+          )
+        )
           throw new HubError(
-            502,
-            "INVALID_TURN_RESPONSE",
-            "Codex не подтвердил идентификатор хода",
+            409,
+            "PROJECT_BUSY",
+            "Сначала дождись завершения работы или восстанови диалог",
           );
-        if (this.store.thread(id).status === "starting")
-          this.store.setStatus(id, "running", turnId);
-        return { turnId, status: this.store.thread(id).status };
-      } catch (error) {
-        this.store.setStatus(id, "unknown");
-        this.emitEvent(id, "session.state", {
-          status: "unknown",
-          message: "Codex не подтвердил запуск. Проверь диалог перед повтором.",
+        const selection =
+          settings ??
+          this.store.threadSettings(id) ??
+          (await this.capabilities(t.projectId)).defaults;
+        const model = await this.validateSettings(t.projectId, selection);
+        // The Hub is the primary writer. Keep its loaded conversation between turns;
+        // releasing and reacquiring it here lets another App Server steal the writer.
+        if (
+          !r.loaded.has(id) &&
+          t.origin !== "desktop" &&
+          !t.sourceUpdatedAt &&
+          !this.store.db.prepare("SELECT 1 FROM messages WHERE threadId=? LIMIT 1").get(id)
+        ) {
+          // An unsent draft may disappear with its App Server. Recreate only that empty draft.
+          const fresh = await r.rpc.request("thread/start", {
+            cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
+            ...(this.project(t.projectId).sourceId
+              ? { projectId: this.project(t.projectId).sourceId }
+              : {}),
+            historyMode: "paginated",
+            ...threadAccess(selection.access),
+          });
+          const sourceId = text(record(fresh.thread).id);
+          if (!sourceId)
+            throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не создал диалог");
+          this.store.db.prepare("UPDATE threads SET codexThreadId=? WHERE id=?").run(sourceId, id);
+          t.codexThreadId = sourceId;
+          r.loaded.add(id);
+        }
+        if (!r.loaded.has(id)) {
+          await r.rpc.request("thread/resume", {
+            threadId: t.codexThreadId,
+            cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
+            excludeTurns: true,
+            ...threadAccess(selection.access),
+          });
+          r.loaded.add(id);
+        }
+        const prepared = await this.attachments.prepare(
+          { ...this.config, projects: this.catalog.projects() },
+          id,
+          attachmentIds,
+          model.supportsImages,
+        );
+        try {
+          this.assertWritable(t.projectId);
+        } catch (error) {
+          prepared.release();
+          throw error;
+        }
+        // From the local message commit onward, preserve uncertain outcomes: the caller
+        // must never replay a prompt whose native acknowledgement may have been lost.
+        committing = true;
+        this.catalog.invalidate(id);
+        const messageId = randomUUID();
+        try {
+          this.attachments.bind(id, messageId, prepared.files);
+        } catch (error) {
+          prepared.release();
+          throw error;
+        }
+        this.store.setThreadSettings(id, selection);
+        this.emitEvent(id, "thread.settings", { settings: selection });
+        r.active.add(id);
+        r.touched = Date.now();
+        this.store.db.prepare("UPDATE threads SET activitySource='hub' WHERE id=?").run(id);
+        this.store.setStatus(id, "starting");
+        this.emitEvent(id, "session.state", { status: "starting" });
+        this.emitEvent(id, "user.message", {
+          id: messageId,
+          text: prompt,
+          attachments: prepared.files.map((file) => ({ ...file, messageId })),
+          settings: selection,
         });
-        throw error;
-      } finally {
-        prepared.release();
-      }
-    });
+        if (t.title === "Новый диалог")
+          this.store.db
+            .prepare("UPDATE threads SET title=? WHERE id=?")
+            .run(
+              (prompt.trim() || prepared.files[0]?.name || "Вложения")
+                .replace(/\s+/g, " ")
+                .slice(0, 60),
+              id,
+            );
+        try {
+          const response = await r.rpc.request("turn/start", {
+            threadId: t.codexThreadId,
+            input: [...(prompt ? [{ type: "text", text: prompt }] : []), ...prepared.input],
+            clientUserMessageId: messageId,
+            ...turnAccess(selection.access),
+            model: selection.model,
+            effort: selection.effort,
+            ...(r.nativeModes
+              ? {
+                  collaborationMode: {
+                    mode: selection.mode,
+                    settings: {
+                      model: selection.model,
+                      reasoning_effort: selection.effort,
+                      developer_instructions: null,
+                    },
+                  },
+                }
+              : {}),
+          });
+          const turnId = text(record(response.turn).id);
+          if (!turnId)
+            throw new HubError(
+              502,
+              "INVALID_TURN_RESPONSE",
+              "Codex не подтвердил идентификатор хода",
+            );
+          if (this.store.thread(id).status === "starting")
+            this.store.setStatus(id, "running", turnId);
+          return { turnId, status: this.store.thread(id).status };
+        } catch (error) {
+          this.store.setStatus(id, "unknown");
+          this.emitEvent(id, "session.state", {
+            status: "unknown",
+            message: "Codex не подтвердил запуск. Проверь диалог перед повтором.",
+          });
+          throw error;
+        } finally {
+          prepared.release();
+        }
+      });
+    } catch (error) {
+      // Ownership, validation, resume and attachment preparation can reject before
+      // any user message is submitted. Keep the same send key usable after handoff.
+      throw committing ? error : new NotSubmittedError(error);
+    }
   }
   async interrupt(id: string): Promise<Record<string, unknown>> {
     const t = this.thread(id);
