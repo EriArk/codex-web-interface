@@ -56,25 +56,47 @@ const readPreference = (name: string, fallback: string) => {
 };
 function useViewport() {
   useEffect(() => {
+    let width = window.innerWidth;
+    let tallest = window.visualViewport?.height ?? window.innerHeight;
+    let keyboard = false;
+    let frame = 0;
     const update = () => {
       const viewport = window.visualViewport;
-      document.documentElement.style.setProperty(
-        "--app-height",
-        `${viewport?.height ?? window.innerHeight}px`,
+      const height = Math.min(viewport?.height ?? window.innerHeight, window.innerHeight);
+      if (Math.abs(window.innerWidth - width) > 80) {
+        width = window.innerWidth;
+        tallest = Math.max(height, window.innerHeight);
+      } else tallest = Math.max(tallest, height);
+      const editing = document.activeElement?.matches(
+        "textarea, input:not([type=checkbox]):not([type=radio]), [contenteditable=true]",
       );
+      // Some iOS versions shrink innerHeight together with visualViewport.
+      keyboard =
+        window.innerHeight - height > 150 || (tallest - height > 150 && (!!editing || keyboard));
+      document.documentElement.style.setProperty("--app-height", `${height}px`);
       document.documentElement.style.setProperty("--app-top", `${viewport?.offsetTop ?? 0}px`);
-      document.documentElement.dataset.keyboard = String(
-        window.innerHeight - (viewport?.height ?? window.innerHeight) > 150,
-      );
+      document.documentElement.dataset.keyboard = String(keyboard);
     };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(document.documentElement);
     update();
-    window.visualViewport?.addEventListener("resize", update);
-    window.visualViewport?.addEventListener("scroll", update);
-    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("scroll", schedule);
+    window.addEventListener("resize", schedule);
+    document.addEventListener("focusin", schedule);
+    document.addEventListener("focusout", schedule);
     return () => {
-      window.visualViewport?.removeEventListener("resize", update);
-      window.visualViewport?.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+      window.visualViewport?.removeEventListener("resize", schedule);
+      window.visualViewport?.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      document.removeEventListener("focusin", schedule);
+      document.removeEventListener("focusout", schedule);
     };
   }, []);
 }
