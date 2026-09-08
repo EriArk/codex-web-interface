@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { CodexClient, type ServerRequest } from "@codex-web/codex";
-import { spawnCodex } from "@codex-web/machines";
+import { readWorkspaceDependencies, spawnCodex } from "@codex-web/machines";
 import {
   type Capabilities,
   type HubConfig,
@@ -21,6 +21,7 @@ import { ExternalActivity } from "./externalActivity.js";
 import type { EntityAction, EntityKind } from "./library.js";
 import type { Store, ThreadRecord } from "./store.js";
 import { normalizeLimits } from "./usage.js";
+import { workspaceTool } from "./workspaceTools.js";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -142,7 +143,13 @@ export class Sessions extends EventEmitter {
       rpc.on("notification", (method: string, params: Record<string, unknown>) =>
         this.notification(runtime, method, params),
       );
-      rpc.on("request", (request: ServerRequest) => this.request(runtime, request));
+      rpc.on(
+        "request",
+        (request: ServerRequest) =>
+          void this.request(runtime, request).catch(() => {
+            if (!rpc.closed) rpc.rejectRequest(request.id);
+          }),
+      );
       rpc.on("fault", (error: HubError) => {
         if (this.runtimes.get(runtimeId) === existing) this.runtimes.delete(runtimeId);
         for (const threadId of runtime.active) {
@@ -811,9 +818,10 @@ export class Sessions extends EventEmitter {
     if (t.archived) throw new HubError(409, "THREAD_ARCHIVED", "Сначала разархивируй диалог.");
     return this.locked(t.projectId, async () => {
       const r = await this.runtime(t.projectId);
-      if (r.loaded.has(id)) return this.store.thread(id);
+      if (r.loaded.has(id) && t.status !== "unknown") return this.store.thread(id);
       await requireAccess(r.rpc, this.project(t.projectId).workingDirectory, t.settings?.access);
       let result: Record<string, unknown>;
+      let recreatedEmpty = false;
       try {
         result = await r.rpc.request("thread/resume", {
           threadId: t.codexThreadId,
@@ -851,9 +859,15 @@ export class Sessions extends EventEmitter {
         }
         await r.rpc.request("thread/name/set", { threadId: nativeId, name: t.title });
         result = { ...result, thread: { ...record(result.thread), turns: [] } };
+        recreatedEmpty = true;
       }
+      const resumedTurns = record(result.thread).turns;
       const turns =
-        record(result.thread).turns ??
+        (recreatedEmpty
+          ? []
+          : Array.isArray(resumedTurns) && resumedTurns.length
+            ? resumedTurns
+            : undefined) ??
         (
           await r.rpc.request("thread/turns/list", {
             threadId: t.codexThreadId,
@@ -862,7 +876,9 @@ export class Sessions extends EventEmitter {
             sortDirection: "desc",
           })
         ).data;
-      const last = Array.isArray(turns) ? record(turns.at(-1)) : {};
+      if (!Array.isArray(turns))
+        throw new HubError(502, "INVALID_CODEX_RESPONSE", "Codex не подтвердил состояние диалога.");
+      const last = record(turns.at(-1));
       const status = text(last.status);
       if (t.status === "unknown" && last.id) {
         const latestUser = this.store.history(id).messages.findLast((m) => m.role === "user");
@@ -894,7 +910,10 @@ export class Sessions extends EventEmitter {
       if (status === "inProgress") {
         r.active.add(id);
         this.store.setStatus(id, "running", text(last.id) || null);
+      } else if (last.id && !["completed", "interrupted", "failed"].includes(status)) {
+        this.store.setStatus(id, "unknown", text(last.id));
       } else if (t.status === "unknown") {
+        r.active.delete(id);
         // Resume restores conversation history; it is not proof that an unacknowledged command ran.
         this.store.setStatus(id, "idle");
         this.emitEvent(id, "session.state", {
@@ -1113,8 +1132,81 @@ export class Sessions extends EventEmitter {
     a.rpc.respond(a.requestId, { answers: formatted });
     return { resolved: true };
   }
-  private request(r: Runtime, request: ServerRequest): void {
+  private toolProblem(
+    t: ThreadRecord,
+    request: ServerRequest,
+    title: string,
+    message: string,
+  ): void {
+    const turnId = text(request.params.turnId) || t.activeTurnId;
+    const tool = text(request.params.tool, 100).replace(/[^a-zA-Z0-9_./-]/g, "");
+    const id = this.store.result(
+      t.id,
+      turnId,
+      "client-tool:" + (turnId || "idle") + ":" + tool,
+      "error",
+      title,
+      {
+        message,
+        tool,
+      },
+    );
+    if (id) this.emitEvent(t.id, "result.created", { id, type: "error" }, turnId);
+  }
+  private async request(r: Runtime, request: ServerRequest): Promise<void> {
     const t = this.store.threadByCodex(text(request.params.threadId));
+    if (request.method === "item/tool/call" && t) {
+      const p = this.project(t.projectId);
+      const machine = this.config.machines.find((m) => m.id === p.machineId)!;
+      const response = await workspaceTool(request.params, machine, async (m) => {
+        let cursor: string | undefined;
+        for (let page = 0; page < 5; page++) {
+          const features = await r.rpc.request("experimentalFeature/list", {
+            limit: 100,
+            ...(cursor ? { cursor } : {}),
+          });
+          const feature = (Array.isArray(features.data) ? features.data : [])
+            .map(record)
+            .find((f) => f.name === "workspace_dependencies");
+          if (feature) {
+            if (feature.enabled !== true) throw new Error("WORKSPACE_DEPENDENCIES_DISABLED");
+            return readWorkspaceDependencies(m);
+          }
+          cursor = text(features.nextCursor);
+          if (!cursor) break;
+        }
+        throw new Error("WORKSPACE_DEPENDENCIES_UNAVAILABLE");
+      });
+      if (r.rpc.closed) return;
+      if (response) {
+        r.rpc.respond(request.id, response);
+        if (!response.success)
+          this.toolProblem(
+            t,
+            request,
+            "Окружение документов недоступно",
+            "Проверь установленное окружение и настройку зависимостей Codex. Обычные инструменты проекта остаются доступны.",
+          );
+      } else {
+        const tool = text(request.params.tool, 100).replace(/[^a-zA-Z0-9_./-]/g, "");
+        r.rpc.respond(request.id, {
+          success: false,
+          contentItems: [
+            {
+              type: "inputText",
+              text: `This web host does not implement the desktop tool ${tool}. Use the available native project tools; do not retry by reconnecting the conversation.`,
+            },
+          ],
+        });
+        this.toolProblem(
+          t,
+          request,
+          "Инструмент клиента недоступен",
+          `Настольный инструмент ${tool} пока не подключён к веб-клиенту. Переподключать диалог не нужно.`,
+        );
+      }
+      return;
+    }
     const supported = [
       "item/commandExecution/requestApproval",
       "item/fileChange/requestApproval",

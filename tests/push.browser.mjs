@@ -130,7 +130,7 @@ for (const [engine, type] of [
     );
     await expect(page.getByText("Ответ по уведомлению", { exact: true })).toBeVisible();
     await expect(editor).toHaveValue("");
-    assert.equal(await page.evaluate(() => location.hash), "");
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
     assert.equal(
       f.calls.filter((c) => ["turn/start", "thread/resume"].includes(c.method)).length,
       0,
@@ -149,8 +149,26 @@ for (const [engine, type] of [
       back,
     );
     await expect(editor).toHaveValue("Черновик должен сохраниться");
+    // Deterministically hold preference writes across a cold reload (#67).
+    let releasePreferences;
+    const preferencesGate = new Promise((resolve) => {
+      releasePreferences = resolve;
+    });
+    await page.route("**/api/preferences", async (route) => {
+      if (
+        route.request().method() === "PATCH" &&
+        route.request().postDataJSON()?.threadId === other.id
+      )
+        await preferencesGate;
+      await route.continue().catch(() => {});
+    });
     await page.goto(origin + "/#notification=" + id);
+    await expect(page.getByText("Ответ по уведомлению", { exact: true })).toBeVisible();
+    assert.equal(await page.evaluate(() => location.hash), "#notification=" + id);
     await page.reload();
+    releasePreferences();
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
+    await page.unroute("**/api/preferences");
     await expect(page.getByText("Ответ по уведомлению", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Настройки", exact: true }).click();
     // A disappeared OS subscription is revoked server-side on opening settings.
@@ -213,6 +231,9 @@ for (const [engine, type] of [
         ),
       gptId,
     );
+    await expect(page.getByText("Ответ GPT по уведомлению", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
+    await page.reload();
     await expect(page.getByText("Ответ GPT по уведомлению", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
     await page

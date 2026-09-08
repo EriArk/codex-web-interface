@@ -145,7 +145,7 @@ export function GptWorkspace({
   theme: Theme;
   onTheme: (theme: Theme) => void;
   notificationTarget?: NotificationTarget;
-  onNotificationHandled: () => void;
+  onNotificationHandled: (id: string) => void;
   onSession: (session: Session) => void;
   onLogout: () => void;
 }) {
@@ -634,7 +634,19 @@ export function GptWorkspace({
   useEffect(() => {
     if (!notificationTarget || handledNotification.current === notificationTarget.id) return;
     handledNotification.current = notificationTarget.id;
-    onNotificationHandled();
+    // Persist before consuming the URL; an immediate PWA reload must reopen this target.
+    try {
+      localStorage.setItem("codex-client", "gpt");
+      if (notificationTarget.nativeId)
+        localStorage.setItem("gpt-conversation", notificationTarget.nativeId);
+      else localStorage.removeItem("gpt-conversation");
+      if (!notificationTarget.nativeId && notificationTarget.jobId)
+        sessionStorage.setItem("gpt-created-job", notificationTarget.jobId);
+      else sessionStorage.removeItem("gpt-created-job");
+      onNotificationHandled(notificationTarget.id);
+    } catch {
+      /* Keep the notification URL when browser storage is unavailable. */
+    }
     navigationVersion.current++;
     rememberScroll();
     setCreatedJob(notificationTarget.nativeId ? "" : notificationTarget.jobId || "");

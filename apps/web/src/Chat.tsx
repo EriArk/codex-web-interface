@@ -20,6 +20,7 @@ import { AttachmentList, useAttachments } from "./AttachmentPicker";
 import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
+import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
@@ -265,7 +266,7 @@ export function Chat({
   onDecision: (id: string, d: "accept" | "decline") => void;
   onAnswer: (id: string, a: Record<string, string[]>) => void;
   onResult: (id: string, category?: ResultCategory) => void;
-  onReconnect: () => void;
+  onReconnect: () => Promise<RecoveryOutcome>;
   onLatest: () => void;
 }) {
   const handoff = useWebHandoff(machineId, threadId);
@@ -623,24 +624,14 @@ export function Chat({
         </div>
       </div>
       <UpdateNotice visible={visible} busy={busy || attachments.busy} />
-      {threadId && state.error && (
-        <div className="notice error-notice" role="alert">
-          <span>{state.error}</span>
-          <button
-            type="button"
-            onClick={onReconnect}
-            className="icon-button"
-            aria-label="Восстановить соединение"
-          >
-            <Icon name="refresh" />
-          </button>
-        </div>
-      )}
-      {threadId && state.thread.status === "unknown" && (
-        <button type="button" className="secondary recovery-button" onClick={onReconnect}>
-          <Icon name="refresh" />
-          Восстановить диалог
-        </button>
+      {threadId && (
+        <ConnectionRecovery
+          key={threadId}
+          needed={state.thread.status === "unknown"}
+          error={state.error}
+          disabled={busy}
+          onRecover={onReconnect}
+        />
       )}
       {(sending || queue.busy || active) && (
         <div

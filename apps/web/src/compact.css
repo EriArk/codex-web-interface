@@ -278,3 +278,28 @@
     height: calc(var(--app-height) - var(--safe-top) - var(--safe-bottom));
   }
 }
+
+.connection-recovery {
+  flex: none;
+  margin: 0 10px 8px;
+}
+.connection-recovery .notice {
+  margin: 0 0 6px;
+}
+.connection-recovery .recovery-button {
+  margin: 0 auto;
+}
+
+.connection-recovery .notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connection-recovery .notice > span:not(.spin) {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+.connection-recovery .notice .icon-button {
+  flex: none;
+}
