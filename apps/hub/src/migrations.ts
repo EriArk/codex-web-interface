@@ -120,6 +120,47 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 10,
+    name: "private-work-notifications",
+    up(db) {
+      db.exec(`
+        CREATE TABLE push_subscriptions(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES sessions(tokenHash) ON DELETE CASCADE,value TEXT NOT NULL,categories TEXT NOT NULL,createdAt INTEGER NOT NULL);
+        CREATE TABLE push_notices(id TEXT PRIMARY KEY,eventKey TEXT NOT NULL UNIQUE,client TEXT NOT NULL,target TEXT NOT NULL,category TEXT NOT NULL,kind TEXT NOT NULL,createdAt INTEGER NOT NULL,fanned INTEGER NOT NULL DEFAULT 0);
+        CREATE INDEX push_notice_age ON push_notices(createdAt);
+        CREATE TABLE push_deliveries(notice TEXT NOT NULL REFERENCES push_notices(id) ON DELETE CASCADE,subscription TEXT NOT NULL REFERENCES push_subscriptions(id) ON DELETE CASCADE,state TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,nextAt INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(notice,subscription));
+        CREATE TRIGGER push_codex_event AFTER INSERT ON events
+        WHEN EXISTS(SELECT 1 FROM push_subscriptions)
+          AND (NEW.type='approval.requested' OR (NEW.type='turn.completed' AND json_extract(NEW.payload,'$.status') IN ('completed','failed')))
+        BEGIN
+          INSERT OR IGNORE INTO push_notices(id,eventKey,client,target,category,kind,createdAt)
+          VALUES(lower(hex(randomblob(16))), 'codex:'||NEW.threadId||':'||COALESCE(NEW.turnId,CAST(NEW.seq AS TEXT))||':'||NEW.type||':'||COALESCE(json_extract(NEW.payload,'$.id'),'')||':'||COALESCE(json_extract(NEW.payload,'$.status'),''),
+            'codex',NEW.threadId,
+            CASE WHEN NEW.type='approval.requested' THEN 'attention' WHEN json_extract(NEW.payload,'$.status')='failed' THEN 'errors' ELSE 'completed' END,
+            CASE WHEN NEW.type='approval.requested' THEN CASE WHEN json_extract(NEW.payload,'$.kind')='question' THEN 'question' ELSE 'approval' END WHEN json_extract(NEW.payload,'$.status')='failed' THEN 'failed' ELSE 'completed' END,
+            CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER push_gpt_job AFTER UPDATE OF status ON gpt_jobs
+        WHEN NEW.status<>OLD.status AND NEW.status IN ('completed','failed','unknown') AND EXISTS(SELECT 1 FROM push_subscriptions)
+        BEGIN
+          INSERT OR IGNORE INTO push_notices(id,eventKey,client,target,category,kind,createdAt)
+          VALUES(lower(hex(randomblob(16))),'gpt:'||NEW.id||':'||NEW.status,'gpt',NEW.id,CASE WHEN NEW.status='completed' THEN 'completed' ELSE 'errors' END,NEW.status,CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER push_codex_queue AFTER UPDATE OF state ON queue_transfers
+        WHEN NEW.state<>OLD.state AND NEW.state IN ('unknown','enqueue_unknown') AND EXISTS(SELECT 1 FROM push_subscriptions)
+        BEGIN
+          INSERT OR IGNORE INTO push_notices(id,eventKey,client,target,category,kind,createdAt)
+          VALUES(lower(hex(randomblob(16))),'queue:'||NEW.threadId||':'||NEW.id,'codex',NEW.threadId,'errors','unknown',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER push_codex_lost AFTER UPDATE OF status ON threads
+        WHEN NEW.status='unknown' AND OLD.status IN ('running','starting','waiting_approval') AND EXISTS(SELECT 1 FROM push_subscriptions)
+        BEGIN
+          INSERT OR IGNORE INTO push_notices(id,eventKey,client,target,category,kind,createdAt)
+          VALUES(lower(hex(randomblob(16))),'lost:'||NEW.id||':'||COALESCE(NEW.activeTurnId,NEW.updatedAt),'codex',NEW.id,'errors','unknown',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+      `);
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

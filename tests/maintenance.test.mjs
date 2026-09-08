@@ -72,6 +72,9 @@ test("online backup restores login, native IDs, projections and file bytes; old 
     source.setStatus(t.id, "running", "native-turn");
     const extra = join(root, "remote.env");
     await writeFile(extra, "SECRET=fixture-only", { mode: 0o600 });
+    await writeFile(join(root, "source", "push-keys.json"), "private-vapid-fixture", {
+      mode: 0o600,
+    });
     const snapshots = join(root, "backups");
     const snapshot = await createSnapshot(config, snapshots, {
       keep: 2,
@@ -82,9 +85,14 @@ test("online backup restores login, native IDs, projections and file bytes; old 
     assert.equal(manifest.schemaVersion, SCHEMA_VERSION);
     assert.equal(manifest.revision, "abcdef1");
     assert(manifest.files.some((file) => file.path === "private/remote.env"));
+    assert.equal(
+      await readFile(join(snapshot, "private", "push-keys.json"), "utf8"),
+      "private-vapid-fixture",
+    );
     assert(manifest.files.every((file) => !file.path.includes("repository")));
     const target = join(root, "restored");
     await restoreSnapshot(snapshot, target);
+    assert.equal(await readFile(join(target, "push-keys.json"), "utf8"), "private-vapid-fixture");
     const restored = new Store(join(target, "app.db"));
     const restoredConfig = {
       ...config,

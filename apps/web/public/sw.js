@@ -56,3 +56,53 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// Generic encrypted payloads only; no prompt, file or account contents on the lock screen.
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    (async () => {
+      let data;
+      try {
+        data = event.data?.json();
+      } catch {
+        return;
+      }
+      if (!data || !/^[a-f0-9]{32}$/.test(data.id) || !["Codex", "GPT"].includes(data.title))
+        return;
+      const allowed = [
+        "Работа завершена",
+        "Нужен ответ на вопрос",
+        "Нужно разрешение",
+        "Не удалось завершить работу",
+        "Проверь состояние работы",
+        "Уведомления работают",
+      ];
+      if (!allowed.includes(data.body)) return;
+      await self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: "/icon.svg",
+        tag: "work-" + data.id,
+        data: { id: data.id },
+        renotify: false,
+      });
+    })(),
+  );
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const id = event.notification.data?.id;
+  if (!/^[a-f0-9]{32}$/.test(id || "")) return;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = windows.find((client) => {
+        const url = new URL(client.url);
+        return url.origin === self.location.origin && url.pathname === "/";
+      });
+      if (existing) {
+        await existing.focus();
+        existing.postMessage({ type: "notification.open", id });
+      } else await self.clients.openWindow("/#notification=" + id);
+    })(),
+  );
+});

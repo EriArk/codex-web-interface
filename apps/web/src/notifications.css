@@ -1,0 +1,29 @@
+.notification-settings {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 16px;
+}
+.notification-settings h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.notification-settings button {
+  min-height: 44px;
+}
+.notification-settings fieldset {
+  border: 0;
+  padding: 6px 0;
+  margin: 0;
+}
+.notification-settings label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 14px;
+}
+.notification-settings input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}

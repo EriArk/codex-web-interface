@@ -28,6 +28,7 @@ import { GptProgress } from "./GptProgress";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
+import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
@@ -132,6 +133,8 @@ function cachedId() {
   }
 }
 export function GptWorkspace({
+  notificationTarget,
+  onNotificationHandled,
   onCodex,
   theme,
   onTheme,
@@ -141,6 +144,8 @@ export function GptWorkspace({
   onCodex: () => void;
   theme: Theme;
   onTheme: (theme: Theme) => void;
+  notificationTarget?: NotificationTarget;
+  onNotificationHandled: () => void;
   onSession: (session: Session) => void;
   onLogout: () => void;
 }) {
@@ -623,6 +628,22 @@ export function GptWorkspace({
       if (input.current) input.current.value = "";
     }
   };
+
+  useNotificationPresence("gpt", selected || createdJob, view === "chat" && !drawer && !settings);
+  const handledNotification = useRef("");
+  useEffect(() => {
+    if (!notificationTarget || handledNotification.current === notificationTarget.id) return;
+    handledNotification.current = notificationTarget.id;
+    onNotificationHandled();
+    navigationVersion.current++;
+    rememberScroll();
+    setCreatedJob(notificationTarget.nativeId ? "" : notificationTarget.jobId || "");
+    setSelected(notificationTarget.nativeId || "");
+    setDrawer(false);
+    setSettings(false);
+    setView("chat");
+    setNotice("");
+  }, [notificationTarget, rememberScroll, onNotificationHandled]);
   const pendingNew = jobs.find((job) => !selected && job.nativeId && job.id === createdJob);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Carry the current draft only when this job acquires its native chat.
   useEffect(() => {
@@ -1401,6 +1422,7 @@ export function GptWorkspace({
             {connection?.state === "login_required" ? "Войти в ChatGPT" : "Подключение ChatGPT"}
           </a>
         </section>
+        <Notifications visible={settings} />
         <StorageUsage visible={settings} />
         <AccountControls onSession={onSession} onLogout={onLogout} />
       </dialog>

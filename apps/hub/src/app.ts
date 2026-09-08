@@ -24,6 +24,7 @@ import { registerGpt } from "./gpt.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { registerNavigation } from "./navigation.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
+import { type PushOptions, registerPush } from "./push.js";
 import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
@@ -46,6 +47,7 @@ export async function createApp(
     store?: Store;
     sessions?: Sessions;
     logger?: boolean;
+    push?: PushOptions;
     desktopTransport?: DesktopTransport;
   } = {},
 ) {
@@ -149,6 +151,7 @@ export async function createApp(
     });
   });
   registerGpt(app, config, store);
+  const push = registerPush(app, store, auth, config.hub.publicBaseUrl, options.push);
   registerNavigation(app, store, sessions, auth, sockets);
   registerQueue(app, sessions, store);
   registerDesktop(app, config, store, sessions, options.desktopTransport);
@@ -747,8 +750,9 @@ export async function createApp(
   }
   app.addHook("onClose", async () => {
     for (const socket of sockets.keys()) socket.close(1001, "Server restarting");
+    await push.close();
     await sessions.close();
     store.close();
   });
-  return { app, store, sessions, auth };
+  return { app, store, sessions, auth, push };
 }

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { loadPushKeys } from "./push.js";
 import { Store } from "./store.js";
 
 process.umask(0o077);
@@ -23,11 +24,18 @@ if (!store.db.prepare("SELECT username FROM users LIMIT 1").get()) {
     });
   }
 } else if (existsSync(setupPath)) unlinkSync(setupPath);
+let pushKeys: ReturnType<typeof loadPushKeys> | undefined;
+try {
+  pushKeys = loadPushKeys(join(dirname(config.hub.databasePath), "push-keys.json"));
+} catch {
+  /* Optional delivery must not prevent Codex/GPT startup. */
+}
 const { app } = await createApp(config, {
   setupToken,
   store,
   webRoot: process.env.HUB_WEB_ROOT ?? fileURLToPath(new URL("../../web/dist/", import.meta.url)),
   logger: true,
+  push: { keys: pushKeys },
 });
 const shutdown = async () => {
   await app.close();
