@@ -240,3 +240,15 @@ Chromium/WebKit phone/tablet workflows cover the project scope, category filteri
 preview, cross-chat origin, preserved drafts and zero writer acquisition. Screenshots cover
 all four themes and the requested brighter public commentary; these are browser checks,
 not a claim of a completed physical iPhone/iPad acceptance pass.
+
+
+## Project Files/Git inspector — 2026-09-08
+
+- Real Windows read-only probe: browsed `apps/web/public`, read the current branch and 12 commits through the configured SSH/Node path. Native writers and desktop maintenance were not invoked.
+- Raw SSH PNG transfer matched the Windows source exactly: 5420 bytes, SHA-256 `4da6f3c02d18169dbe5fc1979d4be818add08ea46c98e852588b35d9eb227203`.
+- Portable tests cover bounded directory pages, secret/path/symlink exclusions, large file refusal, unborn/staged/working/untracked/renamed Unicode files, nested projects, detached state, binary and truncated diffs, invalid repositories and index preservation. Marker scripts configured as fsmonitor/external diff/text conversion never execute.
+- Authenticated routes are tested for exact binary bytes, filename headers, no-store, authentication, parameter rejection and absence of writer acquisition.
+- Chromium/WebKit workflow exercises closable previews, current Git diff, Results-to-file navigation, preserved draft and phone/landscape/wide layouts across shared themes. Device acceptance continues through the owner's actual iPhone/iPad usage.
+- Before the preceding schema11 artifact deployment, an isolated copy of the real schema10 database migrated with unchanged row counts and integrity `ok`. Rollback rehearsal refuses changed application data and restores an untouched schema-only upgrade copy. Production is not used for rollback testing.
+
+- A disposable Windows fixture verified Cyrillic/percent filenames and rejected an actual NTFS junction plus parent traversal. The small fixture remains under ignored `.local` after cleanup was blocked by automatic review. Rapid navigation reads share a small bounded queue, avoiding a spurious busy error when a prior tab read is still finishing.

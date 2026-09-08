@@ -163,4 +163,5 @@ export async function stageAttachment(
   return transferWindowsAttachment(machine, projectId, id, safeName, sourcePath, deadline);
 }
 
+export { inspectProject } from "./inspector.js";
 export { PROJECT_FILE_LIMIT, projectFilePath, readProjectFile } from "./projectFile.js";

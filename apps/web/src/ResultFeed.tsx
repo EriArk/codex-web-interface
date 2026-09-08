@@ -19,6 +19,7 @@ export function ResultFeed({
   extras = [],
   onTurn,
   toolbar,
+  onFile,
   onOverlayChange,
 }: {
   endpoint: string;
@@ -29,6 +30,7 @@ export function ResultFeed({
   focusVersion?: number;
   extras?: ResultItem[];
   toolbar?: ReactNode;
+  onFile?: (path: string) => void;
   onTurn?: (id: string, threadId?: string) => void;
   onOverlayChange: (open: boolean) => void;
 }) {
@@ -198,6 +200,7 @@ export function ResultFeed({
       onOlder={() => void older()}
       onTurn={onTurn}
       toolbar={toolbar}
+      onFile={onFile}
       onOverlayChange={onOverlayChange}
       category={category}
       onCategory={setCategory}
