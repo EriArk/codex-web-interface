@@ -1234,7 +1234,7 @@ export function GptWorkspace({
               />
             )}
             <form
-              className="gpt-composer"
+              className="composer gpt-composer"
               onSubmit={(event) => {
                 event.preventDefault();
                 void send();
@@ -1309,7 +1309,7 @@ export function GptWorkspace({
                 />
                 <button
                   type="submit"
-                  className="primary icon-button"
+                  className="send-button"
                   disabled={
                     busy || uploading || !ready || !model || (!text.trim() && !files.length)
                   }

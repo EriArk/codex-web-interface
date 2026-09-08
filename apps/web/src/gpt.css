@@ -90,15 +90,11 @@
   height: auto;
 }
 .gpt-composer-wrap {
-  padding: 10px 18px 16px;
+  padding: 0 20px 14px;
   flex: none;
 }
 .gpt-composer {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 6px 8px;
-  background: var(--surface);
-  box-shadow: 0 2px 8px #00000008;
+  margin: 0;
 }
 .gpt-options {
   display: flex;
@@ -118,12 +114,21 @@
   min-width: 0;
   background: transparent;
   border: 0;
-  resize: vertical;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  resize: none;
   max-height: 180px;
-  padding: 12px 8px;
+  padding: 1px 0;
   font: inherit;
   font-size: 16px;
-  line-height: 1.4;
+  line-height: 1.45;
+}
+.gpt-input-row textarea:focus {
+  outline: none;
+}
+.gpt-composer:focus-within {
+  border-color: var(--accent);
 }
 .gpt-input-row > button {
   flex: none;
@@ -132,7 +137,7 @@
   margin-bottom: 4px;
 }
 .gpt-input-row > button[type="submit"] {
-  border-radius: 10px;
+  border-radius: 9px;
 }
 .gpt-progress {
   display: flex;
@@ -297,7 +302,7 @@
     padding: 18px 16px;
   }
   .gpt-composer-wrap {
-    padding: 8px 12px 12px;
+    padding: 0 10px 9px;
   }
   .gpt-chat .message-body {
     font-size: 15px;
@@ -392,4 +397,19 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+@media (max-width: 1099px) {
+  .gpt-options {
+    gap: 2px;
+  }
+  .gpt-input-row {
+    gap: 6px;
+  }
+  .gpt-input-row textarea {
+    min-height: 44px;
+  }
+  :root[data-keyboard="true"] .gpt-composer-wrap {
+    padding-bottom: 8px;
+  }
 }
