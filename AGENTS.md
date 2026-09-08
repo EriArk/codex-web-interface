@@ -352,3 +352,11 @@ Before mobile support is considered complete, the same core workflow must also w
 - Suppress old unread-completion badges while that same thread is active. A project may show both indicators only for different threads.
 
 - Drawer and Settings close controls stay compact and unframed with 44px touch targets. Focus the panel on opening instead of highlighting the close button or activating the client picker; retain keyboard focus visibility. Leftward touch swipes close either panel in Codex/GPT while preserving vertical scroll and input gestures.
+
+
+## Owner-requested GPT pinned order (2026-09-08)
+
+- In GPT navigation, pinned panels remain above active unpinned chats. Activity raises a chat to the top of its own unpinned group, never above the pinned panel. Pending new sends also appear below that panel.
+- Apply the same grouping to GPT project chat lists; retain Codex activity-first ordering. This is a GPT-specific update to the earlier activity-first presentation rule, not a change to native pins or execution.
+
+- A Codex project with one visible chat opens that chat directly from the project row. Its project action menu starts with New chat, followed by the existing Pin/Rename/Archive/Delete actions. Two or more chats restore inline expansion; preserve both the chat draft and the other project's pending work when navigating.

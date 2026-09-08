@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useEffect, useId, useState } from "react";
 import { Icon } from "./icons";
 import "./pinned-list.css";
 
-// Callers supply activity order; grouping must never demote unpinned live work.
+// Callers supply activity order and choose whether live work precedes the pinned panel.
 export function PinnedList<T extends { id: string; pinned?: boolean }>({
   items,
   renderItem,
@@ -10,6 +10,8 @@ export function PinnedList<T extends { id: string; pinned?: boolean }>({
   active,
   storageKey,
   searching = false,
+  activeBeforePinned = true,
+  unpinnedPrefix,
 }: {
   items: T[];
   renderItem: (item: T) => ReactNode;
@@ -17,6 +19,8 @@ export function PinnedList<T extends { id: string; pinned?: boolean }>({
   recent: (item: T) => number;
   storageKey: string;
   searching?: boolean;
+  activeBeforePinned?: boolean;
+  unpinnedPrefix?: ReactNode;
 }) {
   const key = "pinned-panel:" + storageKey;
   const read = useCallback(() => {
@@ -48,7 +52,7 @@ export function PinnedList<T extends { id: string; pinned?: boolean }>({
   const open = expanded || searching;
   return (
     <>
-      {items.filter((item) => !item.pinned && active(item)).map(renderItem)}
+      {activeBeforePinned && items.filter((item) => !item.pinned && active(item)).map(renderItem)}
       {pinned.length > 0 && (
         <section className="pinned-panel" aria-label="Закреплённые">
           <div className="pinned-heading">Закреплённые</div>
@@ -76,6 +80,8 @@ export function PinnedList<T extends { id: string; pinned?: boolean }>({
           )}
         </section>
       )}
+      {unpinnedPrefix}
+      {!activeBeforePinned && items.filter((item) => !item.pinned && active(item)).map(renderItem)}
       {items.filter((item) => !item.pinned && !active(item)).map(renderItem)}
     </>
   );

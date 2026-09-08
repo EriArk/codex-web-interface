@@ -283,3 +283,8 @@ not a claim of a completed physical iPhone/iPad acceptance pass.
 ### Message read-aloud (#76, 2026-09-08)
 
 Eight focused controller/text tests cover local voice selection, Markdown exclusion, long Unicode-safe chunk order, one active message, rapid duplicate starts, cancellation races, pause mid-utterance and at chunk boundaries, cleanup and errors. `tests/message-speech.browser.mjs` exercises the actual Codex/GPT interface in Chromium/WebKit with a mocked SpeechSynthesis device: delayed voices, sequential chunks, switching, stop, page/view cleanup, unsupported API, retained drafts and four-theme 390/1366px geometry. The test sends no native prompt and performs no desktop operation. These browser mocks verify integration and state; actual iPhone/iPad system audio and pause behavior remain the owner's physical-device usage check.
+
+
+### Navigation shortcuts and GPT pin order (2026-09-08)
+
+`pinned-navigation.browser.mjs` now verifies that GPT pinned panels precede active unpinned chats and pending new sends, while active chats still precede ordinary inactive chats and Codex retains its existing order. Search, three-pin collapse/persistence and all four themes remain covered. `single-project.browser.mjs` tests the actual Codex shell in Chromium/WebKit: direct single-chat selection, retained per-chat drafts, New chat as the first project action, transition to a collapsible two-chat list, one-tap initial discovery, and rejection of stale asynchronous folder navigation. Native creation is simulated with disposable fixture threads; no owner's prompt or desktop process is touched.

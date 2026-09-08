@@ -6,7 +6,7 @@ import {
   type ProjectActivity,
   type ThreadActivity,
 } from "@codex-web/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
 import { ClientPicker } from "./ClientPicker";
 import { EntityArchive, EntityMenu } from "./EntityMenu";
@@ -43,7 +43,7 @@ export function ProjectNavigation({
   busy: boolean;
   loading: boolean;
   machine: string;
-  onExpand: (id: string) => Promise<void>;
+  onExpand: (id: string) => Promise<Thread[] | void>;
   onThread: (id: string, projectId: string) => void;
   onNewThread: (projectId: string) => void;
   onNewProject: () => void;
@@ -55,6 +55,7 @@ export function ProjectNavigation({
   onOverview?: (id: string) => void;
   onClient?: (value: "codex" | "gpt") => void;
 }) {
+  const openRequest = useRef(0);
   const [section, setSection] = useState<"projects" | "threads">("projects");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -138,7 +139,7 @@ export function ProjectNavigation({
     setPending((old) => new Set(old).add(id));
     setErrors((old) => ({ ...old, [id]: "" }));
     try {
-      await onExpand(id);
+      return await onExpand(id);
     } catch {
       setErrors((old) => ({ ...old, [id]: "Не удалось обновить диалоги." }));
     } finally {
@@ -149,6 +150,13 @@ export function ProjectNavigation({
       });
     }
   };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A newer navigation invalidates an in-flight folder click.
+  useEffect(
+    () => () => {
+      ++openRequest.current;
+    },
+    [projectId, threadId],
+  );
   useEffect(() => {
     if (projectId) setExpanded((old) => new Set(old).add(projectId));
   }, [projectId]);
@@ -161,7 +169,10 @@ export function ProjectNavigation({
           type="button"
           className={`nav-thread ${threadId === t.id ? "selected" : ""}`}
           disabled={busy}
-          onClick={() => onThread(t.id, t.projectId)}
+          onClick={() => {
+            ++openRequest.current;
+            onThread(t.id, t.projectId);
+          }}
           aria-current={threadId === t.id ? "page" : undefined}
           data-thread-id={t.id}
         >
@@ -339,24 +350,47 @@ export function ProjectNavigation({
             storageKey="codex-projects"
             searching={!!query.trim()}
             renderItem={(p) => {
-              const open = expanded.has(p.id) || !!query.trim();
+              const list = groups[p.id] ?? [];
+              const single = list.length === 1 || (list.length === 0 && p.threadCount === 1);
+              const open = !single && (expanded.has(p.id) || !!query.trim());
               return (
                 <div className="nav-project-group" key={p.id}>
                   <div className={"entity-row " + (projectId === p.id ? "selected" : "")}>
                     <button
                       type="button"
                       className={`nav-project ${projectId === p.id ? "selected" : ""}`}
-                      disabled={busy}
-                      aria-expanded={open}
+                      disabled={busy || pending.has(p.id)}
+                      aria-expanded={single ? undefined : open}
                       data-project-id={p.id}
-                      onClick={() => {
+                      onClick={(event) => {
+                        const request = ++openRequest.current;
+                        const button = event.currentTarget;
+                        const sole = list.length === 1 ? list[0] : undefined;
+                        if (sole) {
+                          onThread(sole.id, p.id);
+                          return;
+                        }
                         setExpanded((old) => {
                           const next = new Set(old);
-                          if (next.has(p.id)) next.delete(p.id);
+                          if (next.has(p.id) && !single) next.delete(p.id);
                           else next.add(p.id);
                           return next;
                         });
-                        if (!open) void load(p.id);
+                        if (!open)
+                          void load(p.id).then((loaded) => {
+                            if (
+                              request !== openRequest.current ||
+                              !button.isConnected ||
+                              !button.getClientRects().length
+                            )
+                              return;
+                            const visible = loaded?.filter(
+                              (t) =>
+                                !metadata.get("thread" + t.id)?.archived &&
+                                !metadata.get("thread" + t.id)?.deleted,
+                            );
+                            if (visible?.length === 1 && visible[0]) onThread(visible[0].id, p.id);
+                          });
                       }}
                     >
                       <span
@@ -373,21 +407,52 @@ export function ProjectNavigation({
                         unread={summary(p).unread}
                         waiting={summary(p).waiting}
                       />
-                      <span className="project-chevron" data-open={open}>
-                        <Icon name="chevron" size={15} />
-                      </span>
+                      {pending.has(p.id) ? (
+                        <span className="spinner" role="img" aria-label="Загрузка диалогов" />
+                      ) : (
+                        !single && (
+                          <span className="project-chevron" data-open={open}>
+                            <Icon name="chevron" size={15} />
+                          </span>
+                        )
+                      )}
                     </button>
                     <EntityMenu
                       client="codex"
                       entity={{ id: p.id, kind: "project", name: p.name, pinned: p.pinned }}
                       active={summary(p).active > 0}
+                      relatedThread={
+                        list.length === 1 && list[0]
+                          ? {
+                              id: list[0].id,
+                              kind: "thread",
+                              name: list[0].title,
+                              projectId: p.id,
+                              pinned: list[0].pinned,
+                            }
+                          : undefined
+                      }
+                      newThreadDisabled={busy}
+                      onNewThread={() => {
+                        ++openRequest.current;
+                        setExpanded((old) => new Set(old).add(p.id));
+                        onNewThread(p.id);
+                      }}
                     />
                   </div>
+                  {single && errors[p.id] && (
+                    <button type="button" className="nav-empty" onClick={() => void load(p.id)}>
+                      {errors[p.id]} Повторить
+                    </button>
+                  )}
                   {open && onOverview && (
                     <button
                       type="button"
                       className="nav-new-thread overview-nav"
-                      onClick={() => onOverview(p.id)}
+                      onClick={() => {
+                        ++openRequest.current;
+                        onOverview(p.id);
+                      }}
                     >
                       <Icon name="folder" size={16} />
                       Обзор проекта

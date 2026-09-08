@@ -404,3 +404,11 @@ The chat remains mounted with its draft, while read receipts/presence are suppre
 
 
 Assistant messages expose a speaker icon next to Copy. During reading it becomes Pause (then Resume), with a separate Stop icon; all targets remain 44px. Read-aloud belongs to the current device and stops when leaving the chat or opening another workspace view. Unavailable local voices disable the action; synthesis failures are shown beside the control without changing the chat, draft or run.
+
+
+GPT navigation keeps the pinned panel first as requested by the owner on 2026-09-08. Unpinned active chats lead the ordinary group below it; pending new sends use the same area. A running pinned chat remains inside its panel. Search, the three-item fold, native pin actions and Codex activity-first ordering remain available.
+
+
+A Codex project containing one visible chat is a direct chat shortcut, without a redundant chevron or nested single-item list. Its project menu puts New chat first. Creating a second chat restores expansion in place. An initial unknown group may resolve its single chat on the same tap; stale loads cannot take navigation away from a newer selection or a closed drawer.
+
+The single hidden child keeps its own Pin/Rename/Archive/Delete actions under a named Chat entry in the project menu. The nested menu retains a snapshot of the selected chat identity: background list changes cannot retarget a chat confirmation to the project.

@@ -900,6 +900,49 @@ export function GptWorkspace({
     );
   const threadActive = (item: GptConversation) =>
     jobs.some((job) => job.nativeId === item.id && isActive(job));
+  const outboxNavigation = jobs
+    .filter(
+      (job) =>
+        !job.dismissed &&
+        !job.nativeId &&
+        (job.status !== "cancelled" || !!job.answer || job.assets.length > 0),
+    )
+    .filter((job) => !search || job.text.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+    .map((job) => (
+      <div className="entity-row" key={job.id}>
+        <button
+          type="button"
+          className={"nav-thread" + (!selected && createdJob === job.id ? " selected" : "")}
+          onClick={() => choose("", job.id)}
+        >
+          <Icon name="chat" />
+          <span>
+            {job.text.slice(0, 60) || "Новая отправка"}
+            <small>{titles[job.status]}</small>
+          </span>
+          {isActive(job) && <span className="spinner" aria-hidden="true" />}
+        </button>
+        <EntityMenu
+          client="gpt"
+          outbox
+          entity={{ id: job.id, kind: "thread", name: job.text.slice(0, 120) || "Отправка" }}
+          active={isActive(job) || job.status === "unknown"}
+          onDone={() => {
+            setJobs((old) =>
+              old.map((item) =>
+                item.id === job.id
+                  ? { ...item, dismissed: true, text: "", files: [], answer: "", assets: [] }
+                  : item,
+              ),
+            );
+            try {
+              sessionStorage.removeItem("gpt-draft-job:" + job.id);
+            } catch {}
+            if (!selected && createdJob === job.id) choose("");
+          }}
+        />
+      </div>
+    ));
   const navigation = (
     <div className="navigation-inner">
       <div className="nav-brand">
@@ -936,6 +979,7 @@ export function GptWorkspace({
       </div>
       <div className="gpt-nav-list">
         <PinnedList
+          activeBeforePinned={false}
           items={projects
             .filter((p) => !p.archived && !p.deleted)
             .sort(
@@ -1019,6 +1063,7 @@ export function GptWorkspace({
               )}
               {expanded.has(project.id) && (
                 <PinnedList
+                  activeBeforePinned={false}
                   items={filtered.filter((c) => c.projectId === project.id)}
                   renderItem={navThread}
                   active={threadActive}
@@ -1041,56 +1086,13 @@ export function GptWorkspace({
             <Icon name="plus" />
           </button>
         </div>
-        {jobs
-          .filter(
-            (job) =>
-              !job.dismissed &&
-              !job.nativeId &&
-              (job.status !== "cancelled" || !!job.answer || job.assets.length > 0),
-          )
-          .filter(
-            (job) => !search || job.text.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-          )
-          .map((job) => (
-            <div className="entity-row" key={job.id}>
-              <button
-                type="button"
-                className={"nav-thread" + (!selected && createdJob === job.id ? " selected" : "")}
-                onClick={() => choose("", job.id)}
-              >
-                <Icon name="chat" />
-                <span>
-                  {job.text.slice(0, 60) || "Новая отправка"}
-                  <small>{titles[job.status]}</small>
-                </span>
-                {isActive(job) && <span className="spinner" aria-hidden="true" />}
-              </button>
-              <EntityMenu
-                client="gpt"
-                outbox
-                entity={{ id: job.id, kind: "thread", name: job.text.slice(0, 120) || "Отправка" }}
-                active={isActive(job) || job.status === "unknown"}
-                onDone={() => {
-                  setJobs((old) =>
-                    old.map((item) =>
-                      item.id === job.id
-                        ? { ...item, dismissed: true, text: "", files: [], answer: "", assets: [] }
-                        : item,
-                    ),
-                  );
-                  try {
-                    sessionStorage.removeItem("gpt-draft-job:" + job.id);
-                  } catch {}
-                  if (!selected && createdJob === job.id) choose("");
-                }}
-              />
-            </div>
-          ))}
         <PinnedList
+          activeBeforePinned={false}
           items={filtered.filter((c) => !projects.some((p) => p.id === c.projectId))}
           renderItem={navThread}
           active={threadActive}
           recent={(t) => t.updatedAt}
+          unpinnedPrefix={outboxNavigation}
           storageKey="gpt-threads"
           searching={!!search.trim()}
         />

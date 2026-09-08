@@ -63,6 +63,7 @@ jobs:
       - run: node tests/downloads.browser.mjs
       - run: node tests/file-preview.browser.mjs
       - run: node tests/pinned-navigation.browser.mjs
+      - run: node tests/single-project.browser.mjs
       - run: node tests/push.browser.mjs
       - run: node tests/recovery.browser.mjs
       - run: node tests/project-results.browser.mjs
