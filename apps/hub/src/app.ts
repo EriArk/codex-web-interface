@@ -33,6 +33,7 @@ import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
 import { storageReport } from "./storage.js";
 import { Store } from "./store.js";
+import { registerWorkspaceTasks } from "./tasks.js";
 
 const idSchema = z.string().min(1).max(100);
 const paramId = (req: FastifyRequest): string => z.object({ id: idSchema }).parse(req.params).id;
@@ -577,6 +578,7 @@ export async function createApp(
   registerProjectInspector(app, sessions);
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerNotebook(app, sessions);
+  registerWorkspaceTasks(app, sessions);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));

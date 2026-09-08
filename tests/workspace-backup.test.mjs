@@ -10,6 +10,7 @@ import { createSnapshot, restoreSnapshot, verifySnapshot } from "../apps/hub/dis
 import { Notebook } from "../apps/hub/dist/notebook.js";
 import { Previews } from "../apps/hub/dist/previews.js";
 import { Store } from "../apps/hub/dist/store.js";
+import { WorkspaceTasks } from "../apps/hub/dist/tasks.js";
 import { configSchema } from "../packages/shared/dist/index.js";
 
 function fixtureConfig(root) {
@@ -40,6 +41,17 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
       store: source,
       catalog: { projects: () => [], library: new Library(source, "codex") },
     });
+    const tasks = new WorkspaceTasks(book.sessions),
+      task = tasks.save(randomUUID(), {
+        scope: null,
+        title: "Next step",
+        body: "Keep owner-authored task",
+        links: [],
+        revision: 0,
+        status: "blocked",
+        priority: 2,
+        dueAt: "2026-09-09",
+      });
     const note = book.save(randomUUID(), {
       scope: null,
       title: "Keep project context",
@@ -121,6 +133,7 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
       catalog: { projects: () => [], library: new Library(restored, "codex") },
     });
     assert.deepEqual(restoredBook.get(note.id), note);
+    assert.deepEqual(new WorkspaceTasks(restoredBook.sessions).get(task.id), task);
     assert.equal(restoredBook.pins("global", 0).items[0].target.id, note.id);
     assert.equal(restoredBook.pins("global", 0).items[0].target.availability, "available");
     restoredGpt = new GptService(

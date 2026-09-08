@@ -29,6 +29,16 @@ export class Notebook {
   }
   resolve(target: NotebookTarget): NotebookLink {
     let availability: NotebookLink["availability"] = "unknown";
+    if (target.kind === "task") {
+      const task = this.db
+        .prepare("SELECT title,scope FROM workspace_tasks WHERE id=?")
+        .get(target.id);
+      return {
+        ...target,
+        ...(task ? { title: String(task.title) } : {}),
+        availability: task ? "available" : "missing",
+      };
+    }
     if (target.kind === "note") {
       const note = this.db
         .prepare("SELECT title,scope FROM workspace_notes WHERE id=?")
@@ -100,7 +110,6 @@ export class Notebook {
         availability = this.sessions.catalog.projects().some((p) => p.id === target.projectId)
           ? "unknown"
           : "missing";
-      if (target.kind === "task") availability = "missing";
     } else {
       const kind = target.kind === "project" ? "project" : "thread",
         native = target.kind === "project" ? target.id : (target.threadId ?? target.id);

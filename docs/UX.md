@@ -391,3 +391,7 @@ Hi-Tech uses a neutral silver chassis, dark panel seams, inset pale screens and 
 ## Notes and saved references
 
 “Заметки и ссылки” in both sidebars opens project context by default, with Global/All scopes. iPhone uses a full-width list or editor; iPad shows a list beside a spacious editor. Markdown preview shares collapsed copyable blocks. Save is explicit, local drafts survive panel closure/reload, and concurrent changes offer a reviewable conflict rather than overwriting silently. Result cards expose a reference action; new notes can link to the current chat/result without copying large content. Saved references use the existing three-item collapsible pinned panel. Removing a referenced source leaves the note intact and an unavailable link.
+
+## Plan
+
+Both sidebars expose “План”, defaulting to the current project with an All Projects choice. The compact list filters open/today/doing/blocked/completed tasks and offers one-tap completion/reopen. A spacious editor shares Notes’ Markdown, safe drafts and conflict handling, with status, priority and an optional date. On phones the date gets its own row so the day/month/year remains readable. Result reference actions can switch from Notes to Plan and create a linked task without copying output. Generic pinned references can reopen either module.
