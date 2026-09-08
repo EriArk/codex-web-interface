@@ -64,6 +64,22 @@ test("slow legacy history returns a bounded tail and preserves every older messa
       all.unshift(...page.messages);
     }
     assert.equal(pages, 3);
+    const ordinary = rpc.request;
+    rpc.request = async (method, params) => {
+      if (method === "thread/items/list") elapsed += 6000;
+      return ordinary(method, params);
+    };
+    catalog.invalidate(thread.id);
+    const deferred = await catalog.history(store.thread(thread.id));
+    assert.equal(deferred.messages.length, 0);
+    assert.equal(deferred.hasMore, true);
+    const resumed = await catalog.history(store.thread(thread.id), deferred.nextBefore);
+    assert.deepEqual(
+      resumed.messages.map((m) => m.id),
+      ["user-0", "answer-0"],
+      "a budget exhausted during method fallback must not lose the initial native page",
+    );
+
     assert.equal(all.length, 6);
     assert.equal(new Set(all.map((m) => m.id)).size, 6);
     assert.deepEqual(

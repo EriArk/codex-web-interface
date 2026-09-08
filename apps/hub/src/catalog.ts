@@ -770,7 +770,7 @@ export class Catalog {
     }
     const messages: MessageRecord[] = [];
     messages.push(...cursor.pending.splice(0, 20));
-    let more = !!cursor.rpc || !before;
+    let more = !!cursor.rpc || !before || cursor.offset === 0;
     // Legacy turns/list may rescan a large rollout for every page (Books: ~8s per turn).
     // Return the collected tail promptly; the native cursor retains every older item.
     const deadline = performance.now() + 5000;
