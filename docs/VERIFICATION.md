@@ -252,3 +252,10 @@ not a claim of a completed physical iPhone/iPad acceptance pass.
 - Before the preceding schema11 artifact deployment, an isolated copy of the real schema10 database migrated with unchanged row counts and integrity `ok`. Rollback rehearsal refuses changed application data and restores an untouched schema-only upgrade copy. Production is not used for rollback testing.
 
 - A disposable Windows fixture verified Cyrillic/percent filenames and rejected an actual NTFS junction plus parent traversal. The small fixture remains under ignored `.local` after cleanup was blocked by automatic review. Rapid navigation reads share a small bounded queue, avoiding a spurious busy error when a prior tab read is still finishing.
+
+
+## Focused machine diagnostics — 2026-09-08
+
+- Six portable tests cover normalized layers, unavailable SSH/Companion, malformed/logged-out accounts, redaction, client cleanup, cached/stale/last-seen state, request deduplication, auth/CSRF and rejection of browser-supplied hosts/commands. Linux OS metrics require no SSH.
+- Real Windows probe confirmed SSH, Codex 0.153.4, Companion startup, native account/model responses and the configured Remote port. Fixed read-only CIM metrics returned memory/disk/CPU/boot time. The fresh protocol client did not load a conversation or invoke desktop maintenance.
+- Chromium/WebKit exercise phone/landscape/tablet, explicit checks and offline feedback, preserved draft, entry from both Codex and GPT, and returning to a Codex project. The ordinary overview performs no SSH probe. Physical device acceptance remains the owner's everyday usage.

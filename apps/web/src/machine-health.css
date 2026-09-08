@@ -1,0 +1,179 @@
+.machine-health-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(960px, calc(100vw - 32px));
+  height: auto;
+  max-width: none;
+  max-height: min(850px, calc(100dvh - 32px));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  overflow: hidden;
+}
+.machine-health-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.machine-health-dialog::backdrop {
+  background: #0009;
+}
+.machine-health-heading {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.machine-health-heading strong {
+  flex: 1;
+}
+.machine-health-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+.machine-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 14px;
+}
+.machine-health-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  padding: 12px;
+  min-width: 0;
+}
+.machine-health-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.machine-health-title > div {
+  flex: 1;
+}
+.machine-health-title h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.machine-health-title small,
+.machine-health-time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.machine-health-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.machine-health-dot[data-state="ok"] {
+  background: var(--accent);
+}
+.machine-health-dot[data-state="error"],
+.machine-health-dot[data-state="warning"] {
+  background: var(--danger);
+}
+.machine-health-activity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+.machine-health-checks {
+  margin: 12px 0;
+  font-size: 14px;
+}
+.machine-health-checks > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.7fr) 1.3fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.machine-health-checks dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.machine-health-checks dt,
+.machine-health-checks dd[data-state="skipped"] {
+  color: var(--muted);
+}
+.machine-health-checks dd[data-state="error"],
+.machine-health-checks dd[data-state="warning"] {
+  color: var(--danger);
+}
+.machine-health-metrics,
+.machine-health-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.machine-health-details summary {
+  min-height: 44px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.machine-health-details summary .copy-button {
+  float: right;
+}
+.machine-health-details ul {
+  list-style: none;
+  padding: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.machine-health-projects {
+  margin-top: 10px;
+}
+.machine-health-projects > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.machine-health-projects .secondary {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  overflow-wrap: anywhere;
+  min-height: 44px;
+}
+.machine-health-footer {
+  margin-top: 16px;
+}
+.machine-health-footer .secondary {
+  align-self: flex-start;
+  min-height: 44px;
+}
+@media (max-width: 700px) {
+  .machine-health-dialog {
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+  .machine-health-scroll {
+    padding: 10px;
+  }
+  .machine-health-heading {
+    padding: 3px 10px;
+  }
+}
+
+.machine-health-dialog:focus {
+  outline: none;
+}
+@media (max-width: 700px) {
+  .machine-health-dialog {
+    max-height: none;
+  }
+}

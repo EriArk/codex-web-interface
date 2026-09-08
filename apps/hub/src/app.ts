@@ -22,6 +22,7 @@ import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
 import { entityAction, libraryMutation } from "./library.js";
+import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
 import { registerNavigation } from "./navigation.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
 import { registerProjectInspector } from "./projectInspector.js";
@@ -50,6 +51,7 @@ export async function createApp(
     logger?: boolean;
     push?: PushOptions;
     desktopTransport?: DesktopTransport;
+    machineDiagnostics?: MachineProbeDependencies;
   } = {},
 ) {
   const app = Fastify({
@@ -572,6 +574,7 @@ export async function createApp(
   });
   registerFilePreviews(app, auth);
   registerProjectInspector(app, sessions);
+  registerMachineHealth(app, sessions, options.machineDiagnostics);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));
