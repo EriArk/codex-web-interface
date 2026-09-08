@@ -278,3 +278,8 @@ not a claim of a completed physical iPhone/iPad acceptance pass.
 - Bounded-module tests verify active/unread counts, missing and empty project state, cached/offline machine and directory-bound Git summaries, auth and no native writer/desktop effects. Large technical output is excluded from the overview response. Native/signed image sources never become automatic thumbnails.
 - Chromium/WebKit verify phone and 13-inch tablet layout across the four themes, Notes/Plan/exact Result/thread navigation, unchanged unread state and chat drafts, empty-project reload, cached GPT project context and exact GPT-to-Codex reference navigation.
 - Screenshot review and regression fixed GPT composer visibility under Home. UI diagnostics use stored summaries, with no new project status probe when opening the overview. No physical-device acceptance or production installation is implied by fixture checks.
+
+
+### Message read-aloud (#76, 2026-09-08)
+
+Eight focused controller/text tests cover local voice selection, Markdown exclusion, long Unicode-safe chunk order, one active message, rapid duplicate starts, cancellation races, pause mid-utterance and at chunk boundaries, cleanup and errors. `tests/message-speech.browser.mjs` exercises the actual Codex/GPT interface in Chromium/WebKit with a mocked SpeechSynthesis device: delayed voices, sequential chunks, switching, stop, page/view cleanup, unsupported API, retained drafts and four-theme 390/1366px geometry. The test sends no native prompt and performs no desktop operation. These browser mocks verify integration and state; actual iPhone/iPad system audio and pause behavior remain the owner's physical-device usage check.

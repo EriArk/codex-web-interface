@@ -1,6 +1,9 @@
 import type { CSSProperties } from "react";
 
 const paths: Record<string, string[]> = {
+  speaker: ["M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"],
+  play: ["m8 4 12 8-12 8V4Z"],
+  pause: ["M8 5v14M16 5v14"],
   copy: ["M9 9h12v12H9zM15 9V3H3v12h6"],
   pin: ["m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v7"],
   edit: ["m4 16 12-12 4 4-12 12-5 1 1-5ZM14 6l4 4"],

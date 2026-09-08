@@ -25,6 +25,7 @@ import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
+import { SpeechButton, useSpeechScope } from "./MessageSpeech";
 import { clearAcknowledgedSend, matchesPendingSend } from "./pendingSend";
 import { TurnDetails } from "./TurnDetails";
 import "./taskBoundary.css";
@@ -245,9 +246,11 @@ export function Chat({
   onLatest,
   completion,
   canMarkSeen,
+  speechVisible,
 }: {
   completion?: ThreadActivity;
   canMarkSeen: boolean;
+  speechVisible: boolean;
   machineId?: string;
   projectId: string;
   threadId: string;
@@ -269,6 +272,8 @@ export function Chat({
   onReconnect: () => Promise<RecoveryOutcome>;
   onLatest: () => void;
 }) {
+  const speechScope = `codex:${threadId}`;
+  useSpeechScope(speechScope, visible && speechVisible);
   const handoff = useWebHandoff(machineId, threadId);
   const queue = useMessageQueue(threadId);
   const options = useTurnSettings(projectId, threadId, state.thread.settings);
@@ -552,7 +557,12 @@ export function Chat({
                       {message.phase === "commentary" && (
                         <span className="small muted">В работе</span>
                       )}
-                      <CopyButton text={message.text} />
+                      <span className="message-actions">
+                        {message.role === "assistant" && (
+                          <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
+                        )}
+                        <CopyButton text={message.text} />
+                      </span>
                     </div>
                     <div className="message-body">
                       <MessageText

@@ -30,6 +30,7 @@ import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { MachineHealthPanel } from "./MachineHealth";
+import { SpeechButton, useSpeechScope } from "./MessageSpeech";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
@@ -732,7 +733,12 @@ export function GptWorkspace({
       setSelected(pendingNew.nativeId);
     }
   }, [pendingNew?.nativeId]);
-  const [, setResultOverlay] = useState(false);
+  const [resultOverlay, setResultOverlay] = useState(false);
+  const speechScope = `gpt:${selected || createdJob}`;
+  useSpeechScope(
+    speechScope,
+    view === "chat" && !notebookOpen && !settings && !drawer && !machinePanel && !resultOverlay,
+  );
   const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
   const openResults = (category: ResultCategory = "all") => {
@@ -769,7 +775,10 @@ export function GptWorkspace({
               <div className="message-header">
                 <span className="avatar">G</span>
                 <b>GPT</b>
-                <CopyButton text={job.answer} />
+                <span className="message-actions">
+                  <SpeechButton id={`${speechScope}:job-${job.id}`} text={job.answer} />
+                  <CopyButton text={job.answer} />
+                </span>
               </div>
               <div className="message-body">
                 {!isActive(job) && !!job.progress?.length && <GptProgress items={job.progress} />}
@@ -1309,7 +1318,12 @@ export function GptWorkspace({
                   <div className="message-header">
                     <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
                     <b>{message.role === "user" ? "Вы" : "GPT"}</b>
-                    <CopyButton text={message.text} />
+                    <span className="message-actions">
+                      {message.role === "assistant" && (
+                        <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
+                      )}
+                      <CopyButton text={message.text} />
+                    </span>
                   </div>
                   <div className="message-body">
                     {message.role === "assistant" &&
