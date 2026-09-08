@@ -32,6 +32,7 @@ import { type PushOptions, registerPush } from "./push.js";
 import { registerQueue } from "./queue.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
+import { registerSpeech } from "./speech.js";
 import { storageReport } from "./storage.js";
 import { Store } from "./store.js";
 import { registerWorkspaceTasks } from "./tasks.js";
@@ -114,6 +115,7 @@ export async function createApp(
     },
   });
   auth.install(app);
+  registerSpeech(app, config, auth);
   app.addContentTypeParser(
     "application/octet-stream",
     { parseAs: "buffer", bodyLimit: MAX_FILE_BYTES },

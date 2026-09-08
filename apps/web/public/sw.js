@@ -28,6 +28,8 @@ self.addEventListener("fetch", (event) => {
   )
     return;
   if (event.request.mode === "navigate") {
+    // A protected Remote/download page must never replace the offline app shell.
+    if (url.pathname !== "/") return;
     event.respondWith(
       fetch(event.request, { cache: "no-store" })
         .then((response) => {

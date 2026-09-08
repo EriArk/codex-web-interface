@@ -958,6 +958,14 @@ export function GptWorkspace({
             }}
           />
         </span>
+        <a
+          className="icon-button nav-remote"
+          href="/gpt-connect?immersive=1"
+          aria-label="Открыть Remote"
+          title="Remote"
+        >
+          <Icon name="remote" />
+        </a>
         <button
           type="button"
           className="icon-button mobile-only panel-close"
@@ -1123,10 +1131,6 @@ export function GptWorkspace({
           План
         </button>
       )}
-      <a className="nav-new-thread" href="/gpt-connect">
-        <Icon name="remote" />
-        Открыть ChatGPT
-      </a>
       <button
         type="button"
         className="nav-new-thread"
@@ -1180,9 +1184,6 @@ export function GptWorkspace({
           <small>{items.find((item) => item.id === selected)?.title ?? "Новый чат"}</small>
         </div>
         {active && <span className="spinner" role="img" aria-label="GPT работает" />}
-        <a href="/gpt-connect" className="icon-button" aria-label="Открыть ChatGPT">
-          <Icon name="remote" />
-        </a>
         <button
           type="button"
           className="icon-button wide-pane-control"
@@ -1551,10 +1552,6 @@ export function GptWorkspace({
           <Icon name="results" />
           <span>Результаты</span>
         </button>
-        <a href="/gpt-connect">
-          <Icon name="remote" />
-          <span>ChatGPT</span>
-        </a>
       </nav>
       <dialog
         className="project-sheet"

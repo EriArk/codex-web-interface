@@ -429,7 +429,7 @@ function Workspace({
         setMachines(machineList.machines);
         setProjects(list);
         if (prefs.theme) setTheme(prefs.theme);
-        if (prefs.view) setView(prefs.view);
+        if (prefs.view) setView(prefs.view === "remote" ? "chat" : prefs.view);
         const visible = list.filter((p) => !p.archived && !p.deleted);
         const id = visible.some((p) => p.id === prefs.projectId)
           ? (prefs.projectId ?? "")
@@ -936,6 +936,11 @@ function Workspace({
       }}
       onRefresh={() => void refreshCatalog(true)}
       onClose={() => setDrawer(false)}
+      onRemote={() => {
+        setDrawer(false);
+        setRightHidden(false);
+        setView("remote");
+      }}
       onSettings={() => {
         setDrawer(false);
         setSettings(true);
@@ -1048,18 +1053,7 @@ function Workspace({
               : "Личный Hub"}
           </span>
         </div>
-        <button
-          type="button"
-          className="icon-button wide-pane-control"
-          aria-label="Открыть Remote"
-          title="Remote"
-          onClick={() => {
-            setRightHidden(false);
-            setView("remote");
-          }}
-        >
-          <Icon name="remote" />
-        </button>
+
         <button
           type="button"
           className="icon-button wide-pane-control"
@@ -1228,7 +1222,6 @@ function Workspace({
             {tab("results", "Результаты", "results")}
             {tab("files", "Файлы", "folder")}
             {tab("activity", "Активность", "activity")}
-            {tab("remote", "Remote", "remote")}
           </div>
           <ResultFeed
             onSaveLink={(r) =>
@@ -1359,7 +1352,6 @@ function Workspace({
       <nav className="mobile-tabs" aria-label="Разделы рабочего пространства">
         {tab("chat", "Чат", "chat")}
         {tab("results", "Результаты", "results")}
-        {tab("remote", "Remote", "remote")}
       </nav>
       <ProjectDialog
         open={createProject}

@@ -129,8 +129,11 @@ export function Remote({
       setRequested(false);
       setFull(false);
       setControls(false);
+    } else {
+      setFull(true);
+      if (available) setRequested(true);
     }
-  }, [visible]);
+  }, [visible, available]);
   useEffect(() => {
     inputRef.current?.reset();
     try {
@@ -516,6 +519,9 @@ export function Remote({
     >
       {!requested ? (
         <div key="remote-empty" className="empty-state remote-empty">
+          <button type="button" className="remote-fab" aria-label="Назад к чату" onClick={onBack}>
+            <Icon name="back" />
+          </button>
           <div className="empty-symbol">
             <Icon name="remote" size={32} />
           </div>

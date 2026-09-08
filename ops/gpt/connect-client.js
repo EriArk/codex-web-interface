@@ -1,3 +1,11 @@
+if(new URLSearchParams(location.search).get('immersive')==='1'){
+ document.body.classList.add('immersive');
+ const back=document.querySelector('header a');back.textContent='‹';back.setAttribute('aria-label','Назад к чату');
+ const reload=document.querySelector('#reload');reload.textContent='↻';reload.setAttribute('aria-label','Переподключить Remote');
+ const toggle=document.createElement('button');toggle.type='button';toggle.textContent='☷';toggle.setAttribute('aria-label','Управление Remote');toggle.setAttribute('aria-expanded','false');
+ const footer=document.querySelector('footer');footer.hidden=true;toggle.onclick=()=>{footer.hidden=!footer.hidden;toggle.setAttribute('aria-expanded',String(!footer.hidden));};
+ document.querySelector('header').insertBefore(toggle,reload);
+}
 const G=window.Guacamole,surface=document.querySelector('#surface'),host=document.querySelector('#display'),status=document.querySelector('#status'),sink=document.querySelector('#sink');
 let client,keyboard,mouse,touch;
 function text(value){status.textContent=value;status.hidden=!value}
