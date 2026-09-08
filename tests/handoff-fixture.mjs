@@ -111,6 +111,12 @@ export async function handoffFixture(publicOrigin = origin) {
     calls,
     desktopCalls,
     headers,
+    finishTurn: () => {
+      rpc.emit("notification", "turn/completed", {
+        threadId: thread.codexThreadId,
+        turn: { id: store.thread(thread.id).activeTurnId, status: "completed" },
+      });
+    },
     loseAck: () => {
       loseAck = true;
     },

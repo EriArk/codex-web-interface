@@ -536,15 +536,6 @@ export class GptService {
     return this.upload(fileId);
   }
   enqueue(jobId: string, value: Input) {
-    if (!this.available())
-      throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
-    if (this.libraryBusy)
-      throw error("GPT_LIBRARY_BUSY", "Обновляем список чатов. Повтори отправку через секунду.");
-    if (value.nativeId) {
-      this.library.assertExists("thread", value.nativeId);
-      if (this.library.get("thread", value.nativeId)?.archived)
-        throw error("GPT_ARCHIVED", "Сначала разархивируй чат.");
-    }
     const fingerprint = createHash("sha256").update(JSON.stringify(value)).digest("hex");
     const existing = this.store.db
       .prepare("SELECT fingerprint FROM gpt_jobs WHERE id=?")
@@ -553,6 +544,15 @@ export class GptService {
       if (existing.fingerprint !== fingerprint)
         throw error("GPT_KEY_REUSED", "Эта отправка уже содержит другое сообщение.");
       return this.job(jobId);
+    }
+    if (!this.available())
+      throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
+    if (this.libraryBusy)
+      throw error("GPT_LIBRARY_BUSY", "Обновляем список чатов. Повтори отправку через секунду.");
+    if (value.nativeId) {
+      this.library.assertExists("thread", value.nativeId);
+      if (this.library.get("thread", value.nativeId)?.archived)
+        throw error("GPT_ARCHIVED", "Сначала разархивируй чат.");
     }
     if (!value.text.trim() && !value.files.length)
       throw error("GPT_EMPTY_MESSAGE", "Добавь текст или файл.", 400);
@@ -886,7 +886,18 @@ export class GptService {
     return this.response("/asset?id=" + encodeURIComponent(fileId), undefined, 60000);
   }
   async result(fileId: string) {
-    if (!this.jobs().some((job) => job.assets.some((asset) => asset.id === fileId)))
+    const owners = this.store.db
+      .prepare(
+        "SELECT j.id,j.nativeId FROM gpt_jobs j, json_each(j.assets) a WHERE json_extract(a.value,'$.id')=?",
+      )
+      .all(fileId);
+    if (
+      !owners.some(
+        (row) =>
+          !this.library.get("thread", "outbox:" + row.id)?.deleted &&
+          (!row.nativeId || !this.library.get("thread", String(row.nativeId))?.deleted),
+      )
+    )
       throw error("GPT_RESULT_NOT_FOUND", "Результат не найден.", 404);
     return this.response("/bridge/artifacts/" + encodeURIComponent(fileId) + "/download");
   }

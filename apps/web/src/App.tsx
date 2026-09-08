@@ -13,10 +13,12 @@ import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
 import { DesktopControl } from "./DesktopControl";
 import { type LibraryChange, libraryEvent } from "./EntityMenu";
+import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectNavigation } from "./ProjectNavigation";
+import { completePendingSend, pendingSendKey } from "./pendingSend";
 import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
 import { ActivityPane } from "./Results";
@@ -147,7 +149,11 @@ export default function App() {
       onLogout={() => {
         setSession(null);
         for (const key of Object.keys(sessionStorage))
-          if (key.startsWith("codex-draft-") || key.startsWith("gpt-draft-"))
+          if (
+            key.startsWith("codex-draft-") ||
+            key.startsWith("gpt-draft-") ||
+            key.startsWith("codex-pending-send:")
+          )
             sessionStorage.removeItem(key);
       }}
     />
@@ -178,7 +184,6 @@ function Workspace({
     [sendError, setSendError] = useState("");
   const [writeBlocked, setWriteBlocked] = useState(false);
   const sendingRef = useRef(false);
-  const pendingSend = useRef<{ signature: string; key: string } | undefined>(undefined);
   const [machines, setMachines] = useState<Machine[]>([]),
     [createProject, setCreateProject] = useState(false),
     [syncing, setSyncing] = useState(false),
@@ -438,25 +443,20 @@ function Workspace({
     setWriteBlocked(false);
     setNotice("");
     const signature = JSON.stringify({ threadId, text, settings, attachments });
-    if (pendingSend.current?.signature !== signature)
-      pendingSend.current = { signature, key: crypto.randomUUID() };
+    const scope = "codex:" + threadId;
     try {
+      const key = pendingSendKey(scope, signature);
       await api(`/threads/${threadId}/turns`, {
         method: "POST",
-        key: pendingSend.current.key,
+        key,
         body: { text, settings, attachments },
       });
-      pendingSend.current = undefined;
+      completePendingSend(scope, key);
       // Metadata refresh cannot turn an acknowledged send into a failed send.
       void loadThreads(projectId, threadId).catch(() => {});
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.code === "MACHINE_RELEASED") throw error;
-      if (
-        error instanceof ApiError &&
-        ["THREAD_IN_USE", "PROJECT_BUSY", "INVALID_REQUEST"].includes(error.code)
-      )
-        pendingSend.current = undefined;
       setWriteBlocked(error instanceof ApiError && error.code === "THREAD_IN_USE");
       setSendError(messageOf(error));
       return false;
@@ -668,21 +668,23 @@ function Workspace({
   );
   if (client === "gpt")
     return (
-      <Suspense
-        fallback={
-          <div className="boot-screen">
-            <span className="spinner" />
-          </div>
-        }
-      >
-        <GptWorkspace
-          onCodex={() => setClient("codex")}
-          theme={theme}
-          onTheme={setTheme}
-          onSession={onSession}
-          onLogout={onLogout}
-        />
-      </Suspense>
+      <GptLoadBoundary onCodex={() => setClient("codex")}>
+        <Suspense
+          fallback={
+            <div className="boot-screen">
+              <span className="spinner" />
+            </div>
+          }
+        >
+          <GptWorkspace
+            onCodex={() => setClient("codex")}
+            theme={theme}
+            onTheme={setTheme}
+            onSession={onSession}
+            onLogout={onLogout}
+          />
+        </Suspense>
+      </GptLoadBoundary>
     );
   return (
     <div
