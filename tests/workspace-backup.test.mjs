@@ -7,6 +7,7 @@ import test from "node:test";
 import { GptService } from "../apps/hub/dist/gpt.js";
 import { Library } from "../apps/hub/dist/library.js";
 import { createSnapshot, restoreSnapshot, verifySnapshot } from "../apps/hub/dist/maintenance.js";
+import { Notebook } from "../apps/hub/dist/notebook.js";
 import { Previews } from "../apps/hub/dist/previews.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { configSchema } from "../packages/shared/dist/index.js";
@@ -35,6 +36,18 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
       upload = await gpt.put("example.txt", bytes);
     const thread = source.createThread("p", "native-id", "History");
     new Library(source, "codex").save("thread", thread.id, { name: "History", pinned: true });
+    const book = new Notebook({
+      store: source,
+      catalog: { projects: () => [], library: new Library(source, "codex") },
+    });
+    const note = book.save(randomUUID(), {
+      scope: null,
+      title: "Keep project context",
+      body: "Owner note **Markdown**",
+      links: [{ client: "codex", kind: "thread", id: thread.id, title: thread.title }],
+      revision: 0,
+    });
+    book.pin(null, { client: "codex", kind: "note", id: note.id, title: note.title }, true);
     const path = join(root, "design.html"),
       original = "<button>Original interactive design</button>";
     await writeFile(path, original);
@@ -103,6 +116,13 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
     const target = join(root, "restore");
     await restoreSnapshot(snapshot, target);
     restored = new Store(join(target, "app.db"));
+    const restoredBook = new Notebook({
+      store: restored,
+      catalog: { projects: () => [], library: new Library(restored, "codex") },
+    });
+    assert.deepEqual(restoredBook.get(note.id), note);
+    assert.equal(restoredBook.pins("global", 0).items[0].target.id, note.id);
+    assert.equal(restoredBook.pins("global", 0).items[0].target.availability, "available");
     restoredGpt = new GptService(
       {
         ...config,

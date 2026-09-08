@@ -291,5 +291,16 @@ export type {
   MachineProbe,
   MachinesOverview,
 } from "./machineHealth.js";
+export type {
+  NotebookLink,
+  NotebookPin,
+  NotebookScope,
+  NotebookTarget,
+  NoteRecord,
+  NoteSummary,
+  NotesPage,
+  NoteWrite,
+} from "./notebook.js";
+export { notebookScopeSchema, notebookTargetSchema, noteWriteSchema } from "./notebook.js";
 export * from "./results.js";
 export * from "./storage.js";

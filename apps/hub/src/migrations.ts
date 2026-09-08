@@ -174,6 +174,18 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX artifact_captures_thread ON artifact_captures(threadId);`);
     },
   },
+  {
+    version: 12,
+    name: "workspace_notes_and_context_bookmarks",
+    up(db) {
+      db.exec(`
+      CREATE TABLE workspace_notes(id TEXT PRIMARY KEY,scopeKey TEXT NOT NULL,scope TEXT,title TEXT NOT NULL,body TEXT NOT NULL,search TEXT NOT NULL,links TEXT NOT NULL,revision INTEGER NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+      CREATE INDEX workspace_notes_scope ON workspace_notes(scopeKey,updatedAt DESC);
+      CREATE TABLE workspace_pins(id TEXT PRIMARY KEY,scopeKey TEXT NOT NULL,scope TEXT,targetKey TEXT NOT NULL,target TEXT NOT NULL,createdAt INTEGER NOT NULL,UNIQUE(scopeKey,targetKey));
+      CREATE INDEX workspace_pins_scope ON workspace_pins(scopeKey,createdAt DESC);
+    `);
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

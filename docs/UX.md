@@ -387,3 +387,7 @@ Classic Dark is a fourth shared theme: graphite backgrounds, clear surface level
 The selected theme is persisted to Hub preferences and cached for login/loading. Safari/browser theme-color follows the selection. Switching a theme preserves the active chat, draft, scroll and workspace mode.
 
 Hi-Tech uses a neutral silver chassis, dark panel seams, inset pale screens and beveled cyan controls from the owner reference. Organizer keeps clean light paper, oval binder rings, pastel tabs and blue user avatars. Both reduce decorative edges on compact layouts without changing touch targets or workspace structure.
+
+## Notes and saved references
+
+“Заметки и ссылки” in both sidebars opens project context by default, with Global/All scopes. iPhone uses a full-width list or editor; iPad shows a list beside a spacious editor. Markdown preview shares collapsed copyable blocks. Save is explicit, local drafts survive panel closure/reload, and concurrent changes offer a reviewable conflict rather than overwriting silently. Result cards expose a reference action; new notes can link to the current chat/result without copying large content. Saved references use the existing three-item collapsible pinned panel. Removing a referenced source leaves the note intact and an unavailable link.

@@ -30,6 +30,7 @@ export function ProjectNavigation({
   onRefresh,
   onClose,
   onSettings,
+  onNotebook,
   onClient,
 }: {
   projects: Project[];
@@ -47,6 +48,7 @@ export function ProjectNavigation({
   onRefresh: () => void;
   onClose: () => void;
   onSettings: () => void;
+  onNotebook?: () => void;
   onClient?: (value: "codex" | "gpt") => void;
 }) {
   const [section, setSection] = useState<"projects" | "threads">("projects");
@@ -444,6 +446,12 @@ export function ProjectNavigation({
             </small>
           </span>
         </div>
+        {onNotebook && (
+          <button type="button" className="nav-settings" onClick={onNotebook}>
+            <Icon name="file" size={18} />
+            Заметки и ссылки
+          </button>
+        )}
         <button type="button" className="nav-settings" onClick={onSettings}>
           <Icon name="settings" size={18} />
           Настройки

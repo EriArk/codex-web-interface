@@ -29,6 +29,7 @@ import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { MachineHealthPanel } from "./MachineHealth";
+import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
@@ -138,6 +139,9 @@ export function GptWorkspace({
   onNotificationHandled,
   onCodex,
   onCodexProject,
+  onNotebook,
+  notebookOpen = false,
+  workspaceDestination,
   theme,
   onTheme,
   onSession,
@@ -145,6 +149,9 @@ export function GptWorkspace({
 }: {
   onCodex: () => void;
   onCodexProject?: (id: string, remote: boolean) => void;
+  onNotebook?: (request: NotebookRequest) => void;
+  notebookOpen?: boolean;
+  workspaceDestination?: WorkspaceDestination;
   theme: Theme;
   onTheme: (theme: Theme) => void;
   notificationTarget?: NotificationTarget;
@@ -232,7 +239,9 @@ export function GptWorkspace({
   selectedRef.current = selected;
   useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
   useProjectSwipe(settingsRef, settings, () => setSettings(false), "close");
-  useProjectSwipe(root, !drawer && !settings && !machinePanel, () => setDrawer(true));
+  useProjectSwipe(root, !drawer && !settings && !machinePanel && !notebookOpen, () =>
+    setDrawer(true),
+  );
   const action = useCallback(async (fn: () => Promise<void>) => {
     try {
       await fn();
@@ -519,6 +528,7 @@ export function GptWorkspace({
     rememberScroll();
     setCreatedJob(jobId);
     setSelected(id);
+    setWorkspaceResult("");
     setDrawer(false);
     setView("chat");
     setNotice("");
@@ -532,6 +542,48 @@ export function GptWorkspace({
       setCreatedJob("");
     }
   }, [selected, createdJob, jobs]);
+  const handledWorkspace = useRef(0);
+  const [workspaceResult, setWorkspaceResult] = useState("");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new explicit destination navigates once and never reacquires a writer.
+  useEffect(() => {
+    if (!workspaceDestination || handledWorkspace.current === workspaceDestination.version) return;
+    handledWorkspace.current = workspaceDestination.version;
+    const t = workspaceDestination.target;
+    const id = t.threadId ?? (t.kind === "thread" ? t.id : "");
+    if (id) {
+      choose(id);
+      if (t.kind === "result") {
+        setWorkspaceResult(t.id);
+        setView("results");
+        setRightHidden(false);
+      }
+    } else if (t.kind === "project") {
+      setExpanded((old) => new Set([...old, t.id]));
+      setDrawer(true);
+    }
+  }, [workspaceDestination]);
+  const notebookContext = (): NotebookRequest => {
+    const c = items.find((c) => c.id === selected),
+      p = projects.find((p) => p.id === c?.projectId);
+    return {
+      scope: p ? { client: "gpt", projectId: p.id, name: p.name } : null,
+      target: selected
+        ? {
+            client: "gpt",
+            kind: "thread",
+            id: selected,
+            threadId: selected,
+            title: c?.title || "Диалог GPT",
+            projectId: p?.id,
+          }
+        : undefined,
+    };
+  };
+  const openNotebook = () => {
+    setDrawer(false);
+    setSettings(false);
+    onNotebook?.(notebookContext());
+  };
   const send = async () => {
     if (sending.current || uploading || !model || (!text.trim() && !files.length)) return;
     const version = navigationVersion.current,
@@ -636,7 +688,7 @@ export function GptWorkspace({
   useNotificationPresence(
     "gpt",
     selected || createdJob,
-    view === "chat" && !drawer && !settings && !machinePanel,
+    view === "chat" && !drawer && !settings && !machinePanel && !notebookOpen,
   );
   const handledNotification = useRef("");
   useEffect(() => {
@@ -1029,6 +1081,12 @@ export function GptWorkspace({
         Обновить
       </button>
       <EntityArchive client="gpt" />
+      {onNotebook && (
+        <button type="button" className="nav-new-thread" onClick={openNotebook}>
+          <Icon name="file" />
+          Заметки и ссылки
+        </button>
+      )}
       <a className="nav-new-thread" href="/gpt-connect">
         <Icon name="remote" />
         Открыть ChatGPT
@@ -1350,6 +1408,23 @@ export function GptWorkspace({
         </section>
         <div className="support-pane gpt-results">
           <ResultFeed
+            focusId={workspaceResult}
+            onSaveLink={
+              selected
+                ? (r) =>
+                    onNotebook?.({
+                      ...notebookContext(),
+                      target: {
+                        client: "gpt",
+                        kind: "result",
+                        id: r.id,
+                        title: r.title,
+                        threadId: selected,
+                        turnId: r.turnId ?? undefined,
+                      },
+                    })
+                : undefined
+            }
             key={selected || createdJob}
             endpoint={
               selected ? "/gpt/conversations/" + encodeURIComponent(selected) + "/results" : ""

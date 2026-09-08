@@ -1,3 +1,4 @@
+import type { ResultItem } from "@codex-web/shared";
 import {
   emptyResultCounts,
   type ResultCategory,
@@ -34,6 +35,7 @@ export function Results({
   onTurn,
   toolbar,
   onFile,
+  onSaveLink,
 }: {
   focusVersion?: number;
   onRetry?: () => void;
@@ -51,6 +53,7 @@ export function Results({
   onTurn?: (id: string, threadId?: string) => void;
   toolbar?: ReactNode;
   onFile?: (path: string) => void;
+  onSaveLink?: (result: ResultItem) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
@@ -132,6 +135,16 @@ export function Results({
           .map((r) => (
             <article className={`result-card result-${r.type}`} key={r.id} data-result={r.id}>
               <div className="result-title">
+                {onSaveLink && (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Сохранить ссылку: ${r.title}`}
+                    onClick={() => onSaveLink(r)}
+                  >
+                    <Icon name="pin" size={16} />
+                  </button>
+                )}
                 <span className="result-icon">
                   <Icon
                     name={r.type === "image" ? "image" : r.type === "check" ? "check" : "folder"}
