@@ -29,19 +29,21 @@ export const sshOptions = (device: DeviceConfig, terminal = false) => [
   device.ssh.target,
 ];
 const shQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-const powershell = (device: DeviceConfig, script: string) => [
+const utf8Console =
+  "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Text.UTF8Encoding]::new($false)";
+const powershell = (device: DeviceConfig, script: string, interactive = false) => [
   device.shell === "pwsh" ? "pwsh.exe" : "powershell.exe",
   "-NoLogo",
   "-NoProfile",
   "-EncodedCommand",
-  Buffer.from(script, "utf16le").toString("base64"),
+  Buffer.from(interactive ? `${utf8Console};${script}` : script, "utf16le").toString("base64"),
 ];
 
 export function terminalCommand(device: DeviceConfig, action: DeviceAction): string[] {
   const args = sshOptions(device, true);
   if (action.kind === "shell")
     return device.platform === "windows"
-      ? [...args, device.shell === "pwsh" ? "pwsh.exe" : "powershell.exe", "-NoLogo", "-NoProfile"]
+      ? [...args, ...powershell(device, "", true), "-NoExit"]
       : args;
   if (action.confirmation !== device.name)
     throw new HubError(
@@ -62,6 +64,7 @@ export function terminalCommand(device: DeviceConfig, action: DeviceAction): str
         ...powershell(
           device,
           `& shutdown.exe /${action.kind === "restart" ? "r" : "s"} /t 0; exit $LASTEXITCODE`,
+          true,
         ),
       ];
     return [...args, "sudo", "systemctl", action.kind === "restart" ? "reboot" : "poweroff"];
@@ -99,7 +102,7 @@ export function terminalCommand(device: DeviceConfig, action: DeviceAction): str
       "Get-PSDrive -Name $name",
       "Set-Location -LiteralPath ($name + ':\\')",
     ].join("; ");
-    return [...args, ...powershell(device, script), "-NoExit"];
+    return [...args, ...powershell(device, script, true), "-NoExit"];
   }
   const source = shQuote(action.source.replaceAll("\\", "/")),
     name = shQuote(action.name);
