@@ -99,6 +99,16 @@ for (const [engine, type] of [
       true,
       "subscribe must retain the user's gesture",
     );
+    const preview = panel.getByRole("checkbox", { name: "Показывать чат и текст ответа" });
+    await expect(preview).toBeChecked();
+    await preview.click();
+    await expect(preview).not.toBeChecked();
+    await expect(disable).toBeEnabled();
+    assert.equal(
+      JSON.parse(f.store.db.prepare("SELECT categories FROM push_subscriptions").get().categories)
+        .preview,
+      false,
+    );
     await panel.getByRole("checkbox", { name: "Завершение работы" }).click();
     await expect(disable).toBeEnabled();
     assert.equal(
@@ -108,6 +118,13 @@ for (const [engine, type] of [
     );
     await panel.getByRole("button", { name: "Проверить уведомление" }).click();
     await expect.poll(() => sent.length).toBe(1);
+    assert.equal(sent[0].display, undefined);
+    await preview.click();
+    await expect(preview).toBeChecked();
+    await expect(disable).toBeEnabled();
+    await panel.getByRole("button", { name: "Проверить уведомление" }).click();
+    await expect.poll(() => sent.length).toBe(2);
+    assert.ok(sent[1].display.body.includes("проект, чат и краткий итог"));
     await panel.screenshot({ path: `.local/qa-push/${engine}-settings.png` });
     for (const theme of ["organizer", "hitech-2000s", "classic-dark"]) {
       await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);

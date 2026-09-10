@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import webpush, { type PushSubscription } from "web-push";
 import { z } from "zod";
 import type { Auth } from "./auth.js";
+import { type Notice, noticeDisplay } from "./push-content.js";
 import type { Store } from "./store.js";
 
 export interface PushKeys {
@@ -62,14 +63,6 @@ const subscriptionSchema = z
       .strict(),
   })
   .strict();
-type Notice = {
-  id: string;
-  client: string;
-  target: string;
-  category: string;
-  kind: string;
-  createdAt: number;
-};
 type Subscription = {
   id: string;
   owner: string;
@@ -84,7 +77,12 @@ type Delivery = Notice & {
   attempts: number;
 };
 export type PushSender = (subscription: PushSubscription, payload: string) => Promise<unknown>;
-export type PushOptions = { keys?: PushKeys; send?: PushSender; automatic?: boolean };
+export type PushOptions = {
+  keys?: PushKeys;
+  send?: PushSender;
+  automatic?: boolean;
+  projectName?: (id: string) => string | undefined;
+};
 const titles: Record<string, string> = {
   completed: "Работа завершена",
   question: "Нужен ответ на вопрос",
@@ -267,7 +265,19 @@ export class PushService {
         "UPDATE push_deliveries SET state='sending',attempts=attempts+1 WHERE notice=? AND subscription=?",
       ).run(row.id, row.subscription);
       try {
-        await this.send(JSON.parse(sub.value), JSON.stringify(pushPayload(row)));
+        const payload = pushPayload(row);
+        let display: ReturnType<typeof noticeDisplay> | undefined;
+        if (JSON.parse(sub.categories).preview !== false) {
+          try {
+            display = noticeDisplay(this.store, row, this.options.projectName);
+          } catch {
+            /* Optional context must never break delivery. Legacy status remains valid. */
+          }
+        }
+        await this.send(
+          JSON.parse(sub.value),
+          JSON.stringify({ ...payload, ...(display ? { display } : {}) }),
+        );
         db.prepare("UPDATE push_deliveries SET state='sent' WHERE notice=? AND subscription=?").run(
           row.id,
           row.subscription,
@@ -321,14 +331,15 @@ export function registerPush(
       publicKey: options.keys?.publicKey,
       enabled: !!row,
       categories: row
-        ? JSON.parse(row.categories)
+        ? categories.strip().parse(JSON.parse(row.categories))
         : { completed: true, attention: true, errors: true },
+      preview: row ? JSON.parse(row.categories).preview !== false : true,
     };
   });
   app.post("/api/push", async (req) => {
     if (!options.keys) throw new HubError(503, "PUSH_UNAVAILABLE", "Уведомления пока недоступны.");
     const body = z
-        .object({ subscription: subscriptionSchema, categories })
+        .object({ subscription: subscriptionSchema, categories, preview: z.boolean().optional() })
         .strict()
         .parse(req.body),
       owner = auth.session(req).tokenHash;
@@ -349,7 +360,10 @@ export function registerPush(
         id,
         owner,
         JSON.stringify(body.subscription),
-        JSON.stringify(body.categories),
+        JSON.stringify({
+          ...body.categories,
+          preview: body.preview ?? (old ? JSON.parse(old.categories).preview !== false : true),
+        }),
         Date.now(),
       );
     return { id, enabled: true };
