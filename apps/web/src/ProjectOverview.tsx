@@ -13,6 +13,7 @@ import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
 import { PinnedList } from "./PinnedList";
 import { ProjectRotation } from "./ProjectRotation";
+import { reviewLabels } from "./WorkReviewLink";
 import "./project-overview.css";
 export function ProjectOverview({
   scope,
@@ -194,6 +195,36 @@ export function ProjectOverview({
         )}
         {data && (
           <div className="project-overview-grid">
+            {!!data.reviews?.length && (
+              <section className="overview-card" aria-label="Приёмка работы">
+                <header>
+                  <h2>Приёмка</h2>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Все приёмки проекта"
+                    onClick={() => onNotebook({ scope, mode: "reviews" })}
+                  >
+                    <Icon name="chevron" />
+                  </button>
+                </header>
+                {data.reviews.map((r) => (
+                  <button
+                    type="button"
+                    className="overview-row"
+                    key={r.id}
+                    onClick={() => onNotebook({ scope, mode: "reviews", itemId: r.id })}
+                  >
+                    <Icon name={r.state === "accepted" ? "check" : "plan"} size={18} />
+                    <span>
+                      <strong>{r.title}</strong>
+                      <small>{reviewLabels[r.state]}</small>
+                    </span>
+                    <Icon name="chevron" size={16} />
+                  </button>
+                ))}
+              </section>
+            )}
             <section className="overview-card overview-continue" aria-label="Продолжить работу">
               <header>
                 <h2>Продолжить</h2>

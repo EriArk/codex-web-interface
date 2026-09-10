@@ -24,3 +24,10 @@
   background: var(--soft);
   white-space: nowrap;
 }
+.task-boundary .work-review-link {
+  flex-basis: 100%;
+  justify-content: center;
+}
+.task-boundary:has(.work-review-link) {
+  flex-wrap: wrap;
+}

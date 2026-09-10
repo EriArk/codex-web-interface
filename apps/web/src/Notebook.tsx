@@ -12,7 +12,7 @@ import type {
   TaskFields,
   TaskProjectsPage,
 } from "@codex-web/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -29,7 +29,7 @@ import "./notebook.css";
 export type NotebookRequest = {
   scope: NotebookScope;
   target?: NotebookTarget;
-  mode?: "notes" | "tasks" | "core" | "plans" | "reports";
+  mode?: "notes" | "tasks" | "core" | "plans" | "reports" | "reviews";
   itemId?: string;
   allProjects?: boolean;
   capture?: NoteCapture;
@@ -68,12 +68,30 @@ const drafts = (prefix: string): Draft[] => {
   }
   return rows.sort((a, b) => b.changedAt - a.changedAt);
 };
+const WorkReviewPanel = lazy(() => import("./WorkReview"));
 export function NotebookPanel(props: {
   request: NotebookRequest | undefined;
   onClose: () => void;
   onOpen: (target: NotebookLink) => void;
   onRequest: (request: NotebookRequest) => void;
 }) {
+  if (props.request?.mode === "reviews")
+    return (
+      <Suspense fallback={<p role="status">Открываем приёмку…</p>}>
+        <WorkReviewPanel
+          key={
+            props.request.scope?.client +
+            ":" +
+            props.request.scope?.projectId +
+            ":" +
+            props.request.itemId
+          }
+          request={props.request}
+          onClose={props.onClose}
+          onOpen={props.onOpen}
+        />
+      </Suspense>
+    );
   if (props.request?.mode === "plans" || props.request?.mode === "reports")
     return <ProjectWorkPanel key={props.request.mode} {...props} request={props.request} />;
   return props.request?.mode === "core" && props.request.scope ? (

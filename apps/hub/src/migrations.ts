@@ -266,6 +266,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 21,
+    name: "project-work-reviews",
+    up(db) {
+      db.exec(
+        "CREATE TABLE work_reviews(id TEXT PRIMARY KEY,scopeKey TEXT NOT NULL,threadId TEXT NOT NULL,turnId TEXT,state TEXT NOT NULL,revision INTEGER NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL); CREATE INDEX work_reviews_scope ON work_reviews(scopeKey,createdAt DESC,id); CREATE INDEX work_reviews_thread ON work_reviews(threadId,turnId); CREATE TABLE work_review_receipts(id TEXT PRIMARY KEY,reviewId TEXT NOT NULL,fingerprint TEXT NOT NULL,response TEXT NOT NULL)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

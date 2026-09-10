@@ -62,7 +62,7 @@ export type PlanSummary = {
   latestAction?: Omit<ProjectAction, "text" | "snapshot">;
 };
 export type PlanPage = { items: PlanSummary[]; nextOffset: number | null };
-export type ActionKind = "plan" | "report" | "rotate";
+export type ActionKind = "plan" | "report" | "rotate" | "correction";
 export type ActionState =
   | "prepared"
   | "dispatching"
@@ -79,6 +79,8 @@ export type ProjectAction = {
   kind: ActionKind;
   planId?: string;
   planRevision?: number;
+  reviewId?: string;
+  reviewRevision?: number;
   title: string;
   text: string;
   state: ActionState;
@@ -123,10 +125,24 @@ export type CurrentProjectChat = {
 export const actionPrepareSchema = z
   .object({
     scope: projectScopeSchema,
-    kind: z.enum(["plan", "report", "rotate"]),
+    kind: z.enum(["plan", "report", "rotate", "correction"]),
     planId: z.string().uuid().optional(),
     planRevision: z.number().int().positive().optional(),
+    reviewId: z.string().uuid().optional(),
+    reviewRevision: z.number().int().positive().optional(),
   })
   .strict()
-  .refine((v) => v.kind !== "plan" || (!!v.planId && !!v.planRevision), "Выбери сохранённый план");
+  .refine((v) => v.kind !== "plan" || (!!v.planId && !!v.planRevision), "Выбери сохранённый план")
+  .refine(
+    (v) => v.kind !== "correction" || (!!v.reviewId && !!v.reviewRevision),
+    "Выбери замечание к работе",
+  )
+  .refine(
+    (v) => v.kind === "plan" || (!v.planId && !v.planRevision),
+    "План указывается только для его выполнения",
+  )
+  .refine(
+    (v) => v.kind === "correction" || (!v.reviewId && !v.reviewRevision),
+    "Приёмка указывается только для исправления",
+  );
 export type ActionPrepare = z.infer<typeof actionPrepareSchema>;

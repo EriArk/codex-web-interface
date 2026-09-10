@@ -15,6 +15,7 @@ import { ProjectPlans } from "./project-plans.js";
 import { ProjectRotations } from "./project-rotation.js";
 import type { QueueService } from "./queue.js";
 import type { Sessions } from "./sessions.js";
+import { WorkReviews } from "./work-reviews.js";
 
 const live = ["dispatching", "queued", "running", "unknown"];
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
@@ -22,19 +23,25 @@ export class ProjectActions {
   readonly plans: ProjectPlans;
   readonly rotations: ProjectRotations;
   readonly context: ProjectContext;
+  readonly reviews: WorkReviews;
   private locks = new Set<string>();
   private preparations = new Map<
     string,
     { fingerprint: string; promise: Promise<ProjectAction> }
   >();
   private requestFingerprint(
-    input: Pick<ProjectAction, "scope" | "kind" | "planId" | "planRevision">,
+    input: Pick<
+      ProjectAction,
+      "scope" | "kind" | "planId" | "planRevision" | "reviewId" | "reviewRevision"
+    >,
   ) {
     return digest({
       scope: { client: input.scope.client, projectId: input.scope.projectId },
       kind: input.kind,
       planId: input.planId,
       planRevision: input.planRevision,
+      reviewId: input.reviewId,
+      reviewRevision: input.reviewRevision,
     });
   }
   private submissionGroups = new Set<string>();
@@ -45,6 +52,7 @@ export class ProjectActions {
   ) {
     this.plans = new ProjectPlans(sessions);
     this.context = new ProjectContext(sessions, gpt);
+    this.reviews = new WorkReviews(sessions, gpt);
     this.rotations = new ProjectRotations(sessions, gpt, this.context, (a) => this.write(a));
     // A process restart is not evidence that a native submission failed.
     for (const row of this.db
@@ -138,9 +146,9 @@ export class ProjectActions {
       );
     const duplicate = this.db
       .prepare(
-        "SELECT id FROM project_work_actions WHERE scopeKey=? AND kind=? AND COALESCE(planId,'')=? AND state IN ('dispatching','queued','running','unknown') ORDER BY createdAt DESC LIMIT 1",
+        "SELECT id FROM project_work_actions WHERE scopeKey=? AND kind=? AND COALESCE(planId,json_extract(value,'$.reviewId'),'')=? AND state IN ('dispatching','queued','running','unknown') ORDER BY createdAt DESC LIMIT 1",
       )
-      .get(projectKey(input.scope), input.kind, input.planId ?? "");
+      .get(projectKey(input.scope), input.kind, input.planId ?? input.reviewId ?? "");
     if (duplicate) return this.get(String(duplicate.id));
     let text = "",
       title = "",
@@ -181,6 +189,32 @@ export class ProjectActions {
         ...snapshot,
         plan: { id: plan.id, revision: plan.revision, title: plan.title, sections: plan.sections },
       };
+    } else if (input.kind === "correction") {
+      const review = this.reviews.get(input.reviewId!);
+      if (
+        projectKey(review.scope) !== projectKey(input.scope) ||
+        review.revision !== input.reviewRevision ||
+        review.state !== "needs_fixes"
+      )
+        throw new HubError(409, "REVIEW_CONFLICT", "Замечания изменились. Открой приёмку заново.");
+      title = "Исправления: " + review.title.slice(0, 95);
+      text = [
+        `Исправь замечания к работе «${review.title}» проекта «${review.scope.name}». Не запускай исходное задание заново целиком.`,
+        `Приёмка: ${review.id}; исходное задание: ${review.actionId}; чат: ${review.threadId}; ход/задача: ${review.turnId ?? review.jobId}.`,
+        review.plan ? `Исходный план: ${review.plan.id}, версия ${review.plan.revision}.` : "",
+        "## Замечания владельца\n" + review.note,
+        "## Сохранённый результат исходной работы\n" + review.answer.slice(0, 10000),
+        "Проверь исправления. Чётко укажи выполненное, оставшееся и непроверенное.",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      snapshot = {
+        ...snapshot,
+        reviewId: review.id,
+        reviewRevision: review.revision,
+        sourceThreadId: review.threadId,
+        source: review.source,
+      };
     } else if (input.kind === "rotate") {
       title = "Новый рабочий чат";
       const prepared = this.rotations.prepare(input.scope, current.threadId);
@@ -208,6 +242,8 @@ export class ProjectActions {
       kind: input.kind,
       planId: input.planId,
       planRevision: input.planRevision,
+      reviewId: input.reviewId,
+      reviewRevision: input.reviewRevision,
       title,
       text,
       state: "prepared",
@@ -231,6 +267,8 @@ export class ProjectActions {
     // Recheck identity after asynchronous model discovery before freezing a reviewable request.
     if (this.context.current(input.scope).threadId !== current.threadId)
       throw new HubError(409, "PROJECT_CHAT_CHANGED", "Рабочий чат изменился. Повтори подготовку.");
+    if (input.reviewId && this.reviews.get(input.reviewId).revision !== input.reviewRevision)
+      throw new HubError(409, "REVIEW_CONFLICT", "Замечания изменились. Повтори подготовку.");
     if (Number(this.db.prepare("SELECT count(*) n FROM project_work_actions").get()?.n) >= 10000)
       throw new HubError(409, "PROJECT_ACTION_LIMIT", "Хранилище заданий заполнено.");
     this.db
@@ -270,11 +308,12 @@ export class ProjectActions {
       throw new HubError(409, "ACTION_NOT_READY", "Это задание уже обработано.");
     const duplicate = this.db
       .prepare(
-        "SELECT id FROM project_work_actions WHERE scopeKey=? AND kind=? AND COALESCE(planId,'')=? AND id<>? AND state IN ('dispatching','queued','running','unknown') ORDER BY createdAt DESC LIMIT 1",
+        "SELECT id FROM project_work_actions WHERE scopeKey=? AND kind=? AND COALESCE(planId,json_extract(value,'$.reviewId'),'')=? AND id<>? AND state IN ('dispatching','queued','running','unknown') ORDER BY createdAt DESC LIMIT 1",
       )
-      .get(projectKey(value.scope), value.kind, value.planId ?? "", id);
+      .get(projectKey(value.scope), value.kind, value.planId ?? value.reviewId ?? "", id);
     if (duplicate) return this.get(String(duplicate.id));
-    const group = projectKey(value.scope) + ":" + value.kind + ":" + (value.planId ?? "");
+    const group =
+      projectKey(value.scope) + ":" + value.kind + ":" + (value.planId ?? value.reviewId ?? "");
     if (this.submissionGroups.has(group))
       throw new HubError(409, "ACTION_PENDING", "Это задание уже отправляется.");
     if (this.locks.has(id)) throw new HubError(409, "ACTION_PENDING", "Задание уже отправляется.");
@@ -306,6 +345,16 @@ export class ProjectActions {
           409,
           "PLAN_CONFLICT",
           "План изменился после подготовки. Открой его и подтверди новую версию.",
+        );
+      if (
+        value.reviewId &&
+        (this.reviews.get(value.reviewId).revision !== value.reviewRevision ||
+          this.reviews.get(value.reviewId).state !== "needs_fixes")
+      )
+        throw new HubError(
+          409,
+          "REVIEW_CONFLICT",
+          "Решение по работе изменилось. Подготовь исправление заново.",
         );
       if (
         value.kind === "report" &&
@@ -396,6 +445,7 @@ export class ProjectActions {
     }
   }
   reconcile(value: ProjectAction): ProjectAction {
+    if (value.state === "completed") this.reviews.capture(value);
     if (!live.includes(value.state) || this.locks.has(value.id)) return value;
     if (value.kind === "rotate") return this.rotations.reconcile(value);
     let state = value.state,
@@ -515,7 +565,9 @@ export class ProjectActions {
             : undefined;
       } else this.saveReport(value, body, source);
     }
-    return this.write(value);
+    const saved = this.write(value);
+    if (saved.state === "completed") this.reviews.capture(saved);
+    return saved;
   }
   private saveReport(value: ProjectAction, body: string, source: NotebookTarget) {
     if (this.db.prepare("SELECT 1 FROM project_reports WHERE actionId=?").get(value.id)) return;

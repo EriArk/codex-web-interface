@@ -46,6 +46,7 @@ import { useCompletionPosition } from "./useCompletionPosition";
 import { useGptHistory } from "./useGptHistory";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
+import { useThreadReviews, WorkReviewLink } from "./WorkReviewLink";
 import { WorkspaceLinks } from "./WorkspaceLinks";
 import "./gpt.css";
 
@@ -210,6 +211,7 @@ export function GptWorkspace({
     }
   });
   const [selected, setSelected] = useState(cachedId);
+  const reviews = useThreadReviews("gpt", selected);
   const [jobs, setJobs] = useState<GptJob[]>(gptCache.jobs),
     [models, setModels] = useState<GptModels | null>(gptCache.models),
     [model, setModel] = useState(gptCache.model),
@@ -1547,9 +1549,22 @@ export function GptWorkspace({
                       />
                     )}
                   </div>
+                  {reviews
+                    .filter((r) => r.source?.messageId === message.id)
+                    .map((r) => (
+                      <WorkReviewLink key={r.id} scope={r.scope} id={r.id} state={r.state} />
+                    ))}
                 </article>
               ))}
               {jobElements}
+              {reviews
+                .filter(
+                  (r) =>
+                    !r.source?.messageId || !messages.some((m) => m.id === r.source?.messageId),
+                )
+                .map((r) => (
+                  <WorkReviewLink key={r.id} scope={r.scope} id={r.id} state={r.state} />
+                ))}
             </div>
           </div>
           <div className="gpt-composer-wrap">

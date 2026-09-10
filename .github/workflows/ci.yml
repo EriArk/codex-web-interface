@@ -86,6 +86,7 @@ jobs:
       - run: node tests/bridge-doctor.browser.mjs
       - run: node tests/project-core.browser.mjs
       - run: node tests/project-work.browser.mjs
+      - run: node tests/work-review.browser.mjs
       - run: node tests/project-rotation.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs

@@ -52,6 +52,7 @@ export class ProjectHome {
       };
     value.plans = new ProjectPlans(this.sessions).list(key, "", 0).items.slice(0, 3);
     if (this.work) {
+      value.reviews = this.work.reviews.list(key).items.slice(0, 4);
       value.currentChat = this.work.context.current(value.scope!);
       const report = this.work.context.latestReport(value.scope!);
       if (report)

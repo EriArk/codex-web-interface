@@ -4,6 +4,7 @@ import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { useWebHandoff } from "./WebHandoff";
+import { WorkReviewLink } from "./WorkReviewLink";
 export const actionLabels: Record<Action["state"], string> = {
   prepared: "Готово к запуску",
   dispatching: "Отправляю",
@@ -197,6 +198,9 @@ export function ProjectActionPanel({
           </div>
         )}
         <div className="project-action-buttons">
+          {value.state === "completed" && ["plan", "correction"].includes(value.kind) && (
+            <WorkReviewLink scope={value.scope} id={value.id} />
+          )}
           {["prepared", "blocked"].includes(value.state) && (
             <button
               type="button"
