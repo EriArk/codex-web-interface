@@ -39,6 +39,22 @@ export class Notebook {
   }
   resolve(target: NotebookTarget): NotebookLink {
     let availability: NotebookLink["availability"] = "unknown";
+    if (target.kind === "plan" || target.kind === "report") {
+      const row = this.db
+        .prepare(
+          target.kind === "plan"
+            ? "SELECT json_extract(value,'$.title') title,scope FROM project_plans WHERE id=?"
+            : "SELECT title,scope FROM project_reports WHERE id=?",
+        )
+        .get(target.id);
+      return {
+        ...target,
+        ...(row
+          ? { title: String(row.title), projectId: JSON.parse(String(row.scope)).projectId }
+          : {}),
+        availability: row ? "available" : "missing",
+      };
+    }
     if (target.kind === "task") {
       const task = this.db
         .prepare("SELECT title,scope FROM workspace_tasks WHERE id=?")

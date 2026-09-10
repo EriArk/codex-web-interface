@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ApiError, api, messageOf } from "./api";
 
 type Desktop = { client?: string; returning?: boolean; operation?: { state: string } };
 export function useWebHandoff(machineId: string | undefined, threadId: string) {
+  const titleId = useId();
   const [asking, setAsking] = useState(false),
     [pending, setPending] = useState(false),
     [error, setError] = useState("");
@@ -106,13 +107,13 @@ export function useWebHandoff(machineId: string | undefined, threadId: string) {
       <dialog
         ref={dialog}
         className="web-handoff-dialog"
-        aria-labelledby="web-handoff-title"
+        aria-labelledby={titleId}
         onCancel={(e) => {
           e.preventDefault();
           answer(false);
         }}
       >
-        <h2 id="web-handoff-title">Продолжить на сайте?</h2>
+        <h2 id={titleId}>Продолжить на сайте?</h2>
         <p>
           Codex на компьютере закроется, его текущие задачи остановятся. Сообщение с вложениями
           отправится в этот чат.

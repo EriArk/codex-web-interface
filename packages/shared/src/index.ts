@@ -317,6 +317,7 @@ export type {
   ProjectOverview,
 } from "./overview.js";
 export * from "./project-core.js";
+export * from "./project-work.js";
 export * from "./results.js";
 export * from "./storage.js";
 export {

@@ -31,6 +31,8 @@ export function ProjectNavigation({
   onClose,
   onSettings,
   onNotebook,
+  onPlans,
+  onReports,
   onPlan,
   onOverview,
   onClient,
@@ -52,6 +54,8 @@ export function ProjectNavigation({
   onClose: () => void;
   onSettings: () => void;
   onNotebook?: () => void;
+  onPlans?: () => void;
+  onReports?: () => void;
   onPlan?: () => void;
   onOverview?: (id: string) => void;
   onClient?: (value: "codex" | "gpt") => void;
@@ -548,6 +552,18 @@ export function ProjectNavigation({
           <button type="button" className="nav-settings" onClick={onPlan}>
             <Icon name="check" size={18} />
             Задачи
+          </button>
+        )}
+        {onPlans && (
+          <button type="button" className="nav-settings" onClick={onPlans}>
+            <Icon name="plan" size={18} />
+            Планы
+          </button>
+        )}
+        {onReports && (
+          <button type="button" className="nav-settings" onClick={onReports}>
+            <Icon name="report" size={18} />
+            Отчёты
           </button>
         )}
         <button type="button" className="nav-settings" onClick={onSettings}>

@@ -56,6 +56,9 @@ export class GptHistoryCache {
       this.pending.delete(id);
     }
   }
+  peek(id: string): GptMessage[] {
+    return this.entries.get(id)?.items ?? [];
+  }
   async snapshot(id: string, ttl = 15000) {
     return this.get(id, ttl);
   }

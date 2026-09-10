@@ -1,4 +1,5 @@
 import type { NotebookPin, NotebookScope, NoteSummary } from "./notebook.js";
+import type { CurrentProjectChat, PlanSummary } from "./project-work.js";
 import type { TaskSummary } from "./tasks.js";
 export type OverviewThread = {
   id: string;
@@ -28,6 +29,9 @@ export type CachedProjectGit = {
   error?: boolean;
 };
 export type ProjectOverview = {
+  currentChat?: CurrentProjectChat;
+  plans?: PlanSummary[];
+  latestReport?: { id: string; createdAt: number; excerpt: string };
   core?: { revision: number; purpose: string; updatedAt: number };
   scope: NotebookScope;
   generatedAt: number;

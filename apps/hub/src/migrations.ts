@@ -214,6 +214,22 @@ export const migrations: readonly Migration[] = [
   `);
     },
   },
+  {
+    version: 16,
+    name: "project-plans-and-work-receipts",
+    up(db) {
+      db.exec(`
+ CREATE TABLE project_plans(id TEXT PRIMARY KEY,scopeKey TEXT NOT NULL,scope TEXT NOT NULL,value TEXT NOT NULL,search TEXT NOT NULL,revision INTEGER NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+ CREATE INDEX project_plans_scope ON project_plans(scopeKey,updatedAt DESC);
+ CREATE TABLE project_work_actions(id TEXT PRIMARY KEY,scopeKey TEXT NOT NULL,kind TEXT NOT NULL,planId TEXT,state TEXT NOT NULL,fingerprint TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+ CREATE INDEX project_work_actions_scope ON project_work_actions(scopeKey,createdAt DESC);
+ CREATE TABLE project_reports(id TEXT PRIMARY KEY,scopeKey TEXT NOT NULL,scope TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,actionId TEXT UNIQUE NOT NULL,source TEXT NOT NULL,periodFrom INTEGER NOT NULL,periodTo INTEGER NOT NULL,watermarks TEXT NOT NULL,createdAt INTEGER NOT NULL);
+ CREATE INDEX project_reports_scope ON project_reports(scopeKey,createdAt DESC);
+ CREATE TABLE project_current_chats(scopeKey TEXT PRIMARY KEY,scope TEXT NOT NULL,threadId TEXT NOT NULL,revision INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+ CREATE TABLE project_chat_history(scopeKey TEXT NOT NULL,threadId TEXT NOT NULL,title TEXT NOT NULL,rotatedAt INTEGER NOT NULL,PRIMARY KEY(scopeKey,threadId));
+ `);
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

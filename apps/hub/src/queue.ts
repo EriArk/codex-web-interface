@@ -340,4 +340,5 @@ export function registerQueue(app: FastifyInstance, sessions: Sessions, store: S
       service.change(id, qid!, body.revision, body.action, body.text, body.expectedTurnId),
     );
   });
+  return service;
 }

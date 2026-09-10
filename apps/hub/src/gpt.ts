@@ -260,6 +260,7 @@ export class GptService {
       this.library.save("thread", row.id, {
         name: recent ? saved.name : row.title,
         projectId: row.projectId,
+        activityAt: Math.max(saved?.activityAt ?? 0, row.updatedAt),
         archived: recent ? saved.archived : archived,
       });
       if (recent) row.title = saved.name;
@@ -323,9 +324,19 @@ export class GptService {
       .filter((e) => e.kind === "project" && (e.archived || e.deleted)))
       if (!items.some((p) => p.id === entry.id))
         items.push({ ...entry, name: entry.name, pinned: false });
+    const conversations = gptProjectConversations(raw);
+    for (const row of conversations) {
+      const saved = this.library.get("thread", row.id);
+      if (!saved?.deleted)
+        this.library.save("thread", row.id, {
+          name: saved?.renamed ? saved.name : row.title,
+          projectId: row.projectId,
+          activityAt: Math.max(saved?.activityAt ?? 0, row.updatedAt),
+        });
+    }
     return {
       items,
-      conversations: gptProjectConversations(raw)
+      conversations: conversations
         .filter((row) => !this.library.get("thread", row.id)?.deleted)
         .map((row) => ({
           ...row,

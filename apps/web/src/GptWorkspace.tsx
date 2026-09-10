@@ -624,7 +624,7 @@ export function GptWorkspace({
         : undefined,
     };
   };
-  const openNotebook = (mode: "notes" | "tasks" = "notes") => {
+  const openNotebook = (mode: "notes" | "tasks" | "plans" | "reports" = "notes") => {
     setDrawer(false);
     setSettings(false);
     onNotebook?.({ ...notebookContext(), mode, allProjects: true });
@@ -1161,6 +1161,18 @@ export function GptWorkspace({
       </button>
       <EntityArchive client="gpt" />
       {onNotebook && (
+        <>
+          <button type="button" className="nav-new-thread" onClick={() => openNotebook("plans")}>
+            <Icon name="plan" size={18} />
+            Планы
+          </button>
+          <button type="button" className="nav-new-thread" onClick={() => openNotebook("reports")}>
+            <Icon name="report" size={18} />
+            Отчёты
+          </button>
+        </>
+      )}
+      {onNotebook && (
         <button type="button" className="nav-new-thread" onClick={() => openNotebook()}>
           <Icon name="file" />
           Заметки и ссылки
@@ -1289,14 +1301,26 @@ export function GptWorkspace({
               }))}
             onNotebook={(r) => onNotebook?.(r)}
             onTarget={(t) => {
-              if (t.kind === "note" || t.kind === "task") {
+              if (
+                t.kind === "note" ||
+                t.kind === "task" ||
+                t.kind === "plan" ||
+                t.kind === "report"
+              ) {
                 onNotebook?.({
                   scope: {
                     client: "gpt",
                     projectId: overviewProject.id,
                     name: overviewProject.name,
                   },
-                  mode: t.kind === "task" ? "tasks" : "notes",
+                  mode:
+                    t.kind === "task"
+                      ? "tasks"
+                      : t.kind === "plan"
+                        ? "plans"
+                        : t.kind === "report"
+                          ? "reports"
+                          : "notes",
                   itemId: t.id,
                 });
                 return;

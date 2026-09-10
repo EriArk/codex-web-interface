@@ -28,6 +28,7 @@ import { registerNotebook } from "./notebook.js";
 import { registerProjectOverview } from "./overview.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
 import { registerProjectCores } from "./project-core.js";
+import { registerProjectWork } from "./project-work.js";
 import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
 import { registerQueue } from "./queue.js";
@@ -159,10 +160,10 @@ export async function createApp(
       },
     });
   });
-  registerGpt(app, config, store);
+  const gpt = registerGpt(app, config, store);
   const push = registerPush(app, store, auth, config.hub.publicBaseUrl, options.push);
   registerNavigation(app, store, sessions, auth, sockets);
-  registerQueue(app, sessions, store);
+  const queue = registerQueue(app, sessions, store);
   registerDesktop(app, config, store, sessions, options.desktopTransport);
   let storageCache: { until: number; pending: ReturnType<typeof storageReport> } | undefined;
   app.get("/api/storage", async () => {
@@ -594,8 +595,9 @@ export async function createApp(
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
+  const projectWork = registerProjectWork(app, sessions, gpt, queue);
   registerWorkspaceTasks(app, sessions);
-  registerProjectOverview(app, sessions);
+  registerProjectOverview(app, sessions, projectWork);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);
     sessions.thread(sessions.catalog.previews.thread(id));

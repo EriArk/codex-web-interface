@@ -23,11 +23,13 @@ import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { PinnedList } from "./PinnedList";
 import { ProjectCorePanel } from "./ProjectCore";
+import { ProjectWorkPanel } from "./ProjectWork";
+import { WorkspaceTabs } from "./WorkspaceTabs";
 import "./notebook.css";
 export type NotebookRequest = {
   scope: NotebookScope;
   target?: NotebookTarget;
-  mode?: "notes" | "tasks" | "core";
+  mode?: "notes" | "tasks" | "core" | "plans" | "reports";
   itemId?: string;
   allProjects?: boolean;
   capture?: NoteCapture;
@@ -72,6 +74,8 @@ export function NotebookPanel(props: {
   onOpen: (target: NotebookLink) => void;
   onRequest: (request: NotebookRequest) => void;
 }) {
+  if (props.request?.mode === "plans" || props.request?.mode === "reports")
+    return <ProjectWorkPanel key={props.request.mode} {...props} request={props.request} />;
   return props.request?.mode === "core" && props.request.scope ? (
     <ProjectCorePanel
       key={`${props.request.scope.client}:${props.request.scope.projectId}`}
@@ -523,24 +527,11 @@ function NotebookEditor({
           <Icon name="close" />
         </button>
       </header>
-      <div className="notebook-modules">
-        <button
-          type="button"
-          aria-pressed={!isTask}
-          disabled={busy}
-          onClick={() => onRequest({ ...request, mode: "notes", itemId: undefined })}
-        >
-          Заметки
-        </button>
-        <button
-          type="button"
-          aria-pressed={isTask}
-          disabled={busy}
-          onClick={() => onRequest({ ...request, mode: "tasks", itemId: undefined })}
-        >
-          Задачи
-        </button>
-      </div>
+      <WorkspaceTabs
+        mode={isTask ? "tasks" : "notes"}
+        disabled={busy}
+        onChange={(mode) => onRequest({ ...request, mode, itemId: undefined })}
+      />
       {(error || storageError) && (
         <div className="notice" role="alert">
           {error}

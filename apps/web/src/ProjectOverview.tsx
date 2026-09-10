@@ -264,6 +264,73 @@ export function ProjectOverview({
                 </div>
               </section>
             )}
+            <section className="overview-card" aria-label="Планы проекта">
+              <header>
+                <h2>Планы</h2>
+                <button type="button" onClick={() => onNotebook({ scope, mode: "plans" })}>
+                  Открыть <Icon name="chevron" size={14} />
+                </button>
+              </header>
+              {data.plans?.map((p) => (
+                <button
+                  type="button"
+                  className="overview-row"
+                  key={p.id}
+                  onClick={() => onNotebook({ scope, mode: "plans", itemId: p.id })}
+                >
+                  <Icon name="plan" />
+                  <span>
+                    {p.title}
+                    <small>
+                      {p.checked}/{p.total}
+                      {p.status === "done" ? " · Выполнен" : ""}
+                    </small>
+                  </span>
+                </button>
+              ))}
+              {!data.plans?.length && (
+                <button
+                  type="button"
+                  className="overview-row muted"
+                  onClick={() => onNotebook({ scope, mode: "plans" })}
+                >
+                  <Icon name="plus" />
+                  Создать план
+                </button>
+              )}
+            </section>
+            <section className="overview-card" aria-label="Отчёты проекта">
+              <header>
+                <h2>Последний отчёт</h2>
+                <button type="button" onClick={() => onNotebook({ scope, mode: "reports" })}>
+                  Все отчёты <Icon name="chevron" size={14} />
+                </button>
+              </header>
+              {data.latestReport ? (
+                <button
+                  type="button"
+                  className="overview-row"
+                  onClick={() =>
+                    onNotebook({ scope, mode: "reports", itemId: data.latestReport!.id })
+                  }
+                >
+                  <Icon name="report" />
+                  <span>
+                    {date(data.latestReport.createdAt)}
+                    <small>{data.latestReport.excerpt}</small>
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="overview-row muted"
+                  onClick={() => onNotebook({ scope, mode: "reports" })}
+                >
+                  <Icon name="report" />
+                  Подготовить отчёт
+                </button>
+              )}
+            </section>
             <section className="overview-card" aria-label="Основа проекта">
               <header>
                 <h2>Основа проекта</h2>

@@ -725,10 +725,31 @@ function Workspace({
     setDrawer(false);
   };
   const openNotebookTarget = (target: NotebookLink) => {
-    if (target.kind === "note" || target.kind === "task") {
+    if (
+      target.kind === "note" ||
+      target.kind === "task" ||
+      target.kind === "plan" ||
+      target.kind === "report"
+    ) {
       setNotebook({
-        scope: notebook?.scope ?? null,
-        mode: target.kind === "task" ? "tasks" : "notes",
+        scope: target.projectId
+          ? {
+              client: target.client,
+              projectId: target.projectId,
+              name:
+                projects.find((p) => p.id === target.projectId)?.name ??
+                notebook?.scope?.name ??
+                "Проект GPT",
+            }
+          : (notebook?.scope ?? null),
+        mode:
+          target.kind === "task"
+            ? "tasks"
+            : target.kind === "plan"
+              ? "plans"
+              : target.kind === "report"
+                ? "reports"
+                : "notes",
         itemId: target.id,
       });
       return;
@@ -782,7 +803,7 @@ function Workspace({
       onRequest={setNotebook}
     />
   );
-  const openNotebook = (mode: "notes" | "tasks" = "notes") => {
+  const openNotebook = (mode: "notes" | "tasks" | "plans" | "reports" = "notes") => {
     setDrawer(false);
     setSettings(false);
     setNotebook({
@@ -939,6 +960,8 @@ function Workspace({
       onExpand={expandProject}
       onNotebook={() => openNotebook()}
       onPlan={() => openNotebook("tasks")}
+      onPlans={() => openNotebook("plans")}
+      onReports={() => openNotebook("reports")}
       onOverview={openProjectOverview}
       onThread={selectThread}
       onNewThread={newThread}

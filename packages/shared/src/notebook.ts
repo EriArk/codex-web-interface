@@ -13,7 +13,7 @@ export type NotebookScope = z.infer<typeof notebookScopeSchema>;
 export const notebookTargetSchema = z
   .object({
     client: z.enum(["codex", "gpt"]).default("codex"),
-    kind: z.enum(["note", "thread", "result", "project", "task", "file"]),
+    kind: z.enum(["note", "thread", "result", "project", "task", "file", "plan", "report"]),
     id: z
       .string()
       .min(1)
