@@ -9,6 +9,7 @@ import {
 } from "@codex-web/shared";
 import type { GptService } from "./gpt.js";
 import { Notebook } from "./notebook.js";
+import { reconciliationInstructions } from "./plan-reconciliation.js";
 import { ProjectContext } from "./project-context.js";
 import { projectKey } from "./project-core.js";
 import { ProjectPlans } from "./project-plans.js";
@@ -176,11 +177,12 @@ export class ProjectActions {
             s.items
               .map(
                 (i) =>
-                  `${i.checked ? "[x] Уже сделано / существующее состояние:" : "[ ] Выполнить:"} ${i.text}`,
+                  `${i.checked ? "[x] Уже сделано / существующее состояние:" : "[ ] Выполнить:"} ${i.text} [${i.id}]`,
               )
               .join("\n"),
         ),
         refs ? "## Ссылки и контекст\n" + refs : "",
+        reconciliationInstructions(plan),
         "Сохрани существующую архитектуру и функции. Отмеченные пункты не переделывай без причины. Выполни проверку из плана и подходящие проверки изменений. Чётко укажи результат, незавершённую работу, блокировки и то, что проверить не удалось. Не считай неизвестный исход успешным.",
       ]
         .filter(Boolean)
@@ -203,7 +205,7 @@ export class ProjectActions {
         `Приёмка: ${review.id}; исходное задание: ${review.actionId}; чат: ${review.threadId}; ход/задача: ${review.turnId ?? review.jobId}.`,
         review.plan ? `Исходный план: ${review.plan.id}, версия ${review.plan.revision}.` : "",
         "## Замечания владельца\n" + review.note,
-        "## Сохранённый результат исходной работы\n" + review.answer.slice(0, 10000),
+        "## Сохранённый результат исходной работы\n" + review.answer.slice(0, 4000),
         "Проверь исправления. Чётко укажи выполненное, оставшееся и непроверенное.",
       ]
         .filter(Boolean)
@@ -215,6 +217,16 @@ export class ProjectActions {
         sourceThreadId: review.threadId,
         source: review.source,
       };
+      const previous = this.raw(review.actionId).snapshot.plan;
+      if (previous) {
+        snapshot.plan = previous;
+        text +=
+          "\n\n" +
+          reconciliationInstructions(
+            previous as Parameters<typeof reconciliationInstructions>[0],
+            true,
+          );
+      }
     } else if (input.kind === "rotate") {
       title = "Новый рабочий чат";
       const prepared = this.rotations.prepare(input.scope, current.threadId);

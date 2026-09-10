@@ -9,15 +9,19 @@ import {
   type WorkReview,
 } from "@codex-web/shared";
 import type { GptService } from "./gpt.js";
+import { PlanReconciliations } from "./plan-reconciliation.js";
 import { projectKey } from "./project-core.js";
 import type { Sessions } from "./sessions.js";
 
 /** Frozen, bounded observations. Owner acceptance is independent of check outcomes. */
 export class WorkReviews {
+  readonly reconciliation: PlanReconciliations;
   constructor(
     readonly sessions: Sessions,
     readonly gpt: GptService,
-  ) {}
+  ) {
+    this.reconciliation = new PlanReconciliations(sessions);
+  }
   private get db() {
     return this.sessions.store.db;
   }
@@ -34,7 +38,11 @@ export class WorkReviews {
     )
       return null;
     const existing = this.db.prepare("SELECT value FROM work_reviews WHERE id=?").get(action.id);
-    if (existing) return JSON.parse(String(existing.value));
+    if (existing) {
+      const review = JSON.parse(String(existing.value));
+      this.reconciliation.capture(action, review);
+      return review;
+    }
     let answer = "",
       source = action.source,
       evidence: ReviewEvidence[] = [],
@@ -92,7 +100,11 @@ export class WorkReviews {
             title: String(r.title).slice(0, 200),
           },
           ...(r.type === "check" && typeof p.command === "string"
-            ? { command: p.command.slice(0, 2000), exitCode: code }
+            ? {
+                command: p.command.slice(0, 2000),
+                commandTruncated: p.command.length > 2000,
+                exitCode: code,
+              }
             : {}),
           status:
             r.type === "check" && code !== undefined
@@ -178,7 +190,9 @@ export class WorkReviews {
         JSON.stringify(value),
         value.createdAt,
       );
-    return this.get(value.id);
+    const review = this.get(value.id);
+    this.reconciliation.capture(action, review);
+    return review;
   }
   summary(value: WorkReview): ReviewSummary {
     const { answer: _answer, evidence, ...rest } = value;

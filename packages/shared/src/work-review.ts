@@ -19,6 +19,7 @@ export type ReviewEvidence = {
   type: string;
   target?: NotebookTarget;
   command?: string;
+  commandTruncated?: boolean;
   exitCode?: number;
   status: "passed" | "failed" | "unknown";
 };
