@@ -235,7 +235,7 @@ for (const [engine, type] of [
         .filter({ visible: true })
         .first()
         .click();
-      await page.locator(".gpt-themes button").nth(index).click();
+      await page.locator(".gpt-settings .theme-option input").nth(index).check();
       await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
       await page.screenshot({
         animations: "disabled",
