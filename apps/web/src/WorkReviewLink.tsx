@@ -19,8 +19,9 @@ export function useThreadReviews(client: "codex" | "gpt", threadId: string | nul
     setItems([]);
     if (!threadId) return;
     let busy = false;
+    let suspended = false;
     const refresh = async () => {
-      if (!active || busy || document.hidden) return;
+      if (!active || suspended || busy || document.hidden) return;
       busy = true;
       try {
         const page = await api<ReviewPage>(
@@ -34,6 +35,14 @@ export function useThreadReviews(client: "codex" | "gpt", threadId: string | nul
     };
     void refresh();
     const timer = setInterval(refresh, 10000);
+    const suspend = () => {
+      suspended = true;
+    };
+    const resume = () => {
+      suspended = false;
+    };
+    window.addEventListener("pagehide", suspend);
+    window.addEventListener("pageshow", resume);
     document.addEventListener("visibilitychange", refresh);
     window.addEventListener("work-review-changed", refresh);
     return () => {
@@ -42,6 +51,8 @@ export function useThreadReviews(client: "codex" | "gpt", threadId: string | nul
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("work-review-changed", refresh);
+      window.removeEventListener("pagehide", suspend);
+      window.removeEventListener("pageshow", resume);
     };
   }, [client, threadId]);
   return items;
