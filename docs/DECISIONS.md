@@ -459,3 +459,8 @@ Pause/resume keeps the current native utterance. Cancellation generations reject
 The owner requested read-aloud during iPhone screen lock. This extends the earlier device-only read-aloud decision: an optional network-isolated Linux Piper worker may generate private, ephemeral audio over a Unix socket. Use a single authenticated media track and Media Session controls; retain local system-voice fallback. Do not claim hardware background acceptance from browser tests. See `ops/speech/README.md` for limits and voice attribution.
 
 Remote is a manual sidebar icon beside the Codex/GPT selector in both modes, without a label or a workspace tab. An explicit click connects and opens the full available screen; Codex uses its selected project's desktop and GPT uses the protected native ChatGPT connection. Keep an accessible return control and floating controls. No automatic remote session is created by ordinary page load.
+
+
+## 2026-09-10: Explicit read-aloud modes (#90)
+
+A single device-local choice in Codex/GPT Settings selects System voice or Background audio. System speech is the default when the API exists and never contacts `/api/speech`; background capability is checked only when that mode is selected (or the device has no system speech API). Voice discovery still waits for local installed voices, including delayed `voiceschanged`. Choosing another mode stops both prior playback paths before later playback, while preserving chat drafts and native work. The optional Linux Piper worker and media controls remain available through the background choice.

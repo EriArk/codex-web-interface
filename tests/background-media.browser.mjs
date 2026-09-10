@@ -51,6 +51,29 @@ for (const [engine, type] of [
     const [name, value] = f.headers.cookie.split("=");
     await context.addCookies([{ name, value, url: origin, httpOnly: true, sameSite: "Strict" }]);
     await context.addInitScript(() => {
+      const speech = new EventTarget();
+      speech.spoken = [];
+      speech.calls = [];
+      speech.getVoices = () => [
+        { name: "Local Russian", lang: "ru-RU", localService: true, default: true },
+      ];
+      speech.speak = (u) => {
+        speech.spoken.push(u);
+        speech.calls.push("speak");
+      };
+      speech.cancel = () => speech.calls.push("cancel");
+      speech.pause = () => speech.calls.push("pause");
+      speech.resume = () => speech.calls.push("resume");
+      Object.defineProperty(window, "speechSynthesis", { value: speech, configurable: true });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        value: class {
+          constructor(text) {
+            this.text = text;
+          }
+        },
+        configurable: true,
+      });
+      window.speechMock = speech;
       const NativeAudio = window.Audio;
       window.audioTracks = [];
       window.audioErrors = [];
@@ -107,8 +130,10 @@ for (const [engine, type] of [
     page = await context.newPage();
     page.on("pageerror", (e) => errors.push(e.message));
     let registrations = 0;
+    const speechRequests = [];
     await page.route("**/api/speech/**", async (route) => {
       const url = new URL(route.request().url());
+      speechRequests.push({ path: url.pathname, method: route.request().method() });
       if (url.pathname.endsWith("/status")) return route.fulfill({ json: { available: true } });
       if (route.request().method() === "POST") {
         registrations++;
@@ -139,6 +164,29 @@ for (const [engine, type] of [
     await editor.fill("Сохранённый черновик");
     const reply = page.locator('[data-message="audio-reply"]');
     await reply.getByRole("button", { name: "Озвучить ответ" }).tap();
+    assert.equal(await page.evaluate(() => speechMock.spoken.length), 1);
+    assert.equal(
+      speechRequests.length,
+      0,
+      "default system speech must not call any speech endpoint",
+    );
+    assert.equal(await page.evaluate(() => audioTracks.length), 0);
+    const settings = page
+      .getByRole("button", { name: "Настройки", exact: true })
+      .filter({ visible: true });
+    await settings.click();
+    const mode = page
+      .getByRole("combobox", { name: "Режим озвучивания" })
+      .filter({ visible: true });
+    await expect(mode).toHaveValue("system");
+    await mode.selectOption("background");
+    await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
+    await expect(reply.getByRole("button", { name: "Озвучить ответ" })).toBeEnabled();
+    const cancelled = await page.evaluate(
+      () => speechMock.calls.filter((c) => c === "cancel").length,
+    );
+    assert(cancelled >= 2, "changing mode releases the old system utterance");
+    await reply.getByRole("button", { name: "Озвучить ответ" }).tap();
     await expect(reply.getByRole("button", { name: "Приостановить озвучивание" })).toBeVisible();
     await expect.poll(() => page.evaluate(() => audioTracks.at(-1).currentTime)).toBeGreaterThan(0);
     await page.evaluate(() => {
@@ -153,6 +201,29 @@ for (const [engine, type] of [
     await expect.poll(() => page.evaluate(() => audioTracks.at(-1).paused)).toBe(false);
     await reply.getByRole("button", { name: "Остановить озвучивание", exact: true }).tap();
     assert.equal(await page.evaluate(() => audioTracks.at(-1).getAttribute("src")), null);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", { configurable: true, value: false });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await settings.click();
+    await mode.selectOption("system");
+    await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
+    const beforeSystem = speechRequests.length;
+    await reply.getByRole("button", { name: "Озвучить ответ" }).tap();
+    await expect(reply.getByRole("button", { name: "Приостановить озвучивание" })).toBeVisible();
+    assert.equal(await page.evaluate(() => audioTracks.at(-1).getAttribute("src")), null);
+    assert.equal(await page.evaluate(() => speechMock.spoken.length), 2);
+    assert.equal(
+      speechRequests.length,
+      beforeSystem,
+      "explicit system mode does not contact Piper",
+    );
+    await page.reload();
+    await expect(editor).toHaveValue("Сохранённый черновик");
+    await settings.click();
+    await expect(mode).toHaveValue("system");
+    await page.screenshot({ path: `.local/qa-background-media/${engine}-speech-mode.png` });
+    await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
     await expect(page.locator(".mobile-tabs > button")).toHaveCount(2);
     assert.equal(await page.evaluate(() => remoteConnections), 0);
     for (const width of [390, 1366]) {

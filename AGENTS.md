@@ -379,3 +379,10 @@ Before mobile support is considered complete, the same core workflow must also w
 - Suppress Chromium crash-restore UI on startup without modifying login/profile data. Keep browser memory sufficient for real long conversations and log process exits with fixed, non-content diagnostic codes.
 - During explicit GPT preparation, dismiss recognized optional ChatGPT promotions through native negative/close controls. Leave login, consent, payment, editable and unknown dialogs to the owner with a direct connection-page action.
 - Transient navigation/context replacement and metadata-read failures should recover without stale warning banners. Never replay an uncertain send or silently bypass model/effort verification.
+
+
+## Owner-requested explicit read-aloud modes (2026-09-10)
+
+- Expose a compact shared System voice / Background audio choice in Codex/GPT Settings and remember it on the device. Default to system speech when supported; Piper availability must not override the owner's choice.
+- System mode uses installed local voices and must not call the speech worker. Keep delayed voice discovery, pause/resume/stop and cancellation guards. Background mode retains private media playback and Media Session controls. Switching modes stops the previous engine.
+- Physical iPhone/iPad audio remains the owner's usage check; simulated browser voices are not hardware acceptance.

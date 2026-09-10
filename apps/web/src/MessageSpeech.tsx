@@ -66,13 +66,89 @@ const player = {
   start: (id: string, text: string) => {
     audioPlayer.stop();
     systemPlayer.stop();
-    if (backgroundAvailable && text.length <= 30000) {
+    if (speechMode.snapshot() === "background" || !device()) {
       const cyrillic = text.match(/[а-яё]/giu)?.length ?? 0,
         latin = text.match(/[a-z]/giu)?.length ?? 0;
-      audioPlayer.start(id, text, cyrillic > latin / 2 ? "ru" : "en");
+      if (backgroundAvailable && text.length <= 30000)
+        audioPlayer.start(id, text, cyrillic > latin / 2 ? "ru" : "en");
     } else systemPlayer.start(id, speechChunks(text), navigator.language);
   },
 };
+type SpeechMode = "system" | "background";
+const modeKey = "codex-speech-mode";
+const readMode = (): SpeechMode => {
+  try {
+    return localStorage.getItem(modeKey) === "background" ? "background" : "system";
+  } catch {
+    return "system";
+  }
+};
+let selectedMode = readMode();
+const modeListeners = new Set<() => void>();
+const speechMode = {
+  snapshot: () => selectedMode,
+  subscribe: (listener: () => void) => {
+    modeListeners.add(listener);
+    return () => {
+      modeListeners.delete(listener);
+    };
+  },
+  select: (next: SpeechMode, persist = true) => {
+    if (next === selectedMode) return;
+    player.stop();
+    selectedMode = next;
+    if (next === "background") backgroundCheck = undefined;
+    if (persist)
+      try {
+        localStorage.setItem(modeKey, next);
+      } catch {}
+    for (const listener of modeListeners) listener();
+  },
+};
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === modeKey || event.key === null) speechMode.select(readMode(), false);
+  });
+}
+function useSpeechMode() {
+  const preferred = useSyncExternalStore(
+    speechMode.subscribe,
+    speechMode.snapshot,
+    speechMode.snapshot,
+  );
+  const supported = !!device();
+  const mode = preferred === "system" && !supported ? "background" : preferred;
+  const [background, setBackground] = useState(backgroundAvailable);
+  useEffect(() => {
+    if (mode !== "background") return;
+    let disposed = false;
+    void checkBackground().then((value) => {
+      if (!disposed) setBackground(value);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [mode]);
+  return { mode, supported, background };
+}
+export function SpeechSettings() {
+  const { mode, supported } = useSpeechMode();
+  return (
+    <label className="speech-settings">
+      <span>Озвучивание</span>
+      <select
+        aria-label="Режим озвучивания"
+        value={mode}
+        onChange={(event) => speechMode.select(event.target.value as SpeechMode)}
+      >
+        <option value="system" disabled={!supported}>
+          Системный голос
+        </option>
+        <option value="background">Фоновое аудио</option>
+      </select>
+    </label>
+  );
+}
 if (typeof window !== "undefined")
   window.addEventListener("private-session-ended", () => {
     player.stop();
@@ -95,16 +171,7 @@ export function useSpeechScope(scope: string, visible: boolean) {
 export function SpeechButton({ id, text }: { id: string; text: string }) {
   const state = useSyncExternalStore(player.subscribe, player.snapshot, player.snapshot);
   const [hasVoice, setHasVoice] = useState(false);
-  const [background, setBackground] = useState(backgroundAvailable);
-  useEffect(() => {
-    let disposed = false;
-    void checkBackground().then((value) => {
-      if (!disposed) setBackground(value);
-    });
-    return () => {
-      disposed = true;
-    };
-  }, []);
+  const { mode, background } = useSpeechMode();
   useEffect(() => {
     const engine = device()?.engine;
     if (!engine) return;
@@ -121,6 +188,7 @@ export function SpeechButton({ id, text }: { id: string; text: string }) {
   }, []);
   useEffect(() => () => player.stop(id), [id]);
   if ((!device() && !background) || !text.trim()) return null;
+  const playable = mode === "system" ? hasVoice : background && speechText(text).length <= 30000;
   const active = state.id === id && state.phase !== "idle";
   const paused = active && state.phase === "paused";
   const label =
@@ -138,10 +206,14 @@ export function SpeechButton({ id, text }: { id: string; text: string }) {
         type="button"
         className="speech-button"
         aria-label={label}
-        title={background || hasVoice || active ? label : "Системный голос пока недоступен"}
-        disabled={
-          (state.id === id && state.phase === "loading") || (!background && !hasVoice && !active)
+        title={
+          playable || active
+            ? label
+            : mode === "system"
+              ? "Системный голос пока недоступен"
+              : "Фоновое аудио недоступно"
         }
+        disabled={(state.id === id && state.phase === "loading") || (!playable && !active)}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();

@@ -68,10 +68,12 @@ for (const [engine, type] of [
     });
     const page = await context.newPage(),
       errors = [],
-      unexpected = [];
+      unexpected = [],
+      speechRequests = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("request", (request) => {
       if (!request.url().startsWith(origin)) unexpected.push(request.url());
+      if (request.url().includes("/api/speech")) speechRequests.push(request.url());
     });
     await page.goto(origin);
     const editor = page.getByRole("textbox", { name: "Сообщение Codex" });
@@ -193,6 +195,11 @@ for (const [engine, type] of [
     assert.equal(
       await page.getByRole("button", { name: "Остановить озвучивание", exact: true }).count(),
       0,
+    );
+    assert.equal(
+      speechRequests.length,
+      0,
+      "Codex and GPT system playback never contact speech endpoints",
     );
     await page.addInitScript(() => {
       Object.defineProperty(window, "speechSynthesis", { value: undefined, configurable: true });

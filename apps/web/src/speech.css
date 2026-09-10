@@ -42,3 +42,22 @@
   color: var(--ink);
   font-size: 12px;
 }
+
+.speech-settings {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-block: 12px;
+  color: var(--ink);
+}
+.speech-settings select {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 8px);
+  padding: 8px;
+}
