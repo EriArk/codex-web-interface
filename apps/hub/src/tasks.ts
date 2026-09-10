@@ -2,6 +2,8 @@ import {
   HubError,
   type NotebookScope,
   type NotebookTarget,
+  type TaskProject,
+  type TaskProjectsPage,
   type TaskRecord,
   type TasksPage,
   type TaskWrite,
@@ -91,6 +93,60 @@ export class WorkspaceTasks {
       nextOffset: rows.length > limit ? offset + limit : null,
     };
   }
+  projects(offset = 0): TaskProjectsPage {
+    const projects = new Map<string, TaskProject>();
+    // One saved association per project, independent of the visible task page.
+    const saved = this.db
+      .prepare(
+        "SELECT scope FROM (SELECT scope,row_number() OVER (PARTITION BY scopeKey ORDER BY updatedAt DESC,id) AS n FROM workspace_tasks WHERE scope IS NOT NULL) WHERE n=1 LIMIT 5000",
+      )
+      .all();
+    for (const row of saved) {
+      const scope = JSON.parse(String(row.scope)) as NonNullable<NotebookScope>;
+      projects.set(scopeKey(scope), {
+        scope,
+        availability: scope.client === "codex" ? "missing" : "unknown",
+      });
+    }
+    for (const p of this.sessions.catalog.projects()) {
+      if (p.unassigned) continue;
+      const scope = { client: "codex" as const, projectId: p.id, name: p.name };
+      projects.set(scopeKey(scope), { scope, availability: "available" });
+    }
+    for (const row of this.db
+      .prepare(
+        "SELECT client,id,value FROM library_entities WHERE kind='project' ORDER BY client,id LIMIT 5000",
+      )
+      .all()) {
+      const entry = JSON.parse(String(row.value)),
+        key = `${row.client}:${row.id}`;
+      const previous = projects.get(key);
+      // Hidden/deleted entries without tasks do not clutter the task picker.
+      if (!previous && (entry.deleted || row.client === "codex")) continue;
+      const scope = {
+        client: row.client as "codex" | "gpt",
+        projectId: String(row.id),
+        name: entry.name || previous?.scope.name || String(row.id),
+      };
+      projects.set(key, {
+        scope,
+        availability: entry.deleted
+          ? "missing"
+          : entry.archived
+            ? "archived"
+            : (previous?.availability ?? "unknown"),
+      });
+    }
+    const items = [...projects.values()].sort(
+      (a, b) =>
+        a.scope.name.localeCompare(b.scope.name, "ru") ||
+        scopeKey(a.scope).localeCompare(scopeKey(b.scope)),
+    );
+    return {
+      items: items.slice(offset, offset + 100),
+      nextOffset: items.length > offset + 100 ? offset + 100 : null,
+    };
+  }
   save(id: string, input: TaskWrite) {
     const row = this.db.prepare("SELECT * FROM workspace_tasks WHERE id=?").get(id),
       current = row ? this.record(row) : null;
@@ -177,6 +233,13 @@ export function registerWorkspaceTasks(app: FastifyInstance, sessions: Sessions)
     if (q.filter === "today" && !q.today)
       throw new HubError(400, "TASK_DATE_REQUIRED", "Нужна локальная дата для списка на сегодня.");
     return tasks.list(q.scope, q.filter, q.q, q.offset, q.today ?? "");
+  });
+  app.get("/api/workspace/tasks/projects", (req) => {
+    const q = z
+      .object({ offset: z.coerce.number().int().min(0).max(15000).default(0) })
+      .strict()
+      .parse(req.query);
+    return tasks.projects(q.offset);
   });
   app.get("/api/workspace/tasks/:id", (req) => tasks.get(ids.parse(req.params).id));
   app.put("/api/workspace/tasks/:id", (req) =>

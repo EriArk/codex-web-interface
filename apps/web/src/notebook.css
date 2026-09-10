@@ -413,3 +413,46 @@
     max-width: 180px;
   }
 }
+
+.task-project-filters {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.task-project-filters button {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  white-space: nowrap;
+}
+.task-project-filters button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--soft);
+  border-color: var(--accent);
+}
+
+.notebook-task-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .notebook-task-controls[data-editing="true"] {
+    display: none;
+  }
+}

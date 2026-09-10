@@ -781,6 +781,7 @@ function Workspace({
     setSettings(false);
     setNotebook({
       mode,
+      allProjects: mode === "tasks",
       scope:
         project && !project.unassigned
           ? { client: "codex", projectId: project.id, name: project.name }

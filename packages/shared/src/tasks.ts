@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { NotebookScope } from "./notebook.js";
 import { type NoteRecord, type NoteSummary, noteWriteSchema } from "./notebook.js";
 export const taskStatusSchema = z.enum(["todo", "doing", "blocked", "done"]);
 export const taskDueSchema = z
@@ -20,3 +21,10 @@ export type TaskWrite = z.infer<typeof taskWriteSchema>;
 export type TaskRecord = NoteRecord & TaskFields & { completedAt: number | null };
 export type TaskSummary = NoteSummary & TaskFields & { completedAt: number | null };
 export type TasksPage = { items: TaskSummary[]; nextOffset: number | null };
+
+/** Hub metadata only; opening Tasks never reads a native client. */
+export type TaskProject = {
+  scope: NonNullable<NotebookScope>;
+  availability: "available" | "archived" | "missing" | "unknown";
+};
+export type TaskProjectsPage = { items: TaskProject[]; nextOffset: number | null };

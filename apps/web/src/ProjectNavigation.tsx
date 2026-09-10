@@ -547,7 +547,7 @@ export function ProjectNavigation({
         {onPlan && (
           <button type="button" className="nav-settings" onClick={onPlan}>
             <Icon name="check" size={18} />
-            План
+            Задачи
           </button>
         )}
         <button type="button" className="nav-settings" onClick={onSettings}>
