@@ -2,6 +2,15 @@
 
 This file records decisions that should be treated as fixed unless the owner explicitly changes them.
 
+## 2026-09-10: Tablet materials and optional previous layout
+
+The owner approved stronger shared theme materials and modest tablet geometry changes,
+with a device-local “Прежняя компоновка” option in both clients. Theme and layout
+preferences are independent; restoring geometry does not revert functional fixes.
+The latest clarification explicitly removes CRT monitor housing: its identity comes
+from crisp phosphor text, restrained glow and background raster without wasted space.
+See `TABLET_AUDIT_2026-09-10.md` for findings and verification limits.
+
 ## D01 — Linux Hub is the only Internet-facing machine
 
 **Decision:** The public website/API lives on the Linux server. Execution machines are not exposed directly to the Internet.

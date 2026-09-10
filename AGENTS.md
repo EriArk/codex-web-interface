@@ -441,3 +441,9 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Work notifications show project/chat context, an outcome and a bounded public final-answer excerpt or non-secret question. Use only existing Hub metadata and the exact event/job; no native reads, writer acquisition, automatic sends or AI summary requests. Keep diagnostics/commands/secret questions out of previews.
 - Detailed display is enabled for subscribed devices after this explicit owner request. A compact per-device setting can hide names and answer previews while retaining generic status delivery. Keep encrypted push, opt-in device enrollment, deduplication, draft-preserving authenticated navigation and compatibility with already-installed workers.
+
+## Owner-requested tablet materials and layout (2026-09-10)
+
+- Make theme identity clearer across the workspace and new Tasks/Notes/Plans/Reports/Core/Files/Git surfaces. Organizer uses paper, binding and pastel divider details; Hi-Tech uses restrained metal, recessed displays and physical controls inspired by 2000s devices. Use shared semantic materials and existing space, never separate functional markup.
+- CRT is the screen atmosphere, not a monitor housing: use crisp phosphor text, restrained glow and background raster without a thick frame, flicker, media filters or wasted working area. This supersedes the earlier CRT housing request, including the previous-layout option.
+- Modest tablet layout refinements are approved. Provide a concise shared device-local “Прежняя компоновка” checkbox restoring previous pane/chrome proportions without reverting functional fixes or losing drafts, selection or native work.

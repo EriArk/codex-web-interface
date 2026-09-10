@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { AccountControls } from "./AccountControls";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { Chat } from "./Chat";
@@ -22,6 +23,7 @@ import { MachineHealthPanel } from "./MachineHealth";
 import { SpeechSettings } from "./MessageSpeech";
 import { NotebookPanel, type NotebookRequest, type WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
+import { PaneDivider } from "./PaneDivider";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectFiles } from "./ProjectFiles";
 import { ProjectNavigation } from "./ProjectNavigation";
@@ -31,7 +33,7 @@ import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
 import { ActivityPane } from "./Results";
 import { StorageUsage } from "./StorageUsage";
-import { applyTheme, cachedTheme, themes } from "./theme";
+import { applyTheme, cachedTheme } from "./theme";
 import type {
   Activity,
   History,
@@ -1265,39 +1267,16 @@ function Workspace({
           onReconnect={resume}
           onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
         />
-        <hr
-          className="pane-divider"
-          aria-label="Ширина результатов"
-          aria-orientation="vertical"
-          aria-valuenow={rightWidth}
-          aria-valuemin={28}
-          aria-valuemax={55}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowLeft") setRightWidth((v) => Math.min(55, v + 2));
-            if (e.key === "ArrowRight") setRightWidth((v) => Math.max(28, v - 2));
-          }}
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }}
-          onPointerMove={(e) => {
-            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-              const rect = root.current?.getBoundingClientRect();
-              if (rect) {
-                const value = Math.max(
-                  28,
-                  Math.min(55, (100 * (rect.right - e.clientX)) / rect.width),
-                );
-                setRightWidth(value);
-                try {
-                  localStorage.setItem("codex-right-width", String(value));
-                } catch {
-                  /* Optional preference. */
-                }
-              }
+        <PaneDivider
+          value={rightWidth}
+          onChange={(value) => {
+            setRightWidth(value);
+            try {
+              localStorage.setItem("codex-right-width", String(value));
+            } catch {
+              /* Optional preference. */
             }
           }}
-          onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
         />
         <div className="support-pane" id="support-panel">
           <div className="support-tabs">
@@ -1473,24 +1452,7 @@ function Workspace({
             <Icon name="close" />
           </button>
         </div>
-        <fieldset className="theme-picker">
-          <legend>Оформление</legend>
-          {themes.map(({ id, title, description }) => (
-            <label key={id} className={`theme-option ${id}`}>
-              <input
-                type="radio"
-                name="theme"
-                checked={theme === id}
-                onChange={() => setTheme(id)}
-              />
-              <span className="theme-swatch" />
-              <span>
-                {title}
-                <small>{description}</small>
-              </span>
-            </label>
-          ))}
-        </fieldset>
+        <AppearanceSettings theme={theme} onTheme={setTheme} />
         <section className="settings-navigation-actions" aria-label="Навигация">
           <button type="button" onClick={() => void refreshCatalog(true)} disabled={syncing}>
             <Icon name="refresh" />

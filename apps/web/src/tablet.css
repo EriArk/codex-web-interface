@@ -1,0 +1,236 @@
+/* Functional repairs apply in both layouts. */
+.pane-divider {
+  position: relative;
+  overflow: visible;
+  flex-shrink: 0;
+  border: 0;
+  margin: 0;
+  z-index: 2;
+}
+.pane-divider::before {
+  content: "";
+  position: absolute;
+  width: 44px;
+  height: 88px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.pane-divider::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 28px;
+  left: 2px;
+  top: calc(50% - 14px);
+  border-radius: 3px;
+  background: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.pane-divider:focus-visible {
+  outline-offset: -2px;
+}
+.header-project:disabled {
+  opacity: 1;
+  cursor: default;
+}
+:root :is(.settings-dialog, .gpt-settings) {
+  --settings-padding: 20px;
+  padding: 0 var(--settings-padding) 20px;
+  max-height: calc(var(--app-height) - 24px);
+  overflow-y: auto;
+  scroll-padding-top: 65px;
+}
+:root :is(.settings-dialog > .dialog-heading, .gpt-settings-heading) {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  min-height: 64px;
+  margin-inline: calc(-1 * var(--settings-padding));
+  padding: 8px var(--settings-padding);
+  background: var(--panel-heading);
+  border-bottom: 1px solid var(--line);
+}
+:root :is(.dialog-heading, .gpt-settings-heading) .panel-close {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.theme-picker {
+  min-width: 0;
+}
+.theme-options {
+  display: grid;
+  gap: 7px;
+}
+.theme-options .theme-option {
+  margin: 0;
+  min-height: 62px;
+  border-radius: var(--radius);
+}
+.theme-options .theme-option small {
+  display: block;
+}
+.layout-preference {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+.layout-preference input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+:root .secondary.notebook-context {
+  justify-content: flex-start;
+  white-space: normal;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  text-align: left;
+  font-size: 13px;
+}
+.notebook-context > svg {
+  flex: none;
+}
+.notebook-context > span {
+  min-width: 0;
+  flex: 1;
+}
+.notebook-context small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9em;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* A little more room for the conversation; the checkbox restores the prior geometry. */
+@media (min-width: 1100px) {
+  :root:not([data-layout="legacy"])
+    .workspace:not(.nav-collapsed):not([data-remote-immersive="true"]) {
+    grid-template-columns: 268px minmax(0, 1fr);
+  }
+  :root:not([data-layout="legacy"]) .workspace:not([data-remote-immersive="true"]) {
+    grid-template-rows: 60px minmax(0, 1fr);
+  }
+  :root:not([data-layout="legacy"]) .workspace-header {
+    padding-inline: 12px;
+  }
+  :root:not([data-layout="legacy"]) .support-tabs {
+    min-height: 46px;
+  }
+  :root:not([data-layout="legacy"]) .pane-heading {
+    min-height: 46px;
+  }
+  :root:not([data-layout="legacy"]) .nav-bottom {
+    padding-block: 6px;
+  }
+  :root:not([data-layout="legacy"]) .chat-scroll {
+    padding-inline: clamp(18px, 2.1vw, 32px);
+  }
+  :root:not([data-layout="legacy"]) .gpt-message-scroll {
+    padding-inline: clamp(18px, 2.1vw, 32px);
+  }
+  :root:not([data-layout="legacy"])[data-theme="organizer"]
+    .workspace:not([data-remote-immersive="true"]) {
+    padding: 4px 8px 4px 19px;
+  }
+  :root:not([data-layout="legacy"])[data-theme="organizer"] .workspace::before {
+    left: -7px;
+  }
+  :root:not([data-layout="legacy"])[data-theme="organizer"] .workspace::after {
+    width: 5px;
+  }
+  :root:not([data-layout="legacy"])[data-theme="hitech-2000s"]
+    .workspace:not([data-remote-immersive="true"]) {
+    padding: 5px;
+    border-radius: 12px;
+  }
+  :root:not([data-layout="legacy"])[data-theme="hitech-2000s"] .workspace::before,
+  :root:not([data-layout="legacy"])[data-theme="hitech-2000s"] .workspace::after {
+    display: none;
+  }
+  :root:not([data-layout="legacy"])[data-theme="hitech-2000s"] .workspace-header {
+    margin-bottom: 4px;
+  }
+  :root:not([data-layout="legacy"])[data-theme="hitech-2000s"] .desktop-nav {
+    margin-right: 6px;
+  }
+}
+@media (min-width: 701px) {
+  :root:not([data-layout="legacy"]) .notebook-layout {
+    grid-template-columns: clamp(238px, 27vw, 280px) minmax(0, 1fr);
+  }
+  :root:not([data-layout="legacy"]) .notebook-heading {
+    min-height: 54px;
+  }
+  :root:not([data-layout="legacy"]) .notebook-editor {
+    padding: 16px 20px;
+    gap: 10px;
+  }
+}
+
+/* Tablet software keyboard: keep navigation reachable without consuming its list. */
+@media (min-width: 701px) {
+  :root[data-keyboard="true"] .notebook-dialog {
+    top: var(--app-top);
+    bottom: auto;
+    margin-block: 4px;
+    height: calc(var(--app-height) - 8px);
+    max-height: calc(var(--app-height) - 8px);
+  }
+  :root[data-keyboard="true"] .notebook-heading {
+    min-height: 48px;
+    padding-block: 2px;
+  }
+  :root[data-keyboard="true"] .notebook-task-controls {
+    padding-block: 2px;
+  }
+  :root[data-keyboard="true"] .notebook-editor {
+    padding-block: 8px;
+    gap: 6px;
+  }
+}
+@media (min-width: 1100px) {
+  :root[data-keyboard="true"] .workspace:not([data-remote-immersive="true"]) {
+    grid-template-rows: 52px minmax(0, 1fr);
+  }
+  :root[data-keyboard="true"] .nav-bottom {
+    padding-block: 0;
+  }
+  :root[data-keyboard="true"] .workspace-shortcuts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    padding-block: 0;
+  }
+  :root[data-keyboard="true"] .workspace-shortcuts button {
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 3px 1px;
+    font-size: 11px;
+  }
+  :root[data-keyboard="true"] .workspace-shortcuts button svg {
+    width: 16px;
+    height: 16px;
+  }
+  :root[data-keyboard="true"] .composer {
+    padding-block: 2px;
+    margin-bottom: 5px;
+  }
+  :root[data-keyboard="true"] .gpt-composer-wrap {
+    padding-bottom: 5px;
+  }
+  :root[data-keyboard="true"] .support-tabs {
+    min-height: 44px;
+  }
+}

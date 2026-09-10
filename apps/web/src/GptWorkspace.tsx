@@ -13,6 +13,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccountControls } from "./AccountControls";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { api, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -39,7 +40,7 @@ import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
 import { StorageUsage } from "./StorageUsage";
-import { type Theme, themes } from "./theme";
+import type { Theme } from "./theme";
 import type { Session } from "./types";
 import { useCompletionPosition } from "./useCompletionPosition";
 import { useGptHistory } from "./useGptHistory";
@@ -1766,18 +1767,7 @@ export function GptWorkspace({
             <Icon name="close" />
           </button>
         </div>
-        <div className="gpt-themes">
-          {themes.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              className={theme === item.id ? "selected" : ""}
-              onClick={() => onTheme(item.id)}
-            >
-              {item.title}
-            </button>
-          ))}
-        </div>
+        <AppearanceSettings theme={theme} onTheme={onTheme} />
         <section className="settings-navigation-actions" aria-label="Навигация">
           <button type="button" onClick={() => void action(() => catalog())}>
             <Icon name="refresh" />

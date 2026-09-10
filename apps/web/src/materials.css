@@ -1,0 +1,301 @@
+/* Shared surfaces: materials change, controls and content stay the same. */
+:root {
+  --panel-material: var(--surface);
+  --panel-heading: var(--surface);
+  --card-material: var(--surface);
+  --card-shadow: 0 2px 8px #00000008;
+  --field-shadow: none;
+  --selected-shadow: inset 3px 0 var(--accent);
+  --tab-material: var(--soft);
+}
+:root[data-theme="organizer"] {
+  --radius-sm: 4px;
+  --radius: 7px;
+  --radius-lg: 11px;
+  --paper: #fffdf5;
+  --canvas: #eae6d9;
+  --surface: #faf7ed;
+  --line: #d4d2bf;
+  --panel-material: linear-gradient(100deg, #eee9db, #fffdf5 12%, #faf7eb);
+  --panel-heading: linear-gradient(#fffdf5, #eee9d9);
+  --card-material: linear-gradient(110deg, #fffefa, #faf8ee);
+  --card-shadow: 0 1px 1px #796b3220, 0 3px 7px #61502c0b;
+  --field-shadow: inset 0 1px 2px #7a6b3610, 0 1px #fff9;
+  --tab-material: linear-gradient(#e4eddc, #d5e2ca);
+}
+:root[data-theme="crt-green"] {
+  --radius-sm: 2px;
+  --radius: 3px;
+  --radius-lg: 6px;
+  --ink: #aaf5b8;
+  --muted: #82bb93;
+  --crt-glow: 0 0 7px #5bf98226;
+  --crt-strong-glow: 0 0 3px #9affad40, 0 0 10px #53ff854d;
+  --crt-raster: repeating-linear-gradient(0deg, #00000020 0 1px, transparent 1px 3px);
+  --panel-material:
+    var(--crt-raster), radial-gradient(ellipse at 35% 0, #173c201f, transparent 80%), #06140b;
+  --panel-heading: var(--crt-raster), linear-gradient(#0b2111, #06130b);
+  --card-material: var(--crt-raster), linear-gradient(110deg, #0a1d10, #07150c);
+  --card-shadow: inset 0 1px #7ffa9620, 0 0 9px #5cef7810;
+  --field-shadow: inset 0 1px 4px #0008;
+  --tab-material: var(--crt-raster), #173e24;
+  --selected-shadow: inset 2px 0 #9affae, inset 0 0 18px #72ff9510;
+}
+/* Screen character without a monitor housing or lost working space. */
+:root[data-theme="crt-green"] .workspace:not([data-remote-immersive="true"]) {
+  border: 0;
+  box-shadow: none;
+}
+:root[data-theme="crt-green"] .workspace::before {
+  display: none;
+}
+:root[data-theme="crt-green"] :is(.gpt-chat, .gpt-results) {
+  background-image:
+    var(--crt-raster), radial-gradient(ellipse at 35% 0, #58ff7610, transparent 70%);
+  background-color: var(--paper);
+}
+:root[data-theme="crt-green"] :is(.nav-search, .inspector-search) {
+  box-shadow:
+    inset 0 1px 5px #0007,
+    0 1px #80ff9914;
+}
+:root[data-theme="hitech-2000s"] {
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 12px;
+  --panel-material:
+    repeating-linear-gradient(0deg, #ffffff16 0 1px, transparent 1px 3px),
+    linear-gradient(115deg, #c8d3db, #eff4f7 18%, #d7e0e6 65%, #b9c8d2);
+  --panel-heading: linear-gradient(#fafcfd, #d8e1e7 48%, #b6c5cf 51%, #e5edf2);
+  --card-material: linear-gradient(110deg, #f3f8fa, #e7eff3);
+  --card-shadow: inset 0 1px #fff, 0 1px 1px #35546938;
+  --field-shadow: inset 0 1px 3px #24475e29, 0 1px #fff;
+  --tab-material: linear-gradient(#edfcff, #bcebf4 47%, #91d4e5 51%, #d6f5fb);
+  --selected-shadow: inset 2px 0 #1384a3, inset 0 1px #fff, 0 1px #fff9;
+}
+:root[data-theme="classic-dark"] {
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --card-shadow: 0 2px 8px #00000014;
+}
+
+:root :is(.notebook-dialog, .project-overview-modal, .project-setup-dialog, .gpt-settings) {
+  background: var(--panel-material);
+  border-radius: var(--radius-lg);
+}
+:root :is(.notebook-heading, .inspector-heading, .project-overview-heading, .core-footer) {
+  background: var(--panel-heading);
+}
+:root :is(.notebook-heading, .inspector-heading) strong {
+  letter-spacing: 0.01em;
+}
+:root
+  :is(
+    .overview-card,
+    .plan-section,
+    .project-action,
+    .reference-picker,
+    .repository-summary,
+    .repository-card,
+    .note-source-card,
+    .task-fields,
+    .core-version[aria-pressed="true"]
+  ) {
+  background: var(--card-material);
+  box-shadow: var(--card-shadow);
+}
+:root
+  :is(
+    .notebook-row[data-selected="true"],
+    .core-version[aria-pressed="true"],
+    .inspector-list > li.selected
+  ) {
+  box-shadow: var(--selected-shadow);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+:root :is(.notebook-modules, .inspector-tabs) {
+  background: var(--panel-heading);
+  padding-inline: 10px;
+  gap: 5px;
+}
+:root :is(.notebook-modules, .inspector-tabs) button {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-bottom-width: 2px;
+}
+:root
+  :is(
+    .notebook-modules button[aria-pressed="true"],
+    .inspector-tabs button.active,
+    .task-project-filters button[aria-pressed="true"]
+  ) {
+  background: var(--tab-material);
+  color: var(--ink);
+}
+:root
+  :is(
+    .notebook-list > input,
+    .core-field textarea,
+    .inspector-path input,
+    .inspector-search,
+    .task-fields input,
+    .task-fields select
+  ) {
+  box-shadow: var(--field-shadow);
+  border-radius: var(--radius);
+}
+:root :is(.notebook-editor, .core-content, .project-overview) {
+  background: var(--paper);
+}
+:root .notebook-list {
+  background: color-mix(in srgb, var(--surface) 80%, var(--canvas));
+}
+:root :is(.plan-section > header, .repository-card > header, .repository-card > summary) {
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+}
+:root .notebook-editor :is(.plan-description, .notebook-body):focus {
+  outline: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 2px;
+}
+
+/* Paper details occupy the existing gutter and tab strip, never a new column. */
+:root[data-theme="organizer"] :is(.notebook-modules, .inspector-tabs) {
+  padding-top: 4px;
+  box-shadow: inset 0 -1px #bcbda9;
+}
+:root[data-theme="organizer"] .notebook-modules button {
+  --tab-tint: #d9e4cf;
+  background: linear-gradient(color-mix(in srgb, var(--tab-tint) 60%, #fff), var(--tab-tint));
+  border: 1px solid #b4baa780;
+  border-bottom: 2px solid transparent;
+  box-shadow: inset 0 1px #fff9;
+}
+:root[data-theme="organizer"] .notebook-modules button:nth-child(2) {
+  --tab-tint: #eee2bb;
+}
+:root[data-theme="organizer"] .notebook-modules button:nth-child(3) {
+  --tab-tint: #ccdeea;
+}
+:root[data-theme="organizer"] .notebook-modules button:nth-child(4) {
+  --tab-tint: #e5cfc8;
+}
+:root[data-theme="organizer"] .notebook-modules button[aria-pressed="true"] {
+  border-bottom-color: var(--accent);
+  color: #28392d;
+}
+:root[data-theme="organizer"] .notebook-editor {
+  background-image: linear-gradient(90deg, transparent 11px, #be908228 11px 12px, transparent 12px);
+  box-shadow: inset 3px 0 5px #6e5b3010;
+}
+:root[data-theme="organizer"] .notebook-body {
+  line-height: 1.7;
+  background: repeating-linear-gradient(
+      transparent 0 calc(1.7em - 1px),
+      #677e4812 calc(1.7em - 1px) 1.7em
+    )
+    0 4px;
+}
+:root[data-theme="organizer"] :is(.notebook-heading, .project-overview-heading) {
+  box-shadow:
+    inset 0 -1px #fff9,
+    0 1px 3px #64542b12;
+}
+:root[data-theme="organizer"] .overview-card {
+  border-top: 3px solid #b5c8a9;
+}
+:root[data-theme="organizer"] .overview-card:nth-child(3n + 2) {
+  border-top-color: #bccfdc;
+}
+:root[data-theme="organizer"] .overview-card:nth-child(3n + 3) {
+  border-top-color: #dfcdb0;
+}
+:root[data-theme="organizer"] :is(.gpt-chat, .gpt-composer) {
+  background: linear-gradient(110deg, #fffdf6, #f8f6eb);
+}
+
+/* Recessed displays and small machined controls, in the spirit of 2000s devices. */
+:root[data-theme="hitech-2000s"] :is(.notebook-dialog, .project-overview-modal, .gpt-settings) {
+  border-color: #778f9f;
+  box-shadow:
+    inset 0 0 0 1px #fff,
+    0 12px 35px #10283955;
+}
+:root[data-theme="hitech-2000s"]
+  :is(.notebook-heading, .inspector-heading, .project-overview-heading) {
+  border-bottom: 1px solid #849aa8;
+  box-shadow:
+    inset 0 1px #fff,
+    inset 0 -1px #f3fbff,
+    0 1px 3px #1b3d4e26;
+}
+:root[data-theme="hitech-2000s"] .notebook-modules button {
+  border: 1px solid #92a8b5;
+  border-bottom: 2px solid #8ea8b5;
+  background: linear-gradient(#f7fafc, #d4e0e7);
+  box-shadow: inset 0 1px #fff;
+}
+:root[data-theme="hitech-2000s"] .notebook-modules {
+  padding-top: 5px;
+}
+:root[data-theme="hitech-2000s"] .notebook-modules button[aria-pressed="true"] {
+  background: var(--tab-material);
+  border-bottom-color: #098baa;
+  box-shadow:
+    inset 0 1px #fff,
+    inset 0 -2px #78dcec55;
+}
+:root[data-theme="hitech-2000s"] :is(.notebook-editor, .core-content) {
+  background: linear-gradient(90deg, #e2ecf0, #f5f9fa 5%, #f0f6f8);
+  box-shadow: inset 2px 2px 5px #4869781c;
+}
+:root[data-theme="hitech-2000s"] .notebook-list {
+  background: linear-gradient(90deg, #d1dce4, #e4ecf1 8%, #dce6ec);
+  border-right-color: #9aafbd;
+}
+:root[data-theme="hitech-2000s"] .repository-summary {
+  background: linear-gradient(#e0eff4, #f2f9fc);
+  box-shadow:
+    inset 0 1px 4px #25567526,
+    0 1px #fff;
+}
+:root[data-theme="hitech-2000s"] :is(.gpt-chat, .gpt-results) {
+  background: linear-gradient(90deg, #dfe9ee, #f7fafb 9%, #f1f5f7 92%, #dce7ed);
+  border: 1px solid #587382;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px #e6fbff;
+  overflow: hidden;
+}
+:root[data-theme="hitech-2000s"] .gpt-composer {
+  background: linear-gradient(#f8fcff, #ddeaf1);
+  box-shadow:
+    inset 0 0 0 1px #f3fcff,
+    0 0 5px #52bede26;
+}
+:root[data-theme="crt-green"] :is(.notebook-editor, .core-content, .project-overview) {
+  background: var(--panel-material);
+}
+:root[data-theme="crt-green"]
+  :is(.notebook-heading, .notebook-modules button[aria-pressed="true"], .repository-identity h2) {
+  text-shadow: var(--crt-strong-glow);
+}
+:root[data-theme="crt-green"] .gpt-composer {
+  background: var(--card-material);
+  border-color: #3e8c55;
+  box-shadow: var(--card-shadow);
+  border-radius: var(--radius);
+}
+
+/* Keep phone safe-area geometry; decorations never sit over media. */
+@media (min-width: 1100px) {
+  :root[data-theme="crt-green"] .workspace {
+    border-radius: 0;
+  }
+}
+@media (prefers-contrast: more), (forced-colors: active) {
+  :root[data-theme="crt-green"] {
+    --crt-glow: none;
+    --crt-strong-glow: none;
+    --crt-raster: none;
+  }
+}
