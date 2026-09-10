@@ -386,6 +386,7 @@ Before mobile support is considered complete, the same core workflow must also w
 - Expose a compact shared System voice / Background audio choice in Codex/GPT Settings and remember it on the device. Default to system speech when supported; Piper availability must not override the owner's choice.
 - System mode uses installed local voices and must not call the speech worker. Keep delayed voice discovery, pause/resume/stop and cancellation guards. Background mode retains private media playback and Media Session controls. Switching modes stops the previous engine.
 - Physical iPhone/iPad audio remains the owner's usage check; simulated browser voices are not hardware acceptance.
+
 ## Owner-requested global human Tasks (2026-09-10)
 
 - Tasks is one global human reminder list, separate from native collaboration Plan mode and future AI Plans. Sidebar entries open all projects; Project Home opens the same storage filtered to its project.

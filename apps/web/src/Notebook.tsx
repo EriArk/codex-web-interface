@@ -452,6 +452,11 @@ export function NotebookPanel({
     if (n.scope) scopes.set(notebookKey(n.scope), n.scope);
   if (edit?.scope) scopes.set(notebookKey(edit.scope), edit.scope);
   if (isTask) for (const p of projects.items) scopes.set(notebookKey(p.scope), p.scope);
+  const orderedScopes = [...scopes].sort(([ak, a], [bk, b]) => {
+    if (!isTask) return 0;
+    if (!a || !b) return a ? 1 : b ? -1 : 0;
+    return a.name.localeCompare(b.name, "ru") || ak.localeCompare(bk);
+  });
   const projectLabel = (s: NotebookScope) => {
     if (!s) return "Без проекта";
     const p = projects.items.find((p) => notebookKey(p.scope) === notebookKey(s));
@@ -523,7 +528,7 @@ export function NotebookPanel({
           <fieldset className="task-project-filters" aria-label="Проекты задач">
             {[
               ["all", "Все"] as const,
-              ...[...scopes].map(([key, s]) => [key, projectLabel(s)] as const),
+              ...orderedScopes.map(([key, s]) => [key, projectLabel(s)] as const),
             ].map(([key, name]) => (
               <button
                 type="button"
@@ -583,7 +588,7 @@ export function NotebookPanel({
                 onChange={(e) => setScope(e.target.value)}
               >
                 <option value="all">Все заметки</option>
-                {[...scopes].map(([key, s]) => (
+                {orderedScopes.map(([key, s]) => (
                   <option key={key} value={key}>
                     {s ? `${s.name} · ${s.client === "gpt" ? "GPT" : "Codex"}` : "Общие"}
                   </option>
@@ -801,7 +806,7 @@ export function NotebookPanel({
                   value={notebookKey(edit.scope)}
                   onChange={(e) => change({ scope: scopes.get(e.target.value) ?? null })}
                 >
-                  {[...scopes].map(([key, s]) => (
+                  {orderedScopes.map(([key, s]) => (
                     <option key={key} value={key}>
                       {isTask ? projectLabel(s) : s?.name || "Общая заметка"}
                     </option>
