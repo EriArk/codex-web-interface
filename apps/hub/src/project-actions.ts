@@ -363,6 +363,27 @@ export class ProjectActions {
       const message = this.db
         .prepare("SELECT id,turnId FROM messages WHERE threadId=? AND id=? AND role='user'")
         .get(value.threadId!, value.id);
+      if (value.delivery === "queue" && !message?.turnId) {
+        const held = this.db
+          .prepare(
+            "SELECT state FROM queue_transfers WHERE threadId=? AND json_extract(value,'$.clientUserMessageId')=?",
+          )
+          .get(value.threadId!, value.id);
+        const change = this.db
+          .prepare(
+            "SELECT payload FROM events WHERE threadId=? AND type='queue.changed' AND json_extract(payload,'$.clientMessageId')=? AND json_extract(payload,'$.action') IN ('delete','dismissed') ORDER BY seq DESC LIMIT 1",
+          )
+          .get(value.threadId!, value.id);
+        const action = change ? JSON.parse(String(change.payload)).action : null;
+        if (action === "delete") state = "cancelled";
+        else if (
+          action === "dismissed" ||
+          (held && ["unknown", "enqueue_unknown"].includes(String(held.state)))
+        ) {
+          state = "unknown";
+          value.error = "Исход отправки из очереди нужно проверить в диалоге.";
+        }
+      }
       if (message?.turnId) {
         value.turnId = String(message.turnId);
         value.messageId = String(message.id);
@@ -418,7 +439,13 @@ export class ProjectActions {
         const final = job.nativeId
           ? this.gpt.historyCache
               .peek(job.nativeId)
-              .filter((m) => m.role === "assistant" && body.includes(m.text) && m.text.trim())
+              .filter(
+                (m) =>
+                  m.role === "assistant" &&
+                  body.includes(m.text) &&
+                  m.text.trim() &&
+                  Number(m.createdAt) * 1000 >= job.createdAt - 10000,
+              )
               .at(-1)
           : undefined;
         if (job.nativeId)

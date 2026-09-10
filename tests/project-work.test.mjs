@@ -160,7 +160,26 @@ test("reports advance their durable checkpoint only with confirmed completion an
     "Старая проверка",
     {},
   );
+  f.store.setPreferences({
+    ...f.store.preferences(),
+    projectGit: {
+      project: {
+        repository: true,
+        branch: "main",
+        dirty: true,
+        changed: 3,
+        checkedAt: 123,
+      },
+    },
+  });
   const { id, action } = await prepare(f, "report");
+  assert.deepEqual(action.snapshot.context.cachedGit, {
+    repository: true,
+    branch: "main",
+    dirty: true,
+    changed: 3,
+    checkedAt: 123,
+  });
   assert(action.snapshot.context.results.some((r) => r.id === initial));
   assert.equal((await request(f, "GET", "/api/workspace/reports")).data.items.length, 0);
   const running = (
@@ -201,6 +220,12 @@ test("active implementation uses the existing native queue with its stable user 
     queue = [];
   f.rpc.request = async (method, p) => {
     if (method === "thread/queue/list") return { data: queue };
+    if (method === "thread/queue/delete") {
+      const i = queue.findIndex((q) => q.id === p.queuedSubmissionId);
+      if (i < 0) return { deleted: false };
+      queue.splice(i, 1);
+      return { deleted: true };
+    }
     if (method === "thread/queue/add") {
       f.calls.push({ method, params: p });
       const q = { id: randomUUID(), clientUserMessageId: p.clientUserMessageId, input: p.input };
@@ -221,6 +246,19 @@ test("active implementation uses the existing native queue with its stable user 
   assert.equal(queue[0].clientUserMessageId, second.id);
   await request(f, "POST", `/api/workspace/actions/${second.id}/submit`, { confirm: true });
   assert.equal(queue.length, 1);
+  const q = (await request(f, "GET", `/api/threads/${f.thread.id}/queue`)).data.items[0];
+  const removal = await f.app.inject({
+    method: "POST",
+    url: `/api/threads/${f.thread.id}/queue/${q.id}`,
+    headers: { ...f.headers, "idempotency-key": randomUUID() },
+    payload: { action: "delete", revision: q.revision },
+  });
+  assert.equal(removal.statusCode, 200);
+  assert.equal(queue.length, 0);
+  assert.equal(
+    (await request(f, "GET", `/api/workspace/actions/${second.id}`)).data.state,
+    "cancelled",
+  );
 });
 
 test("report completion waits briefly for its final message and never checkpoints an empty answer", async (t) => {
@@ -264,4 +302,41 @@ test("workspace work mutations require the existing session and CSRF confirmatio
     ).statusCode,
     403,
   );
+});
+
+test("GPT reports never attach an identical older assistant message as the new report source", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const { GptService } = await import("../apps/hub/dist/gpt.js");
+  const { ProjectActions } = await import("../apps/hub/dist/project-actions.js");
+  const gpt = new GptService(f.sessions.config, f.store);
+  t.after(() => gpt.close());
+  gpt.available = () => true;
+  gpt.pump = async () => {};
+  gpt.models = async () => ({ currentModel: "Latest", currentEffort: "2" });
+  const projectId = "g-p-" + randomUUID(),
+    nativeId = randomUUID();
+  const scope = { client: "gpt", projectId, name: "GPT project" };
+  gpt.library.save("project", projectId, { name: scope.name });
+  gpt.library.save("thread", nativeId, { name: "Current", projectId, activityAt: 1 });
+  const actions = new ProjectActions(f.sessions, gpt, {});
+  for (const recent of [false, true]) {
+    const a = await actions.prepare(randomUUID(), { scope, kind: "report" });
+    await actions.submit(a.id);
+    f.store.db
+      .prepare("UPDATE gpt_jobs SET status='completed',submitted=1,answer='Готово' WHERE id=?")
+      .run(a.id);
+    gpt.historyCache.peek = () => [
+      {
+        id: recent ? "new-final" : "old-final",
+        role: "assistant",
+        text: "Готово",
+        createdAt: (Date.now() - (recent ? 0 : 3600000)) / 1000,
+      },
+    ];
+    assert.equal(actions.get(a.id).state, "completed");
+    const report = actions.context.report(a.id);
+    assert.equal(report.source.messageId, recent ? "new-final" : undefined);
+    assert.equal(report.body, "Готово");
+  }
 });

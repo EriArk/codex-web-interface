@@ -31,8 +31,8 @@ export class QueueService {
       this.locks.delete(id);
     }
   }
-  private changed(id: string) {
-    this.sessions.emit("event", this.store.append(id, "queue.changed", {}));
+  private changed(id: string, details: Record<string, unknown> = {}) {
+    this.sessions.emit("event", this.store.append(id, "queue.changed", details));
   }
   private async native(id: string): Promise<Submission[]> {
     const t = this.sessions.thread(id),
@@ -296,7 +296,10 @@ export class QueueService {
           throw error;
         }
       }
-      this.changed(id);
+      this.changed(id, {
+        clientMessageId: q.clientUserMessageId,
+        action: action === "delete" && held ? "dismissed" : action,
+      });
       return { ok: true };
     });
   }

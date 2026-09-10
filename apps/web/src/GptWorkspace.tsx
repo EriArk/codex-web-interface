@@ -43,6 +43,7 @@ import type { Session } from "./types";
 import { useGptHistory } from "./useGptHistory";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
+import { WorkspaceLinks } from "./WorkspaceLinks";
 import "./gpt.css";
 
 const isActive = (job: GptJob) => ["queued", "preparing", "running"].includes(job.status);
@@ -1161,29 +1162,14 @@ export function GptWorkspace({
       </button>
       <EntityArchive client="gpt" />
       {onNotebook && (
-        <>
-          <button type="button" className="nav-new-thread" onClick={() => openNotebook("plans")}>
-            <Icon name="plan" size={18} />
-            Планы
-          </button>
-          <button type="button" className="nav-new-thread" onClick={() => openNotebook("reports")}>
-            <Icon name="report" size={18} />
-            Отчёты
-          </button>
-        </>
+        <WorkspaceLinks
+          onTasks={() => openNotebook("tasks")}
+          onNotes={() => openNotebook()}
+          onPlans={() => openNotebook("plans")}
+          onReports={() => openNotebook("reports")}
+        />
       )}
-      {onNotebook && (
-        <button type="button" className="nav-new-thread" onClick={() => openNotebook()}>
-          <Icon name="file" />
-          Заметки и ссылки
-        </button>
-      )}
-      {onNotebook && (
-        <button type="button" className="nav-new-thread" onClick={() => openNotebook("tasks")}>
-          <Icon name="check" />
-          Задачи
-        </button>
-      )}
+
       <button
         type="button"
         className="nav-new-thread"

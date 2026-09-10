@@ -70,7 +70,7 @@ for (const [engine, type] of [
     assert.equal(note.source.target.messageId, "m59");
     await page.getByRole("button", { name: "Открыть проекты" }).click();
     await page
-      .getByRole("button", { name: "Заметки и ссылки", exact: true })
+      .getByRole("button", { name: "Заметки", exact: true })
       .filter({ visible: true })
       .click();
     const notes = page.getByRole("dialog", { name: "Заметки и ссылки", exact: true });
