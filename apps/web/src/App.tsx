@@ -18,6 +18,7 @@ import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { MachineHealthPanel } from "./MachineHealth";
+import { SpeechSettings } from "./MessageSpeech";
 import { NotebookPanel, type NotebookRequest, type WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { ProjectDialog } from "./ProjectDialog";
@@ -1408,6 +1409,7 @@ function Workspace({
             </label>
           ))}
         </fieldset>
+        <SpeechSettings />
         <UsageLimits machines={machines} open={settings} />
         <DesktopControl
           machines={machines}

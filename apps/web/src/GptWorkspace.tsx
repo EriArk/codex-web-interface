@@ -30,7 +30,7 @@ import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { MachineHealthPanel } from "./MachineHealth";
-import { SpeechButton, useSpeechScope } from "./MessageSpeech";
+import { SpeechButton, SpeechSettings, useSpeechScope } from "./MessageSpeech";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
@@ -1610,6 +1610,7 @@ export function GptWorkspace({
             </button>
           ))}
         </div>
+        <SpeechSettings />
         <section className="gpt-connection-settings" aria-label="Состояние GPT">
           <p role="status">{connection?.message ?? "Проверяем подключение GPT…"}</p>
           <button
