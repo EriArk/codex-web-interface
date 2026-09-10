@@ -124,6 +124,9 @@ for (const [engine, type] of [
     const doctor = page.locator(".bridge-doctor-panel");
     await doctor.locator(":scope > summary").click();
     await expect(doctor.getByLabel("Проект Bridge Doctor")).toHaveValue("project");
+    assert(
+      (await doctor.getByLabel("Автодиагностика GPT").locator("..").boundingBox()).height >= 44,
+    );
     await doctor.getByLabel("Автодиагностика GPT").click();
     await expect(doctor.getByLabel("Автодиагностика GPT")).not.toBeChecked();
     await expect(doctor.getByLabel("Автодиагностика GPT")).toBeEnabled();

@@ -17,6 +17,7 @@
   margin: 10px 0;
 }
 .doctor-controls label {
+  min-height: 44px;
   display: flex;
   gap: 9px;
   align-items: center;
@@ -94,4 +95,11 @@
 }
 .doctor-actions button {
   min-height: 44px;
+}
+
+.doctor-controls input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  accent-color: var(--accent);
 }
