@@ -328,6 +328,7 @@ export type {
 export * from "./plan-reconciliation.js";
 export * from "./project-core.js";
 export * from "./project-work.js";
+export * from "./quick-capture.js";
 export * from "./results.js";
 export type {
   ProjectSetupInput,

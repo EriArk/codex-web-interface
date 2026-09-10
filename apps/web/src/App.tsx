@@ -272,7 +272,16 @@ function Workspace({
       if (request?.mode === "reviews" && request.scope) setNotebook(request);
     };
     window.addEventListener("open-work-review", open);
-    return () => window.removeEventListener("open-work-review", open);
+    const captured = (event: Event) => {
+      const request = (event as CustomEvent<NotebookRequest>).detail;
+      if (request && ["notes", "tasks"].includes(request.mode ?? "") && request.itemId)
+        setNotebook(request);
+    };
+    window.addEventListener("open-captured-record", captured);
+    return () => {
+      window.removeEventListener("open-work-review", open);
+      window.removeEventListener("open-captured-record", captured);
+    };
   }, []);
   const [pendingNotebookResult, setPendingNotebookResult] = useState<{
     threadId: string;
