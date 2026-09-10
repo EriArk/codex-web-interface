@@ -7,7 +7,8 @@ Completion, observed verification and owner acceptance are distinct. Failed, can
 Accept and Needs fixes update only owner metadata with explicit revisions and atomic idempotency receipts. Needs fixes preserves a short local draft, records the owner note and can prepare a separate correction action. Preparation binds the current confirmed chat, Review revision and existing model/effort settings. Submission rechecks those identities and uses the ordinary native queue/send receipts and ownership guard. An uncertain submission is never replayed. No additional model invocation occurs on capture or acceptance.
 
 The same responsive Review dialog is opened from a completed project action, its source turn or Project Overview. Existing source/Results/Plans/Files navigation is reused. Closing the dialog preserves the chat and its draft. iPhone uses one list/detail view; wide tablets use a bounded split layout.
-# Plan reconciliation
+
+## Plan reconciliation
 
 An implementation prompt names each item in the exact saved Plan revision and requests one bounded `codex-plan-result` JSON block in the public final answer. Hub validates its schema, Plan identity/revision and item identities. Missing, malformed or unrelated payloads produce unknown items; prose is never treated as proof. No extra native turn is launched.
 

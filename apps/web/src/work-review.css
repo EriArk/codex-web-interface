@@ -31,6 +31,9 @@
 .work-review-header > div:last-child {
   display: flex;
 }
+.work-review-dialog .icon-button {
+  color: var(--ink);
+}
 .work-review-layout {
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
