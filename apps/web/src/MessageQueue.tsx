@@ -20,7 +20,9 @@ interface QueueState {
 export function useMessageQueue(threadId: string) {
   const [state, setState] = useState<QueueState>({ available: false, items: [], canSteer: false });
   const [error, setError] = useState(""),
+    [loadError, setLoadError] = useState(""),
     [busy, setBusy] = useState(false);
+  const readFailures = useRef(0);
   const current = useRef(threadId);
   current.current = threadId;
   const request = useRef(0),
@@ -29,13 +31,31 @@ export function useMessageQueue(threadId: string) {
   const refresh = useCallback(async () => {
     if (!threadId) return;
     const seq = ++request.current;
-    const value = await api<QueueState>(`/threads/${threadId}/queue`);
-    if (current.current === threadId && seq === request.current) setState(value);
-    return value;
+    try {
+      const value = await api<QueueState>(`/threads/${threadId}/queue`);
+      if (current.current === threadId && seq === request.current) {
+        setState(value);
+        readFailures.current = 0;
+        setLoadError("");
+      }
+      return value;
+    } catch (e) {
+      if (current.current === threadId && seq === request.current) {
+        if (e instanceof ApiError && e.code === "MACHINE_RELEASED") {
+          readFailures.current = 0;
+          setLoadError("");
+        } else if (++readFailures.current >= 3) {
+          setLoadError("Не удалось обновить очередь. Повторяем подключение.");
+        }
+      }
+      throw e;
+    }
   }, [threadId]);
   useEffect(() => {
     setState({ available: false, items: [], canSteer: false });
     setError("");
+    setLoadError("");
+    readFailures.current = 0;
     setBusy(false);
     busyRef.current = false;
     let disposed = false,
@@ -44,10 +64,7 @@ export function useMessageQueue(threadId: string) {
       if (disposed || checking || document.visibilityState !== "visible") return;
       checking = true;
       void refresh()
-        .catch((e) => {
-          if (!disposed)
-            setError(e instanceof ApiError && e.code === "MACHINE_RELEASED" ? "" : messageOf(e));
-        })
+        .catch(() => {})
         .finally(() => {
           checking = false;
         });
@@ -61,6 +78,7 @@ export function useMessageQueue(threadId: string) {
     document.addEventListener("visibilitychange", check);
     return () => {
       disposed = true;
+      request.current++;
       clearInterval(timer);
       window.removeEventListener("codex-queue-changed", change);
       document.removeEventListener("visibilitychange", check);
@@ -113,7 +131,7 @@ export function useMessageQueue(threadId: string) {
         body: { revision: item.revision, action: kind, text, expectedTurnId },
       }),
     );
-  return { state, error, busy, add, change };
+  return { state, error: error || loadError, busy, add, change };
 }
 export function MessageQueue({
   queue,
@@ -128,12 +146,14 @@ export function MessageQueue({
   if (!queue.state.items.length && !queue.error) return null;
   return (
     <section className="message-queue" aria-label="Очередь сообщений">
-      <div className="queue-heading">
-        <span>
-          Далее <b>{queue.state.items.length}</b>
-        </span>
-        <small>После текущего ответа</small>
-      </div>
+      {!!queue.state.items.length && (
+        <div className="queue-heading">
+          <span>
+            Далее <b>{queue.state.items.length}</b>
+          </span>
+          <small>После текущего ответа</small>
+        </div>
+      )}
       {queue.error && (
         <div className="composer-error" role="alert">
           {queue.error}

@@ -1,7 +1,31 @@
 import type { GptHistoryPage, GptJob, GptMessage } from "@codex-web/shared";
 import type { GptCachedChat } from "./gptCache";
-export function showGptJob(job: GptJob, messages: GptMessage[], now = Date.now()): boolean {
-  if (job.dismissed) return false;
+// A failed pre-dispatch attempt can outlive an explicit successful retry.
+// Hide only that obsolete presentation; do not mutate receipts or resolve unknown sends.
+export function completedGptRetry(job: GptJob, jobs: GptJob[]): boolean {
+  if (job.status !== "failed" || !job.nativeId || job.summaryOnly) return false;
+  return jobs.some(
+    (next) =>
+      next.id !== job.id &&
+      !next.dismissed &&
+      !next.summaryOnly &&
+      next.status === "completed" &&
+      next.nativeId === job.nativeId &&
+      next.createdAt >= job.updatedAt &&
+      next.createdAt <= job.updatedAt + 300000 &&
+      next.text === job.text &&
+      next.files.length === job.files.length &&
+      next.files.every((file, index) => file.id === job.files[index]?.id),
+  );
+}
+
+export function showGptJob(
+  job: GptJob,
+  messages: GptMessage[],
+  now = Date.now(),
+  jobs: GptJob[] = [],
+): boolean {
+  if (job.dismissed || completedGptRetry(job, jobs)) return false;
   if (["queued", "preparing", "running", "failed", "unknown"].includes(job.status)) return true;
   if (job.status === "cancelled" && !job.answer && !job.assets.length) return false;
   // Completed outbox entries must never append old messages below a paged native history.

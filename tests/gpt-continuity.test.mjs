@@ -141,3 +141,54 @@ test("Late GPT polling cannot resurrect a dismissed outbox item or its cached co
   assert.deepEqual(late[0].files, []);
   assert.deepEqual(late[0].progress, []);
 });
+
+test("Confirmed GPT retries hide only exact recent pre-dispatch failures in the same chat", async () => {
+  const { completedGptRetry, showGptJob } = await import("../apps/web/src/gptState.ts");
+  const failed = {
+    id: "failed",
+    nativeId: "chat",
+    status: "failed",
+    text: "same prompt",
+    files: [{ id: "file-a" }],
+    assets: [],
+    answer: "",
+    error: "Preparation failed",
+    createdAt: 10000,
+    updatedAt: 20000,
+  };
+  const completed = {
+    ...failed,
+    id: "retry",
+    status: "completed",
+    createdAt: 30000,
+    updatedAt: 40000,
+    error: "",
+  };
+  assert.equal(completedGptRetry(failed, [failed, completed]), true);
+  assert.equal(showGptJob(failed, [], 50000, [failed, completed]), false);
+  for (const patch of [
+    { status: "unknown" },
+    { status: "running" },
+    { status: "failed" },
+    { nativeId: "other-chat" },
+    { nativeId: null },
+    { text: "different prompt" },
+    { files: [] },
+    { files: [{ id: "file-b" }] },
+    { createdAt: 19000 },
+    { createdAt: 320001 },
+    { summaryOnly: true },
+    { dismissed: true },
+  ])
+    assert.equal(
+      completedGptRetry(failed, [failed, { ...completed, ...patch }]),
+      false,
+      JSON.stringify(patch),
+    );
+  assert.equal(showGptJob({ ...failed, status: "unknown" }, [], 50000, [completed]), true);
+  assert.equal(
+    completedGptRetry({ ...failed, nativeId: null }, [{ ...completed, nativeId: null }]),
+    false,
+  );
+  assert.equal(showGptJob(failed, [], 50000, []), true);
+});

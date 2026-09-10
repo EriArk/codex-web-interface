@@ -767,7 +767,7 @@ export function GptWorkspace({
     setView("results");
   };
   const jobElements = currentJobs
-    .filter((job) => showGptJob(job, messages))
+    .filter((job) => showGptJob(job, messages, Date.now(), currentJobs))
     .map((job) => {
       const nativeUser = messages.some(
         (m) =>
@@ -1164,7 +1164,7 @@ export function GptWorkspace({
     </div>
   );
   const resultExtras: ResultItem[] = currentJobs
-    .filter((job) => showGptJob(job, messages))
+    .filter((job) => showGptJob(job, messages, Date.now(), currentJobs))
     .flatMap((job) =>
       job.assets.map((file) => ({
         id: file.id,
