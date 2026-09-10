@@ -936,6 +936,7 @@ export class Sessions extends EventEmitter {
     prompt: string,
     settings?: TurnSettings,
     attachmentIds: string[] = [],
+    clientMessageId?: string,
   ): Promise<Record<string, unknown>> {
     let committing = false;
     try {
@@ -1016,7 +1017,7 @@ export class Sessions extends EventEmitter {
         // must never replay a prompt whose native acknowledgement may have been lost.
         committing = true;
         this.catalog.invalidate(id);
-        const messageId = randomUUID();
+        const messageId = clientMessageId ?? randomUUID();
         try {
           this.attachments.bind(id, messageId, prepared.files);
         } catch (error) {

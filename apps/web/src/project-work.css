@@ -1,0 +1,385 @@
+.notebook-modules button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.work-editor {
+  gap: 14px;
+}
+.work-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.work-row-heading .spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.plan-meter {
+  display: block;
+  height: 3px;
+  background: var(--line);
+  border-radius: 3px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.plan-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.plan-description {
+  width: 100%;
+  min-height: 66px;
+  resize: vertical;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  padding: 4px;
+  line-height: 1.5;
+}
+.plan-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.plan-section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.plan-section > header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.plan-section > header input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 600;
+}
+.plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 6px;
+}
+.plan-item + .plan-item {
+  border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+}
+.plan-item textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  min-height: 44px;
+  max-height: 180px;
+  line-height: 1.5;
+  padding: 10px 4px;
+  color: var(--ink);
+  border: 0;
+  background: transparent;
+}
+.plan-item[data-checked="true"] textarea {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.plan-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+.plan-check input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+.plan-check span {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+}
+.plan-check input:checked + span {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.plan-check input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.plan-order {
+  position: relative;
+  flex: none;
+}
+.plan-order summary {
+  list-style: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+}
+.plan-order summary::-webkit-details-marker {
+  display: none;
+}
+.plan-order > div {
+  position: absolute;
+  right: 0;
+  top: 40px;
+  z-index: 6;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.plan-order button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  text-align: left;
+}
+.plan-add-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 15px;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.plan-add-section {
+  align-self: flex-start;
+}
+.plan-owner-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.notebook-dialog .plan-owner-status input {
+  min-height: 20px;
+  width: 20px;
+  accent-color: var(--accent);
+}
+.plan-save {
+  position: sticky;
+  bottom: -20px;
+  background: var(--paper);
+  padding-bottom: 10px;
+  z-index: 3;
+  align-items: center;
+}
+.plan-save .secondary {
+  min-width: 0;
+}
+.plan-save .primary {
+  min-width: 130px;
+}
+.plan-references > div:not(.reference-picker) {
+  display: flex;
+  align-items: center;
+}
+.plan-references > div > button:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-height: 44px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.reference-picker {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-top: 10px;
+  max-height: 300px;
+  overflow: auto;
+}
+.reference-picker header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.reference-picker > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  width: 100%;
+  text-align: left;
+}
+.reference-file {
+  display: flex;
+  align-items: center;
+}
+.reference-file input {
+  flex: 1;
+  min-width: 0;
+}
+.project-action {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.project-action header,
+.project-action header > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.project-action header {
+  justify-content: space-between;
+}
+.project-action .spinner {
+  width: 18px;
+  height: 18px;
+}
+.project-action h3 {
+  font-size: 1.12em;
+  margin: 6px 0;
+}
+.project-action-meta {
+  font-size: 0.82em;
+  color: var(--muted);
+  margin: 4px 0 10px;
+}
+.project-action details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  font-size: 0.9em;
+}
+.project-action pre {
+  white-space: pre-wrap;
+  overflow: auto;
+  max-height: 260px;
+  line-height: 1.5;
+  font-size: 0.9em;
+}
+.project-action-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.project-action-buttons button {
+  min-height: 44px;
+}
+.project-action[data-state="completed"] {
+  border-color: var(--line);
+}
+.report-date {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82em;
+  margin-bottom: 6px;
+}
+.report-heading {
+  position: relative;
+  padding-right: 44px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+.report-heading h2 {
+  margin: 4px 0 8px;
+  font-size: 1.45em;
+}
+.report-heading small {
+  color: var(--muted);
+}
+.report-heading > .copy-control {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+.report-body {
+  overflow: visible;
+}
+.work-editor .notebook-empty h2 {
+  font-size: 1.2em;
+  font-weight: 600;
+  color: var(--ink);
+}
+.work-editor .notebook-empty p {
+  max-width: 340px;
+  line-height: 1.5;
+}
+@media (max-width: 700px) {
+  .notebook-modules button {
+    padding: 4px 8px;
+    gap: 5px;
+    font-size: 0.9em;
+  }
+  .notebook-modules button svg {
+    width: 14px;
+  }
+  .work-editor {
+    padding-inline: 12px;
+  }
+  .plan-item textarea,
+  .plan-description {
+    font-size: 16px;
+  }
+  .plan-save {
+    bottom: -12px;
+    gap: 4px;
+  }
+  .plan-save .primary {
+    min-width: 120px;
+  }
+  .project-action {
+    padding: 10px;
+  }
+}
+
+.work-editor > * {
+  flex-shrink: 0;
+}
+.work-editor > .notebook-back {
+  align-self: flex-start;
+  width: 44px;
+}
+.project-work-dialog input.notebook-title {
+  font-size: 1.3em;
+  font-weight: 600;
+  min-height: 44px;
+}
+.report-body {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.report-body + button {
+  align-self: flex-start;
+}

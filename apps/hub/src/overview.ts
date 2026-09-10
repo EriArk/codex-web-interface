@@ -9,7 +9,9 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Notebook } from "./notebook.js";
+import type { ProjectActions } from "./project-actions.js";
 import { ProjectCores } from "./project-core.js";
+import { ProjectPlans } from "./project-plans.js";
 import type { Sessions } from "./sessions.js";
 import { WorkspaceTasks } from "./tasks.js";
 
@@ -17,7 +19,10 @@ const live = "('starting','running','waiting_approval')";
 export class ProjectHome {
   readonly notes: Notebook;
   readonly tasks: WorkspaceTasks;
-  constructor(readonly sessions: Sessions) {
+  constructor(
+    readonly sessions: Sessions,
+    readonly work?: ProjectActions,
+  ) {
     this.notes = new Notebook(sessions);
     this.tasks = new WorkspaceTasks(sessions);
   }
@@ -45,6 +50,17 @@ export class ProjectHome {
         pins: this.notes.pins(key, 0, 3).items,
         results: [],
       };
+    value.plans = new ProjectPlans(this.sessions).list(key, "", 0).items.slice(0, 3);
+    if (this.work) {
+      value.currentChat = this.work.context.current(value.scope!);
+      const report = this.work.context.latestReport(value.scope!);
+      if (report)
+        value.latestReport = {
+          id: report.id,
+          createdAt: report.createdAt,
+          excerpt: report.body.slice(0, 240),
+        };
+    }
     const core = new ProjectCores(this.sessions).get(value.scope!);
     value.core = {
       revision: core.revision,
@@ -121,8 +137,12 @@ export class ProjectHome {
     return value;
   }
 }
-export function registerProjectOverview(app: FastifyInstance, sessions: Sessions) {
-  const home = new ProjectHome(sessions);
+export function registerProjectOverview(
+  app: FastifyInstance,
+  sessions: Sessions,
+  work?: ProjectActions,
+) {
+  const home = new ProjectHome(sessions, work);
   app.get("/api/workspace/overview", (req) => {
     const q = z
       .object({

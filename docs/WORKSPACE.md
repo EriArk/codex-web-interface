@@ -25,3 +25,14 @@ Project Home opens the owner-maintained Core: purpose, behavior, rules, constrai
 Schema 15 stores Core and its last 40 versions independently of native project/chat records. Restoration creates a new version; it never deletes the intervening history. Version lists page ten metadata rows at a time. Deleting/archiving a native project retains its saved Core; no source folder, repository instructions or native writer is changed. The complete SQLite backup includes both tables.
 
 Core text is available for the forthcoming current-chat bootstrap only. It is not automatically appended to ordinary messages. Chromium/WebKit check phone/tablet editing, draft preservation, conflicts, history and explicit restore with four-theme screenshots.
+
+
+## Plans and Reports
+
+Plans are project-owned ordered checklist packages, separate from human Tasks and native Work/Plan mode. Their saved version produces a reviewable ordinary request. Checked items remain explicit existing state. The confirmed action uses the existing native queue/turn or durable GPT outbox, per-chat permissions and desktop handoff. An uncertain receipt never automatically repeats work. Drafts survive closing the panel; edits use revision conflicts and exact-save retries.
+
+Reports freeze a bounded Hub activity digest and the last successful report boundary at preparation. The checkpoint advances only after a confirmed native completion and stored visible final answer. A failed/unknown/image-only answer cannot advance it. Recent turns across chats, Results, Tasks, Plans, Notes and cached Git observations remain separate from claims of comprehensive verification. Saved answers and source links remain available after native chat deletion.
+
+All four workspace sections share navigation and project filters. The wide view is a list/editor layout; phones show one at a time. Actions retain the underlying chat draft and do not navigate to execution unless requested.
+
+Verification: backend tests cover exact retry, revision conflicts, ownership, native queues, unknown outcomes, report checkpoints and delayed final events. Chromium/WebKit journeys cover local drafts, lost save acknowledgement, explicit execution, report history, four themes and phone/tablet layout. Physical iPhone/iPad acceptance remains the owner's usage check.

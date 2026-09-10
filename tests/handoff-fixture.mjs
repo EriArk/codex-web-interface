@@ -111,6 +111,7 @@ export async function handoffFixture(
   const headers = { origin: publicOrigin, cookie, "x-csrf-token": session.json().csrf };
   return {
     app,
+    rpc,
     push,
     store,
     sessions,

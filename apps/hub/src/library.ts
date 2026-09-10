@@ -20,6 +20,7 @@ export type LibraryEntry = {
   renamed?: boolean;
   nameCheckedAt?: number;
   changedAt?: number;
+  activityAt?: number;
   pinned?: boolean;
   archived?: boolean;
   deleted?: boolean;
