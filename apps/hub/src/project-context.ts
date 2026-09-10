@@ -367,6 +367,14 @@ export class ProjectContext {
           "SELECT id,state,revision,createdAt,json_extract(value,'$.title') title,json_extract(value,'$.decidedAt') decidedAt,substr(json_extract(value,'$.note'),1,700) note FROM work_reviews WHERE scopeKey=? ORDER BY createdAt DESC LIMIT 8",
         )
         .all(key),
+      delivery:
+        scope.client === "codex"
+          ? this.db
+              .prepare(
+                "SELECT id,state,createdAt,json_extract(value,'$.kind') kind,json_extract(value,'$.commit') commitSha,json_extract(value,'$.pr.url') pr,json_extract(value,'$.input.reviewId') reviewId FROM delivery_operations WHERE projectId=? AND createdAt>? AND createdAt<=? ORDER BY createdAt DESC LIMIT 8",
+              )
+              .all(scope.projectId, from.time ?? 0, until)
+          : [],
       ...(git ? { cachedGit: git } : {}),
     });
     return {

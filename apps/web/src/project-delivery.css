@@ -1,0 +1,331 @@
+.delivery-dialog {
+  width: min(1020px, calc(100% - 32px));
+  height: min(850px, calc(var(--app-height, 100dvh) - 32px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--panel-material, var(--paper));
+  color: var(--ink);
+  overflow: hidden;
+  box-shadow: var(--panel-shadow, 0 18px 70px #0005);
+}
+.delivery-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.delivery-dialog::backdrop {
+  background: #0008;
+}
+.delivery-dialog > header {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-heading, var(--paper));
+}
+.delivery-dialog > header > div:last-child,
+.delivery-dialog h2,
+.delivery-sha,
+.delivery-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.delivery-dialog h2 {
+  margin: 3px 0 0;
+  font-size: 22px;
+}
+.delivery-dialog h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.delivery-dialog h4 {
+  margin: 10px 0;
+}
+.delivery-dialog small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82em;
+}
+.delivery-dialog .icon-button {
+  color: var(--ink);
+  flex: none;
+}
+.delivery-dialog code {
+  overflow-wrap: anywhere;
+}
+.delivery-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px 20px;
+}
+.delivery-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 4px 0 18px;
+}
+.delivery-summary > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.delivery-summary strong {
+  font-size: 22px;
+}
+.delivery-summary dl {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin: 5px 0;
+}
+.delivery-summary dt {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.delivery-summary dd {
+  margin: 3px 0;
+  font-size: 19px;
+}
+.delivery-summary > small {
+  grid-column: 1 / -1;
+}
+.delivery-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.delivery-main,
+.delivery-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.delivery-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card-material, var(--paper));
+  box-shadow: var(--card-shadow, none);
+  overflow-wrap: anywhere;
+}
+.delivery-card > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.delivery-card p {
+  margin: 10px 0;
+  line-height: 1.45;
+}
+.delivery-card > button {
+  margin-top: 10px;
+}
+.delivery-card ul {
+  padding-left: 22px;
+  max-height: 280px;
+  overflow: auto;
+}
+.delivery-operation[data-state="completed"] {
+  border-color: var(--accent);
+}
+.delivery-paths {
+  max-height: 280px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-bottom: 14px;
+}
+.delivery-path {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  gap: 3px;
+}
+.delivery-path label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  min-height: 50px;
+  cursor: pointer;
+}
+.delivery-path input {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  accent-color: var(--accent);
+}
+.delivery-path span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.92em;
+}
+.delivery-path small {
+  white-space: pre;
+}
+.delivery-path .icon-button {
+  width: 40px;
+  min-width: 40px;
+}
+.delivery-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 10px;
+  font-size: 0.9em;
+}
+.delivery-field input,
+.delivery-field textarea {
+  font: inherit;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 5px);
+  padding: 10px;
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  resize: vertical;
+}
+.delivery-field textarea {
+  max-height: 280px;
+}
+.delivery-caption {
+  color: var(--muted);
+  font-size: 0.82em;
+  margin: 10px 0;
+}
+.delivery-dialog summary {
+  cursor: pointer;
+  min-height: 36px;
+  align-content: center;
+}
+.delivery-actions {
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.delivery-checks {
+  list-style: none;
+  padding: 0 !important;
+}
+.delivery-checks li {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+.delivery-checks li > svg {
+  flex: none;
+  margin-top: 3px;
+}
+.delivery-checks li[data-state="passed"] {
+  color: var(--accent);
+}
+.delivery-checks a {
+  color: inherit;
+}
+.delivery-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.delivery-history button {
+  text-align: left;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 5px);
+  color: var(--ink);
+  background: var(--paper);
+}
+.delivery-error {
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: var(--radius);
+}
+.delivery-diff {
+  margin: 12px 0;
+}
+.delivery-dialog pre {
+  max-height: 320px;
+  overflow: auto;
+}
+.delivery-dialog .secondary,
+.delivery-dialog .primary {
+  min-height: 44px;
+}
+.delivery-field input,
+.delivery-field textarea {
+  box-shadow: var(--field-shadow);
+}
+.delivery-dialog .spinner {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 3px 5px 0 0;
+}
+.delivery-summary strong {
+  text-shadow: var(--crt-strong-glow, none);
+}
+@media (max-width: 700px) {
+  .delivery-dialog {
+    width: calc(100% - 12px);
+    height: calc(var(--app-height, 100dvh) - 12px);
+    max-height: calc(var(--app-height, 100dvh) - 12px);
+  }
+  .delivery-dialog > header {
+    padding: 10px 12px;
+  }
+  .delivery-scroll {
+    padding: 12px;
+  }
+  .delivery-columns {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .delivery-card {
+    padding: 13px;
+  }
+  .delivery-summary dl {
+    gap: 10px 20px;
+  }
+  .delivery-summary {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .delivery-summary .delivery-sha {
+    justify-self: start;
+  }
+  .delivery-paths {
+    max-height: 230px;
+  }
+  .delivery-field input,
+  .delivery-field textarea {
+    font-size: 16px;
+  }
+  .delivery-dialog .primary,
+  .delivery-dialog .secondary {
+    max-width: 100%;
+    white-space: normal;
+  }
+  .delivery-dialog h2 {
+    font-size: 20px;
+  }
+}

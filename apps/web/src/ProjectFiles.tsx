@@ -4,6 +4,7 @@ import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
+import { DeliveryButton } from "./ProjectDeliveryHost";
 import { ProjectRepositoryView } from "./ProjectRepositoryView";
 import "./project-files.css";
 
@@ -519,6 +520,9 @@ export function ProjectFiles({
               <small>Проверены первые 5000 записей. Открой нужную папку по пути.</small>
             )}
           </>
+        )}
+        {mode === "git" && visible && (
+          <DeliveryButton projectId={projectId} projectName={projectName} />
         )}
         {mode === "git" && visible && (
           <ProjectRepositoryView

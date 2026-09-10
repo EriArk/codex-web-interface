@@ -275,6 +275,7 @@ export interface Attachment {
   createdAt: string;
 }
 
+export * from "./delivery.js";
 export type {
   GptConversation,
   GptFile,

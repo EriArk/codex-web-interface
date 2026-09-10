@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { CodexClient, type ServerRequest } from "@codex-web/codex";
 import { readWorkspaceDependencies, spawnCodex } from "@codex-web/machines";
 import {
@@ -195,6 +195,12 @@ export class Sessions extends EventEmitter {
     return clients[machineId] === "desktop" ? "desktop" : "web";
   }
   assertWritable(projectId: string): void {
+    if (this.deliveryProjects.has(projectId))
+      throw new HubError(
+        409,
+        "DELIVERY_BUSY",
+        "Сохраняем изменения в Git. Повтори отправку после завершения операции.",
+      );
     const machineId = this.project(projectId).machineId;
     if (this.catalog.library.get("project", projectId)?.deleted)
       throw new HubError(404, "PROJECT_DELETED", "Проект удалён.");
@@ -211,6 +217,40 @@ export class Sessions extends EventEmitter {
       );
   }
   private machineWrites = new Map<string, number>();
+  private deliveryProjects = new Set<string>();
+  beginProjectDelivery(projectId: string): () => void {
+    const p = this.project(projectId);
+    const windows = this.catalog.machine(p.machineId).type === "ssh-windows";
+    const canonical = (s: string) => (windows ? win32.resolve(s).toLowerCase() : posix.resolve(s));
+    const ids = this.catalog
+      .projects()
+      .filter(
+        (q) =>
+          q.machineId === p.machineId &&
+          canonical(q.workingDirectory) === canonical(p.workingDirectory),
+      )
+      .map((q) => q.id);
+    if (
+      ids.some((id) => this.deliveryProjects.has(id) || this.locks.has(id)) ||
+      this.machineWrites.get(p.machineId) ||
+      ids.some((id) =>
+        this.store.db
+          .prepare(
+            "SELECT 1 FROM threads WHERE projectId=? AND status IN ('starting','running','waiting_approval','unknown') LIMIT 1",
+          )
+          .get(id),
+      )
+    )
+      throw new HubError(
+        409,
+        "PROJECT_BUSY",
+        "Дождись завершения работы в проекте перед Git-операцией.",
+      );
+    for (const id of ids) this.deliveryProjects.add(id);
+    return () => {
+      for (const id of ids) this.deliveryProjects.delete(id);
+    };
+  }
   private handingOff = new Set<string>();
 
   async handoffToDesktop(machineId: string, confirmInterrupt = false): Promise<void> {

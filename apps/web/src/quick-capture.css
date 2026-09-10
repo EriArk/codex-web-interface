@@ -4,7 +4,7 @@
   padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--paper);
+  background: var(--panel-material, var(--paper));
   color: var(--ink);
   overflow: auto;
   overscroll-behavior: contain;
@@ -13,6 +13,7 @@
   background: #0008;
 }
 .quick-capture-dialog > header {
+  background: var(--panel-heading, var(--paper));
   display: flex;
   align-items: center;
   gap: 10px;

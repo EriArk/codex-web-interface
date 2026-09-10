@@ -16,6 +16,7 @@ import { Icon } from "./icons";
 import type { NotebookRequest } from "./Notebook";
 import { PlanReconciliation } from "./PlanReconciliation";
 import { ProjectActionPanel } from "./ProjectAction";
+import { DeliveryButton } from "./ProjectDeliveryHost";
 import { reviewLabels } from "./WorkReviewLink";
 import "./work-review.css";
 
@@ -342,6 +343,13 @@ export default function WorkReviewPanel({
                     <Icon name="plan" size={17} />
                     План · версия {r.plan.revision}
                   </button>
+                )}
+                {r.scope.client === "codex" && (
+                  <DeliveryButton
+                    projectId={r.scope.projectId}
+                    projectName={r.scope.name}
+                    reviewId={r.id}
+                  />
                 )}
                 {r.scope.client === "codex" && (
                   <button
