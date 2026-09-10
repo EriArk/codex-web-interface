@@ -1,6 +1,9 @@
 import type { CSSProperties } from "react";
 
 const paths: Record<string, string[]> = {
+  terminal: ["M3 4h18v16H3z", "m6 8 4 4-4 4m7 0h5"],
+  server: ["M3 3h18v7H3zM3 14h18v7H3zM7 6h.01M7 17h.01M11 6h6M11 17h6"],
+  power: ["M12 2v10M6 5a9 9 0 1 0 12 0"],
   repository: ["M3 7V4h6l2 3h10v13H3V7Z", "m10 11-3 3 3 3m4-6 3 3-3 3"],
   branch: ["M6 5v14M6 13h7a5 5 0 0 0 5-5V5", "M4 3h4v4H4zM16 3h4v4h-4zM4 17h4v4H4z"],
   tag: ["M3 3h8l10 10-8 8L3 11V3Z", "M7 7h.01"],

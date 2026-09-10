@@ -20,7 +20,9 @@ import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { registerBridgeDoctor } from "./bridge-doctor.js";
+import { registerCommandOutput } from "./command-output.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
+import { type DeviceDependencies, registerDevices } from "./devices.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
 import { entityAction, libraryMutation } from "./library.js";
@@ -62,6 +64,7 @@ export async function createApp(
     desktopTransport?: DesktopTransport;
     machineDiagnostics?: MachineProbeDependencies;
     projectSetupProbe?: typeof runProjectSetup;
+    devices?: DeviceDependencies;
   } = {},
 ) {
   const app = Fastify({
@@ -121,6 +124,8 @@ export async function createApp(
     },
   });
   auth.install(app);
+  registerCommandOutput(app, sessions);
+  const devices = registerDevices(app, config, store, auth, options.devices);
   registerSpeech(app, config, auth);
   app.addContentTypeParser(
     "application/octet-stream",
@@ -129,6 +134,7 @@ export async function createApp(
   );
   const sockets = new Map<WebSocket, string>();
   const closeSession = (token: string) => {
+    devices.sweep();
     for (const [socket, owner] of sockets) if (owner === token) socket.close(1008, "Session ended");
   };
   app.setErrorHandler((error, req, reply) => {
@@ -221,6 +227,7 @@ export async function createApp(
     return { ok: true };
   });
   const closeAllSessions = () => {
+    devices.sweep();
     for (const socket of sockets.keys()) socket.close(1008, "Session ended");
   };
   app.post(

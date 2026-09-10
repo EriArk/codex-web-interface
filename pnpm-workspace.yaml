@@ -1,4 +1,6 @@
 packages:
   - apps/*
   - packages/*
+allowBuilds:
+  node-pty: true
 minimumReleaseAge: 1440

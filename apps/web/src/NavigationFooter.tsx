@@ -1,4 +1,5 @@
 import { ClientPicker } from "./ClientPicker";
+import { openDevices } from "./DeviceWorkspaceHost";
 import { Icon } from "./icons";
 export function NavigationFooter({
   client,
@@ -20,6 +21,15 @@ export function NavigationFooter({
         Настройки
       </button>
       <div className="navigation-mode-controls">
+        <button
+          type="button"
+          className="icon-button"
+          onClick={openDevices}
+          aria-label="Открыть устройства"
+          title="Устройства"
+        >
+          <Icon name="terminal" />
+        </button>
         {remoteHref ? (
           <a
             className="icon-button nav-remote"

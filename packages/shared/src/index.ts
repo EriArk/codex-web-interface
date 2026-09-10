@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { deviceConfigSchema } from "./devices.js";
+
+export * from "./devices.js";
+
 import { storagePolicySchema } from "./storage.js";
 
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);
@@ -89,6 +93,7 @@ export const configSchema = z
       .optional(),
     auth: z.object({ username: z.string().min(1).max(80).default("owner") }),
     machines: z.array(machine).max(20),
+    devices: z.array(deviceConfigSchema).max(40).default([]),
     projects: z
       .array(
         z.object({
@@ -103,6 +108,8 @@ export const configSchema = z
   })
   .superRefine((c, ctx) => {
     const machines = new Map(c.machines.map((m) => [m.id, m]));
+    if (new Set(c.devices.map((d) => d.id)).size !== c.devices.length)
+      ctx.addIssue({ code: "custom", message: "Duplicate device ID" });
     if (machines.size !== c.machines.length)
       ctx.addIssue({ code: "custom", message: "Duplicate machine ID" });
     if (new Set(c.projects.map((p) => p.id)).size !== c.projects.length)

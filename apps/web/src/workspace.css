@@ -845,6 +845,13 @@
 .result-card > .code-disclosure {
   margin: 10px 16px;
 }
+.command-output > :is(p, small, button) {
+  margin: 10px 12px;
+}
+.command-output pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .send-error > .secondary {
   display: flex;
   margin-top: 9px;
