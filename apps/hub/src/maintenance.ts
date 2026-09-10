@@ -438,6 +438,11 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
       db.prepare(
         "UPDATE gpt_jobs SET status='unknown',error=? WHERE status IN ('queued','preparing','running')",
       ).run("Восстановлено из резервной копии. Проверь ответ в ChatGPT перед повторной отправкой.");
+      db.prepare(
+        "UPDATE project_work_actions SET state='unknown',value=json_set(value,'$.state','unknown','$.error',?) WHERE state IN ('dispatching','queued','running')",
+      ).run(
+        "Восстановлено из резервной копии. Проверь выполнение в исходном чате; повторной отправки не будет.",
+      );
       db.exec(
         "UPDATE auth_state SET revision=revision+1,recoveryHash=NULL,recoveryExpires=NULL WHERE id=1",
       );

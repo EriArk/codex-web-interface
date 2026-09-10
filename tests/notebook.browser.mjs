@@ -41,7 +41,7 @@ for (const [engine, type] of [
       if ((await page.viewportSize()).width < 800)
         await page.getByRole("button", { name: "Открыть проекты" }).click();
       await page
-        .getByRole("button", { name: "Заметки и ссылки", exact: true })
+        .getByRole("button", { name: "Заметки", exact: true })
         .filter({ visible: true })
         .click();
     };

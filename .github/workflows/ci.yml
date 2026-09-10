@@ -73,6 +73,7 @@ jobs:
       - run: node tests/machine-health.browser.mjs
       - run: node tests/notebook.browser.mjs
       - run: node tests/note-capture.browser.mjs
+      - run: node tests/gpt-note-capture.browser.mjs
       - run: node tests/tasks.browser.mjs
       - run: node tests/project-overview.browser.mjs
       - run: node tests/project-core.browser.mjs

@@ -104,7 +104,8 @@ export function ProjectWorkPanel({
       title: string;
     } | null>(null),
     [references, setReferences] = useState<NotebookTarget[] | null>(null),
-    [filePath, setFilePath] = useState("");
+    [filePath, setFilePath] = useState(""),
+    [referenceOffset, setReferenceOffset] = useState<number | null>(null);
   const selectedScope =
     projects.items.find((p) => sk(p.scope) === scope)?.scope ??
     (sk(request.scope) === scope ? request.scope : null);
@@ -876,10 +877,12 @@ export function ProjectWorkPanel({
                         client: target.client,
                         projectId: target.projectId,
                       });
-                      setReferences(
-                        (await api<{ items: NotebookTarget[] }>("/workspace/references?" + q))
-                          .items,
-                      );
+                      const page = await api<{
+                        items: NotebookTarget[];
+                        nextOffset: number | null;
+                      }>("/workspace/references?" + q);
+                      setReferences(page.items);
+                      setReferenceOffset(page.nextOffset);
                     })
                   }
                 >
@@ -926,6 +929,36 @@ export function ProjectWorkPanel({
                           {link.title}
                         </button>
                       ))}
+                    {referenceOffset !== null && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            const q = new URLSearchParams({
+                              client: draft.scope!.client,
+                              projectId: draft.scope!.projectId,
+                              offset: String(referenceOffset),
+                            });
+                            const page = await api<{
+                              items: NotebookTarget[];
+                              nextOffset: number | null;
+                            }>("/workspace/references?" + q);
+                            setReferences((old) => [
+                              ...new Map(
+                                [...(old ?? []), ...page.items].map((t) => [
+                                  t.kind + ":" + t.id,
+                                  t,
+                                ]),
+                              ).values(),
+                            ]);
+                            setReferenceOffset(page.nextOffset);
+                          })
+                        }
+                      >
+                        Загрузить ещё контекст
+                      </button>
+                    )}
                     {draft.scope?.client === "codex" && (
                       <div className="reference-file">
                         <input

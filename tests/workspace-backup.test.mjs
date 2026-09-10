@@ -9,6 +9,8 @@ import { Library } from "../apps/hub/dist/library.js";
 import { createSnapshot, restoreSnapshot, verifySnapshot } from "../apps/hub/dist/maintenance.js";
 import { Notebook } from "../apps/hub/dist/notebook.js";
 import { Previews } from "../apps/hub/dist/previews.js";
+import { ProjectCores } from "../apps/hub/dist/project-core.js";
+import { ProjectPlans } from "../apps/hub/dist/project-plans.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { WorkspaceTasks } from "../apps/hub/dist/tasks.js";
 import { configSchema } from "../packages/shared/dist/index.js";
@@ -60,6 +62,91 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
       revision: 0,
     });
     book.pin(null, { client: "codex", kind: "note", id: note.id, title: note.title }, true);
+    const projectScope = { client: "codex", projectId: "p", name: "Project" },
+      coreStore = new ProjectCores(book.sessions),
+      baseCore = coreStore.get(projectScope);
+    const core = coreStore.save({
+      ...baseCore,
+      value: { ...baseCore.value, rules: "Сохранять данные" },
+    });
+    const planStore = new ProjectPlans(book.sessions),
+      plan = planStore.save(randomUUID(), {
+        scope: projectScope,
+        title: "План",
+        description: "Работа",
+        sections: [
+          {
+            id: randomUUID(),
+            title: "Проверка",
+            items: [{ id: randomUUID(), text: "Вернуть из копии", checked: false }],
+          },
+        ],
+        links: [],
+        revision: 0,
+        status: "draft",
+      });
+    const captured = book.capture(randomUUID(), {
+      scope: projectScope,
+      role: "assistant",
+      text: "Полезный ответ",
+      target: {
+        client: "codex",
+        kind: "thread",
+        id: thread.id,
+        threadId: thread.id,
+        messageId: "kept-message",
+        title: "Источник",
+      },
+    });
+    const actionId = randomUUID(),
+      action = {
+        id: actionId,
+        scope: projectScope,
+        kind: "plan",
+        planId: plan.id,
+        planRevision: 1,
+        title: plan.title,
+        text: "Не повторять после восстановления",
+        state: "queued",
+        threadId: thread.id,
+        createdAt: 1,
+        updatedAt: 1,
+        snapshot: { plan: plan.id },
+      };
+    source.db
+      .prepare("INSERT INTO project_work_actions VALUES(?,?,?,?,?,?,?,?,?)")
+      .run(
+        actionId,
+        "codex:p",
+        "plan",
+        plan.id,
+        "queued",
+        "backup-fixture",
+        JSON.stringify(action),
+        1,
+        1,
+      );
+    source.db
+      .prepare("INSERT INTO project_reports VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+      .run(
+        "report-backup",
+        "codex:p",
+        JSON.stringify(projectScope),
+        "Итог",
+        "Проверено. Не закончено: синхронизация.",
+        "report-action",
+        JSON.stringify({ client: "codex", kind: "thread", id: thread.id, title: thread.title }),
+        1,
+        2,
+        JSON.stringify({ eventSeq: 7 }),
+        3,
+      );
+    source.db
+      .prepare("INSERT INTO project_current_chats VALUES(?,?,?,?,?)")
+      .run("codex:p", JSON.stringify(projectScope), thread.id, 2, 3);
+    source.db
+      .prepare("INSERT INTO project_chat_history VALUES(?,?,?,?)")
+      .run("codex:p", "old-thread", "Прежний", 2);
     const path = join(root, "design.html"),
       original = "<button>Original interactive design</button>";
     await writeFile(path, original);
@@ -110,6 +197,12 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
           Number(status === "running"),
         );
     }
+    const completedJob = source.db
+      .prepare("SELECT id FROM gpt_jobs WHERE status='completed'")
+      .get().id;
+    source.db
+      .prepare("INSERT INTO gpt_project_jobs VALUES(?,?,?,?)")
+      .run(completedJob, "g-p-backup-project", 1, 2);
     // Neither unreferenced files nor a browser profile placed beside uploads are sweep targets.
     await mkdir(join(config.hub.resultsPath, "gpt", "profile"), { mode: 0o700 });
     await writeFile(
@@ -133,6 +226,32 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
       catalog: { projects: () => [], library: new Library(restored, "codex") },
     });
     assert.deepEqual(restoredBook.get(note.id), note);
+    assert.deepEqual(restoredBook.get(captured.id), captured);
+    assert.deepEqual(new ProjectCores(restoredBook.sessions).get(projectScope), core);
+    assert.equal(
+      new ProjectPlans(restoredBook.sessions).get(plan.id).sections[0].items[0].text,
+      "Вернуть из копии",
+    );
+    const restoredAction = restored.db
+      .prepare("SELECT state,value FROM project_work_actions WHERE id=?")
+      .get(actionId);
+    assert.equal(restoredAction.state, "unknown");
+    assert.equal(JSON.parse(restoredAction.value).state, "unknown");
+    assert.equal(JSON.parse(restoredAction.value).text, action.text);
+    assert.equal(
+      restored.db.prepare("SELECT body FROM project_reports").get().body,
+      "Проверено. Не закончено: синхронизация.",
+    );
+    assert.equal(
+      restored.db.prepare("SELECT threadId FROM project_current_chats").get().threadId,
+      thread.id,
+    );
+    assert.equal(
+      restored.db.prepare("SELECT threadId FROM project_chat_history").get().threadId,
+      "old-thread",
+    );
+    assert.equal(restored.db.prepare("SELECT verified FROM gpt_project_jobs").get().verified, 1);
+
     assert.deepEqual(new WorkspaceTasks(restoredBook.sessions).get(task.id), task);
     assert.equal(restoredBook.pins("global", 0).items[0].target.id, note.id);
     assert.equal(restoredBook.pins("global", 0).items[0].target.availability, "available");

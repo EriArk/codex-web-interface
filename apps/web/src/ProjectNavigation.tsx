@@ -13,6 +13,7 @@ import { EntityArchive, EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
 import { PinnedList } from "./PinnedList";
 import type { Project, Thread } from "./types";
+import { WorkspaceLinks } from "./WorkspaceLinks";
 
 export function ProjectNavigation({
   projects,
@@ -542,30 +543,12 @@ export function ProjectNavigation({
             </small>
           </span>
         </div>
-        {onNotebook && (
-          <button type="button" className="nav-settings" onClick={onNotebook}>
-            <Icon name="file" size={18} />
-            Заметки и ссылки
-          </button>
-        )}
-        {onPlan && (
-          <button type="button" className="nav-settings" onClick={onPlan}>
-            <Icon name="check" size={18} />
-            Задачи
-          </button>
-        )}
-        {onPlans && (
-          <button type="button" className="nav-settings" onClick={onPlans}>
-            <Icon name="plan" size={18} />
-            Планы
-          </button>
-        )}
-        {onReports && (
-          <button type="button" className="nav-settings" onClick={onReports}>
-            <Icon name="report" size={18} />
-            Отчёты
-          </button>
-        )}
+        <WorkspaceLinks
+          onTasks={onPlan}
+          onNotes={onNotebook}
+          onPlans={onPlans}
+          onReports={onReports}
+        />
         <button type="button" className="nav-settings" onClick={onSettings}>
           <Icon name="settings" size={18} />
           Настройки

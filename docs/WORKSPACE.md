@@ -47,3 +47,10 @@ Codex native creation and bootstrap use persisted receipts; Current changes only
 Active/unknown old work blocks rotation until it is resolved through the normal chat controls. A changed Core/handoff requires a fresh review. An explicit Keep previous action can abandon an uncertain transition without resending, deleting either conversation or stopping native work. Notes, Tasks, Plans, Reports, source links and files stay project-owned.
 
 Tests cover lost create/bootstrap acknowledgements, exact late evidence, changed Core, active work, concurrent confirmations, bounded maximal Core, canonical GPT membership, pre-dispatch native composer changes, old source/draft retention and Chromium/WebKit review/history workflows. Native project links are accepted from ChatGPT's rendered interface; if the project is not visible or its UI changes, preparation fails before sending and preserves the action.
+
+
+## Recovery and release verification
+
+Explicit deletion from the native web queue cancels its linked plan action. A dismissed uncertain submission stays unknown; absence alone never proves it was not accepted. Snapshot restoration retains Core/history, plans, reports/checkpoints, note sources, Current/history and GPT project bindings, and marks previously live workspace actions unknown without replaying them.
+
+Workspace shortcuts use one compact shared sidebar grid. Context pickers page older links explicitly. Both browser engines cover Codex and GPT direct note capture, exact backlinks and underlying composer drafts. GPT project rotation is verified against its native browser/HTTP contracts and fixtures; the owner's account currently has no native Projects for a live project rotation check.

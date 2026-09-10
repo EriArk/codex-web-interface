@@ -286,9 +286,12 @@ export class ProjectContext {
     const git = cached
       ? {
           branch: cached.branch,
-          clean: cached.clean,
-          updatedAt: cached.updatedAt,
-          summary: typeof cached.summary === "string" ? cached.summary.slice(0, 1000) : undefined,
+          repository: cached.repository,
+          detached: cached.detached,
+          dirty: cached.dirty,
+          changed: cached.changed,
+          checkedAt: cached.checkedAt,
+          error: cached.error,
         }
       : undefined;
     const context = boundContext({

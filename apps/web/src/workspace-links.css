@@ -1,0 +1,34 @@
+.workspace-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.workspace-shortcuts button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius, 8px);
+  box-shadow: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.workspace-shortcuts button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-shortcuts button:hover,
+.workspace-shortcuts button:focus-visible {
+  background: var(--soft);
+}
+.workspace-shortcuts button svg {
+  flex: none;
+  color: var(--muted);
+}
