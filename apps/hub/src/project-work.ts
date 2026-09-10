@@ -116,6 +116,18 @@ export function registerProjectWork(
           : null,
     };
   });
+  app.post("/api/workspace/current/restore", (req) => {
+    const body = z
+      .object({
+        scope: projectScopeSchema,
+        threadId: z.string().uuid(),
+        revision: z.number().int().positive(),
+        confirm: z.literal(true),
+      })
+      .strict()
+      .parse(req.body);
+    return actions.context.restoreCurrent(body.scope, body.threadId, body.revision);
+  });
   app.get("/api/workspace/current", (req) => {
     const scope = projectScopeSchema.omit({ name: true }).parse(req.query);
     return actions.context.current({ ...scope, name: "Проект" });

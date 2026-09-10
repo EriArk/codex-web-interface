@@ -82,6 +82,19 @@ for (const [engine, type] of [
       "Сохранено",
     );
     assert.equal(f.store.db.prepare("SELECT count(*) n FROM project_plans").get().n, 1);
+    const removed = f.store.db.prepare("SELECT id FROM project_plans").get().id;
+    f.store.db.prepare("DELETE FROM project_plans WHERE id=?").run(removed);
+    await panel
+      .getByRole("textbox", { name: "Описание плана", exact: true })
+      .fill("Черновик после удаления на другом устройстве");
+    await panel.getByRole("button", { name: "Сохранить", exact: true }).click();
+    await page.screenshot({ path: `.local/qa-work/${engine}-deleted-plan.png` });
+    await panel.getByRole("button", { name: "Сохранить как новый", exact: true }).click();
+    await expect(panel.getByRole("status").filter({ hasText: "Сохранено" })).toHaveText(
+      "Сохранено",
+    );
+    assert.equal(f.store.db.prepare("SELECT count(*) n FROM project_plans").get().n, 1);
+    assert.notEqual(f.store.db.prepare("SELECT id FROM project_plans").get().id, removed);
     await panel.getByRole("button", { name: "Реализовать", exact: true }).click();
     const action = panel.getByRole("region", { name: "Задание проекта" });
     await expect(action.getByText("Готово к запуску", { exact: true })).toBeVisible();
@@ -144,6 +157,31 @@ for (const [engine, type] of [
       .first()
       .click();
     await expect(chat).toHaveValue("Мой несвязанный черновик");
+    const callsBeforeRepair = f.calls.length;
+    const missing = "00000000-0000-4000-8000-000000000000";
+    f.store.db
+      .prepare("UPDATE project_current_chats SET threadId=? WHERE scopeKey='codex:project'")
+      .run(missing);
+    await page.getByRole("button", { name: "Обзор текущего проекта" }).click();
+    const repair = page.getByRole("button", {
+      name: /^Сделать рабочим:/,
+      exact: true,
+    });
+    await expect(repair).toBeVisible();
+    await repair.click();
+    await expect(page.getByText("Текущий чат", { exact: true })).toBeVisible();
+    assert.equal(
+      f.store.db
+        .prepare("SELECT threadId FROM project_current_chats WHERE scopeKey='codex:project'")
+        .get().threadId,
+      f.thread.id,
+    );
+    assert.equal(
+      f.calls
+        .slice(callsBeforeRepair)
+        .filter((c) => ["turn/start", "thread/start"].includes(c.method)).length,
+      0,
+    );
     assert.deepEqual(errors, []);
     console.log(
       engine +

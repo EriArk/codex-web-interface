@@ -23,6 +23,20 @@ export class ProjectActions {
   readonly rotations: ProjectRotations;
   readonly context: ProjectContext;
   private locks = new Set<string>();
+  private preparations = new Map<
+    string,
+    { fingerprint: string; promise: Promise<ProjectAction> }
+  >();
+  private requestFingerprint(
+    input: Pick<ProjectAction, "scope" | "kind" | "planId" | "planRevision">,
+  ) {
+    return digest({
+      scope: { client: input.scope.client, projectId: input.scope.projectId },
+      kind: input.kind,
+      planId: input.planId,
+      planRevision: input.planRevision,
+    });
+  }
   private submissionGroups = new Set<string>();
   constructor(
     readonly sessions: Sessions,
@@ -74,10 +88,38 @@ export class ProjectActions {
     };
   }
   async prepare(id: string, input: ActionPrepare): Promise<ProjectAction> {
-    const fingerprint = digest(input),
-      existing = this.db.prepare("SELECT fingerprint FROM project_work_actions WHERE id=?").get(id);
+    const fingerprint = this.requestFingerprint(input),
+      pending = this.preparations.get(id);
+    if (pending) {
+      if (pending.fingerprint !== fingerprint)
+        throw new HubError(
+          409,
+          "ACTION_KEY_REUSED",
+          "Это подтверждение относится к другому заданию.",
+        );
+      return pending.promise;
+    }
+    const promise = this.prepareOnce(id, input, fingerprint);
+    this.preparations.set(id, { fingerprint, promise });
+    try {
+      return await promise;
+    } finally {
+      this.preparations.delete(id);
+    }
+  }
+  private async prepareOnce(
+    id: string,
+    input: ActionPrepare,
+    fingerprint: string,
+  ): Promise<ProjectAction> {
+    const existing = this.db
+      .prepare("SELECT fingerprint,value FROM project_work_actions WHERE id=?")
+      .get(id);
     if (existing) {
-      if (existing.fingerprint !== fingerprint)
+      if (
+        existing.fingerprint !== fingerprint &&
+        this.requestFingerprint(JSON.parse(String(existing.value))) !== fingerprint
+      )
         throw new HubError(
           409,
           "ACTION_KEY_REUSED",

@@ -250,7 +250,9 @@ export function GptWorkspace({
     rememberScroll,
     contextMessage,
     hasNewer,
-  } = useGptHistory(selected, setNotice);
+    error: historyNotice,
+    clearError: clearHistoryNotice,
+  } = useGptHistory(selected);
   selectedRef.current = selected;
   useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
   useProjectSwipe(settingsRef, settings, () => setSettings(false), "close");
@@ -258,10 +260,11 @@ export function GptWorkspace({
     setDrawer(true),
   );
   const action = useCallback(async (fn: () => Promise<void>) => {
+    const version = navigationVersion.current;
     try {
       await fn();
     } catch (e) {
-      setNotice(messageOf(e));
+      if (navigationVersion.current === version) setNotice(messageOf(e));
     }
   }, []);
   const catalogVersion = useRef(0);
@@ -586,7 +589,9 @@ export function GptWorkspace({
     if (id) {
       choose(id);
       if (t.messageId)
-        void history(id, undefined, true, t.messageId).catch((e) => setNotice(messageOf(e)));
+        void history(id, undefined, true, t.messageId).catch((e) => {
+          if (selectedRef.current === id) setNotice(messageOf(e));
+        });
       if (t.kind === "result") {
         setWorkspaceResult(t.id);
         setView("results");
@@ -1249,9 +1254,9 @@ export function GptWorkspace({
           <Icon name="settings" />
         </button>
       </header>
-      {(notice || loadNotice) && (
+      {(notice || loadNotice || historyNotice) && (
         <div className="global-notice" role="status">
-          <span>{notice || loadNotice}</span>
+          <span>{notice || loadNotice || historyNotice}</span>
           <button
             type="button"
             className="icon-button"
@@ -1259,6 +1264,7 @@ export function GptWorkspace({
             onClick={() => {
               setNotice("");
               setLoadNotice("");
+              clearHistoryNotice();
             }}
           >
             <Icon name="close" />

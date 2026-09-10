@@ -63,6 +63,7 @@ jobs:
       - run: node tests/queue-recovery.browser.mjs
       - run: node tests/turn-handoff.browser.mjs
       - run: node tests/downloads.browser.mjs
+      - run: node tests/attachments-continuity.browser.mjs
       - run: node tests/file-preview.browser.mjs
       - run: node tests/pinned-navigation.browser.mjs
       - run: node tests/single-project.browser.mjs

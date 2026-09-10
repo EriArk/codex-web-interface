@@ -11,9 +11,10 @@ import {
 } from "./gptCache";
 import { mergeGptHistory } from "./gptState";
 
-export function useGptHistory(selected: string, onError: (message: string) => void) {
+export function useGptHistory(selected: string) {
   const [page, setPage] = useState<GptCachedChat | undefined>(() => gptCache.chats[selected]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const scroll = useRef<HTMLDivElement>(null),
     sticky = useRef(page?.sticky ?? true);
   const selectedRef = useRef(selected),
@@ -33,6 +34,7 @@ export function useGptHistory(selected: string, onError: (message: string) => vo
     setPage(cached);
     sticky.current = cached?.sticky ?? true;
     setLoading(false);
+    setError("");
     return () => {
       rememberScroll(selected);
       mounted.current = false;
@@ -94,15 +96,16 @@ export function useGptHistory(selected: string, onError: (message: string) => vo
           const next = mergeGptHistory(current, data, !!older);
           if (messageId) {
             next.sticky = false;
-            sticky.current = false;
+            if (mounted.current && selectedRef.current === id) sticky.current = false;
           }
           if (force && !messageId && !older && current?.contextMessage) {
             next.sticky = true;
-            sticky.current = true;
+            if (mounted.current && selectedRef.current === id) sticky.current = true;
           }
           gptCache.chats[id] = next;
           saveGptCache();
           if (!mounted.current || selectedRef.current !== id) return;
+          setError("");
           const oldHeight = scroll.current?.scrollHeight ?? 0;
           setPage(next);
           if (older)
@@ -135,8 +138,13 @@ export function useGptHistory(selected: string, onError: (message: string) => vo
     [rememberScroll],
   );
   useEffect(() => {
+    let active = true;
     const refresh = () => {
-      if (!document.hidden) void history(selected).catch((error) => onError(messageOf(error)));
+      if (!document.hidden)
+        void history(selected).catch((error) => {
+          if (active && mounted.current && selectedRef.current === selected)
+            setError(messageOf(error));
+        });
     };
     refresh();
     const timer = setInterval(refresh, 15000);
@@ -144,13 +152,16 @@ export function useGptHistory(selected: string, onError: (message: string) => vo
     window.addEventListener("pageshow", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
+      active = false;
       clearInterval(timer);
       window.removeEventListener("online", refresh);
       window.removeEventListener("pageshow", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [selected, history, onError]);
+  }, [selected, history]);
   return {
+    error,
+    clearError: () => setError(""),
     messages: page?.messages ?? [],
     contextMessage: page?.contextMessage,
     hasNewer: page?.hasNewer,

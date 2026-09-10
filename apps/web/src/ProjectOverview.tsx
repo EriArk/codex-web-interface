@@ -1,4 +1,5 @@
 import type {
+  CurrentProjectChat,
   NotebookLink,
   NotebookScope,
   NotebookTarget,
@@ -54,7 +55,10 @@ export function ProjectOverview({
           `/workspace/overview?client=${scope.client}&projectId=${encodeURIComponent(scope.projectId)}`,
           { signal: controller.signal },
         );
-        if (!controller.signal.aborted) setData(value);
+        if (!controller.signal.aborted) {
+          setData(value);
+          setError("");
+        }
       } catch (e) {
         if (!controller.signal.aborted) setError(messageOf(e));
       } finally {
@@ -225,7 +229,54 @@ export function ProjectOverview({
                   )}
                 </>
               ) : (
-                threads.slice(0, 4).map(threadButton)
+                <>
+                  {current?.explicit && (
+                    <p className="muted">Рабочий чат недоступен. Выбери другой.</p>
+                  )}
+                  {threads.slice(0, 4).map((t) => (
+                    <div className="overview-current-repair" key={t.id}>
+                      {threadButton(t)}
+                      {current?.explicit && (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          disabled={opening}
+                          aria-label={"Сделать рабочим: " + t.title}
+                          onClick={async () => {
+                            if (opening) return;
+                            setOpening(true);
+                            setError("");
+                            const controller = new AbortController();
+                            pendingOpen.current = controller;
+                            try {
+                              const next = await api<CurrentProjectChat>(
+                                "/workspace/current/restore",
+                                {
+                                  method: "POST",
+                                  body: {
+                                    scope,
+                                    threadId: t.id,
+                                    revision: current.revision,
+                                    confirm: true,
+                                  },
+                                  signal: controller.signal,
+                                },
+                              );
+                              if (!controller.signal.aborted)
+                                setData((old) => (old ? { ...old, currentChat: next } : old));
+                            } catch (e) {
+                              if (!controller.signal.aborted) setError(messageOf(e));
+                            } finally {
+                              if (!controller.signal.aborted) setOpening(false);
+                            }
+                          }}
+                        >
+                          <Icon name="check" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </>
               )}
               {!threads.length && <p className="muted">Пока нет диалогов.</p>}
               {onNew && !currentRow && (

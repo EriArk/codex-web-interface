@@ -113,6 +113,57 @@ export class ProjectContext {
       .prepare("INSERT OR IGNORE INTO project_current_chats VALUES(?,?,?,?,?)")
       .run(projectKey(scope), JSON.stringify(scope), threadId, 1, Date.now());
   }
+  restoreCurrent(scope: ProjectScope, threadId: string, revision: number) {
+    this.assertProject(scope);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.current(scope);
+      if (current.threadId === threadId && current.revision === revision + 1) {
+        this.db.exec("COMMIT");
+        return current;
+      }
+      if (
+        !current.explicit ||
+        current.threadId ||
+        current.revision !== revision ||
+        !this.thread(scope, threadId)
+      )
+        throw new HubError(
+          409,
+          "PROJECT_CHAT_CHANGED",
+          "Рабочий чат изменился. Обнови обзор проекта.",
+        );
+      if (
+        this.db
+          .prepare(
+            "SELECT 1 FROM project_work_actions WHERE scopeKey=? AND state IN ('dispatching','queued','running','unknown') LIMIT 1",
+          )
+          .get(projectKey(scope))
+      )
+        throw new HubError(
+          409,
+          "PROJECT_ACTION_PENDING",
+          "Сначала проверь незавершённое задание проекта.",
+        );
+      const old = this.db
+        .prepare("SELECT threadId FROM project_current_chats WHERE scopeKey=?")
+        .get(projectKey(scope))!;
+      this.db
+        .prepare("INSERT OR IGNORE INTO project_chat_history VALUES(?,?,?,?)")
+        .run(projectKey(scope), String(old.threadId), "Предыдущий рабочий чат", Date.now());
+      this.db
+        .prepare(
+          "UPDATE project_current_chats SET threadId=?,revision=revision+1,updatedAt=? WHERE scopeKey=? AND revision=?",
+        )
+        .run(threadId, Date.now(), projectKey(scope), revision);
+      const result = this.current(scope);
+      this.db.exec("COMMIT");
+      return result;
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
   rotate(scope: ProjectScope, oldId: string, newId: string) {
     if (!this.thread(scope, newId))
       throw new HubError(
@@ -283,17 +334,20 @@ export class ProjectContext {
       cached = (prefs.projectGit as Record<string, Record<string, unknown>> | undefined)?.[
         scope.projectId
       ];
-    const git = cached
-      ? {
-          branch: cached.branch,
-          repository: cached.repository,
-          detached: cached.detached,
-          dirty: cached.dirty,
-          changed: cached.changed,
-          checkedAt: cached.checkedAt,
-          error: cached.error,
-        }
-      : undefined;
+    const git =
+      scope.client === "codex" &&
+      cached &&
+      cached.root === this.sessions.project(scope.projectId).workingDirectory
+        ? {
+            branch: cached.branch,
+            repository: cached.repository,
+            detached: cached.detached,
+            dirty: cached.dirty,
+            changed: cached.changed,
+            checkedAt: cached.checkedAt,
+            error: cached.error,
+          }
+        : undefined;
     const context = boundContext({
       project: scope.name,
       previousReport: previous

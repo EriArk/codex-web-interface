@@ -12,7 +12,8 @@ for (const [engine, type] of [
     f = await handoffFixture(origin),
     book = new Notebook(f.sessions),
     id = randomUUID(),
-    mid = randomUUID();
+    mid = randomUUID(),
+    secondId = randomUUID();
   const browser = await type.launch(),
     context = await browser.newContext({
       viewport: { width: 1366, height: 1024 },
@@ -26,11 +27,16 @@ for (const [engine, type] of [
     const page = await context.newPage(),
       errors = [];
     let sends = 0,
-      contextReads = 0;
+      contextReads = 0,
+      delayed = false,
+      releaseHistory,
+      delayedStarted = false,
+      secondFailed = false;
+    const historyGate = new Promise((resolve) => (releaseHistory = resolve));
     page.on("pageerror", (e) => errors.push(e.message));
     const text = "Полезный ответ GPT\n\n  точные пробелы  ",
       message = { id: mid, role: "assistant", text, createdAt: Date.now() / 1000, files: [] };
-    await page.route("**/api/gpt/**", (route) => {
+    await page.route("**/api/gpt/**", async (route) => {
       const url = new URL(route.request().url()),
         path = url.pathname;
       if (path === "/api/gpt/send") {
@@ -59,11 +65,30 @@ for (const [engine, type] of [
       if (path === "/api/gpt/conversations")
         return route.fulfill({
           json: {
-            items: [{ id, title: "GPT source", updatedAt: Date.now() / 1000 }],
+            items: [
+              { id, title: "GPT source", updatedAt: Date.now() / 1000 },
+              { id: secondId, title: "Second chat", updatedAt: Date.now() / 1000 },
+            ],
             nextOffset: null,
           },
         });
       if (path.includes("/messages")) {
+        if (path.includes(secondId) && !secondFailed) {
+          secondFailed = true;
+          return route.fulfill({
+            status: 503,
+            json: { error: { code: "GPT_TEST_TRANSIENT", message: "Связь временно потеряна" } },
+          });
+        }
+
+        if (delayed && path.includes(id) && !url.searchParams.has("messageId")) {
+          delayedStarted = true;
+          await historyGate;
+          return route.fulfill({
+            status: 503,
+            json: { error: { code: "GPT_TEST_OLD_HISTORY", message: "Ошибка прошлого чата" } },
+          });
+        }
         if (url.searchParams.has("messageId")) contextReads++;
         return route.fulfill({
           json: {
@@ -118,6 +143,24 @@ for (const [engine, type] of [
     await expect(chat).toHaveValue("Не отправлять черновик");
     await expect(page.locator(`[data-message="${mid}"]`)).toHaveClass(/message-focus/);
     assert(contextReads > 0);
+    await page.setViewportSize({ width: 1366, height: 1024 });
+    delayed = true;
+    await page.getByRole("button", { name: "К последним сообщениям", exact: true }).click();
+    await expect.poll(() => delayedStarted).toBe(true);
+    await page
+      .getByRole("button", { name: "Second chat", exact: true })
+      .filter({ visible: true })
+      .click();
+    await chat.fill("Черновик второго чата");
+    await expect(page.getByText("Связь временно потеряна", { exact: true })).toBeVisible();
+    const lateResponse = page.waitForResponse((r) => r.status() === 503 && r.url().includes(id));
+    releaseHistory();
+    await lateResponse;
+    await expect(page.getByText("Ошибка прошлого чата", { exact: true })).not.toBeVisible();
+    await expect(page.getByText("Связь временно потеряна", { exact: true })).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(page.getByText("Связь временно потеряна", { exact: true })).not.toBeVisible();
+    await expect(chat).toHaveValue("Черновик второго чата");
     assert.equal(sends, 0);
     assert.deepEqual(errors, []);
     console.log(
