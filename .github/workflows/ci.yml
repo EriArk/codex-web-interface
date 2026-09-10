@@ -50,6 +50,8 @@ jobs:
         with:
           node-version: 24.18.0
       - run: npm install --global pnpm@11.13.1
+      - name: Install native terminal build prerequisites
+        run: apt-get update && apt-get install -y --no-install-recommends python3 make g++
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: node tests/copy-controls.browser.mjs
