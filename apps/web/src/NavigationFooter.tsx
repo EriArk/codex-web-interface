@@ -16,9 +16,15 @@ export function NavigationFooter({
 }) {
   return (
     <div className="navigation-system-row">
-      <button type="button" className="nav-settings" onClick={onSettings}>
+      <button
+        type="button"
+        className="nav-settings"
+        onClick={onSettings}
+        aria-label="Настройки"
+        title="Настройки"
+      >
         <Icon name="settings" size={19} />
-        Настройки
+        <span className="nav-settings-label">Настройки</span>
       </button>
       <div className="navigation-mode-controls">
         <button

@@ -1,4 +1,5 @@
 .navigation-system-row {
+  container-type: inline-size;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -27,6 +28,15 @@
 }
 .navigation-system-row .nav-settings svg {
   flex-shrink: 0;
+}
+@container (max-width: 260px) {
+  .navigation-system-row .nav-settings-label {
+    display: none;
+  }
+  .navigation-system-row .nav-settings {
+    flex: 0 0 44px;
+    justify-content: center;
+  }
 }
 .navigation-system-row .nav-remote {
   min-width: 44px;

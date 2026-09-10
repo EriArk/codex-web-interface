@@ -75,6 +75,14 @@ for (const [engine, type] of [
       await page.waitForTimeout(400);
       await page.screenshot({ path: `${out}/tablet-${theme}.png` });
       assert.equal(await modal.evaluate((e) => e.scrollWidth > e.clientWidth + 1), false);
+      assert.equal(
+        await page
+          .locator(".navigation-system-row .nav-settings:visible")
+          .first()
+          .evaluate((e) => e.scrollWidth > e.clientWidth + 1),
+        false,
+        theme + " footer overflow",
+      );
     }
     await button("Закрыть устройства").click();
     await expect(composer).toHaveValue("Draft stays here");
