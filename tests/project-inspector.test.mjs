@@ -218,3 +218,124 @@ test("diff requires one file, including deleted files, and cannot expand a direc
   });
   assert.match(staged.text, /-visible/);
 });
+
+test("repository overview keeps README scoped, remote credentials private and references read-only", async (t) => {
+  const root = await fixture(t);
+  command(root, "init", "-b", "main");
+  await writeFile(join(root, "README.md"), "# Реальный проект\n\nOwner readme\n");
+  await mkdir(join(root, "sub"));
+  await writeFile(join(root, "sub/readme.md"), "# Подпроект\n");
+  command(root, "add", ".");
+  command(root, "commit", "-m", "Initial state");
+  command(root, "branch", "design");
+  command(root, "tag", "v1.2.3");
+  command(root, "remote", "add", "origin", "git@github.com:EriArk/example-project.git");
+  let result = await inspectorProbe(root, { op: "repository" });
+  assert.equal(result.remote.url, "https://github.com/EriArk/example-project");
+  assert.equal(result.readme.path, "README.md");
+  assert.match(result.readme.text, /Owner readme/);
+  assert(result.branches.some((b) => b.name === "main" && b.current));
+  assert(result.branches.some((b) => b.name === "design"));
+  assert.equal(result.tags[0].name, "v1.2.3");
+  const before = await readFile(join(root, ".git/index"));
+  result = await inspectorProbe(join(root, "sub"), { op: "repository" });
+  assert.equal(result.subdirectory, "sub");
+  assert.equal(result.readme.path, "readme.md");
+  assert.match(result.readme.text, /Подпроект/);
+  assert(!result.readme.text.includes("Owner"));
+  assert.deepEqual(await readFile(join(root, ".git/index")), before);
+  command(
+    root,
+    "remote",
+    "set-url",
+    "origin",
+    "https://name:private-token@github.com/EriArk/example-project.git",
+  );
+  result = await inspectorProbe(root, { op: "repository" });
+  assert.equal(result.remote, undefined);
+  assert(!JSON.stringify(result).includes("private-token"));
+  await writeFile(join(root, "README.md"), "a".repeat(140000));
+  result = await inspectorProbe(root, { op: "repository" });
+  assert.equal(result.readme.text.length, 131072);
+  assert.equal(result.readme.truncated, true);
+  await rm(join(root, "README.md"));
+  await symlink(join(root, "sub/readme.md"), join(root, "README.md"));
+  assert.equal((await inspectorProbe(root, { op: "repository" })).readme, null);
+});
+
+test("file ordering happens before pagination and explicit reveal finds a later-page file", async (t) => {
+  const root = await fixture(t);
+  for (let i = 0; i < 106; i++)
+    await writeFile(join(root, `file-${String(i).padStart(3, "0")}.txt`), "x".repeat(i + 1));
+  await mkdir(join(root, "folder"));
+  const result = await inspectorProbe(root, {
+    op: "directory",
+    path: "",
+    offset: 0,
+    search: "",
+    sort: "size",
+  });
+  assert.equal(result.entries[0].kind, "directory");
+  assert.equal(result.entries[1].name, "file-105.txt");
+  const reveal = await inspectorProbe(root, {
+    op: "directory",
+    path: "",
+    offset: 0,
+    search: "",
+    reveal: "file-105.txt",
+  });
+  assert.equal(reveal.offset, 100);
+  assert(reveal.entries.some((e) => e.name === "file-105.txt"));
+  assert.equal(reveal.total, 107);
+});
+
+test("GitHub releases use the configured repository, sanitize metadata and distinguish unavailable from empty", async (t) => {
+  const root = await fixture(t),
+    tools = await fixture(t),
+    originalPath = process.env.PATH;
+  command(root, "init", "-b", "main");
+  command(root, "remote", "add", "origin", "https://github.com/owner/demo.git");
+  // The fixed CLI probe is simulated; no real account or external network is used.
+  const git = execFileSync("which", ["git"]).toString().trim();
+  await symlink(git, join(tools, "git"));
+  const releases = [
+    {
+      id: 12,
+      name: "Release",
+      tag_name: "v1",
+      html_url: "https://github.com/Owner/Demo/releases/tag/v1",
+      body: "Release notes",
+      published_at: "2026-09-10T00:00:00Z",
+      assets: [{}],
+      prerelease: false,
+      draft: false,
+      private_data: "must-not-leak",
+    },
+  ];
+  await writeFile(
+    join(tools, "gh"),
+    "#!/bin/sh\nprintf '%s' '" + JSON.stringify(releases) + "'\n",
+    { mode: 0o700 },
+  );
+  process.env.PATH = tools;
+  const oldFetch = globalThis.fetch;
+  t.after(() => {
+    process.env.PATH = originalPath;
+    globalThis.fetch = oldFetch;
+  });
+  globalThis.fetch = async () => {
+    throw Error("No network in test");
+  };
+  let result = await inspectorProbe(root, { op: "releases" });
+  assert.equal(result.state, "ok");
+  assert.equal(result.items[0].tag, "v1");
+  assert.equal(result.items[0].assets, 1);
+  assert(!JSON.stringify(result).includes("must-not-leak"));
+  await writeFile(join(tools, "gh"), "#!/bin/sh\nprintf '[]'\n", { mode: 0o700 });
+  result = await inspectorProbe(root, { op: "releases" });
+  assert.equal(result.state, "ok");
+  assert.equal(result.items.length, 0);
+  await writeFile(join(tools, "gh"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
+  result = await inspectorProbe(root, { op: "releases" });
+  assert.equal(result.state, "unavailable");
+});

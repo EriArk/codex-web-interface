@@ -1,10 +1,24 @@
-import type { InspectRequest, ProjectDiff, ProjectDirectory, ProjectGit } from "@codex-web/shared";
+import type {
+  InspectRequest,
+  ProjectDiff,
+  ProjectDirectory,
+  ProjectGit,
+  ProjectReleases,
+  ProjectRepository,
+} from "@codex-web/shared";
 
 // Self-contained: the compiled function also executes in the configured Windows Node runtime.
 export async function inspectorProbe(
   root: string,
   request: InspectRequest,
-): Promise<ProjectDirectory | ProjectGit | ProjectDiff | { path: string }> {
+): Promise<
+  | ProjectDirectory
+  | ProjectGit
+  | ProjectDiff
+  | ProjectRepository
+  | ProjectReleases
+  | { path: string }
+> {
   const fs = await import("node:fs/promises"),
     paths = await import("node:path"),
     cp = await import("node:child_process");
@@ -103,12 +117,21 @@ export async function inspectorProbe(
     entries.sort(
       (a, b) =>
         (a.kind === b.kind ? 0 : a.kind === "directory" ? -1 : 1) ||
+        (request.sort === "modified"
+          ? b.modifiedAt - a.modifiedAt
+          : request.sort === "size"
+            ? b.size - a.size
+            : 0) ||
         a.name.localeCompare(b.name, "ru"),
     );
+    const found = request.reveal ? entries.findIndex((e) => e.name === request.reveal) : -1;
+    const offset = found >= 0 ? Math.floor(found / 100) * 100 : request.offset;
     return {
       path: relative(directory),
-      entries: entries.slice(request.offset, request.offset + 100),
-      nextOffset: entries.length > request.offset + 100 ? request.offset + 100 : null,
+      offset,
+      total: entries.length,
+      entries: entries.slice(offset, offset + 100),
+      nextOffset: entries.length > offset + 100 ? offset + 100 : null,
       truncated: scanned > 5000,
     };
   }
@@ -119,21 +142,23 @@ export async function inspectorProbe(
   env.GIT_TERMINAL_PROMPT = "0";
   env.GIT_PAGER = "cat";
   env.LC_ALL = "C.UTF-8";
-  let executable = "";
-  for (const directory of (process.env.PATH ?? process.env.Path ?? "").split(paths.delimiter)) {
-    if (!paths.isAbsolute(directory)) continue;
-    try {
-      const candidate = await fs.realpath(
-        paths.join(directory, process.platform === "win32" ? "git.exe" : "git"),
-      );
-      if (!inside(actualRoot, candidate) && (await fs.stat(candidate)).isFile()) {
-        executable = candidate;
-        break;
+  const findExecutable = async (name: string) => {
+    for (const directory of (process.env.PATH ?? process.env.Path ?? "").split(paths.delimiter)) {
+      if (!paths.isAbsolute(directory)) continue;
+      try {
+        const candidate = await fs.realpath(
+          paths.join(directory, process.platform === "win32" ? name + ".exe" : name),
+        );
+        if (!inside(actualRoot, candidate) && (await fs.stat(candidate)).isFile()) {
+          return candidate;
+        }
+      } catch {
+        /* Try the next configured executable directory. */
       }
-    } catch {
-      /* Try the next configured executable directory. */
     }
-  }
+    return "";
+  };
+  const executable = await findExecutable("git");
   if (!executable) throw Error("GIT_UNAVAILABLE");
   const git = (
     args: string[],
@@ -193,6 +218,240 @@ export async function inspectorProbe(
       child.on("error", () => finish(127));
       child.on("close", (code) => finish(code ?? 1));
     });
+
+  if (request.op === "repository" || request.op === "releases") {
+    const top = await git(["rev-parse", "--show-toplevel"]);
+    if (top.code && !top.notRepository) throw Error("GIT_UNAVAILABLE");
+    const repository = top.code === 0;
+    let remote: ProjectRepository["remote"];
+    if (repository) {
+      const current = await git(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+      const preferred =
+        current.code === 0
+          ? await git(["config", "--get", `branch.${current.text.trim()}.remote`], 4096)
+          : null;
+      const names = Array.from(
+        new Set([preferred?.text.trim(), "origin"].filter((v): v is string => !!v && v !== ".")),
+      );
+      for (const name of names) {
+        const config = await git(["config", "--get", `remote.${name}.url`], 8192);
+        const raw = config.text.trim();
+        // Return only a canonical GitHub identity, never raw config URLs or embedded credentials.
+        const match =
+          /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(
+            raw,
+          );
+        if (config.code === 0 && match && ![".", ".."].includes(match[2]!)) {
+          const [, owner, repo] = match;
+          remote = {
+            name: name.slice(0, 120),
+            owner: owner!,
+            repo: repo!,
+            url: `https://github.com/${owner}/${repo}`,
+          };
+          break;
+        }
+      }
+    }
+    if (request.op === "releases") {
+      const result: ProjectReleases = {
+        state: remote ? "unavailable" : "no-remote",
+        checkedAt: Date.now(),
+        items: [],
+        ...(remote ? { url: remote.url + "/releases" } : {}),
+      };
+      if (!remote) return result;
+      const endpoint = `repos/${remote.owner}/${remote.repo}/releases?per_page=6`;
+      let raw: unknown;
+      const gh = await findExecutable("gh");
+      let helper = "";
+      if (process.platform === "win32" && process.env.LOCALAPPDATA) {
+        const candidate = paths.join(
+          process.env.LOCALAPPDATA,
+          "CodexWeb",
+          "github-releases",
+          "GitHubReleases.cjs",
+        );
+        try {
+          const st = await fs.lstat(candidate);
+          if (st.isFile() && !st.isSymbolicLink() && !inside(actualRoot, candidate))
+            helper = candidate;
+        } catch {}
+      }
+      if (helper || gh) {
+        // Fixed user-session reader uses Windows Credential Manager; credentials never leave Windows.
+        const ghEnv = Object.fromEntries(
+          Object.entries(env).filter(
+            ([k]) => !/^(?:GH_DEBUG|GH_HOST|GH_REPO|GH_PAGER|PAGER)$/i.test(k),
+          ),
+        );
+        const output = await new Promise<string | null>((resolve) => {
+          const child = cp.execFile(
+            helper ? process.execPath : gh,
+            helper
+              ? [helper, "request", remote.owner, remote.repo]
+              : ["api", "--hostname", "github.com", "--method", "GET", endpoint],
+            {
+              cwd: actualRoot,
+              env: { ...ghEnv, GH_PROMPT_DISABLED: "1", GH_HOST: "github.com" },
+              windowsHide: true,
+              timeout: helper ? 14000 : 8000,
+              maxBuffer: 2097152,
+            },
+            (error, stdout) => resolve(error ? null : stdout),
+          );
+          child.stdin?.end();
+        });
+        if (output) {
+          try {
+            raw = JSON.parse(output);
+          } catch {}
+        }
+      }
+      if (!raw) {
+        try {
+          const response = await fetch("https://api.github.com/" + endpoint, {
+            redirect: "error",
+            signal: AbortSignal.timeout(6000),
+            headers: { Accept: "application/vnd.github+json", "User-Agent": "CodexWeb" },
+          });
+          if (response.ok && response.body) {
+            const reader = response.body.getReader(),
+              chunks: Uint8Array[] = [];
+            let bytes = 0;
+            try {
+              while (true) {
+                const item = await reader.read();
+                if (item.done) break;
+                bytes += item.value.length;
+                if (bytes > 2097152) throw Error("RELEASE_LIMIT");
+                chunks.push(item.value);
+              }
+              raw = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            } finally {
+              await reader.cancel().catch(() => {});
+            }
+          } else await response.body?.cancel();
+        } catch {}
+      }
+      if (!Array.isArray(raw)) return result;
+      const text = (v: unknown, limit: number) => (typeof v === "string" ? v.slice(0, limit) : "");
+      for (const row of raw.slice(0, 6)) {
+        if (
+          !row ||
+          typeof row !== "object" ||
+          !Number.isSafeInteger(row.id) ||
+          typeof row.tag_name !== "string"
+        )
+          continue;
+        const url = text(row.html_url, 2048);
+        if (!url.toLowerCase().startsWith(remote.url.toLowerCase() + "/releases/")) continue;
+        result.items.push({
+          id: String(row.id),
+          name: text(row.name, 300) || text(row.tag_name, 300),
+          tag: text(row.tag_name, 300),
+          url,
+          body: text(row.body, 12000),
+          publishedAt: text(row.published_at, 40),
+          prerelease: row.prerelease === true,
+          draft: row.draft === true,
+          assets: Array.isArray(row.assets) ? row.assets.length : 0,
+          truncated: typeof row.body === "string" && row.body.length > 12000,
+        });
+      }
+      result.state = "ok";
+      return result;
+    }
+    const details: ProjectRepository = {
+      repository,
+      name: remote?.repo ?? paths.basename(actualRoot),
+      remote,
+      readme: null,
+      branches: [],
+      tags: [],
+    };
+    // README belongs to the configured project folder, including subprojects inside a larger Git root.
+    for (const folder of ["", ".github", "docs"]) {
+      try {
+        const dir = await scoped(folder),
+          candidates: string[] = [];
+        const stream = await fs.opendir(dir);
+        let scanned = 0;
+        for await (const entry of stream) {
+          if (++scanned > 5000) break;
+          if (entry.isFile() && /^readme(?:\.(?:md|markdown|txt))?$/i.test(entry.name))
+            candidates.push(entry.name);
+        }
+        candidates.sort(
+          (a, b) => Number(!/\.md$/i.test(a)) - Number(!/\.md$/i.test(b)) || a.localeCompare(b),
+        );
+        if (!candidates.length) continue;
+        const path = [folder, candidates[0]].filter(Boolean).join("/");
+        const safePath = await scoped(path);
+        const handle = await fs.open(
+          safePath,
+          fs.constants.O_RDONLY | (process.platform === "win32" ? 0 : fs.constants.O_NOFOLLOW),
+        );
+        try {
+          const st = await handle.stat();
+          if (!st.isFile() || (await scoped(path)) !== safePath) continue;
+          const data = Buffer.alloc(131072),
+            read = await handle.read(data, 0, data.length, 0);
+          if (data.subarray(0, read.bytesRead).includes(0)) continue;
+          details.readme = {
+            path,
+            text: data.subarray(0, read.bytesRead).toString("utf8"),
+            truncated: st.size > read.bytesRead,
+          };
+        } finally {
+          await handle.close();
+        }
+        if (details.readme) break;
+      } catch {
+        /* Missing/unsafe README does not prevent repository inspection. */
+      }
+    }
+    if (repository) {
+      const gitRoot = await fs.realpath(top.text.trim());
+      if (!inside(gitRoot, actualRoot)) fail();
+      details.subdirectory = paths.relative(gitRoot, actualRoot).split(paths.sep).join("/");
+      const [branches, tags] = await Promise.all([
+        git(
+          [
+            "for-each-ref",
+            "--count=40",
+            "--sort=-committerdate",
+            "--format=%(HEAD)%00%(refname:short)%00%(upstream:short)",
+            "refs/heads/",
+          ],
+          65536,
+        ),
+        git(
+          [
+            "for-each-ref",
+            "--count=12",
+            "--sort=-creatordate",
+            "--format=%(refname:short)%00%(creatordate:iso-strict)%00%(contents:subject)",
+            "refs/tags/",
+          ],
+          65536,
+        ),
+      ]);
+      if (branches.code === 0)
+        for (const row of branches.text.trimEnd().split("\n")) {
+          const [head, name, upstream] = row.split("\0");
+          if (name)
+            details.branches.push({ name, current: head === "*", upstream: upstream ?? "" });
+        }
+      if (tags.code === 0)
+        for (const row of tags.text.trimEnd().split("\n")) {
+          const [name, date, subject] = row.split("\0");
+          if (name) details.tags.push({ name, date: date ?? "", subject: subject ?? "" });
+        }
+    }
+    return details;
+  }
+
   const top = await git(["rev-parse", "--show-toplevel"]);
   if (top.code !== 0) {
     // A non-repository is a normal result; missing Git/timeouts remain failures.
@@ -269,7 +528,7 @@ export async function inspectorProbe(
       "-12",
       "--no-show-signature",
       "--no-decorate",
-      "--format=%h%x00%s%x00%cI",
+      "--format=%h%x00%s%x00%cI%x00%an",
       "--",
       ".",
     ]),
@@ -325,8 +584,8 @@ export async function inspectorProbe(
   const commits: ProjectGit["commits"] = [];
   if (log.code === 0)
     for (const line of log.text.trimEnd().split("\n")) {
-      const [id, subject, date] = line.split("\0");
-      if (id && date && subject !== undefined) commits.push({ id, subject, date });
+      const [id, subject, date, author] = line.split("\0");
+      if (id && date && subject !== undefined) commits.push({ id, subject, date, author });
     }
   else if (log.code !== 128) throw Error("GIT_LOG_FAILED");
   const branch =
@@ -347,6 +606,7 @@ export async function inspectorProbe(
     hiddenCount,
     summary: { staged: stat(stagedStat.text), working: stat(workingStat.text) },
     branch,
+    upstream: header.match(/\.\.\.([^ []+)/)?.[1],
     detached: branch.startsWith("HEAD"),
     ahead: Number(header.match(/ahead (\d+)/)?.[1] ?? 0),
     behind: Number(header.match(/behind (\d+)/)?.[1] ?? 0),

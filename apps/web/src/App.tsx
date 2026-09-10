@@ -1111,6 +1111,20 @@ function Workspace({
         </button>
         <button
           type="button"
+          className="icon-button header-files"
+          aria-label="Файлы и Git проекта"
+          title={project ? `Файлы и Git: ${project.name}` : "Выбери проект"}
+          aria-pressed={view === "files"}
+          disabled={!project || project.unassigned}
+          onClick={() => {
+            setView("files");
+            setRightHidden(false);
+          }}
+        >
+          <Icon name="repository" />
+        </button>
+        <button
+          type="button"
           className="icon-button"
           onClick={() => setSettings(true)}
           aria-label="Настройки"
@@ -1380,6 +1394,7 @@ function Workspace({
           <ProjectFiles
             key={`project-files:${projectId}`}
             projectId={projectId}
+            projectName={project?.name ?? "Проект"}
             visible={view === "files"}
             focus={fileFocus}
             onBack={() => setView("chat")}
@@ -1491,20 +1506,6 @@ function Workspace({
           <Icon name="activity" />
           Активность диалога
         </button>
-        {project && !project.unassigned && (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => {
-              setRightHidden(false);
-              setView("files");
-              setSettings(false);
-            }}
-          >
-            <Icon name="folder" />
-            Файлы и Git проекта
-          </button>
-        )}
         <button
           type="button"
           className="secondary"

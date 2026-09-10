@@ -56,6 +56,8 @@ export function registerProjectInspector(app: FastifyInstance, sessions: Session
           path,
           offset: z.coerce.number().int().min(0).max(5000).default(0),
           search: z.string().max(120).default(""),
+          sort: z.enum(["name", "modified", "size"]).default("name"),
+          reveal: z.string().max(255).optional(),
         })
         .strict()
         .parse(req.query);
@@ -100,6 +102,13 @@ export function registerProjectInspector(app: FastifyInstance, sessions: Session
       throw error;
     }
   });
+  for (const op of ["repository", "releases"] as const) {
+    app.get(`/api/projects/:id/git/${op}`, async (req) => {
+      const { project, machine } = context(req);
+      z.object({}).strict().parse(req.query);
+      return bounded(() => inspectProject(machine, project.workingDirectory, { op }));
+    });
+  }
   app.get("/api/projects/:id/git/diff", async (req) => {
     const { project, machine } = context(req),
       q = z

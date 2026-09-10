@@ -468,3 +468,12 @@ A single device-local choice in Codex/GPT Settings selects System voice or Backg
 ## 2026-09-10 — Global human Tasks (#83)
 
 The existing `workspace_tasks` store remains the source of truth, without a schema or data migration. Tasks replaces the former human-facing Plan label; native Work/Plan mode is unchanged. Sidebar entry points show all projects; Project Home filters the same data. Project filters read bounded Hub metadata and saved task associations, including unavailable projects. Normal GPT project discovery remembers names in the existing private library cache; opening Tasks performs no native browser request. Unknown GPT availability is not treated as deletion. Existing revision conflicts, draft recovery, completion timestamps, links and idempotent writes are retained. Future AI Plans/Reports are separate modules and will supply their own reference types when implemented.
+
+
+## 2026-09-10: Project Files/Git inspector
+
+The header shortcut resolves the selected Codex project and machine; switching projects remounts the inspector and aborts stale reads. File actions stay inside their selected row. Directory sorting precedes pagination, and exact file reveals locate the relevant page. Git overview reads the configured project README, branch/upstream state, recent commits, branches and tags without changing the index or taking a native writer. Release failures remain independent of local Git/README.
+
+Remote GitHub coordinates are normalized to a credential-free github.com URL. Release reads use the fixed [GitHub releases API](https://docs.github.com/en/rest/releases/releases), six records at a time, through the existing GitHub CLI login; public repositories have a bounded anonymous fallback. On this Windows installation the Credential Manager login is unavailable in SSH Session 0. A fixed `CodexWebGitHubReleases` task therefore performs only that GET in the logged-in session, with a private bounded file mailbox and hidden, limited-privilege process. No OAuth token is copied to the Hub, no public/private listener is added, and no Codex/desktop process is opened or stopped.
+
+Install with `ops/windows/Install-GitHubReleases.ps1` in the intended Windows user session, using the stable Node runtime and existing `gh auth login`. It registers only the current user's task and does not require elevation. Without the optional helper, ordinary CLI/public reads remain available; unavailable private release metadata has an explicit retry/link rather than blocking files.
