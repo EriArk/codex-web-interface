@@ -53,6 +53,7 @@ try {
         polls = 0,
         catalogFailures = 0;
       const accepted = new Map();
+      let retryJobs = [];
       const page = await context.newPage();
       await page.route("https://outbox.test/**", async (route) => {
         const path = new URL(route.request().url()).pathname;
@@ -95,7 +96,7 @@ try {
         if (path === "/api/gpt/jobs") {
           polls++;
           if (mode === "hang") return;
-          return route.fulfill({ json: { items: [], stamp: Date.now() } });
+          return route.fulfill({ json: { items: retryJobs, stamp: Date.now() } });
         }
         if (path === "/api/gpt/send") {
           attempts.push({
@@ -209,6 +210,70 @@ try {
       assert.equal(attempts.length, beforeRecovery);
       console.log(
         name + ": native attention has a direct Open action and preserves an unsent draft",
+      );
+      const now = await page.evaluate(() => Date.now());
+      const failed = {
+        id: "failed-attempt",
+        nativeId: "retry-chat",
+        text: "Same restored question",
+        files: [],
+        model: "Latest",
+        effort: "2",
+        status: "failed",
+        answer: "",
+        assets: [],
+        error: "Old preparation failure",
+        createdAt: now - 60000,
+        updatedAt: now - 55000,
+      };
+      retryJobs = [
+        failed,
+        {
+          ...failed,
+          id: "completed-retry",
+          status: "completed",
+          answer: "Successful retry result",
+          error: "",
+          createdAt: now - 40000,
+          updatedAt: now - 30000,
+        },
+        {
+          ...failed,
+          id: "unknown-send",
+          status: "unknown",
+          error: "Unknown outcome must remain",
+          createdAt: now - 20000,
+          updatedAt: now - 10000,
+        },
+      ];
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("private-session-ended"));
+        localStorage.setItem("gpt-conversation", "retry-chat");
+        sessionStorage.setItem(
+          "gpt-draft-retry-chat",
+          JSON.stringify({ text: "An intentional unsent draft", files: [] }),
+        );
+      });
+      await page.reload();
+      await expect(page.locator(".gpt-job")).toContainText([
+        "Successful retry result",
+        "Unknown outcome must remain",
+      ]);
+      await expect(
+        page.locator(".gpt-job-error").filter({ hasText: "Old preparation failure" }),
+      ).toHaveCount(0);
+      await expect(
+        page.locator(".gpt-job-error").filter({ hasText: "Unknown outcome must remain" }),
+      ).toBeVisible();
+      await expect(editor).toHaveValue("An intentional unsent draft");
+      assert.equal(
+        attempts.length,
+        beforeRecovery,
+        "retry reconciliation never sends or erases a draft",
+      );
+      console.log(
+        name +
+          ": successful retry hides obsolete failure while unknown sends and unrelated drafts remain",
       );
     } finally {
       await context.close();

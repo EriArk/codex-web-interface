@@ -60,6 +60,7 @@ jobs:
       - run: node tests/gpt-reliability.browser.mjs
       - run: node tests/gpt-load.browser.mjs
       - run: node tests/reliability-codex.browser.mjs
+      - run: node tests/queue-recovery.browser.mjs
       - run: node tests/turn-handoff.browser.mjs
       - run: node tests/downloads.browser.mjs
       - run: node tests/file-preview.browser.mjs
