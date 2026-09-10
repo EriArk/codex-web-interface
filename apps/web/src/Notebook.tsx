@@ -22,11 +22,12 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { PinnedList } from "./PinnedList";
+import { ProjectCorePanel } from "./ProjectCore";
 import "./notebook.css";
 export type NotebookRequest = {
   scope: NotebookScope;
   target?: NotebookTarget;
-  mode?: "notes" | "tasks";
+  mode?: "notes" | "tasks" | "core";
   itemId?: string;
   allProjects?: boolean;
   capture?: NoteCapture;
@@ -71,7 +72,13 @@ export function NotebookPanel(props: {
   onOpen: (target: NotebookLink) => void;
   onRequest: (request: NotebookRequest) => void;
 }) {
-  return props.request?.capture ? (
+  return props.request?.mode === "core" && props.request.scope ? (
+    <ProjectCorePanel
+      key={`${props.request.scope.client}:${props.request.scope.projectId}`}
+      request={props.request}
+      onClose={props.onClose}
+    />
+  ) : props.request?.capture ? (
     <CaptureNote capture={props.request.capture} onClose={props.onClose} />
   ) : (
     <NotebookEditor {...props} />

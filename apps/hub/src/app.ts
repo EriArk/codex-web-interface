@@ -27,6 +27,7 @@ import { registerNavigation } from "./navigation.js";
 import { registerNotebook } from "./notebook.js";
 import { registerProjectOverview } from "./overview.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
+import { registerProjectCores } from "./project-core.js";
 import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
 import { registerQueue } from "./queue.js";
@@ -592,6 +593,7 @@ export async function createApp(
   registerProjectInspector(app, sessions);
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerNotebook(app, sessions);
+  registerProjectCores(app, sessions);
   registerWorkspaceTasks(app, sessions);
   registerProjectOverview(app, sessions);
   app.get("/api/previews/:id/ready", async (req) => {

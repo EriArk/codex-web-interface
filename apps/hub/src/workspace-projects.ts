@@ -7,7 +7,7 @@ export function workspaceProjects(sessions: Sessions, offset = 0): TaskProjectsP
   // One saved association per project, independent of the visible task page.
   const saved = sessions.store.db
     .prepare(
-      "SELECT scope FROM (SELECT scope,row_number() OVER (PARTITION BY scopeKey ORDER BY updatedAt DESC,id) AS n FROM (SELECT scope,scopeKey,updatedAt,id FROM workspace_tasks UNION ALL SELECT scope,scopeKey,updatedAt,id FROM workspace_notes) WHERE scope IS NOT NULL) WHERE n=1 LIMIT 5000",
+      "SELECT scope FROM (SELECT scope,row_number() OVER (PARTITION BY scopeKey ORDER BY updatedAt DESC,id) AS n FROM (SELECT scope,scopeKey,updatedAt,id FROM workspace_tasks UNION ALL SELECT scope,scopeKey,updatedAt,id FROM workspace_notes UNION ALL SELECT scope,scopeKey,updatedAt,scopeKey AS id FROM project_cores) WHERE scope IS NOT NULL) WHERE n=1 LIMIT 10000",
     )
     .all();
   for (const row of saved) {
