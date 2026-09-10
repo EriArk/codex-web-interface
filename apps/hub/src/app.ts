@@ -37,6 +37,7 @@ import { registerProjectWork } from "./project-work.js";
 import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
 import { registerQueue } from "./queue.js";
+import { registerQuickCapture } from "./quick-capture.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
 import { registerSpeech } from "./speech.js";
@@ -613,6 +614,7 @@ export async function createApp(
   registerProjectCores(app, sessions);
   const projectWork = registerProjectWork(app, sessions, gpt, queue);
   registerWorkspaceTasks(app, sessions);
+  registerQuickCapture(app, sessions);
   registerProjectOverview(app, sessions, projectWork);
   app.get("/api/previews/:id/ready", async (req) => {
     const id = paramId(req);

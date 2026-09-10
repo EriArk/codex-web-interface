@@ -284,6 +284,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 23,
+    name: "quick-capture-receipts",
+    up(db) {
+      db.exec(
+        "CREATE TABLE workspace_capture_receipts(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

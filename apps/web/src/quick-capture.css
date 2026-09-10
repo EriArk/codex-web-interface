@@ -1,0 +1,126 @@
+.quick-capture-dialog {
+  width: min(500px, calc(100% - 24px));
+  max-height: calc(var(--app-height, 100dvh) - 24px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.quick-capture-dialog::backdrop {
+  background: #0008;
+}
+.quick-capture-dialog > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.quick-capture-dialog h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 19px;
+}
+.quick-capture-dialog .icon-button {
+  color: var(--ink);
+}
+.quick-capture-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.quick-capture-content select,
+.quick-capture-content textarea,
+.quick-capture-content input {
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 5px);
+  width: 100%;
+  min-width: 0;
+}
+.quick-capture-content textarea {
+  resize: vertical;
+  min-height: 100px;
+  max-height: 45dvh;
+}
+.quick-capture-kind {
+  margin: 0;
+  min-width: 0;
+  border: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--soft);
+  border-radius: var(--radius);
+}
+.quick-capture-kind button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 5px);
+  color: var(--muted);
+}
+.quick-capture-kind button[aria-pressed="true"] {
+  background: var(--paper);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.quick-task-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.quick-capture-options > summary {
+  min-height: 44px;
+  align-content: center;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+.quick-task-fields label {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.quick-task-fields select,
+.quick-task-fields input {
+  margin-top: 5px;
+}
+.quick-capture-content footer,
+.quick-capture-saved > div {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.quick-capture-saved {
+  padding: 14px 0;
+}
+.quick-capture-saved > svg {
+  color: var(--accent);
+}
+.quick-capture-saved h3 {
+  margin-block: 10px;
+  font-size: 19px;
+}
+.quick-capture-saved p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .quick-capture-dialog {
+    top: var(--app-top, 0px);
+  }
+}
