@@ -166,7 +166,10 @@ export async function createApp(
   });
   const gpt = registerGpt(app, config, store);
   const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);
-  const push = registerPush(app, store, auth, config.hub.publicBaseUrl, options.push);
+  const push = registerPush(app, store, auth, config.hub.publicBaseUrl, {
+    ...options.push,
+    projectName: (id) => sessions.catalog.projects().find((project) => project.id === id)?.name,
+  });
   registerNavigation(app, store, sessions, auth, sockets);
   const queue = registerQueue(app, sessions, store);
   registerDesktop(app, config, store, sessions, options.desktopTransport);

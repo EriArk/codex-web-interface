@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import vm from "node:vm";
+import { Library } from "../apps/hub/dist/library.js";
 import { loadPushKeys, PushService, pushEndpoint } from "../apps/hub/dist/push.js";
+import { notificationText } from "../apps/hub/dist/push-content.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
 const keys = { publicKey: "A".repeat(87), privateKey: "B".repeat(43) };
@@ -314,7 +316,7 @@ test("push keys survive restart with private permissions", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
-test("service worker shows only generic notices and opens an authenticated same-origin target", async () => {
+test("service worker validates legacy and detailed notices and opens an authenticated same-origin target", async () => {
   const events = {},
     shown = [],
     messages = [],
@@ -363,6 +365,35 @@ test("service worker shows only generic notices and opens an authenticated same-
   });
   await pending;
   assert.equal(shown.length, 1);
+  events.push({
+    data: {
+      json: () => ({
+        id,
+        title: "GPT",
+        body: "Работа завершена",
+        display: { title: "GPT · Books · Готово", body: "Обложка\nГотово изображение." },
+        url: "https://evil.test",
+      }),
+    },
+    waitUntil: (p) => (pending = p),
+  });
+  await pending;
+  assert.equal(shown.at(-1).title, "GPT · Books · Готово");
+  assert.equal(shown.at(-1).body, "Обложка\nГотово изображение.");
+  assert.deepEqual(Object.keys(shown.at(-1).data), ["id"]);
+  for (const display of [
+    { title: "Bank", body: "spoof" },
+    { title: "GPT · test", body: "x".repeat(561) },
+    { title: "GPT · test", body: "\u202espoof" },
+  ]) {
+    events.push({
+      data: { json: () => ({ id, title: "GPT", body: "Работа завершена", display }) },
+      waitUntil: (p) => (pending = p),
+    });
+    await pending;
+    assert.equal(shown.at(-1).title, "GPT");
+    assert.equal(shown.at(-1).body, "Работа завершена");
+  }
   events.notificationclick({
     notification: { data: { id }, close: () => {} },
     waitUntil: (p) => (pending = p),
@@ -378,4 +409,163 @@ test("service worker shows only generic notices and opens an authenticated same-
   });
   await pending;
   assert.equal(opened[0], "/#notification=" + id);
+});
+
+test("detailed notifications identify the exact project, chat and completed turn without native work", async () => {
+  const f = await fixture();
+  try {
+    await f.subscribe();
+    const library = new Library(f.store, "codex");
+    library.save("project", "project", { name: "Books" });
+    library.save("thread", f.thread.codexThreadId, { name: "Каталог книг" });
+    f.store.append(
+      f.thread.id,
+      "assistant.completed",
+      { id: "old", phase: "final_answer", text: "Устаревший итог" },
+      "old",
+    );
+    f.store.append(
+      f.thread.id,
+      "assistant.completed",
+      {
+        id: "final",
+        phase: "final_answer",
+        text: "**Добавлен каталог.** [Проверено](https://private.test/?secret=1)\n```sh\nsecret command\n```",
+      },
+      "one",
+    );
+    f.complete("one");
+    f.store.append(
+      f.thread.id,
+      "assistant.completed",
+      { id: "later", phase: "final_answer", text: "Итог следующего задания" },
+      "two",
+    );
+    f.complete("two");
+    await f.push.tick();
+    const first = f.sent[0].payload;
+    assert.equal(first.title, "Codex", "legacy workers still receive a valid fixed payload");
+    assert.equal(first.display.title, "Codex · Books · Готово");
+    assert.equal(first.display.body, "Каталог книг\nДобавлен каталог. Проверено");
+    assert.ok(!JSON.stringify(first).includes("secret"));
+    assert.ok(f.sent[1].payload.display.body.includes("Итог следующего задания"));
+    assert.equal(f.calls.length, 0);
+  } finally {
+    await f.close();
+  }
+});
+test("private device preference hides all content and survives old-client category changes", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.subscribe();
+    const request = { subscription: subscription(), categories, preview: false };
+    assert.equal((await f.request("/api/push", "POST", request)).statusCode, 200);
+    await f.subscribe(); // An already-open older page sends no preview preference.
+    const status = (await f.request("/api/push?id=" + id)).json();
+    assert.equal(status.preview, false);
+    assert.deepEqual(status.categories, categories);
+    await f.subscribe("tablet");
+    f.complete();
+    await f.push.tick();
+    assert.equal(f.sent.find((s) => s.sub.endpoint.endsWith("/device")).payload.display, undefined);
+    assert.ok(
+      f.sent
+        .find((s) => s.sub.endpoint.endsWith("/tablet"))
+        .payload.display.title.includes("Project"),
+    );
+    assert.equal(
+      (await f.request("/api/push", "POST", { ...request, preview: "yes" })).statusCode,
+      400,
+    );
+  } finally {
+    await f.close();
+  }
+});
+test("questions omit secret fields, approvals describe their type, and compaction has a useful fallback", async () => {
+  const f = await fixture();
+  try {
+    await f.subscribe();
+    f.store.setStatus(f.thread.id, "waiting_approval");
+    f.store.append(
+      f.thread.id,
+      "approval.requested",
+      {
+        id: "q",
+        kind: "question",
+        questions: [
+          { isSecret: true, question: "SECRET_PASSWORD" },
+          { isSecret: false, question: "Какую обложку выбрать?" },
+        ],
+      },
+      "q",
+    );
+    await f.push.tick();
+    assert.ok(f.sent.at(-1).payload.display.body.endsWith("Какую обложку выбрать?"));
+    for (const kind of ["command", "files", "permissions"]) {
+      f.store.append(
+        f.thread.id,
+        "approval.requested",
+        { id: kind, kind, description: "SECRET_COMMAND" },
+        "q",
+      );
+      await f.push.tick();
+      assert.ok(!JSON.stringify(f.sent.at(-1)).includes("SECRET"));
+      assert.ok(f.sent.at(-1).payload.display.body.includes("запрашивает"));
+    }
+    f.complete("compacted");
+    f.store.db.prepare("DELETE FROM events WHERE threadId=?").run(f.thread.id);
+    await f.push.tick();
+    assert.ok(f.sent.at(-1).payload.display.body.includes("Ответ готов"));
+  } finally {
+    await f.close();
+  }
+});
+test("GPT notifications use the exact durable job, known project and safe failure reasons", async () => {
+  const f = await fixture();
+  try {
+    await f.subscribe();
+    const one = job(f),
+      two = job(f);
+    const library = new Library(f.store, "gpt");
+    library.save("project", "books", { name: "Книги" });
+    library.save("thread", "native-" + one, { name: "Обложки", projectId: "books" });
+    f.store.db
+      .prepare("UPDATE gpt_jobs SET answer=?,status='completed' WHERE id=?")
+      .run("Первая обложка готова.", one);
+    f.store.db
+      .prepare("UPDATE gpt_jobs SET answer=?,status='completed' WHERE id=?")
+      .run("Совсем другой ответ.", two);
+    await f.push.tick();
+    assert.equal(f.sent[0].payload.display.title, "GPT · Книги · Готово");
+    assert.equal(f.sent[0].payload.display.body, "Обложки\nПервая обложка готова.");
+    const image = job(f);
+    f.store.db
+      .prepare("UPDATE gpt_jobs SET assets='[{}]',status='completed' WHERE id=?")
+      .run(image);
+    await f.push.tick();
+    assert.ok(f.sent.at(-1).payload.display.body.includes("изображения или файлы"));
+    const failed = job(f);
+    f.store.db
+      .prepare("UPDATE gpt_jobs SET error=?,status='failed' WHERE id=?")
+      .run("Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены.", failed);
+    await f.push.tick();
+    assert.ok(f.sent.at(-1).payload.display.body.includes("загрузить вложения"));
+    const unknown = job(f);
+    f.store.db
+      .prepare("UPDATE gpt_jobs SET error='SECRET_RAW_ERROR',status='unknown' WHERE id=?")
+      .run(unknown);
+    await f.push.tick();
+    assert.ok(f.sent.at(-1).payload.display.body.includes("перед повторной отправкой"));
+    assert.ok(!JSON.stringify(f.sent).includes("SECRET"));
+  } finally {
+    await f.close();
+  }
+});
+test("preview cleanup bounds Unicode text and removes code, URLs, paths and bidi controls", () => {
+  const text = notificationText(
+    "**Готово** [результат](https://private.test?token=1)\n~~~sh\npassword=SECRET\n~~~\n`SECRET` C:\\private\\file /private/key https://asset.test/sign \u202Etest",
+  );
+  assert.equal(text, "Готово результат test");
+  assert.equal(notificationText("Итог\n```js\nсекрет"), "Итог");
+  assert.equal(Array.from(notificationText("😀".repeat(1000))).length, 180);
 });

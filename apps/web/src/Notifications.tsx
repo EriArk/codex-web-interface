@@ -24,6 +24,7 @@ type PushStatus = {
   publicKey?: string;
   enabled: boolean;
   categories: Categories;
+  preview: boolean;
 };
 export function Notifications({ visible }: { visible: boolean }) {
   const supported =
@@ -67,15 +68,19 @@ export function Notifications({ visible }: { visible: boolean }) {
       clearTimeout(timer);
     };
   }, [visible, supported]);
-  const store = async (sub: PushSubscription, categories: Categories) => {
+  const store = async (
+    sub: PushSubscription,
+    categories: Categories,
+    preview = status?.preview ?? true,
+  ) => {
     const data = await api<{ id: string }>("/push", {
       method: "POST",
-      body: { subscription: sub.toJSON(), categories },
+      body: { subscription: sub.toJSON(), categories, preview },
       timeoutMs: 15000,
     });
     saveDevice(data.id);
     setSubscription(sub);
-    setStatus((s) => (s ? { ...s, enabled: true, categories } : s));
+    setStatus((s) => (s ? { ...s, enabled: true, categories, preview } : s));
   };
   const enable = () => {
     if (!registration || !status?.publicKey || pending) return;
@@ -171,6 +176,21 @@ export function Notifications({ visible }: { visible: boolean }) {
                     {label}
                   </label>
                 ))}
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={status.preview ?? true}
+                    onChange={(e) => {
+                      if (!subscription) return;
+                      setPending(true);
+                      setError("");
+                      void store(subscription, status.categories, e.target.checked)
+                        .catch((e) => setError(messageOf(e)))
+                        .finally(() => setPending(false));
+                    }}
+                  />
+                  Показывать чат и текст ответа
+                </label>
               </fieldset>
               <button
                 type="button"

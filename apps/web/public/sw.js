@@ -59,7 +59,7 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Generic encrypted payloads only; no prompt, file or account contents on the lock screen.
+// Legacy status stays valid for existing workers; optional bounded display follows device preferences.
 self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
@@ -80,8 +80,20 @@ self.addEventListener("push", (event) => {
         "Уведомления работают",
       ];
       if (!allowed.includes(data.body)) return;
-      await self.registration.showNotification(data.title, {
-        body: data.body,
+      const display = data.display;
+      const validDisplay =
+        display &&
+        typeof display.title === "string" &&
+        typeof display.body === "string" &&
+        display.title.startsWith(data.title + " · ") &&
+        display.title.length <= 200 &&
+        display.body.length <= 560 &&
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject forged control characters while allowing the body newline.
+        !/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(
+          display.title + display.body,
+        );
+      await self.registration.showNotification(validDisplay ? display.title : data.title, {
+        body: validDisplay ? display.body : data.body,
         icon: "/icon.svg",
         tag: "work-" + data.id,
         data: { id: data.id },

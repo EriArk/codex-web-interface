@@ -435,3 +435,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Automatic Doctor turns use native read-only sandbox policy with no escalation, and deterministic diagnosis-only instructions. They do not authorize file changes, arbitrary project execution, restart/deploy, credential changes, GPT sends or automatic repairs.
 - Evidence contains only allowlisted fixed diagnostics. A sanitized native screenshot hides all text, user/account/media regions and composer contents; retain only structural layout. Omit evidence when owner flows or reliable capture cannot be excluded. It remains private behind Hub authentication.
 - While following a live response, successful completion moves to the start of its final/main assistant answer once. Manual scrolling, source/history views, hidden panels, old completions and another conversation's late responses take precedence. Use the internal scroller, keep focus/drafts intact and prevent later layout changes from pulling the reader back to the bottom.
+
+
+## Owner-requested informative notifications (2026-09-10)
+
+- Work notifications show project/chat context, an outcome and a bounded public final-answer excerpt or non-secret question. Use only existing Hub metadata and the exact event/job; no native reads, writer acquisition, automatic sends or AI summary requests. Keep diagnostics/commands/secret questions out of previews.
+- Detailed display is enabled for subscribed devices after this explicit owner request. A compact per-device setting can hide names and answer previews while retaining generic status delivery. Keep encrypted push, opt-in device enrollment, deduplication, draft-preserving authenticated navigation and compatibility with already-installed workers.
