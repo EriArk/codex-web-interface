@@ -297,10 +297,14 @@ export class Store {
       lastSeq: this.lastSeq(threadId),
     };
   }
-  context(threadId: string, turnId: string): Record<string, unknown> {
-    const start = this.db
-      .prepare("SELECT MIN(firstSeq) AS seq FROM messages WHERE threadId=? AND turnId=?")
-      .get(threadId, turnId)?.seq;
+  context(threadId: string, turnId: string, messageId?: string): Record<string, unknown> {
+    const start = messageId
+      ? this.db
+          .prepare("SELECT firstSeq AS seq FROM messages WHERE threadId=? AND id=?")
+          .get(threadId, messageId)?.seq
+      : this.db
+          .prepare("SELECT MIN(firstSeq) AS seq FROM messages WHERE threadId=? AND turnId=?")
+          .get(threadId, turnId)?.seq;
     if (!start) throw new HubError(404, "TURN_NOT_FOUND", "Сообщение этого хода ещё не сохранено");
     const messages = this.db
       .prepare("SELECT * FROM messages WHERE threadId=? AND firstSeq>=? ORDER BY firstSeq LIMIT 20")

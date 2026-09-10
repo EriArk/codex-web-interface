@@ -1,6 +1,8 @@
 import type { GptConversation, GptJob, GptMessage, GptModels, GptProject } from "@codex-web/shared";
 
 export interface GptCachedChat {
+  contextMessage?: string;
+  hasNewer?: boolean;
   messages: GptMessage[];
   before: string | null;
   revision: string;

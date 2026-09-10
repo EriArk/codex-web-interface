@@ -274,6 +274,7 @@ function Workspace({
   const [pendingResultTurn, setPendingResultTurn] = useState<{
     threadId: string;
     turnId: string;
+    messageId?: string;
   }>();
   useEffect(() => {
     if (resultScope !== "project" || !["results", "chat"].includes(view)) return;
@@ -287,6 +288,7 @@ function Workspace({
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
   const [focusResult, setFocusResult] = useState(""),
     [focusTurn, setFocusTurn] = useState("");
+  const [focusMessage, setFocusMessage] = useState("");
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new conversation clears its predecessor's result navigation.
   useEffect(() => {
     setFocusResult("");
@@ -753,8 +755,12 @@ function Workspace({
       selectThread(target.threadId, target.projectId);
       if (target.kind === "result")
         setPendingNotebookResult({ threadId: target.threadId, id: target.id });
-      else if (target.turnId)
-        setPendingResultTurn({ threadId: target.threadId, turnId: target.turnId });
+      else if (target.turnId || target.messageId)
+        setPendingResultTurn({
+          threadId: target.threadId,
+          turnId: target.turnId ?? "",
+          messageId: target.messageId,
+        });
     }
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: Consume an explicit target once after its history mounts.
@@ -781,7 +787,7 @@ function Workspace({
     setSettings(false);
     setNotebook({
       mode,
-      allProjects: mode === "tasks",
+      allProjects: true,
       scope:
         project && !project.unassigned
           ? { client: "codex", projectId: project.id, name: project.name }
@@ -798,13 +804,13 @@ function Workspace({
         : undefined,
     });
   };
-  const showTurn = async (id: string) => {
+  const showTurn = async (id: string, messageId?: string) => {
     const selected = threadId;
-    if (!state.messages.some((m) => m.turnId === id)) {
+    if (!state.messages.some((m) => (messageId ? m.id === messageId : m.turnId === id))) {
       setNotice("Это сообщение выше в истории. Подгружаем нужный фрагмент…");
       // A bounded context request avoids downloading the whole conversation.
       const context = await api<History>(
-        `/threads/${threadId}/history?turnId=${encodeURIComponent(id)}`,
+        `/threads/${threadId}/history?${new URLSearchParams({ ...(id ? { turnId: id } : {}), ...(messageId ? { messageId } : {}) })}`,
       );
       if (selectionRef.current.threadId !== selected) return;
       window.dispatchEvent(
@@ -814,7 +820,11 @@ function Workspace({
     }
     setFocusTurn("");
     setView("chat");
-    requestAnimationFrame(() => setFocusTurn(id));
+    setFocusMessage("");
+    requestAnimationFrame(() => {
+      setFocusTurn(id);
+      setFocusMessage(messageId ?? "");
+    });
   };
   // The destination history must mount before fetching an older result's turn context.
   // biome-ignore lint/correctness/useExhaustiveDependencies: This consumes each explicit navigation once after the selected history loads.
@@ -823,7 +833,7 @@ function Workspace({
       return;
     const target = pendingResultTurn;
     setPendingResultTurn(undefined);
-    void showTurn(target.turnId).catch((e) => setNotice(messageOf(e)));
+    void showTurn(target.turnId, target.messageId).catch((e) => setNotice(messageOf(e)));
   }, [pendingResultTurn, state.loading, state.thread.id]);
   const refreshCatalog = useCallback(
     async (force = false) => {
@@ -1124,6 +1134,33 @@ function Workspace({
           />
         )}
         <Chat
+          onCapture={(message) =>
+            setNotebook({
+              mode: "notes",
+              scope:
+                project && !project.unassigned
+                  ? { client: "codex", projectId: project.id, name: project.name }
+                  : null,
+              capture: {
+                scope:
+                  project && !project.unassigned
+                    ? { client: "codex", projectId: project.id, name: project.name }
+                    : null,
+                text: message.text,
+                role: message.role === "user" ? "user" : "assistant",
+                target: {
+                  client: "codex",
+                  kind: "thread",
+                  id: threadId,
+                  threadId,
+                  projectId,
+                  turnId: message.turnId ?? undefined,
+                  messageId: message.id,
+                  title: state.thread.title || "Чат Codex",
+                },
+              },
+            })
+          }
           machineId={project?.machineId}
           projectId={projectId}
           threadId={threadId}
@@ -1157,6 +1194,7 @@ function Workspace({
           busy={busy}
           results={results}
           focusTurn={focusTurn}
+          focusMessage={focusMessage}
           onSend={send}
           onStop={() =>
             void action(() => api(`/threads/${threadId}/interrupt`, { method: "POST" }))

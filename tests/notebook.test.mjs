@@ -170,3 +170,85 @@ test("a removed Result leaves a readable note and a missing backlink, without a 
   assert.equal(book.pins("global", 0).items[0].target.availability, "missing");
   assert.equal(book.get(note.id).body, input().body);
 });
+
+test("message capture preserves exact visible text and frozen source, retries without duplication or native writes", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const book = new Notebook(f.sessions),
+    id = randomUUID();
+  const capture = {
+    scope: project,
+    text: "Ответ\n```txt\n  exact  \n```",
+    role: "assistant",
+    target: {
+      client: "codex",
+      kind: "thread",
+      id: f.thread.id,
+      threadId: f.thread.id,
+      messageId: "message-1",
+      turnId: "turn-1",
+      title: "Исходный ответ",
+    },
+  };
+  const first = book.capture(id, capture);
+  assert.equal(first.body, capture.text);
+  assert.equal(first.source.text, capture.text);
+  assert.equal(first.source.nativeThreadId, f.thread.codexThreadId);
+  assert.equal(first.source.target.messageId, "message-1");
+  assert.equal(book.capture(id, capture).revision, 1);
+  assert.equal(book.capture(randomUUID(), capture).id, id);
+  assert.equal(book.list("all", "", 0).items.length, 1);
+  assert.equal(book.capture(randomUUID(), { ...capture, scope: null }).scope, null);
+  book.save(id, { ...first, body: "Редакция владельца", revision: 1 });
+  assert.equal(book.get(id).source.text, capture.text);
+  assert.equal(book.get(id).body, "Редакция владельца");
+  f.sessions.catalog.library.save("thread", f.thread.codexThreadId, { deleted: true });
+  assert.equal(book.get(id).resolvedLinks[0].availability, "missing");
+  assert.equal(book.get(id).source.text, capture.text);
+  const gpt = book.capture(randomUUID(), {
+    ...capture,
+    target: { ...capture.target, client: "gpt", id: "gpt-thread" },
+  });
+  assert.equal(gpt.source.nativeThreadId, "gpt-thread");
+  book.pin(null, capture.target, true);
+  book.pin(null, { ...capture.target, messageId: "message-2" }, true);
+  assert.equal(book.pins("global", 0).items.length, 2);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.desktopCalls.length, 0);
+  book.remove(id, 2);
+  assert.equal(book.source(id), undefined);
+});
+
+test("capture endpoint enforces password session, CSRF and a message source", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const url = "/api/workspace/notes/" + randomUUID() + "/capture",
+    payload = {
+      scope: null,
+      text: "visible",
+      role: "assistant",
+      target: { client: "codex", kind: "thread", id: f.thread.id, title: "Ответ", messageId: "m1" },
+    };
+  assert.equal((await f.app.inject({ method: "PUT", url, payload })).statusCode, 401);
+  assert.equal(
+    (await f.app.inject({ method: "PUT", url, payload, headers: { cookie: f.headers.cookie } }))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await f.app.inject({ method: "PUT", url, payload, headers: f.headers })).statusCode,
+    200,
+  );
+  assert.equal(
+    (
+      await f.app.inject({
+        method: "PUT",
+        url,
+        payload: { ...payload, target: { ...payload.target, messageId: undefined } },
+        headers: f.headers,
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(f.calls.length, 0);
+});

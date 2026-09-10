@@ -235,6 +235,7 @@ export function Chat({
   busy,
   results,
   focusTurn,
+  focusMessage,
   onSend,
   onStop,
   onOlder,
@@ -247,7 +248,9 @@ export function Chat({
   completion,
   canMarkSeen,
   speechVisible,
+  onCapture,
 }: {
+  onCapture?: (message: Message) => void;
   completion?: ThreadActivity;
   canMarkSeen: boolean;
   speechVisible: boolean;
@@ -262,6 +265,7 @@ export function Chat({
   busy: boolean;
   results: Result[];
   focusTurn: string;
+  focusMessage?: string;
   onSend: (text: string, settings: TurnSettings, attachments: string[]) => Promise<boolean>;
   onStop: () => void;
   onOlder: () => Promise<void>;
@@ -396,16 +400,19 @@ export function Chat({
     } else setNewMessages(true);
   }, [threadId, state.messages, state.loadingOlder, visible]);
   useEffect(() => {
-    if (!visible || !focusTurn) return;
+    if (!visible || (!focusTurn && !focusMessage)) return;
+    atBottom.current = false;
     requestAnimationFrame(() => {
       const target = scroller.current?.querySelector<HTMLElement>(
-        `[data-turn="${CSS.escape(focusTurn)}"]`,
+        focusMessage
+          ? `[data-message="${CSS.escape(focusMessage)}"]`
+          : `[data-turn="${CSS.escape(focusTurn)}"]`,
       );
       target?.scrollIntoView({ block: "center" });
       target?.classList.add("message-focus");
       setTimeout(() => target?.classList.remove("message-focus"), 2000);
     });
-  }, [focusTurn, visible]);
+  }, [focusTurn, focusMessage, visible]);
   const saveDraft = (value: string) => {
     setDraft(value);
     try {
@@ -560,6 +567,16 @@ export function Chat({
                       <span className="message-actions">
                         {message.role === "assistant" && (
                           <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
+                        )}
+                        {onCapture && message.text.trim() && (
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label="Сохранить в заметки"
+                            onClick={() => onCapture(message)}
+                          >
+                            <Icon name="file" size={17} />
+                          </button>
                         )}
                         <CopyButton text={message.text} />
                       </span>

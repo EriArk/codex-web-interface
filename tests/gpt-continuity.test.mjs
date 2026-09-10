@@ -192,3 +192,24 @@ test("Confirmed GPT retries hide only exact recent pre-dispatch failures in the 
   );
   assert.equal(showGptJob(failed, [], 50000, []), true);
 });
+
+test("saved GPT message sources use bounded native-branch context and explicit return to latest", async () => {
+  const cache = new GptHistoryCache(async () => messages(200));
+  const context = await cache.page("chat", { messageId: "m50" });
+  assert.equal(context.items.length, 20);
+  assert(context.items.some((m) => m.id === "m50"));
+  assert.equal(context.contextMessage, "m50");
+  assert.equal(context.hasNewer, true);
+  let client = mergeGptHistory(undefined, context);
+  const older = await cache.page("chat", { before: context.nextBefore });
+  client = mergeGptHistory(client, older, true);
+  assert.equal(client.contextMessage, "m50");
+  assert.equal(client.hasNewer, true);
+  const latest = mergeGptHistory(client, await cache.page("chat", {}));
+  assert.equal(latest.contextMessage, undefined);
+  assert.equal(latest.messages.at(-1).id, "m199");
+  await assert.rejects(
+    cache.page("chat", { messageId: "gone" }),
+    (e) => e.code === "GPT_MESSAGE_MISSING",
+  );
+});

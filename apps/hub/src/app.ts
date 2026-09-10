@@ -395,13 +395,24 @@ export async function createApp(
     const id = paramId(req);
     const thread = sessions.thread(id);
     const q = z
-      .object({ turnId: idSchema.optional(), before: z.string().max(100).optional() })
+      .object({
+        turnId: idSchema.optional(),
+        messageId: z
+          .string()
+          .min(1)
+          .max(200)
+          .regex(/^[a-zA-Z0-9_:.-]+$/)
+          .optional(),
+        before: z.string().max(100).optional(),
+      })
       .parse(req.query);
     return {
       ...(thread.origin === "desktop" || thread.historyMode
-        ? await sessions.catalog.history(thread, q.before, q.turnId)
-        : q.turnId
-          ? store.context(id, q.turnId)
+        ? q.messageId
+          ? await sessions.catalog.messageContext(thread, q.messageId, q.turnId)
+          : await sessions.catalog.history(thread, q.before, q.turnId)
+        : q.turnId || q.messageId
+          ? store.context(id, q.turnId ?? "", q.messageId)
           : store.history(id, page(req).before)),
       thread: store.thread(id),
       approvals: sessions.pending(id),

@@ -297,12 +297,19 @@ export type {
   NotebookPin,
   NotebookScope,
   NotebookTarget,
+  NoteCapture,
   NoteRecord,
+  NoteSource,
   NoteSummary,
   NotesPage,
   NoteWrite,
 } from "./notebook.js";
-export { notebookScopeSchema, notebookTargetSchema, noteWriteSchema } from "./notebook.js";
+export {
+  notebookScopeSchema,
+  notebookTargetSchema,
+  noteCaptureSchema,
+  noteWriteSchema,
+} from "./notebook.js";
 export type {
   CachedProjectGit,
   OverviewResult,

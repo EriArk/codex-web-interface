@@ -64,12 +64,18 @@ export class GptHistoryCache {
   }
   async page(
     id: string,
-    query: { before?: string; known?: string; anchor?: string; prefix?: string },
+    query: {
+      before?: string;
+      known?: string;
+      anchor?: string;
+      prefix?: string;
+      messageId?: string;
+    },
     ttl = 15000,
   ): Promise<GptHistoryPage> {
     const entry = await this.get(id, ttl),
       list = entry.items;
-    if (!query.before && query.known === entry.revision)
+    if (!query.messageId && !query.before && query.known === entry.revision)
       return {
         items: [],
         nextBefore: null,
@@ -78,12 +84,25 @@ export class GptHistoryCache {
         notModified: true,
         retainOlder: true,
       };
-    const end = query.before ? list.findIndex((m) => m.id === query.before) : list.length;
+    const focus = query.messageId ? list.findIndex((m) => m.id === query.messageId) : -1;
+    if (query.messageId && focus < 0)
+      throw new HubError(
+        404,
+        "GPT_MESSAGE_MISSING",
+        "Сообщение больше не находится в этой ветке чата.",
+      );
+    const end = query.messageId
+      ? Math.min(list.length, focus + 11)
+      : query.before
+        ? list.findIndex((m) => m.id === query.before)
+        : list.length;
     if (end < 0) throw new HubError(409, "GPT_HISTORY_CHANGED", "История изменилась. Обнови чат.");
     const start = Math.max(0, end - 20);
     const anchor = query.anchor ? list.findIndex((m) => m.id === query.anchor) : -1;
     return {
       items: list.slice(start, end),
+      contextMessage: query.messageId,
+      hasNewer: !!query.messageId && end < list.length,
       nextBefore: start > 0 ? list[start]!.id : null,
       revision: entry.revision,
       prefix: hash(list.slice(0, start)),

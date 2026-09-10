@@ -83,6 +83,8 @@ export function mergeGptHistory(
   const retained = keep && messages.length > page.items.length;
   return {
     messages,
+    contextMessage: older ? previous?.contextMessage : page.contextMessage,
+    hasNewer: older ? previous?.hasNewer : page.hasNewer,
     before: older ? page.nextBefore : retained ? previous!.before : page.nextBefore,
     revision: older && previous ? previous.revision : page.revision,
     prefix: older && previous ? previous.prefix : page.prefix,

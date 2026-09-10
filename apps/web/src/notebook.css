@@ -456,3 +456,213 @@
     display: none;
   }
 }
+
+.note-capture-dialog {
+  width: min(460px, calc(100vw - 24px));
+  height: auto;
+  max-height: calc(var(--app-height, 100dvh) - 24px);
+  padding: 0;
+  margin: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.note-capture-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 18px;
+}
+.note-capture-content blockquote {
+  margin: 0;
+  border-left: 2px solid var(--accent);
+  padding: 6px 12px;
+  line-height: 1.5;
+  max-height: 24vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.note-source-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  padding: 8px 12px;
+  flex-shrink: 0;
+}
+.note-source-card summary {
+  min-height: 36px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.note-source-card time {
+  float: right;
+  font-size: 0.85em;
+}
+.note-source-card pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: inherit;
+}
+
+/* One compact workspace, shared by every theme and both clients. */
+.notebook-heading {
+  min-height: 60px;
+  padding-inline: 18px;
+  background: var(--surface);
+}
+.notebook-heading > svg {
+  color: var(--accent);
+}
+.notebook-heading strong {
+  font-size: 1.12em;
+  letter-spacing: -0.015em;
+}
+.notebook-modules {
+  gap: 0;
+  background: var(--surface);
+}
+.notebook-modules button {
+  flex: 1;
+  max-width: 180px;
+}
+.notebook-task-controls {
+  padding: 10px 16px;
+}
+.task-project-filters button {
+  border-color: transparent;
+  background: transparent;
+}
+.task-project-filters button[aria-pressed="true"] {
+  border-color: var(--line);
+}
+.notebook-list {
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface) 65%, var(--paper));
+}
+.notebook-list > input {
+  margin-top: 0;
+  background: var(--paper);
+}
+.notebook-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  margin: 3px 0;
+}
+.notebook-row[data-selected="true"] {
+  border-color: var(--line);
+}
+.notebook-row button {
+  padding: 12px;
+}
+.notebook-row b {
+  font-weight: 600;
+  line-height: 1.3;
+}
+.notebook-row small {
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+.notebook-row:focus-within {
+  border-color: var(--accent);
+}
+.notebook-context {
+  font-size: 0.85em;
+  padding: 8px;
+  background: transparent;
+  border-style: dashed;
+}
+.notebook-editor {
+  padding: 20px 24px;
+  gap: 14px;
+}
+.notebook-title {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 4px !important;
+  font-size: 1.4em;
+}
+.notebook-editor-tools select {
+  border-color: transparent;
+  background: transparent;
+  font-size: 0.85em;
+}
+.notebook-mode {
+  border-bottom: 1px solid var(--line);
+  gap: 0;
+}
+.notebook-mode span {
+  font-size: 0.75em;
+}
+.notebook-save {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.notebook-save .primary {
+  min-height: 44px;
+  min-width: 120px;
+}
+.notebook-empty > svg {
+  color: var(--accent);
+  opacity: 0.7;
+}
+.task-fields {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.task-fields label {
+  gap: 6px;
+}
+@media (max-width: 700px) {
+  .notebook-heading {
+    min-height: 52px;
+    padding-inline: 14px;
+  }
+  .notebook-heading strong {
+    font-size: 1em;
+  }
+  .notebook-task-controls {
+    padding: 6px 10px;
+  }
+  .notebook-editor {
+    padding: 10px 16px 12px;
+    gap: 10px;
+  }
+  .notebook-title {
+    font-size: 20px;
+  }
+  .notebook-list {
+    padding: 10px 12px;
+  }
+  .notebook-save {
+    padding-top: 8px;
+  }
+  .notebook-row button {
+    padding: 11px;
+  }
+}
+
+.notebook-dialog select {
+  appearance: none;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 32px;
+}
+.notebook-dialog .notebook-back {
+  display: none;
+}
+@media (max-width: 700px) {
+  .notebook-dialog .notebook-back {
+    display: inline-flex;
+  }
+}
