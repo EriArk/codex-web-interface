@@ -1,0 +1,467 @@
+.devices-workspace {
+  position: fixed;
+  inset: 20px;
+  width: min(1200px, calc(100% - 40px));
+  height: calc(100dvh - 40px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 14px);
+  box-shadow: 0 20px 90px #0006;
+}
+.devices-workspace::backdrop {
+  background: #0007;
+  backdrop-filter: blur(4px);
+}
+.devices-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 4px 12px 4px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.devices-heading h2 {
+  font-size: 20px;
+  margin: 0;
+  flex: 1;
+}
+.devices-heading .icon-button {
+  border: 0;
+  box-shadow: none;
+}
+.device-picker {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.device-picker button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  min-width: 140px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.device-picker button.selected {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+.device-picker small,
+.device-os small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.device-layout {
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.device-system {
+  overflow: auto;
+  padding: 12px 18px 24px;
+  border-right: 1px solid var(--line);
+}
+.device-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.device-section-heading h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+}
+.device-section-heading > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.devices-workspace .online {
+  color: var(--accent);
+}
+.device-os {
+  font-size: 15px;
+  margin: 8px 0 18px;
+}
+.device-specs {
+  font-size: 13px;
+  margin: 0;
+}
+.device-specs > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 9px 0;
+}
+.device-specs dt {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.device-specs dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.device-system h4 {
+  font-size: 13px;
+  margin: 22px 0 12px;
+  color: var(--muted);
+}
+.device-meter {
+  margin: 14px 0;
+  font-size: 12px;
+}
+.device-meter > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.device-meter b {
+  font-weight: 400;
+  flex-shrink: 0;
+}
+.device-meter meter {
+  width: 100%;
+  height: 6px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--line);
+}
+.device-meter meter::-webkit-meter-bar {
+  background: var(--line);
+  border: 0;
+}
+.device-meter meter::-webkit-meter-optimum-value {
+  background: var(--accent);
+}
+.device-meter meter::-moz-meter-bar {
+  background: var(--accent);
+}
+.device-sensor {
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0;
+}
+.device-sensor span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.device-sensor b {
+  white-space: nowrap;
+}
+.device-muted {
+  font-size: 13px;
+  color: var(--muted);
+}
+.device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  margin-top: 22px;
+  padding-top: 16px;
+}
+.device-actions button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+.device-console {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--paper);
+}
+.device-console-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.device-console-heading select {
+  border: 0;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  font-size: 14px;
+}
+.device-terminal {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.device-terminal-status {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 8px 0 16px;
+  min-height: 40px;
+}
+.device-terminal-status span {
+  flex: 1;
+}
+.device-terminal-screen {
+  flex: 1;
+  min-height: 80px;
+  min-width: 0;
+  padding: 4px 10px 4px 16px;
+  overflow: hidden;
+}
+.device-terminal-screen .xterm {
+  height: 100%;
+}
+.device-terminal-screen .xterm-helper-textarea {
+  font-size: 16px !important;
+}
+.device-terminal-keys {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.device-terminal-keys button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px;
+  font-size: 13px;
+  border: 0;
+  background: var(--surface);
+}
+.device-terminal-empty {
+  margin: auto;
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+}
+.device-terminal-empty button {
+  padding: 8px 16px;
+  min-height: 44px;
+}
+.device-mobile-tabs {
+  display: none;
+}
+.device-error {
+  padding: 10px 18px;
+  color: var(--danger);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.device-empty {
+  padding: 20px;
+}
+.device-action-backdrop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0008;
+  padding: 20px;
+  z-index: 4;
+}
+.device-action-dialog {
+  width: min(420px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 12px);
+  padding: 20px;
+  box-shadow: 0 12px 50px #0005;
+}
+.device-action-dialog h3 {
+  margin: 0 0 18px;
+  font-size: 18px;
+}
+.device-action-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.device-action-dialog input,
+.device-action-dialog select {
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+}
+.device-action-dialog .device-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+.device-checkbox input {
+  width: 20px;
+  min-height: 20px;
+}
+.device-action-dialog p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.device-action-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+.device-action-dialog footer button {
+  min-height: 44px;
+  padding: 7px 14px;
+}
+.device-loading {
+  position: fixed;
+  inset: 30%;
+  background: var(--surface);
+  padding: 24px;
+  z-index: 100;
+}
+[data-theme="hitech-2000s"] .devices-heading,
+[data-theme="hitech-2000s"] .device-console-heading {
+  background: linear-gradient(#f9fcff, #cbd5de 48%, #eff6fa 52%, #b3c3ce);
+}
+[data-theme="organizer"] .device-system {
+  background-image: linear-gradient(
+    90deg,
+    transparent 11px,
+    #b9676630 11px,
+    #b9676630 12px,
+    transparent 12px
+  );
+}
+[data-theme="crt-green"] .devices-workspace {
+  box-shadow:
+    inset 0 0 24px #43ff6b07,
+    0 16px 80px #0008;
+}
+@media (max-width: 700px) {
+  .devices-workspace {
+    inset: 0;
+    width: 100%;
+    height: var(--app-height, 100dvh);
+    border: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .devices-heading {
+    min-height: 48px;
+    padding-left: 16px;
+  }
+  .device-picker {
+    padding: 8px 12px;
+  }
+  .device-picker button {
+    min-width: 128px;
+    padding: 6px 12px;
+  }
+  .device-mobile-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+  }
+  .device-mobile-tabs button {
+    flex: 1;
+    min-height: 44px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+  }
+  .device-mobile-tabs button[aria-pressed="true"] {
+    border-bottom-color: var(--accent);
+    color: var(--accent);
+  }
+  .device-layout {
+    display: flex;
+  }
+  .device-layout[data-page="info"] .device-console,
+  .device-layout[data-page="terminal"] .device-system {
+    display: none;
+  }
+  .device-system,
+  .device-console {
+    width: 100%;
+    border: 0;
+  }
+  .device-terminal-screen {
+    padding-left: 8px;
+    padding-right: 6px;
+  }
+  .device-terminal-keys {
+    gap: 2px;
+    padding: 4px;
+  }
+  .device-terminal-keys button {
+    flex: 1;
+    min-width: 36px;
+  }
+  .device-action-backdrop {
+    padding: 12px;
+  }
+}
+
+.device-terminal-screen .xterm-viewport {
+  background: var(--paper) !important;
+}
+.device-action-backdrop {
+  position: fixed;
+  inset: 0;
+  width: min(460px, 100%);
+  max-width: 100%;
+  height: fit-content;
+  max-height: var(--app-height, 100dvh);
+  margin: auto;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  overflow: auto;
+}
+.device-action-backdrop::backdrop {
+  background: #0008;
+}
+.device-action-dialog {
+  width: 100%;
+}
+.devices-workspace .icon-button {
+  color: var(--ink);
+}
+@media (max-width: 700px) {
+  .devices-workspace {
+    top: var(--app-top, 0px);
+    bottom: auto;
+  }
+  [data-keyboard="true"] .devices-workspace {
+    padding-bottom: 0;
+  }
+}

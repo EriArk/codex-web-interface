@@ -14,6 +14,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CollapsibleCode } from "./CollapsibleCode";
+import { CommandOutput } from "./CommandOutput";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { PreviewViewer } from "./PreviewViewer";
@@ -234,6 +235,9 @@ export function Results({
               )}
               {r.payload.command && (
                 <CollapsibleCode label="Команда и код">{r.payload.command}</CollapsibleCode>
+              )}
+              {r.type === "check" && r.payload.command && r.threadId && (
+                <CommandOutput threadId={r.threadId} resultId={r.id} />
               )}
               {r.payload.changes?.map((change) => (
                 <details className="file-change" key={change.path}>

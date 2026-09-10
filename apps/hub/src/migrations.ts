@@ -257,6 +257,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 20,
+    name: "private-device-terminals",
+    up(db) {
+      db.exec(
+        "CREATE TABLE device_terminals(id TEXT PRIMARY KEY,deviceId TEXT NOT NULL,owner TEXT NOT NULL,title TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('open','closed')),createdAt TEXT NOT NULL,exitCode INTEGER); CREATE INDEX device_terminals_owner ON device_terminals(owner,state,createdAt)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

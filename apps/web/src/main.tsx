@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { applyLayoutPreference } from "./AppearanceSettings";
+import { DeviceWorkspaceHost } from "./DeviceWorkspaceHost";
 import { applyTheme, cachedTheme } from "./theme";
 import "./fonts.css";
 import "./styles.css";
@@ -17,7 +18,12 @@ applyTheme(cachedTheme());
 applyLayoutPreference();
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing root");
-createRoot(root).render(<App />);
+createRoot(root).render(
+  <>
+    <App />
+    <DeviceWorkspaceHost />
+  </>,
+);
 if ("serviceWorker" in navigator)
   window.addEventListener("load", () => {
     void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
