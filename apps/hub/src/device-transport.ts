@@ -97,9 +97,9 @@ export function terminalCommand(device: DeviceConfig, action: DeviceAction): str
         : []),
       `New-PSDrive -Name $name -PSProvider FileSystem -Root $source -Persist -Scope Global${action.credentials ? " -Credential $credential" : ""}`,
       "Get-PSDrive -Name $name",
-      "Read-Host 'Press Enter to close'",
+      "Set-Location -LiteralPath ($name + ':\\')",
     ].join("; ");
-    return [...args, ...powershell(device, script)];
+    return [...args, ...powershell(device, script), "-NoExit"];
   }
   const source = shQuote(action.source.replaceAll("\\", "/")),
     name = shQuote(action.name);

@@ -138,6 +138,23 @@ test("device scripts quote mount paths, reject credential URLs and normalize una
   }).join(" ");
   assert(command.includes("'\\''"));
   assert(!command.includes("password="));
+  const mounted = terminalCommand(
+    { ...d, platform: "windows" },
+    {
+      kind: "mount",
+      confirmation: d.name,
+      protocol: "smb",
+      name: "Z",
+      credentials: true,
+      source: "//host/share",
+    },
+  );
+  assert(mounted.includes("-NoExit"));
+  const script = Buffer.from(mounted[mounted.indexOf("-EncodedCommand") + 1], "base64").toString(
+    "utf16le",
+  );
+  assert(script.includes("Set-Location -LiteralPath"));
+  assert(!script.includes("Press Enter to close"));
   const snap = parseDeviceSnapshot(
     "windows",
     JSON.stringify({
