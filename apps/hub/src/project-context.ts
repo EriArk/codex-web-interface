@@ -362,6 +362,11 @@ export class ProjectContext {
       plans,
       notes,
       pins,
+      reviews: this.db
+        .prepare(
+          "SELECT id,state,revision,createdAt,json_extract(value,'$.title') title,json_extract(value,'$.decidedAt') decidedAt,substr(json_extract(value,'$.note'),1,700) note FROM work_reviews WHERE scopeKey=? ORDER BY createdAt DESC LIMIT 8",
+        )
+        .all(key),
       ...(git ? { cachedGit: git } : {}),
     });
     return {

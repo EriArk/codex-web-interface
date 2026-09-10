@@ -34,6 +34,7 @@ import type { Approval, Message, Result, TurnSettings } from "./types";
 import { UpdateNotice } from "./UpdateNotice";
 import type { ChatState } from "./useWorkspace";
 import { useWebHandoff } from "./WebHandoff";
+import { useThreadReviews, WorkReviewLink } from "./WorkReviewLink";
 
 const positions = new Map<string, number>();
 const MessageText = memo(function MessageText({
@@ -278,6 +279,7 @@ export function Chat({
   onLatest: () => void;
 }) {
   const speechScope = `codex:${threadId}`;
+  const reviews = useThreadReviews("codex", threadId);
   useSpeechScope(speechScope, visible && speechVisible);
   const handoff = useWebHandoff(machineId, threadId);
   const queue = useMessageQueue(threadId);
@@ -672,6 +674,11 @@ export function Chat({
                       <hr aria-label="Конец задачи" />
                       <span aria-hidden="true">Конец задачи</span>
                       <div className="task-boundary-line" aria-hidden="true" />
+                      {reviews
+                        .filter((r) => r.turnId === message.turnId)
+                        .map((r) => (
+                          <WorkReviewLink key={r.id} scope={r.scope} id={r.id} state={r.state} />
+                        ))}
                     </div>
                   )}
                 </Fragment>

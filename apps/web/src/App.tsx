@@ -266,6 +266,14 @@ function Workspace({
     [activityCursor, setActivityCursor] = useState<number | null>(null);
   const [notebook, setNotebook] = useState<NotebookRequest>();
   const [workspaceDestination, setWorkspaceDestination] = useState<WorkspaceDestination>();
+  useEffect(() => {
+    const open = (event: Event) => {
+      const request = (event as CustomEvent<NotebookRequest>).detail;
+      if (request?.mode === "reviews" && request.scope) setNotebook(request);
+    };
+    window.addEventListener("open-work-review", open);
+    return () => window.removeEventListener("open-work-review", open);
+  }, []);
   const [pendingNotebookResult, setPendingNotebookResult] = useState<{
     threadId: string;
     id: string;

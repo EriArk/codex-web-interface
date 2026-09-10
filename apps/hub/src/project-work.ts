@@ -4,6 +4,7 @@ import {
   type NotebookTarget,
   planWriteSchema,
   projectScopeSchema,
+  reviewDecisionSchema,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -30,6 +31,43 @@ export function registerProjectWork(
       offset: z.coerce.number().int().min(0).max(10000).default(0),
     })
     .strict();
+  app.get("/api/workspace/reviews", (req) => {
+    const q = page.extend({ threadId: z.string().max(100).default("") }).parse(req.query);
+    actions.synchronize();
+    // Bounded backfill also catches terminal-before-final projection ordering and old work.
+    for (const row of sessions.store.db
+      .prepare(
+        "SELECT value FROM project_work_actions WHERE state='completed' AND kind IN ('plan','correction') AND (?='all' OR scopeKey=?) AND NOT EXISTS(SELECT 1 FROM work_reviews r WHERE r.id=project_work_actions.id) ORDER BY createdAt DESC LIMIT 30",
+      )
+      .all(q.scope, q.scope)) {
+      try {
+        actions.reviews.capture(JSON.parse(String(row.value)));
+      } catch {}
+    }
+    return actions.reviews.list(q.scope, q.offset, q.threadId);
+  });
+  app.get("/api/workspace/reviews/:id", (req) => {
+    const key = id.parse(req.params).id;
+    try {
+      actions.get(key);
+    } catch {}
+    const review = actions.reviews.get(key),
+      current = actions.context.current(review.scope);
+    const row = sessions.store.db
+      .prepare(
+        "SELECT id FROM project_work_actions WHERE kind='correction' AND json_extract(value,'$.reviewId')=? ORDER BY createdAt DESC LIMIT 1",
+      )
+      .get(key);
+    return {
+      review,
+      currentThreadId: current.threadId,
+      currentTitle: current.title,
+      ...(row ? { correction: actions.get(String(row.id)) } : {}),
+    };
+  });
+  app.post("/api/workspace/reviews/:id/decision", (req) =>
+    actions.reviews.decide(id.parse(req.params).id, reviewDecisionSchema.parse(req.body)),
+  );
   app.get("/api/workspace/plans", (req) => {
     const q = page.extend({ q: z.string().max(200).default("") }).parse(req.query);
     return actions.plans.list(q.scope, q.q, q.offset);

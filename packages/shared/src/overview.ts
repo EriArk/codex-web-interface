@@ -29,6 +29,7 @@ export type CachedProjectGit = {
   error?: boolean;
 };
 export type ProjectOverview = {
+  reviews?: import("./work-review.js").ReviewSummary[];
   currentChat?: CurrentProjectChat;
   plans?: PlanSummary[];
   latestReport?: { id: string; createdAt: number; excerpt: string };
