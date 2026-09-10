@@ -24,7 +24,7 @@ Project Home opens the owner-maintained Core: purpose, behavior, rules, constrai
 
 Schema 15 stores Core and its last 40 versions independently of native project/chat records. Restoration creates a new version; it never deletes the intervening history. Version lists page ten metadata rows at a time. Deleting/archiving a native project retains its saved Core; no source folder, repository instructions or native writer is changed. The complete SQLite backup includes both tables.
 
-Core text is available for the forthcoming current-chat bootstrap only. It is not automatically appended to ordinary messages. Chromium/WebKit check phone/tablet editing, draft preservation, conflicts, history and explicit restore with four-theme screenshots.
+Core text is included in the explicitly confirmed current-chat bootstrap only. It is not automatically appended to ordinary messages. Chromium/WebKit check phone/tablet editing, draft preservation, conflicts, history and explicit restore with four-theme screenshots.
 
 
 ## Plans and Reports
@@ -36,3 +36,14 @@ Reports freeze a bounded Hub activity digest and the last successful report boun
 All four workspace sections share navigation and project filters. The wide view is a list/editor layout; phones show one at a time. Actions retain the underlying chat draft and do not navigate to execution unless requested.
 
 Verification: backend tests cover exact retry, revision conflicts, ownership, native queues, unknown outcomes, report checkpoints and delayed final events. Chromium/WebKit journeys cover local drafts, lost save acknowledgement, explicit execution, report history, four themes and phone/tablet layout. Physical iPhone/iPad acceptance remains the owner's usage check.
+
+
+## Current chat and rotation / issue #88
+
+Project Home distinguishes Current chat, Previous chats and other native chats. Rotation reviews a deterministic bounded bootstrap: complete owner Core, bounded project digest and visible excerpts/observations from the outgoing chat. The dynamic handoff is explicitly incomplete; it never rewrites Core or promotes hypotheses to confirmed rules. The first reply is asked to summarize state and the next step, not to begin new changes automatically.
+
+Codex native creation and bootstrap use persisted receipts; Current changes only after a confirmed native turn or its exact user-message identity arrives. Unknown creation never guesses a recent chat. GPT creates its composer through an existing matching native project link, rechecks it before dispatch, and then verifies canonical project membership plus the matching user prompt before rebinding Current. Model/effort checks, the existing durable outbox, account profile and approval controls remain intact. Schema 17 retains GPT project-send binding receipts.
+
+Active/unknown old work blocks rotation until it is resolved through the normal chat controls. A changed Core/handoff requires a fresh review. An explicit Keep previous action can abandon an uncertain transition without resending, deleting either conversation or stopping native work. Notes, Tasks, Plans, Reports, source links and files stay project-owned.
+
+Tests cover lost create/bootstrap acknowledgements, exact late evidence, changed Core, active work, concurrent confirmations, bounded maximal Core, canonical GPT membership, pre-dispatch native composer changes, old source/draft retention and Chromium/WebKit review/history workflows. Native project links are accepted from ChatGPT's rendered interface; if the project is not visible or its UI changes, preparation fails before sending and preserves the action.

@@ -6,6 +6,7 @@ import {privateState,readConnectorHealth} from './browser-health.mjs';
 import {readAsset} from './browser-assets.mjs';
 import {mutateLibrary} from './browser-library.mjs';
 import {readModels,selectModels} from './browser-models.mjs';
+import {prepareProjectSession,projectComposer} from './browser-projects.mjs';
 import {prepareSession} from './browser-session.mjs';
 import {activeConversation} from './conversation-binding.mjs';
 import {readJson,proxyBridge} from './bridge-proxy.mjs';
@@ -61,7 +62,7 @@ server=createServer(async(req,res)=>{
    const body=await readJson(req,4096),sessionId=url.pathname.endsWith('/new')?null:(body.sessionId??'');
    const headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
    const health=async()=>{const r=await fetch('http://127.0.0.1:8080/health',{headers,signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error('GPT_BRIDGE_UNAVAILABLE');return r.json()};
-   const result=await prepareSession({activePage,health,sessionId,command:async id=>{
+   const result=body.projectId && sessionId===null ? await prepareProjectSession({activePage,health,projectId:body.projectId}) : await prepareSession({activePage,health,sessionId,command:async id=>{
     const r=await fetch('http://127.0.0.1:8080/sessions/'+(id?'select':'new'),{method:'POST',headers,body:JSON.stringify(id?{sessionId:id}:{}),signal:AbortSignal.timeout(15000)});
     await r.body?.cancel();return r.ok;
    }});
@@ -84,7 +85,7 @@ server=createServer(async(req,res)=>{
   }catch{res.writeHead(409).end('{}');}
   return;
  }
- if(url.pathname.startsWith('/bridge/')){await proxyBridge(req,res,url.pathname,token);return}
+ if(url.pathname.startsWith('/bridge/')){await proxyBridge(req,res,url.pathname,token,{beforeChat:async body=>projectComposer(await activePage(),body.projectId)});return}
  if(req.method==='GET'&&url.pathname==='/asset'){
   const id=url.searchParams.get('id')??'';
   if(!/^file[-_][a-zA-Z0-9_-]{1,100}$/.test(id)){res.writeHead(400).end();return}

@@ -1,5 +1,5 @@
 import type { ProjectAction as Action, NotebookLink } from "@codex-web/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
@@ -20,15 +20,25 @@ export function ProjectActionPanel({
   onChange,
   onOpen,
   onClose,
+  showTitle = true,
 }: {
   initial: Action;
   onChange: (value: Action) => void;
   onOpen: (target: NotebookLink) => void;
-  onClose: () => void;
+  onClose?: () => void;
+  showTitle?: boolean;
 }) {
   const [value, setValue] = useState(initial),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [keepPrevious, setKeepPrevious] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const handoff = useWebHandoff(
     typeof value.snapshot.machineId === "string" ? value.snapshot.machineId : undefined,
     value.threadId ?? value.id,
@@ -63,8 +73,10 @@ export function ProjectActionPanel({
   }, [value.id, value.state, onChange]);
   const read = async () => {
     const next = await api<Action>(`/workspace/actions/${value.id}`);
-    setValue(next);
-    onChange(next);
+    if (alive.current) {
+      setValue(next);
+      onChange(next);
+    }
     return next;
   };
   const submit = async () => {
@@ -76,12 +88,14 @@ export function ProjectActionPanel({
         method: "POST",
         body: { confirm: true },
       });
-      setValue(next);
-      onChange(next);
+      if (alive.current) {
+        setValue(next);
+        onChange(next);
+      }
       return true;
     });
     await read().catch((e) => setError(messageOf(e)));
-    setBusy(false);
+    if (alive.current) setBusy(false);
   };
   const source =
     value.source ??
@@ -107,17 +121,19 @@ export function ProjectActionPanel({
             )}
             <strong>{actionLabels[value.state]}</strong>
           </span>
-          <button
-            type="button"
-            className="icon-button"
-            disabled={busy || handoff.pending}
-            aria-label="Закрыть задание"
-            onClick={onClose}
-          >
-            <Icon name="close" />
-          </button>
+          {onClose && (
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy || handoff.pending}
+              aria-label="Закрыть задание"
+              onClick={onClose}
+            >
+              <Icon name="close" />
+            </button>
+          )}
         </header>
-        <h3>{value.title}</h3>
+        {showTitle && <h3>{value.title}</h3>}
         <p className="project-action-meta">
           {value.scope.client === "codex"
             ? `Codex · ${value.settings?.model ?? ""} · Работа`
@@ -134,6 +150,52 @@ export function ProjectActionPanel({
             {error || value.error}
           </p>
         )}
+        {value.kind === "rotate" && ["blocked", "unknown"].includes(value.state) && (
+          <div className="rotation-keep">
+            {keepPrevious ? (
+              <>
+                <p>
+                  Оставить прежний чат рабочим? Уже созданный новый чат сохранится. Повторной
+                  отправки не будет.
+                </p>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => setKeepPrevious(false)}
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const next = await api<Action>(
+                        "/workspace/actions/" + value.id + "/keep-current",
+                        { method: "POST", body: { confirm: true } },
+                      );
+                      setValue(next);
+                      onChange(next);
+                    } catch (e) {
+                      setError(messageOf(e));
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Оставить прежний
+                </button>
+              </>
+            ) : (
+              <button type="button" className="secondary" onClick={() => setKeepPrevious(true)}>
+                Оставить прежний чат
+              </button>
+            )}
+          </div>
+        )}
         <div className="project-action-buttons">
           {["prepared", "blocked"].includes(value.state) && (
             <button
@@ -146,7 +208,7 @@ export function ProjectActionPanel({
               {value.state === "prepared" ? "Подтвердить и запустить" : "Повторить отправку"}
             </button>
           )}
-          {value.state === "prepared" && (
+          {["prepared", "blocked"].includes(value.state) && (
             <button
               type="button"
               className="secondary"

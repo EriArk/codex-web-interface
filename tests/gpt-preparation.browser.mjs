@@ -3,6 +3,7 @@ import { chromium, expect, webkit } from "@playwright/test";
 import { inspectComposer, readConnectorHealth } from "../ops/gpt/browser-health.mjs";
 import { selectModels } from "../ops/gpt/browser-models.mjs";
 import { dismissPromotions, inspectObstructions } from "../ops/gpt/browser-obstructions.mjs";
+import { prepareProjectSession, projectComposer } from "../ops/gpt/browser-projects.mjs";
 import { sessionReady } from "../ops/gpt/browser-session.mjs";
 
 const html = `<!doctype html><meta charset="utf-8"><form>
@@ -72,6 +73,27 @@ for (const [name, type] of [
       "starting",
       "temporary missing tab is not a logout",
     );
+    const projectId = "g-p-12345678-1234-1234-1234-123456789abc";
+    await page.evaluate((id) => {
+      const a = document.createElement("a");
+      a.href = "/g/" + id + "-fixture/project";
+      a.textContent = "Project";
+      document.body.append(a);
+    }, projectId);
+    await prepareProjectSession({
+      activePage: async () => page,
+      health: connector.health,
+      projectId,
+    });
+    assert(await projectComposer(page, projectId));
+    assert.equal(await projectComposer(page, "g-p-otherproject"), false);
+    await page
+      .getByRole("textbox")
+      .count()
+      .catch(() => {});
+    await page.locator("#prompt-textarea").fill("Native draft");
+    assert.equal(await projectComposer(page, projectId), false);
+    await page.goto("https://chatgpt.com/");
     authenticated = true;
     assert.equal((await readConnectorHealth(connector)).state, "healthy");
     assert.deepEqual(await inspectComposer(page), {

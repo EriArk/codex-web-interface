@@ -90,7 +90,7 @@ export class ProjectContext {
       scope.client === "codex"
         ? this.db
             .prepare(
-              "SELECT t.id FROM threads t WHERE t.projectId=? AND t.archived=0 AND NOT EXISTS(SELECT 1 FROM library_entities e WHERE e.client='codex' AND e.kind='thread' AND e.id=t.codexThreadId AND (json_extract(e.value,'$.deleted')=1 OR json_extract(e.value,'$.archived')=1)) ORDER BY COALESCE(t.activityAt,t.updatedAt) DESC,t.id LIMIT 1",
+              "SELECT t.id FROM threads t WHERE t.projectId=? AND t.archived=0 AND NOT EXISTS(SELECT 1 FROM library_entities e WHERE e.client='codex' AND e.kind='thread' AND e.id=t.codexThreadId AND (json_extract(e.value,'$.deleted')=1 OR json_extract(e.value,'$.archived')=1)) ORDER BY CASE WHEN t.status IN ('starting','running','waiting_approval','unknown') THEN 0 ELSE 1 END,COALESCE(t.activityAt,t.updatedAt) DESC,t.id LIMIT 1",
             )
             .all(scope.projectId)
         : this.db
@@ -112,6 +112,40 @@ export class ProjectContext {
     this.db
       .prepare("INSERT OR IGNORE INTO project_current_chats VALUES(?,?,?,?,?)")
       .run(projectKey(scope), JSON.stringify(scope), threadId, 1, Date.now());
+  }
+  rotate(scope: ProjectScope, oldId: string, newId: string) {
+    if (!this.thread(scope, newId))
+      throw new HubError(
+        409,
+        "ROTATION_BINDING_UNKNOWN",
+        "Новый чат ещё не подтверждён в этом проекте.",
+      );
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.current(scope);
+      if (current.threadId === newId) {
+        this.db.exec("COMMIT");
+        return;
+      }
+      if (current.threadId !== oldId)
+        throw new HubError(
+          409,
+          "PROJECT_CHAT_CHANGED",
+          "Рабочий чат уже изменился. Проверь оба диалога.",
+        );
+      this.db
+        .prepare("INSERT OR IGNORE INTO project_chat_history VALUES(?,?,?,?)")
+        .run(projectKey(scope), oldId, current.title, Date.now());
+      this.db
+        .prepare(
+          "INSERT INTO project_current_chats VALUES(?,?,?,?,?) ON CONFLICT(scopeKey) DO UPDATE SET threadId=excluded.threadId,revision=project_current_chats.revision+1,updatedAt=excluded.updatedAt",
+        )
+        .run(projectKey(scope), JSON.stringify(scope), newId, 1, Date.now());
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
   }
   latestReport(scope: ProjectScope): ProjectReport | null {
     const row = this.db
@@ -300,10 +334,14 @@ export function boundContext(
   for (const key of ["turns", "results", "tasks", "plans", "notes", "pins", "errors"]) {
     const rows = result[key];
     if (!Array.isArray(rows)) continue;
-    while (JSON.stringify({ ...result, omitted }).length > budget && rows.length > 1) {
+    while (JSON.stringify({ ...result, omitted }).length > budget && rows.length) {
       rows.pop();
       omitted[key] = (omitted[key] ?? 0) + 1;
     }
+  }
+  if (JSON.stringify({ ...result, omitted }).length > budget && result.previousReport?.body) {
+    result.previousReport.body = result.previousReport.body.slice(0, 1000);
+    omitted.previousReport = 1;
   }
   return { ...result, ...(Object.keys(omitted).length ? { omitted } : {}) };
 }

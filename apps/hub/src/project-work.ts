@@ -136,6 +136,10 @@ export function registerProjectWork(
     confirm.parse(req.body);
     return actions.cancel(id.parse(req.params).id);
   });
+  app.post("/api/workspace/actions/:id/keep-current", (req) => {
+    confirm.parse(req.body);
+    return actions.keepCurrent(id.parse(req.params).id);
+  });
   const timer = setInterval(() => actions.synchronize(), 3000);
   timer.unref();
   app.addHook("onClose", async () => clearInterval(timer));

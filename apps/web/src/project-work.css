@@ -383,3 +383,43 @@
 .report-body + button {
   align-self: flex-start;
 }
+
+.rotation-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(var(--app-height, 100dvh) - 28px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 12px);
+  color: var(--ink);
+  background: var(--paper);
+  overflow: auto;
+}
+.rotation-dialog::backdrop {
+  background: #0008;
+}
+.rotation-content {
+  padding: 16px;
+}
+.rotation-content > p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.overview-current-label {
+  display: block;
+  color: var(--muted);
+  padding: 8px 10px 0;
+}
+.overview-chat-history {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+}
+.overview-chat-history > summary {
+  padding: 12px 8px;
+  min-height: 44px;
+  color: var(--muted);
+  cursor: pointer;
+}

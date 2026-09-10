@@ -230,6 +230,15 @@ export const migrations: readonly Migration[] = [
  `);
     },
   },
+  {
+    version: 17,
+    name: "gpt-project-bootstrap-binding",
+    up(db) {
+      db.exec(
+        "CREATE TABLE gpt_project_jobs(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id) ON DELETE CASCADE,projectId TEXT NOT NULL,verified INTEGER NOT NULL DEFAULT 0,checkedAt INTEGER NOT NULL DEFAULT 0)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

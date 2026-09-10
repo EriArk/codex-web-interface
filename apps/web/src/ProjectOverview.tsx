@@ -5,12 +5,13 @@ import type {
   ProjectOverview as Overview,
   OverviewThread,
 } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
 import { PinnedList } from "./PinnedList";
+import { ProjectRotation } from "./ProjectRotation";
 import "./project-overview.css";
 export function ProjectOverview({
   scope,
@@ -36,7 +37,9 @@ export function ProjectOverview({
   const [data, setData] = useState<Overview | null>(null),
     [error, setError] = useState(""),
     [revision, setRevision] = useState(0),
-    [opening, setOpening] = useState(false);
+    [opening, setOpening] = useState(false),
+    [rotation, setRotation] = useState(false);
+  const rotationChanged = useCallback(() => setRevision((n) => n + 1), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh repeats a bounded cached overview read.
   useEffect(() => {
     const controller = new AbortController();
@@ -99,6 +102,53 @@ export function ProjectOverview({
         hour: "2-digit",
         minute: "2-digit",
       });
+  const current = data?.currentChat;
+  const currentRow = current?.threadId
+    ? (threads.find((t) => t.id === current.threadId) ?? {
+        id: current.threadId,
+        title: current.title,
+        status: current.status,
+        active: ["running", "starting", "waiting_approval"].includes(current.status),
+        unread: false,
+      })
+    : null;
+  const threadButton = (t: {
+    id: string;
+    title: string;
+    status: string;
+    active: boolean;
+    unread: boolean;
+  }) => (
+    <button
+      type="button"
+      className="overview-row"
+      key={t.id}
+      data-thread-id={t.id}
+      disabled={opening}
+      onClick={() =>
+        void open({
+          client: scope.client,
+          kind: "thread",
+          id: t.id,
+          threadId: t.id,
+          projectId: scope.projectId,
+          title: t.title,
+        })
+      }
+    >
+      <Icon name="chat" />
+      <span>
+        {t.title}
+        {t.status === "unknown" && <small>Статус неизвестен</small>}
+      </span>
+      <ActivityBadge
+        active={Number(t.active)}
+        unread={Number(t.unread)}
+        waiting={Number(t.status === "waiting_approval")}
+      />
+      <Icon name="chevron" size={15} />
+    </button>
+  );
   return (
     <section className="project-overview pane" aria-label={`Обзор проекта ${scope.name}`}>
       <header className="project-overview-heading">
@@ -135,38 +185,50 @@ export function ProjectOverview({
                   <ActivityBadge active={data.activity.active} unread={data.activity.unread} />
                 )}
               </header>
-              {threads.slice(0, 4).map((t) => (
-                <button
-                  type="button"
-                  className="overview-row"
-                  key={t.id}
-                  disabled={opening}
-                  onClick={() =>
-                    void open({
-                      client: scope.client,
-                      kind: "thread",
-                      id: t.id,
-                      threadId: t.id,
-                      projectId: scope.projectId,
-                      title: t.title,
-                    })
-                  }
-                >
-                  <Icon name="chat" />
-                  <span>
-                    {t.title}
-                    {t.status === "unknown" && <small>Статус неизвестен</small>}
-                  </span>
-                  <ActivityBadge
-                    active={Number(t.active)}
-                    unread={Number(t.unread)}
-                    waiting={Number(t.status === "waiting_approval")}
-                  />
-                  <Icon name="chevron" size={15} />
-                </button>
-              ))}
+              {currentRow ? (
+                <>
+                  <small className="overview-current-label">Текущий чат</small>
+                  {threadButton(currentRow)}
+                  <button type="button" className="secondary" onClick={() => setRotation(true)}>
+                    <Icon name="history" size={18} />
+                    Продолжить в новом чате
+                  </button>
+                  {!!current?.history.length && (
+                    <details className="overview-chat-history">
+                      <summary>Предыдущие чаты · {current.history.length}</summary>
+                      {current.history.map((t) =>
+                        threadButton({
+                          ...t,
+                          id: t.threadId,
+                          status: "idle",
+                          active: false,
+                          unread: false,
+                        }),
+                      )}
+                    </details>
+                  )}
+                  {threads.some(
+                    (t) =>
+                      t.id !== currentRow.id && !current?.history.some((h) => h.threadId === t.id),
+                  ) && (
+                    <details className="overview-chat-history">
+                      <summary>Другие чаты</summary>
+                      {threads
+                        .filter(
+                          (t) =>
+                            t.id !== currentRow.id &&
+                            !current?.history.some((h) => h.threadId === t.id),
+                        )
+                        .slice(0, 10)
+                        .map(threadButton)}
+                    </details>
+                  )}
+                </>
+              ) : (
+                threads.slice(0, 4).map(threadButton)
+              )}
               {!threads.length && <p className="muted">Пока нет диалогов.</p>}
-              {onNew && (
+              {onNew && !currentRow && (
                 <button type="button" className="secondary" onClick={onNew}>
                   <Icon name="plus" />
                   Новый диалог
@@ -462,6 +524,14 @@ export function ProjectOverview({
           </div>
         )}
       </div>
+      {rotation && (
+        <ProjectRotation
+          scope={scope}
+          onClose={() => setRotation(false)}
+          onOpen={onTarget}
+          onChanged={rotationChanged}
+        />
+      )}
     </section>
   );
 }
