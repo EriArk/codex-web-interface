@@ -50,7 +50,8 @@ try {
     try {
       const attempts = [];
       let mode = "lost",
-        polls = 0;
+        polls = 0,
+        catalogFailures = 0;
       const accepted = new Map();
       const page = await context.newPage();
       await page.route("https://outbox.test/**", async (route) => {
@@ -64,7 +65,24 @@ try {
             body: '<!doctype html><meta charset="utf-8"><div id="root"></div><link rel="stylesheet" href="/fixture.css"><script src="/fixture.js"></script>',
           });
         if (path === "/api/gpt/status")
-          return route.fulfill({ json: { configured: true, canSend: true, state: "healthy" } });
+          return route.fulfill({
+            json:
+              mode === "attention"
+                ? {
+                    configured: true,
+                    canSend: false,
+                    state: "attention",
+                    message: "В ChatGPT открыто окно, требующее внимания.",
+                  }
+                : { configured: true, canSend: true, state: "healthy" },
+          });
+        if (path === "/api/gpt/conversations" && mode === "catalog-fail") {
+          catalogFailures++;
+          return route.fulfill({
+            status: 503,
+            json: { error: { code: "GPT_CONNECTION_LOST", message: "Temporary catalog outage" } },
+          });
+        }
         if (path === "/api/gpt/models")
           return route.fulfill({
             json: {
@@ -161,6 +179,36 @@ try {
       console.log(
         name +
           ": timed-out write never replays automatically; explicit retry reconciles the saved receipt",
+      );
+      mode = "catalog-fail";
+      await page.evaluate(() => window.dispatchEvent(new Event("private-session-ended")));
+      await page.reload();
+      await expect.poll(() => catalogFailures).toBeGreaterThan(0);
+      await page.clock.runFor(12000);
+      await expect.poll(() => catalogFailures).toBeGreaterThan(2);
+      await expect(page.locator(".global-notice")).toBeVisible();
+      const beforeRecovery = attempts.length;
+      mode = "ok";
+      await page.clock.runFor(16000);
+      await expect(page.locator(".global-notice")).toHaveCount(0);
+      assert.equal(attempts.length, beforeRecovery, "metadata recovery never replays a send");
+      console.log(name + ": metadata loads recover automatically and clear only their own notice");
+      await editor.fill("Draft while native dialog is open");
+      mode = "attention";
+      await page.clock.runFor(10000);
+      await expect(
+        page.locator(".gpt-connection-notice").getByRole("link", { name: "Открыть" }),
+      ).toHaveAttribute("href", "/gpt-connect");
+      await expect(button).toBeDisabled();
+      await expect(editor).toHaveValue("Draft while native dialog is open");
+      await page.screenshot({ path: `.local/qa-gpt-outbox/attention-${name}.png` });
+      mode = "ok";
+      await page.clock.runFor(10000);
+      await expect(page.locator(".gpt-connection-notice")).toHaveCount(0);
+      await expect(button).toBeEnabled();
+      assert.equal(attempts.length, beforeRecovery);
+      console.log(
+        name + ": native attention has a direct Open action and preserves an unsent draft",
       );
     } finally {
       await context.close();

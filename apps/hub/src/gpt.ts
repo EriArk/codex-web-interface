@@ -192,6 +192,13 @@ export class GptService {
             "ChatGPT отклонил сообщение до отправки. Текст и файлы сохранены.",
             400,
           );
+        if (["/settings", "/bridge/sessions/new", "/bridge/sessions/select"].includes(path)) {
+          const reason = response.headers.get("x-codex-gpt-preparation");
+          if (reason === "attention")
+            throw error("GPT_UI_ATTENTION", "В ChatGPT открыто окно, требующее внимания.");
+          if (reason === "timeout")
+            throw error("GPT_PREPARATION_TIMEOUT", "ChatGPT не успел подготовить поле ввода.");
+        }
         if (path === "/library" && response.status === 429)
           throw error(
             "GPT_PIN_LIMIT",
@@ -217,7 +224,15 @@ export class GptService {
     }
   }
   async json(path: string, body?: unknown): Promise<Json> {
-    return (await this.response(path, body)).json();
+    return (
+      await this.response(
+        path,
+        body,
+        ["/settings", "/models", "/bridge/sessions/new", "/bridge/sessions/select"].includes(path)
+          ? 60000
+          : 30000,
+      )
+    ).json();
   }
   async pins() {
     const raw = await this.json("/pins");
@@ -836,19 +851,30 @@ export class GptService {
       if (!done && this.job(jobId).status !== "cancelled") throw Error("GPT_STREAM_ENDED");
     } catch (cause) {
       const rejected = cause instanceof HubError && cause.code === "GPT_CHAT_NOT_SUBMITTED";
-      if (!dispatched && preparing === "settings") this.compatibilityFailure = true;
+      if (
+        !dispatched &&
+        preparing === "settings" &&
+        !(
+          cause instanceof HubError &&
+          ["GPT_UI_ATTENTION", "GPT_PREPARATION_TIMEOUT"].includes(cause.code)
+        )
+      )
+        this.compatibilityFailure = true;
       if (!done && this.job(jobId).status !== "cancelled")
         this.update(jobId, {
           status: dispatched && !rejected ? "unknown" : "failed",
-          error: rejected
-            ? cause.message
-            : dispatched
-              ? "ChatGPT не подтвердил завершение. Проверь чат перед повторной отправкой."
-              : preparing === "settings"
-                ? "Не удалось выбрать модель или режим в ChatGPT. Текст и файлы сохранены."
-                : preparing === "session"
-                  ? "Не удалось открыть чат в ChatGPT. Текст и файлы сохранены."
-                  : "Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены.",
+          error:
+            cause instanceof HubError && cause.code === "GPT_UI_ATTENTION"
+              ? cause.message + " Текст и файлы сохранены."
+              : rejected
+                ? cause.message
+                : dispatched
+                  ? "ChatGPT не подтвердил завершение. Проверь чат перед повторной отправкой."
+                  : preparing === "settings"
+                    ? "Не удалось выбрать модель или режим в ChatGPT. Текст и файлы сохранены."
+                    : preparing === "session"
+                      ? "Не удалось открыть чат в ChatGPT. Текст и файлы сохранены."
+                      : "Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены.",
         });
     } finally {
       if (monitor) clearInterval(monitor);

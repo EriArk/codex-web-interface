@@ -57,6 +57,8 @@ services:
     image: codex-web-gpt:${GPT_REVISION:-local}
     build:
       context: ../gpt
+      args:
+        SOURCE_REVISION: ${GPT_REVISION:-unknown}
     container_name: codex-web-gpt-connect
     environment:
       GPT_UPLOAD_MAX_BYTES: ${GPT_UPLOAD_MAX_BYTES:-2147483648}
@@ -67,7 +69,10 @@ services:
     user: "1000:1000"
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    mem_limit: 1g
+    # Long native ChatGPT threads can exceed 1 GiB in Chromium alone.
+    mem_limit: ${GPT_MEMORY_LIMIT:-2g}
+    memswap_limit: ${GPT_MEMORY_SWAP_LIMIT:-3g}
+    stop_grace_period: 30s
     cpus: 1
     shm_size: 256m
     ports: ["127.0.0.1:8786:8786"]

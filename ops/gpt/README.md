@@ -65,3 +65,11 @@ Doctor includes the normalized state, pinned versions, active/unknown counts and
 The pinned bridge's `/chat` and `/sessions/:id/messages` HTTP guards are patched to accept attachments without text, matching its native extension behavior. No placeholder prompt is inserted. Image normalization, attachment readiness and the exact file list remain enforced. The image build runs `verify-bridge.mjs` against the actual pinned router with an isolated fake writer; empty, whitespace-only and text-plus-three-image sends are checked without an account.
 
 Only the bridge's exact pre-dispatch validation refusal receives `X-Codex-Gpt-Dispatch: not-submitted` on the private connector contract. The Hub keeps that job failed with its text/files available for explicit retry. Other HTTP errors, stream errors and dropped confirmations remain unknown and are never replayed automatically. No adapter diagnostics are included in the public job.
+
+## Browser resilience
+
+The optional browser container defaults to 2 GiB RAM (3 GiB including swap), configurable with GPT_MEMORY_LIMIT/GPT_MEMORY_SWAP_LIMIT. The owner's 1 GiB container hit a cgroup OOM that killed Chromium on 2026-09-09; a parent process can restart without Docker reporting OOMKilled=true. Inspect kernel/cgroup events as well as container state. Execution stays on Linux.
+
+Chrome starts with its crash-restore bubble suppressed, without changing the persistent profile or login. Shutdown has a 30-second grace period. Before session/model preparation, the connector dismisses only recognized promotional dialogs using their native Close/Not now controls. Login, payment, consent, deletion, editable and unknown dialogs remain intact and produce an Open ChatGPT action. Read-only health probes never click controls.
+
+Session preparation tolerates document/extension replacement, waits for the exact target and dispatches at most one navigation command. It never retries a prompt. Preparation diagnostics contain fixed stage codes, not DOM excerpts or account contents.

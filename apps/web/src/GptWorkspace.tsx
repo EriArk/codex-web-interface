@@ -214,6 +214,7 @@ export function GptWorkspace({
     [files, setFiles] = useState<GptFile[]>([]),
     [busy, setBusy] = useState(false),
     [uploading, setUploading] = useState(false);
+  const [loadNotice, setLoadNotice] = useState("");
   const [notice, setNotice] = useState(""),
     [drawer, setDrawer] = useState(false),
     [settings, setSettings] = useState(false),
@@ -334,26 +335,43 @@ export function GptWorkspace({
     };
   }, [catalog, items]);
   useEffect(() => {
-    let disposed = false;
-    void action(async () => {
-      const request = ++connectionRequest.current;
-      const status = await api<GptConnection>("/gpt/status");
-      if (disposed) return;
-      if (request === connectionRequest.current) {
-        setConnection(status);
-        setReady(status.canSend);
+    let disposed = false,
+      attempt = 0;
+    let retry: ReturnType<typeof setTimeout>;
+    const load = async () => {
+      try {
+        const request = ++connectionRequest.current;
+        const status = await api<GptConnection>("/gpt/status");
+        if (disposed) return;
+        if (request === connectionRequest.current) {
+          setConnection(status);
+          setReady(status.canSend);
+        }
+        if (!status.configured) {
+          setLoadNotice("Подключение GPT ещё не настроено.");
+          return;
+        }
+        await catalog(false, 0, false);
+        if (disposed) return;
+        if (!status.canSend && !gptCache.models) {
+          retry = setTimeout(() => void load(), 5000);
+          return;
+        }
+        const result = gptCache.models ?? (await api<GptModels>("/gpt/models"));
+        if (disposed) return;
+        setModels(result);
+        setModel((old) => old || result.currentModel);
+        setEffort((old) => old || result.currentEffort);
+        setLoadNotice("");
+      } catch (error) {
+        if (disposed) return;
+        attempt++;
+        if (attempt >= 3) setLoadNotice(messageOf(error));
+        // Only read catalog/settings metadata again; never repeat an action or send.
+        retry = setTimeout(() => void load(), Math.min(15000, attempt * 2000));
       }
-      if (!status.configured) {
-        setNotice("Подключение GPT ещё не настроено.");
-        return;
-      }
-      await catalog(false, 0, false);
-      const result = gptCache.models ?? (await api<GptModels>("/gpt/models"));
-      if (disposed) return;
-      setModels(result);
-      setModel((old) => old || result.currentModel);
-      setEffort((old) => old || result.currentEffort);
-    });
+    };
+    void load();
     if (Date.now() - gptCache.projectsAt >= 30000)
       void api<{ items: GptProject[]; conversations: GptConversation[] }>("/gpt/projects")
         .then((data) => {
@@ -368,8 +386,9 @@ export function GptWorkspace({
         .catch(() => {});
     return () => {
       disposed = true;
+      clearTimeout(retry);
     };
-  }, [catalog, action]);
+  }, [catalog]);
   useLayoutEffect(() => {
     try {
       if (selected) localStorage.setItem("gpt-conversation", selected);
@@ -1210,14 +1229,17 @@ export function GptWorkspace({
           <Icon name="settings" />
         </button>
       </header>
-      {notice && (
+      {(notice || loadNotice) && (
         <div className="global-notice" role="status">
-          <span>{notice}</span>
+          <span>{notice || loadNotice}</span>
           <button
             type="button"
             className="icon-button"
             aria-label="Закрыть уведомление"
-            onClick={() => setNotice("")}
+            onClick={() => {
+              setNotice("");
+              setLoadNotice("");
+            }}
           >
             <Icon name="close" />
           </button>
@@ -1371,9 +1393,9 @@ export function GptWorkspace({
             {connection && !connection.canSend && (
               <div className="gpt-connection-notice" role="status">
                 <span>{connection.message}</span>
-                {connection.state === "login_required" ? (
+                {["login_required", "attention"].includes(connection.state) ? (
                   <a className="secondary" href="/gpt-connect">
-                    Войти
+                    {connection.state === "attention" ? "Открыть" : "Войти"}
                   </a>
                 ) : (
                   <button

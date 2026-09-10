@@ -10,8 +10,11 @@ import {prepareSession} from './browser-session.mjs';
 import {readJson,proxyBridge} from './bridge-proxy.mjs';
 import {timingSafeEqual} from 'node:crypto';
 import {chromium} from 'playwright';
-const children=[];let closing=false;
-const start=(cmd,args)=>{const child=spawn(cmd,args,{stdio:['ignore','ignore','ignore']});children.push(child);child.on('error',()=>process.exit(1));child.on('exit',()=>{if(!closing&&!args.includes('-storepasswd'))process.exit(1)});return child};
+const children=[];let closing=false,context,server;
+const start=(cmd,args)=>{const child=spawn(cmd,args,{stdio:['ignore','ignore','ignore']});children.push(child);child.on('error',()=>void close('child-start-'+cmd,1));child.on('exit',(code,signal)=>{if(!closing&&!args.includes('-storepasswd'))void close('child-exit-'+cmd+'-'+(signal||code),1)});return child};
+process.on('SIGTERM',()=>void close('SIGTERM'));process.on('SIGINT',()=>void close('SIGINT'));
+process.on('unhandledRejection',()=>void close('unhandled-rejection',1));
+process.on('uncaughtException',()=>void close('uncaught-exception',1));
 // The entrypoint holds /data/browser.lock exclusively across the process lifetime.
 mkdirSync('/data/profile',{recursive:true,mode:0o700});
 for(const path of ['/tmp/.X91-lock','/tmp/.X11-unix/X91','/data/profile/SingletonLock','/data/profile/SingletonCookie','/data/profile/SingletonSocket']){
@@ -29,8 +32,9 @@ start('node',['/opt/gpt/bridge.mjs']);
 const password=readFileSync('/data/vnc-password','utf8').trim();
 await new Promise((resolve,reject)=>{const p=start('x11vnc',['-storepasswd',password,'/data/vnc-auth']);p.once('exit',code=>code===0?resolve():reject(Error('VNC password setup failed')))});
 start('x11vnc',['-display',':91','-rfbauth','/data/vnc-auth','-rfbport','5900','-forever','-shared','-noxdamage','-repeat']);
-const context=await chromium.launchPersistentContext('/data/profile',{channel:'chromium',headless:false,viewport:null,args:['--window-size=480,900','--start-maximized','--disable-extensions-except=/opt/bridge/tools/chrome-bridge-extension','--load-extension=/opt/bridge/tools/chrome-bridge-extension']});
-context.browser()?.on('disconnected',()=>{if(!closing)process.exit(1)});
+context=await chromium.launchPersistentContext('/data/profile',{channel:'chromium',headless:false,viewport:null,args:['--hide-crash-restore-bubble','--no-first-run','--no-default-browser-check','--window-size=480,900','--start-maximized','--disable-extensions-except=/opt/bridge/tools/chrome-bridge-extension','--load-extension=/opt/bridge/tools/chrome-bridge-extension']});
+context.on('close',()=>{if(!closing)void close('browser-closed',1)});
+context.on('page',page=>page.on('crash',()=>console.error('GPT lifecycle: page-crashed')));
 const bridgeToken=readFileSync('/data/bridge-token','utf8').trim();
 await context.addInitScript(value=>{if(location.origin==='https://chatgpt.com'){localStorage.setItem('chatgptBridge:bridge.serverUrl',JSON.stringify('http://127.0.0.1:8080'));localStorage.setItem('chatgptBridge:bridge.token',JSON.stringify(value));localStorage.setItem('chatgptBridge:bridge.debug','false')}},bridgeToken);
 const page=context.pages()[0]??await context.newPage();
@@ -47,7 +51,7 @@ async function activePage(){
 }
 function authorized(req){const v=Buffer.from(req.headers.authorization??''),expected=Buffer.from('Bearer '+token);return v.length===expected.length&&timingSafeEqual(v,expected)}
 const storageState=privateState();
-const server=createServer(async(req,res)=>{
+server=createServer(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!authorized(req)){res.writeHead(401).end();return}
  const url=new URL(req.url,'http://localhost');
@@ -61,7 +65,7 @@ const server=createServer(async(req,res)=>{
     await r.body?.cancel();return r.ok;
    }});
    res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));
-  }catch{res.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'GPT_SESSION_NOT_READY'}))}
+  }catch(error){console.error('GPT preparation:',error?.message==='GPT_UI_ATTENTION'?'GPT_UI_ATTENTION':'GPT_SESSION_NOT_READY');res.writeHead(409,{'Content-Type':'application/json','X-Codex-Gpt-Preparation':error?.message==='GPT_UI_ATTENTION'?'attention':'session-not-ready'}).end(JSON.stringify({error:'GPT_SESSION_NOT_READY'}))}
   return;
  }
  if(req.method==='POST'&&url.pathname==='/uploads/release'){
@@ -117,7 +121,7 @@ const server=createServer(async(req,res)=>{
    const target=await activePage();
    const result=await selectModels(target,settings);
    res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));
-  }catch(error){console.error('GPT settings:',String(error?.message).slice(0,300));res.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'GPT_SETTINGS_NOT_CONFIRMED'}))}
+  }catch(error){const reason=error?.message==='GPT_UI_ATTENTION'?'attention':(error?.name==='TimeoutError'||/Execution context was destroyed|Target.*closed|Cannot find context/i.test(error?.message??''))?'timeout':'settings-not-confirmed';console.error('GPT settings:',reason);res.writeHead(409,{'Content-Type':'application/json','X-Codex-Gpt-Preparation':reason}).end(JSON.stringify({error:'GPT_SETTINGS_NOT_CONFIRMED'}))}
   return;
  }
  if(req.method!=='GET'||!['/status','/catalog','/conversation','/bridge-health','/models','/projects','/active','/pins','/project'].includes(url.pathname)){res.writeHead(404).end();return}
@@ -170,6 +174,13 @@ const server=createServer(async(req,res)=>{
  }catch{res.statusCode=503;res.end(JSON.stringify({error:'GPT_BROWSER_UNAVAILABLE'}))}
 });
 server.listen(8786,'0.0.0.0');
-async function close(){if(closing)return;closing=true;server.close();await context.close().catch(()=>{});for(const p of children)if(p.exitCode===null)p.kill();process.exit(0)}
-process.on('SIGTERM',close);process.on('SIGINT',close);
+async function close(reason='signal',code=0){
+ if(closing)return;closing=true;console.error('GPT lifecycle:',reason);
+ server?.close();
+ let timer;
+ await Promise.race([context?.close().catch(()=>{}),new Promise(resolve=>{timer=setTimeout(resolve,15000)})]);
+ clearTimeout(timer);
+ for(const p of children)if(p.exitCode===null)p.kill();
+ process.exit(code);
+}
 console.log('GPT connection browser ready');

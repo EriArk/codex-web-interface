@@ -371,3 +371,11 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Support reading a reply while the iPhone screen is locked through an optional local Linux speech worker and one private audio track. Keep system-voice fallback; actual iPhone verification remains the owner's physical-device check. Text/audio never goes to a third-party speech service.
 - Remove Remote from workspace tabs. Place an icon-only Remote shortcut beside the Codex/GPT branding in each sidebar. An explicit click connects and opens the full available viewport, with a clear way back and floating controls.
+
+
+## Owner-requested GPT stability priority (2026-09-10)
+
+- Stabilize GPT before the project-workspace expansion (#83-#89). Preserve native features, drafts, and the single-password experience.
+- Suppress Chromium crash-restore UI on startup without modifying login/profile data. Keep browser memory sufficient for real long conversations and log process exits with fixed, non-content diagnostic codes.
+- During explicit GPT preparation, dismiss recognized optional ChatGPT promotions through native negative/close controls. Leave login, consent, payment, editable and unknown dialogs to the owner with a direct connection-page action.
+- Transient navigation/context replacement and metadata-read failures should recover without stale warning banners. Never replay an uncertain send or silently bypass model/effort verification.
