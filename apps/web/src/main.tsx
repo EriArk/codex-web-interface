@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { applyLayoutPreference } from "./AppearanceSettings";
 import { applyTheme, cachedTheme } from "./theme";
 import "./fonts.css";
 import "./styles.css";
@@ -9,8 +10,11 @@ import "./compact.css";
 import "./queue.css";
 import "./messageImages.css";
 import "./motion.css";
+import "./materials.css";
+import "./tablet.css";
 
 applyTheme(cachedTheme());
+applyLayoutPreference();
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing root");
 createRoot(root).render(<App />);

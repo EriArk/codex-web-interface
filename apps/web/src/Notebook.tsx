@@ -634,7 +634,9 @@ function NotebookEditor({
               onClick={() => void pin(request.target!, request.scope)}
             >
               <Icon name="results" />
-              Сохранить ссылку: {request.target.title}
+              <span>
+                Сохранить ссылку<small>{request.target.title}</small>
+              </span>
             </button>
           )}
           <PinnedList
@@ -963,13 +965,15 @@ function NotebookEditor({
                   ) && (
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary notebook-context"
                       disabled={busy}
                       onClick={() =>
                         change({ links: [...edit.links, cleanTarget(request.target!)] })
                       }
                     >
-                      Добавить ссылку: {request.target.title}
+                      <span>
+                        Добавить ссылку<small>{request.target.title}</small>
+                      </span>
                     </button>
                   )}
               </div>
