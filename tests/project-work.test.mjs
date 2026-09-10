@@ -164,6 +164,7 @@ test("reports advance their durable checkpoint only with confirmed completion an
     ...f.store.preferences(),
     projectGit: {
       project: {
+        root: f.sessions.project("project").workingDirectory,
         repository: true,
         branch: "main",
         dirty: true,
@@ -339,4 +340,137 @@ test("GPT reports never attach an identical older assistant message as the new r
     assert.equal(report.source.messageId, recent ? "new-final" : undefined);
     assert.equal(report.body, "Готово");
   }
+});
+
+test("parallel preparation shares one receipt and survives project rename", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const { GptService } = await import("../apps/hub/dist/gpt.js");
+  const { ProjectActions } = await import("../apps/hub/dist/project-actions.js");
+  const gpt = new GptService(f.sessions.config, f.store);
+  t.after(() => gpt.close());
+  const projectId = "g-p-" + randomUUID(),
+    nativeId = randomUUID(),
+    scope = { client: "gpt", projectId, name: "Before" };
+  gpt.library.save("project", projectId, { name: scope.name });
+  gpt.library.save("thread", nativeId, { projectId, name: "Current" });
+  let release;
+  let calls = 0;
+  const gate = new Promise((r) => (release = r));
+  gpt.models = async () => {
+    calls++;
+    await gate;
+    return { currentModel: "Latest", currentEffort: "2" };
+  };
+  const actions = new ProjectActions(f.sessions, gpt, {}),
+    id = randomUUID();
+  const first = actions.prepare(id, { scope, kind: "report" });
+  const second = actions.prepare(id, { scope, kind: "report" });
+  release();
+  const both = await Promise.allSettled([first, second]);
+  assert.deepEqual(
+    both.map((r) => r.status),
+    ["fulfilled", "fulfilled"],
+  );
+  assert.equal(calls, 1);
+  const renamed = await actions.prepare(id, { scope: { ...scope, name: "After" }, kind: "report" });
+  assert.equal(renamed.id, id);
+  assert.equal(renamed.text, both[0].value.text);
+  await assert.rejects(
+    actions.prepare(id, { scope, kind: "rotate" }),
+    (e) => e.code === "ACTION_KEY_REUSED",
+  );
+});
+
+test("a missing Current can be explicitly repaired without sending or losing old links", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const { ProjectContext } = await import("../apps/hub/dist/project-context.js");
+  const context = new ProjectContext(f.sessions, {});
+  context.adopt(scope, f.thread.id);
+  f.store.db.prepare("UPDATE threads SET archived=1 WHERE id=?").run(f.thread.id);
+  const next = f.store.createThread("project", randomUUID(), "Replacement");
+  assert.equal(context.current(scope).threadId, null);
+  const body = { scope, threadId: next.id, revision: 1, confirm: true };
+  for (const [headers, status] of [
+    [{}, 401],
+    [{ cookie: f.headers.cookie, origin: f.headers.origin }, 403],
+  ]) {
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/api/workspace/current/restore",
+      headers,
+      payload: body,
+    });
+    assert.equal(response.statusCode, status);
+  }
+  const a = await request(f, "POST", "/api/workspace/current/restore", body);
+  assert.equal(a.status, 200, JSON.stringify(a.data));
+  assert.equal(a.data.threadId, next.id);
+  assert.equal(a.data.revision, 2);
+  assert(a.data.history.some((h) => h.threadId === f.thread.id));
+  assert.equal((await request(f, "POST", "/api/workspace/current/restore", body)).data.revision, 2);
+  assert.equal(
+    (await request(f, "POST", "/api/workspace/current/restore", { ...body, threadId: f.thread.id }))
+      .status,
+    409,
+  );
+  assert.equal(f.calls.filter((c) => ["turn/start", "thread/start"].includes(c.method)).length, 0);
+});
+
+test("report context excludes cached Git observations from an old project directory", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  f.store.setPreferences({
+    projectGit: {
+      project: {
+        root: "C:\\previous",
+        repository: true,
+        branch: "old-branch",
+        dirty: false,
+        changed: 0,
+        checkedAt: Date.now(),
+      },
+    },
+  });
+  const { action } = await prepare(f, "report");
+  assert.equal(action.snapshot.context.cachedGit, undefined);
+});
+
+test("GPT Current repair respects membership and unresolved native receipts", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const { GptService } = await import("../apps/hub/dist/gpt.js");
+  const { ProjectActions } = await import("../apps/hub/dist/project-actions.js");
+  const gpt = new GptService(f.sessions.config, f.store);
+  t.after(() => gpt.close());
+  gpt.models = async () => ({ currentModel: "Latest", currentEffort: "2" });
+  const projectId = "g-p-" + randomUUID(),
+    oldId = randomUUID(),
+    nextId = randomUUID(),
+    wrongId = randomUUID();
+  const scope = { client: "gpt", projectId, name: "GPT project" };
+  gpt.library.save("project", projectId, { name: scope.name });
+  gpt.library.save("thread", oldId, { name: "Current", projectId });
+  gpt.library.save("thread", nextId, { name: "Replacement", projectId });
+  gpt.library.save("thread", wrongId, { name: "Other project", projectId: "different" });
+  const actions = new ProjectActions(f.sessions, gpt, {}),
+    context = actions.context;
+  context.adopt(scope, oldId);
+  const action = await actions.prepare(randomUUID(), { scope, kind: "report" });
+  f.store.db.prepare("UPDATE project_work_actions SET state='unknown' WHERE id=?").run(action.id);
+  gpt.library.save("thread", oldId, { name: "Current", projectId, deleted: true });
+  assert.throws(
+    () => context.restoreCurrent(scope, wrongId, 1),
+    (e) => e.code === "PROJECT_CHAT_CHANGED",
+  );
+  assert.throws(
+    () => context.restoreCurrent(scope, nextId, 1),
+    (e) => e.code === "PROJECT_ACTION_PENDING",
+  );
+  assert.equal(context.current(scope).revision, 1);
+  f.store.db.prepare("UPDATE project_work_actions SET state='cancelled' WHERE id=?").run(action.id);
+  assert.equal(context.restoreCurrent(scope, nextId, 1).threadId, nextId);
+  assert.equal(f.store.db.prepare("SELECT count(*) n FROM gpt_jobs").get().n, 0);
+  assert.equal(f.calls.length, 0);
 });

@@ -98,6 +98,7 @@ export function ProjectWorkPanel({
     [report, setReport] = useState<ProjectReport | null>(null),
     [action, setAction] = useState<ProjectAction | null>(null),
     [conflict, setConflict] = useState<ProjectPlan | null>(null),
+    [deleted, setDeleted] = useState(false),
     [confirm, setConfirm] = useState<{
       kind: "plan" | "section";
       id: string;
@@ -227,6 +228,7 @@ export function ProjectWorkPanel({
     setAction(null);
     setConfirm(null);
     setConflict(null);
+    setDeleted(false);
     setReferences(null);
     setError("");
     if (mode === "reports") {
@@ -251,6 +253,14 @@ export function ProjectWorkPanel({
       } else if (value.revision !== local.revision) setConflict(value);
     } catch (e) {
       if (!local) throw e;
+      if (
+        mounted.current &&
+        generation.current === version &&
+        local.revision > 0 &&
+        e instanceof ApiError &&
+        e.status === 404
+      )
+        setDeleted(true);
     }
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit source selection is consumed once, not on each metadata poll.
@@ -258,6 +268,8 @@ export function ProjectWorkPanel({
     if (request.itemId) void load(request.itemId).catch((e) => setError(messageOf(e)));
   }, [request.itemId]);
   const create = () => {
+    generation.current++;
+    setDeleted(false);
     setReport(null);
     setAction(null);
     setConflict(null);
@@ -304,15 +316,29 @@ export function ProjectWorkPanel({
         setDraft({ ...value, changedAt: value.updatedAt });
         setDirty(false);
         setConflict(null);
+        setDeleted(false);
         setStatus("Сохранено");
         refreshDrafts();
         setRevision((n) => n + 1);
       }
       return value;
     } catch (e) {
-      if (e instanceof ApiError && e.code === "PLAN_CONFLICT") {
-        const current = await api<ProjectPlan>("/workspace/plans/" + id);
-        if (mounted.current) setConflict(current);
+      if (mounted.current && generation.current === version && e instanceof ApiError) {
+        if (e.code === "PLAN_DELETED") setDeleted(true);
+        else if (e.code === "PLAN_CONFLICT") {
+          try {
+            const current = await api<ProjectPlan>("/workspace/plans/" + id);
+            if (mounted.current && generation.current === version) setConflict(current);
+          } catch (readError) {
+            if (
+              mounted.current &&
+              generation.current === version &&
+              readError instanceof ApiError &&
+              readError.status === 404
+            )
+              setDeleted(true);
+          }
+        }
       }
       throw e;
     }
@@ -518,6 +544,7 @@ export function ProjectWorkPanel({
                         setDirty(true);
                         setAction(null);
                         setConflict(null);
+                        setDeleted(false);
                       }}
                     >
                       {d.title || "Без названия"}
@@ -1043,6 +1070,23 @@ export function ProjectWorkPanel({
                   </button>
                 </div>
               )}
+              {deleted && (
+                <div className="notice" role="alert">
+                  <p>План удалён на другом устройстве. Черновик сохранён.</p>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await save(undefined, true);
+                      })
+                    }
+                  >
+                    Сохранить как новый
+                  </button>
+                </div>
+              )}
               <label className="plan-owner-status">
                 <input
                   type="checkbox"
@@ -1108,7 +1152,7 @@ export function ProjectWorkPanel({
                   <button
                     type="button"
                     className="secondary"
-                    disabled={busy || !draft.title.trim() || !draft.scope || !!conflict}
+                    disabled={busy || !draft.title.trim() || !draft.scope || !!conflict || deleted}
                     onClick={() =>
                       void run(async () => {
                         await save();
@@ -1126,6 +1170,7 @@ export function ProjectWorkPanel({
                       !draft.title.trim() ||
                       !draft.scope ||
                       !!conflict ||
+                      deleted ||
                       draft.status === "done" ||
                       !draft.sections.some((s) => s.items.some((i) => !i.checked && i.text.trim()))
                     }

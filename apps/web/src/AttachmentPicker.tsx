@@ -14,7 +14,12 @@ export function useAttachments(threadId: string) {
   const current = useRef(threadId);
   current.current = threadId;
   const inFlight = useRef(false);
+  const inventory = useRef<{ threadId: string; cleared: boolean; removed: Set<string> } | null>(
+    null,
+  );
   useEffect(() => {
+    const load = { threadId, cleared: false, removed: new Set<string>() };
+    inventory.current = load;
     if (!threadId) {
       setFiles([]);
       return;
@@ -24,7 +29,12 @@ export function useAttachments(threadId: string) {
     setError("");
     void api<{ attachments: Attachment[] }>(`/threads/${threadId}/attachments`)
       .then((value) => {
-        if (!disposed) setFiles(value.attachments);
+        if (!disposed && !load.cleared)
+          setFiles((old) =>
+            [
+              ...new Map([...value.attachments, ...old].map((file) => [file.id, file])).values(),
+            ].filter((file) => !load.removed.has(file.id)),
+          );
       })
       .catch((e) => {
         if (!disposed) setError(messageOf(e));
@@ -99,7 +109,10 @@ export function useAttachments(threadId: string) {
     const thread = threadId;
     try {
       await api(`/attachments/${id}`, { method: "DELETE" });
-      if (current.current === thread) setFiles((old) => old.filter((f) => f.id !== id));
+      if (current.current === thread) {
+        inventory.current?.removed.add(id);
+        setFiles((old) => old.filter((f) => f.id !== id));
+      }
     } catch (e) {
       if (current.current === thread) setError(messageOf(e));
     } finally {
@@ -107,7 +120,17 @@ export function useAttachments(threadId: string) {
       setBusy(false);
     }
   };
-  return { files, busy, error, add, remove, clear: () => setFiles([]) };
+  return {
+    files,
+    busy,
+    error,
+    add,
+    remove,
+    clear: () => {
+      if (inventory.current) inventory.current.cleared = true;
+      setFiles([]);
+    },
+  };
 }
 export function AttachmentList({
   files,

@@ -172,3 +172,28 @@ test("authenticated GPT project context uses existing Hub notes/tasks and doesn'
   assert.equal(f.calls.length, 0);
   assert.equal(f.desktopCalls.length, 0);
 });
+
+test("viewing unread completions does not reorder inactive Home chats", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const older = f.store.createThread("project", "native-older", "Older completed chat");
+  f.store.db
+    .prepare("UPDATE threads SET status='idle',activityAt=?,completedSeq=1,seenSeq=1 WHERE id=?")
+    .run("2026-09-10T10:00:00Z", f.thread.id);
+  f.store.db
+    .prepare("UPDATE threads SET status='idle',activityAt=?,completedSeq=2,seenSeq=0 WHERE id=?")
+    .run("2026-09-10T09:00:00Z", older.id);
+  const home = new ProjectHome(f.sessions),
+    before = home.get("codex", "project");
+  assert.deepEqual(
+    before.threads.map((t) => t.id),
+    [f.thread.id, older.id],
+  );
+  assert.equal(before.threads[1].unread, true);
+  f.store.db.prepare("UPDATE threads SET seenSeq=completedSeq WHERE id=?").run(older.id);
+  assert.deepEqual(
+    home.get("codex", "project").threads.map((t) => t.id),
+    before.threads.map((t) => t.id),
+  );
+  assert.equal(f.calls.length, 0);
+});

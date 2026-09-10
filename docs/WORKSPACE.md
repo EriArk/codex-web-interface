@@ -54,3 +54,8 @@ Tests cover lost create/bootstrap acknowledgements, exact late evidence, changed
 Explicit deletion from the native web queue cancels its linked plan action. A dismissed uncertain submission stays unknown; absence alone never proves it was not accepted. Snapshot restoration retains Core/history, plans, reports/checkpoints, note sources, Current/history and GPT project bindings, and marks previously live workspace actions unknown without replaying them.
 
 Workspace shortcuts use one compact shared sidebar grid. Context pickers page older links explicitly. Both browser engines cover Codex and GPT direct note capture, exact backlinks and underlying composer drafts. GPT project rotation is verified against its native browser/HTTP contracts and fixtures; the owner's account currently has no native Projects for a live project rotation check.
+
+
+## Audit recovery additions
+
+If an explicitly selected Current becomes unavailable, Home can assign an existing project chat as Current. This is a confirmed metadata change with revision checks; it cannot replace an available Current or bypass unresolved project-action receipts. Old source links remain stored. A plan deleted on another device keeps its local draft and offers Save as new. See [workflow audit](AUDIT-2026-09-10.md) for reproduced races and regression coverage.

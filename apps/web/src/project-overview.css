@@ -171,3 +171,16 @@
 .workspace[data-view="overview"] .workspace-content > .gpt-chat {
   display: none;
 }
+
+.overview-current-repair {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.overview-current-repair > .overview-row {
+  flex: 1;
+  min-width: 0;
+}
+.overview-current-repair > .icon-button {
+  flex: none;
+}
