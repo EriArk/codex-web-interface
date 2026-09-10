@@ -7,6 +7,7 @@ import {readAsset} from './browser-assets.mjs';
 import {mutateLibrary} from './browser-library.mjs';
 import {readModels,selectModels} from './browser-models.mjs';
 import {prepareSession} from './browser-session.mjs';
+import {activeConversation} from './conversation-binding.mjs';
 import {readJson,proxyBridge} from './bridge-proxy.mjs';
 import {timingSafeEqual} from 'node:crypto';
 import {chromium} from 'playwright';
@@ -138,9 +139,7 @@ server=createServer(async(req,res)=>{
   if(url.pathname==='/models'){res.end(JSON.stringify(await readModels(target)));return}
   if(url.pathname==='/active'){
    const health=await(await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)})).json();
-   const active=health.activeRequests?.find(r=>r.clientId===health.activeClient?.id);
-   const match=new URL(health.activeClient?.url??'https://chatgpt.com').pathname.match(/\/c\/([a-z0-9-]+)$/i);
-   res.end(JSON.stringify({requestId:active?.requestId??null,nativeId:match?.[1]??null,generating:active?.currentGenerationActive===true}));return;
+   res.end(JSON.stringify(activeConversation(health)));return;
   }
   if(url.pathname==='/bridge-health'){
    const upstream=await fetch('http://127.0.0.1:8080'+(url.pathname==='/models'?'/models':'/health'),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});

@@ -39,3 +39,18 @@ const ack='promptSubmitAckTimeoutMs: 4_000,';
 if(runtime.split(ack).length!==2)throw Error('Pinned submission acknowledgement timeout changed');
 writeFileSync(runtimePath,runtime.replace(ack,'promptSubmitAckTimeoutMs: 60_000,'));
 execFileSync(process.execPath,['--check',runtimePath],{stdio:'inherit'});
+
+
+// A new ChatGPT URL can become canonical before image processing establishes
+// the submitted user-turn boundary. Keep observing the same lease without
+// adopting that URL or marking this as navigation to another conversation.
+const observationPath='/opt/bridge/src/bridge/adapters/tabObservationAdapter.js';
+let observationSource=readFileSync(observationPath,'utf8');
+function patchObservation(from,to){if(observationSource.split(from).length!==2)throw Error('Pinned conversation binding adapter changed');observationSource=observationSource.replace(from,to)}
+observationSource="import {pendingConversationBinding} from '/opt/gpt/conversation-binding.mjs';\n"+observationSource;
+patchObservation('  const conversationChanged = conversationIdChanged && !conversationCanonicalized;',`  const pendingCanonicalization = pendingConversationBinding({state:currentState,observation,requestId,clientId,submittedUserTurnKey});
+  const conversationChanged = conversationIdChanged && !conversationCanonicalized && !pendingCanonicalization;`);
+patchObservation("    conversationId: bindingEstablished ? observation.conversationId || payload.session?.id || '' : '',",`    conversationId: pendingCanonicalization ? expectedConversationId : bindingEstablished ? observation.conversationId || payload.session?.id || '' : '',
+    pendingConversationId: pendingCanonicalization ? observedConversationId : '',`);
+writeFileSync(observationPath,observationSource);
+execFileSync(process.execPath,['--check',observationPath],{stdio:'inherit'});

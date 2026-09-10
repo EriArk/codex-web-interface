@@ -64,3 +64,34 @@ const uncertain=api.createPromptSubmissionEvidenceWaiter({},new Set(),'missing',
 now+=60000;for(const timer of [...timers.values()])if(timer.at<=now)timer.fn();
 assert.equal((await uncertain).confirmed,false);
 console.log('Pinned composer verified: late image-only/text+image acceptance, bounded unknown state without replay.');
+
+
+// Test the actual pinned observation adapter AND reducer, not a replacement.
+const {tabObservationToCanonicalEvent}=await import('/opt/bridge/src/bridge/adapters/tabObservationAdapter.js');
+const {createInitialRequestState}=await import('/opt/bridge/src/bridge/state/requestPolicy.js');
+const {reduceRequestState}=await import('/opt/bridge/src/bridge/state/requestMachine.js');
+const provisional='WEB:11111111-1111-4111-8111-111111111111',canonical='22222222-2222-4222-8222-222222222222',other='33333333-3333-4333-8333-333333333333';
+const base=createInitialRequestState({requestId:'binding-fixture',sourceClientId:'fixture-tab',leaseId:'fixture-lease',ownerServerInstanceId:'fixture-owner',conversationId:provisional,at:1});
+base.submission='accepted';base.lifecycle='preparing';
+const observation={conversationId:canonical,observedAt:10,activeRequest:{requestId:base.requestId,leaseId:base.source.leaseId,ownerServerInstanceId:base.source.ownerServerInstanceId,submittedUserTurnKey:''},turn:{state:'placeholder',phase:'ASSISTANT_PLACEHOLDER',count:0},generation:{state:'stopped'},output:{state:'none'},artifact:{state:'none'},blocker:{state:'none'}};
+const pendingEvent=tabObservationToCanonicalEvent(base.requestId,'fixture-tab',{observation},base,10);
+assert.equal(pendingEvent.data.conversationChanged,false);
+assert.equal(pendingEvent.data.conversationCanonicalized,false);
+assert.equal(pendingEvent.data.conversationId,provisional);
+assert.equal(pendingEvent.data.pendingConversationId,canonical);
+assert.equal(pendingEvent.data.answer,'');assert.equal(pendingEvent.data.scopedToRequest,false);
+const pendingState=reduceRequestState(base,pendingEvent);
+assert.equal(pendingState.state.terminal,null);assert.equal(pendingState.state.source.conversationId,provisional);
+assert.deepEqual(pendingState.effects,[]);assert.deepEqual(pendingState.deadlines,[]);
+const submitted={...pendingState.state,submission:'submitted'};
+const confirmed={...observation,observedAt:20,activeRequest:{...observation.activeRequest,submittedUserTurnKey:'fixture-user'},turn:{...observation.turn,userKey:'fixture-user'}};
+const confirmedEvent=tabObservationToCanonicalEvent(base.requestId,'fixture-tab',{observation:confirmed},submitted,20);
+assert.equal(confirmedEvent.data.conversationCanonicalized,true);
+const confirmedState=reduceRequestState(submitted,confirmedEvent);
+assert.equal(confirmedState.state.terminal,null);assert.equal(confirmedState.state.source.conversationId,canonical);
+for(const [state,observed] of [[{...base,source:{...base.source,conversationId:other}},observation],[base,{...observation,activeRequest:{...observation.activeRequest,leaseId:'other'}}],[pendingState.state,{...observation,conversationId:other}]]){
+ const event=tabObservationToCanonicalEvent(base.requestId,'fixture-tab',{observation:observed},state,30);
+ assert.equal(event.data.conversationChanged,true);
+ assert.equal(reduceRequestState(state,event).state.terminal.code,'conversation_changed');
+}
+console.log('Pinned canonical binding verified: wait for new-chat user evidence; retain existing-chat, lease and candidate identity guards; no prompt effects.');
