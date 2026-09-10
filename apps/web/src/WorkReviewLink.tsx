@@ -15,19 +15,18 @@ export function openWorkReview(scope: ProjectScope, id?: string) {
 export function useThreadReviews(client: "codex" | "gpt", threadId: string | null | undefined) {
   const [items, setItems] = useState<ReviewPage["items"]>([]);
   useEffect(() => {
-    const abort = new AbortController();
+    let active = true;
     setItems([]);
-    if (!threadId) return () => abort.abort();
+    if (!threadId) return;
     let busy = false;
     const refresh = async () => {
-      if (busy || document.hidden) return;
+      if (!active || busy || document.hidden) return;
       busy = true;
       try {
         const page = await api<ReviewPage>(
           "/workspace/reviews?threadId=" + encodeURIComponent(threadId),
-          { signal: abort.signal },
         );
-        if (!abort.signal.aborted) setItems(page.items.filter((r) => r.scope.client === client));
+        if (active) setItems(page.items.filter((r) => r.scope.client === client));
       } catch {
       } finally {
         busy = false;
@@ -38,7 +37,8 @@ export function useThreadReviews(client: "codex" | "gpt", threadId: string | nul
     document.addEventListener("visibilitychange", refresh);
     window.addEventListener("work-review-changed", refresh);
     return () => {
-      abort.abort();
+      // This bounded metadata read may finish after navigation; never publish it to the new chat.
+      active = false;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("work-review-changed", refresh);
