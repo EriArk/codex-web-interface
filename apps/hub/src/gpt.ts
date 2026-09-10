@@ -311,6 +311,13 @@ export class GptService {
         : row.name,
       pinned: pins.some((p) => p.kind === "project" && p.id === row.id),
     }));
+    // Remember only confirmed project metadata during normal native discovery.
+    // Tasks uses this Hub cache, never an extra browser request or writer.
+    for (const row of items) {
+      const saved = this.library.get("project", row.id);
+      if (!saved?.deleted && saved?.name !== row.name)
+        this.library.save("project", row.id, { name: row.name });
+    }
     for (const entry of this.library
       .all()
       .filter((e) => e.kind === "project" && (e.archived || e.deleted)))

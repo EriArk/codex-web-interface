@@ -96,9 +96,9 @@ for (const [engine, type] of [
     );
     await notes.getByRole("button", { name: "Закрыть заметки" }).click();
     await panel.getByRole("button", { name: /Следующий шаг/ }).click();
-    const plan = page.getByRole("dialog", { name: "План", exact: true });
+    const plan = page.getByRole("dialog", { name: "Задачи", exact: true });
     await expect(plan.getByRole("textbox", { name: "Название задачи" })).toHaveValue(task.title);
-    await plan.getByRole("button", { name: "Закрыть план" }).click();
+    await plan.getByRole("button", { name: "Закрыть задачи" }).click();
     await panel.getByRole("button", { name: /^Handoff chat/ }).click();
     await expect(chat).toHaveValue("Черновик остаётся в чате");
     await open();

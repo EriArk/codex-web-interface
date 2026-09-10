@@ -313,6 +313,8 @@ export * from "./results.js";
 export * from "./storage.js";
 export {
   type TaskFields,
+  type TaskProject,
+  type TaskProjectsPage,
   type TaskRecord,
   type TaskSummary,
   type TasksPage,

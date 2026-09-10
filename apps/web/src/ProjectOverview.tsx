@@ -175,9 +175,9 @@ export function ProjectOverview({
             </section>
             <section className="overview-card" aria-label="Текущие задачи">
               <header>
-                <h2>Дальше по плану</h2>
+                <h2>Задачи проекта</h2>
                 <button type="button" onClick={() => onNotebook({ scope, mode: "tasks" })}>
-                  План <Icon name="chevron" size={14} />
+                  Задачи <Icon name="chevron" size={14} />
                 </button>
               </header>
               {data.tasks.map((t) => (

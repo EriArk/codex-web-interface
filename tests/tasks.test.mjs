@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { GptService } from "../apps/hub/dist/gpt.js";
+import { Library } from "../apps/hub/dist/library.js";
 import { WorkspaceTasks } from "../apps/hub/dist/tasks.js";
 import { taskWriteSchema } from "../packages/shared/dist/index.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
@@ -147,4 +149,97 @@ test("task mutation dates/priority/fields are bounded and remain behind existing
   );
   assert.equal(f.calls.length, 0);
   assert.equal(f.desktopCalls.length, 0);
+});
+
+test("global task project filters use saved Hub metadata, retain missing associations and remain paged without native calls", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const tasks = new WorkspaceTasks(f.sessions),
+    library = new Library(f.store, "gpt");
+  const gptScope = { client: "gpt", projectId: "g-example", name: "GPT Project" };
+  const saved = tasks.save(randomUUID(), input({ scope: gptScope, body: "Keep owner text" }));
+  library.save("project", gptScope.projectId, { name: "Renamed GPT", archived: true });
+  tasks.save(randomUUID(), input({ scope: { client: "codex", projectId: "gone", name: "Gone" } }));
+  const response = await f.app.inject({ url: "/api/workspace/tasks/projects", headers: f.headers });
+  assert.equal(response.statusCode, 200);
+  const items = response.json().items;
+  assert.equal(items.find((p) => p.scope.projectId === "project").availability, "available");
+  assert.equal(items.find((p) => p.scope.projectId === "gone").availability, "missing");
+  assert.deepEqual(
+    items.find((p) => p.scope.projectId === "g-example"),
+    { scope: { ...gptScope, name: "Renamed GPT" }, availability: "archived" },
+  );
+  library.save("project", gptScope.projectId, { deleted: true });
+  assert.equal(
+    tasks.projects().items.find((p) => p.scope.projectId === "g-example").availability,
+    "missing",
+  );
+  assert.equal(tasks.get(saved.id).body, "Keep owner text");
+  for (let i = 0; i < 120; i++)
+    library.save("project", `g-empty-${i}`, { name: `Empty ${String(i).padStart(3, "0")}` });
+  const page = tasks.projects();
+  assert.equal(page.items.length, 100);
+  const next = tasks.projects(page.nextOffset);
+  assert.equal(
+    new Set([...page.items, ...next.items].map((p) => `${p.scope.client}:${p.scope.projectId}`))
+      .size,
+    123,
+  );
+  assert.equal(next.nextOffset, null);
+  f.sessions.catalog.library.save("project", "project", { deleted: true });
+  library.save("project", "g-deleted-empty", { name: "Deleted empty", deleted: true });
+  assert(
+    !tasks.projects().items.some((p) => ["project", "g-deleted-empty"].includes(p.scope.projectId)),
+  );
+  assert.equal(tasks.get(saved.id).body, "Keep owner text");
+  assert.equal((await f.app.inject({ url: "/api/workspace/tasks/projects" })).statusCode, 401);
+  assert.equal(
+    (await f.app.inject({ url: "/api/workspace/tasks/projects?offset=-1", headers: f.headers }))
+      .statusCode,
+    400,
+  );
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.desktopCalls.length, 0);
+});
+test("normal GPT project discovery caches only public project names for offline Tasks, preserving local actions", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const library = new Library(f.store, "gpt"),
+    calls = [];
+  const service = {
+    library,
+    pins: async () => [],
+    json: async (path) => {
+      calls.push(path);
+      return {
+        items: [
+          {
+            gizmo: {
+              gizmo: {
+                id: "g-p-task-cache",
+                display: { name: "Cached project" },
+                instructions: "PRIVATE",
+              },
+            },
+          },
+        ],
+      };
+    },
+  };
+  await GptService.prototype.projects.call(service);
+  const entry = library.get("project", "g-p-task-cache");
+  assert.equal(entry.name, "Cached project");
+  assert.doesNotMatch(JSON.stringify(entry), /PRIVATE|instructions/);
+  let changes = 0;
+  f.store.changes.on("navigation", () => changes++);
+  await GptService.prototype.projects.call(service);
+  assert.equal(changes, 0);
+  library.save("project", entry.id, { archived: true });
+  const tasks = new WorkspaceTasks(f.sessions);
+  assert.equal(
+    tasks.projects().items.find((p) => p.scope.projectId === entry.id).availability,
+    "archived",
+  );
+  assert.deepEqual(calls, ["/projects", "/projects"]);
+  assert.equal(f.calls.length, 0);
 });

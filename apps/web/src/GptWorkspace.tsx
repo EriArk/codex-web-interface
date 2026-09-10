@@ -607,7 +607,7 @@ export function GptWorkspace({
   const openNotebook = (mode: "notes" | "tasks" = "notes") => {
     setDrawer(false);
     setSettings(false);
-    onNotebook?.({ ...notebookContext(), mode });
+    onNotebook?.({ ...notebookContext(), mode, allProjects: mode === "tasks" });
   };
   const send = async () => {
     if (sending.current || uploading || !model || (!text.trim() && !files.length)) return;
@@ -1147,7 +1147,7 @@ export function GptWorkspace({
       {onNotebook && (
         <button type="button" className="nav-new-thread" onClick={() => openNotebook("tasks")}>
           <Icon name="check" />
-          План
+          Задачи
         </button>
       )}
       <button

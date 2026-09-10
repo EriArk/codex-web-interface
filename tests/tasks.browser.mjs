@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect, webkit } from "@playwright/test";
+import { Library } from "../apps/hub/dist/library.js";
 import { WorkspaceTasks } from "../apps/hub/dist/tasks.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
@@ -12,6 +14,19 @@ for (const [engine, type] of [
   const origin = "http://127.0.0.1:18856",
     f = await handoffFixture(origin),
     tasks = new WorkspaceTasks(f.sessions);
+  const otherScope = { client: "gpt", projectId: "g-tasks", name: "Другой проект" };
+  new Library(f.store, "gpt").save("project", otherScope.projectId, { name: otherScope.name });
+  const globalTask = tasks.save(randomUUID(), {
+    scope: null,
+    title: "Личное напоминание",
+    body: "Global",
+    links: [],
+    revision: 0,
+    status: "todo",
+    priority: 1,
+    dueAt: null,
+  });
+  tasks.save(randomUUID(), { ...globalTask, scope: otherScope, title: "GPT задача", revision: 0 });
   f.store.setPreferences({
     projectId: "project",
     threadId: f.thread.id,
@@ -48,23 +63,40 @@ for (const [engine, type] of [
       if (page.viewportSize().width < 800)
         await page.getByRole("button", { name: "Открыть проекты" }).click();
       await page
-        .getByRole("button", { name: "План", exact: true })
+        .getByRole("button", { name: "Задачи", exact: true })
         .filter({ visible: true })
         .click();
     };
     await open();
-    const panel = page.getByRole("dialog", { name: "План", exact: true });
+    const panel = page.getByRole("dialog", { name: "Задачи", exact: true });
     await expect(panel).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Все", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(
+      panel.locator(".notebook-row").filter({ hasText: "Личное напоминание" }),
+    ).toBeVisible();
+    await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toBeVisible();
+    await panel.getByRole("button", { name: "Без проекта", exact: true }).click();
+    await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toHaveCount(0);
+    await panel.getByRole("button", { name: "Другой проект · GPT", exact: true }).click();
+    await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toBeVisible();
+    await panel.getByRole("button", { name: "Project · Codex", exact: true }).click();
+    await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toHaveCount(0);
     await panel.getByRole("button", { name: "Новая задача", exact: true }).tap();
     const title = panel.getByRole("textbox", { name: "Название задачи" }),
       body = panel.getByRole("textbox", { name: "Описание задачи" });
+    await expect(
+      panel.getByRole("combobox", { name: "Проект задачи" }).locator("option[value='gpt:g-tasks']"),
+    ).toHaveCount(1);
     await title.fill("Проверить читалку");
     await body.fill("Проверить место чтения после сна.");
     await panel.getByRole("combobox", { name: "Статус задачи" }).selectOption("doing");
     await panel.getByRole("combobox", { name: "Приоритет задачи" }).selectOption("2");
     await panel.getByLabel("Срок задачи").fill("2026-09-09");
     await page.screenshot({ path: `.local/qa-tasks/${engine}-phone-edit.png` });
-    await panel.getByRole("button", { name: "Закрыть план" }).tap();
+    await panel.getByRole("button", { name: "Закрыть задачи" }).tap();
     await expect(chat).toHaveValue("Мой черновик Codex");
     await page.reload();
     await open();
@@ -107,7 +139,7 @@ for (const [engine, type] of [
       .getByRole("button", { name: "Проверить читалку", exact: true })
       .click();
     await expect(title).toHaveValue("Проверить читалку");
-    await panel.getByRole("button", { name: "Закрыть план" }).click();
+    await panel.getByRole("button", { name: "Закрыть задачи" }).click();
     // A Result creates a reference-only task and can navigate back after the task is saved.
     await page
       .locator(".mobile-tabs")
@@ -117,7 +149,7 @@ for (const [engine, type] of [
       .getByRole("button", { name: "Сохранить ссылку: Проверка каталога", exact: true })
       .click();
     const notes = page.getByRole("dialog", { name: "Заметки и ссылки", exact: true });
-    await notes.getByRole("button", { name: "План", exact: true }).click();
+    await notes.getByRole("button", { name: "Задачи", exact: true }).click();
     await panel.getByRole("button", { name: "Новая задача", exact: true }).click();
     await title.fill("Проверить результат");
     await expect(body).toHaveValue("");
@@ -140,10 +172,13 @@ for (const [engine, type] of [
     await page.locator(".theme-option.hitech-2000s input").check();
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
     await open();
-    await panel.getByRole("combobox", { name: "Область задач" }).selectOption("all");
+    await expect(panel.getByRole("button", { name: "Все", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     await page.screenshot({ path: `.local/qa-tasks/${engine}-tablet.png` });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await panel.getByRole("button", { name: "Закрыть план" }).click();
+    await panel.getByRole("button", { name: "Закрыть задачи" }).click();
     await page
       .getByRole("combobox", { name: "Режим приложения" })
       .filter({ visible: true })
@@ -152,11 +187,14 @@ for (const [engine, type] of [
     await expect(gpt).toBeVisible();
     await gpt.fill("Мой черновик GPT");
     await open();
-    await panel.getByRole("combobox", { name: "Область задач" }).selectOption("all");
+    await expect(panel.getByRole("button", { name: "Все", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     await expect(
       panel.locator(".notebook-row").filter({ hasText: "Проверить результат" }),
     ).toBeVisible();
-    await panel.getByRole("button", { name: "Закрыть план" }).click();
+    await panel.getByRole("button", { name: "Закрыть задачи" }).click();
     await expect(gpt).toHaveValue("Мой черновик GPT");
     assert.deepEqual(errors, []);
     assert.equal(

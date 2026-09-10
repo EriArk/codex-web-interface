@@ -8,6 +8,7 @@ import type {
   NotesPage,
   NoteWrite,
   TaskFields,
+  TaskProjectsPage,
 } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -24,6 +25,7 @@ export type NotebookRequest = {
   target?: NotebookTarget;
   mode?: "notes" | "tasks";
   itemId?: string;
+  allProjects?: boolean;
 };
 export type WorkspaceDestination = { target: NotebookLink; version: number };
 export const notebookKey = (scope: NotebookScope) =>
@@ -68,7 +70,7 @@ export function NotebookPanel({
     base = `/workspace/${isTask ? "tasks" : "notes"}`,
     prefix = isTask ? "workspace-task-draft:" : "workspace-note-draft:";
   const labels = {
-    title: isTask ? "План" : "Заметки и ссылки",
+    title: isTask ? "Задачи" : "Заметки и ссылки",
     item: isTask ? "задача" : "заметка",
     plural: isTask ? "задачи" : "заметки",
     genitive: isTask ? "задач" : "заметок",
@@ -94,6 +96,7 @@ export function NotebookPanel({
   const dialog = useRef<HTMLDialogElement>(null),
     [scope, setScope] = useState("all"),
     [query, setQuery] = useState(""),
+    [projects, setProjects] = useState<TaskProjectsPage>({ items: [], nextOffset: null }),
     [page, setPage] = useState<{
       items: (NoteSummary & Partial<TaskFields>)[];
       nextOffset: number | null;
@@ -179,6 +182,7 @@ export function NotebookPanel({
       } catch {}
       setEdit(null);
       setLocal([]);
+      setProjects({ items: [], nextOffset: null });
     };
     window.addEventListener("private-session-ended", clear);
     return () => window.removeEventListener("private-session-ended", clear);
@@ -189,7 +193,7 @@ export function NotebookPanel({
     generation.current++;
     setBusy(false);
     setEdit(null);
-    setScope(notebookKey(request.scope));
+    setScope(isTask && request.allProjects ? "all" : notebookKey(request.scope));
     setQuery("");
     setFilter("open");
     setError("");
@@ -201,7 +205,7 @@ export function NotebookPanel({
       generation.current++;
       dialog.current?.close();
     };
-  }, [request, refreshDrafts]);
+  }, [request, refreshDrafts, isTask]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh polls only small Hub metadata.
   useEffect(() => {
     if (!request) return;
@@ -217,11 +221,25 @@ export function NotebookPanel({
         api<typeof pins>(`/workspace/pins?scope=${encodeURIComponent(scope)}`, {
           signal: controller.signal,
         }),
+        isTask
+          ? api<TaskProjectsPage>("/workspace/tasks/projects", { signal: controller.signal })
+          : Promise.resolve(undefined),
       ])
-        .then(([notes, saved]) => {
+        .then(([notes, saved, catalog]) => {
           if (!controller.signal.aborted) {
             setPage(notes);
             setPins(saved);
+            if (catalog)
+              setProjects((old) => ({
+                items: [
+                  ...catalog.items,
+                  ...old.items.filter(
+                    (p) =>
+                      !catalog.items.some((n) => notebookKey(n.scope) === notebookKey(p.scope)),
+                  ),
+                ],
+                nextOffset: old.items.length > 100 ? old.nextOffset : catalog.nextOffset,
+              }));
           }
         })
         .catch((e) => {
@@ -253,6 +271,12 @@ export function NotebookPanel({
       window.removeEventListener("online", refresh);
     };
   }, [request, refreshDrafts]);
+  useEffect(() => {
+    if (isTask && scope)
+      dialog.current
+        ?.querySelector('.task-project-filters [aria-pressed="true"]')
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [isTask, scope]);
   const operation = async (fn: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
@@ -427,6 +451,17 @@ export function NotebookPanel({
   for (const n of [...page.items, ...local, ...pins.items])
     if (n.scope) scopes.set(notebookKey(n.scope), n.scope);
   if (edit?.scope) scopes.set(notebookKey(edit.scope), edit.scope);
+  if (isTask) for (const p of projects.items) scopes.set(notebookKey(p.scope), p.scope);
+  const orderedScopes = [...scopes].sort(([ak, a], [bk, b]) => {
+    if (!isTask) return 0;
+    if (!a || !b) return a ? 1 : b ? -1 : 0;
+    return a.name.localeCompare(b.name, "ru") || ak.localeCompare(bk);
+  });
+  const projectLabel = (s: NotebookScope) => {
+    if (!s) return "Без проекта";
+    const p = projects.items.find((p) => notebookKey(p.scope) === notebookKey(s));
+    return `${p?.scope.name ?? s.name} · ${s.client === "gpt" ? "GPT" : "Codex"}${p?.availability === "missing" ? " · Недоступен" : p?.availability === "archived" ? " · Архив" : ""}`;
+  };
   const change = (next: Partial<Draft>) => {
     if (edit) keep({ ...edit, ...next, changedAt: Date.now() });
   };
@@ -453,7 +488,7 @@ export function NotebookPanel({
           type="button"
           className="icon-button"
           disabled={busy}
-          aria-label={isTask ? "Закрыть план" : "Закрыть заметки"}
+          aria-label={isTask ? "Закрыть задачи" : "Закрыть заметки"}
           onClick={onClose}
         >
           <Icon name="close" />
@@ -474,7 +509,7 @@ export function NotebookPanel({
           disabled={busy}
           onClick={() => onRequest({ ...request, mode: "tasks", itemId: undefined })}
         >
-          План
+          Задачи
         </button>
       </div>
       {(error || storageError) && (
@@ -488,32 +523,88 @@ export function NotebookPanel({
           {status}
         </p>
       )}
+      {isTask && (
+        <div className="notebook-task-controls" data-editing={!!edit}>
+          <fieldset className="task-project-filters" aria-label="Проекты задач">
+            {[
+              ["all", "Все"] as const,
+              ...orderedScopes.map(([key, s]) => [key, projectLabel(s)] as const),
+            ].map(([key, name]) => (
+              <button
+                type="button"
+                key={key}
+                aria-pressed={scope === key}
+                disabled={busy}
+                onClick={() => setScope(key)}
+              >
+                {name}
+              </button>
+            ))}
+            {projects.nextOffset !== null && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void operation(async () => {
+                    const next = await api<TaskProjectsPage>(
+                      `/workspace/tasks/projects?offset=${projects.nextOffset}`,
+                    );
+                    setProjects((old) => ({
+                      items: [
+                        ...old.items,
+                        ...next.items.filter(
+                          (p) =>
+                            !old.items.some((n) => notebookKey(n.scope) === notebookKey(p.scope)),
+                        ),
+                      ],
+                      nextOffset: next.nextOffset,
+                    }));
+                  })
+                }
+              >
+                Ещё проекты
+              </button>
+            )}
+          </fieldset>
+          <button
+            type="button"
+            className="icon-button"
+            disabled={busy}
+            aria-label={isTask ? "Новая задача" : "Новая заметка"}
+            onClick={create}
+          >
+            <Icon name="plus" />
+          </button>
+        </div>
+      )}
       <div className="notebook-layout" data-editing={!!edit}>
         <aside className="notebook-list" aria-label={isTask ? "Список задач" : "Список заметок"}>
-          <div className="notebook-controls">
-            <select
-              aria-label={isTask ? "Область задач" : "Область заметок"}
-              value={scope}
-              disabled={busy}
-              onChange={(e) => setScope(e.target.value)}
-            >
-              <option value="all">{isTask ? "Все проекты" : "Все заметки"}</option>
-              {[...scopes].map(([key, s]) => (
-                <option key={key} value={key}>
-                  {s ? `${s.name} · ${s.client === "gpt" ? "GPT" : "Codex"}` : "Общие"}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="icon-button"
-              disabled={busy}
-              aria-label={isTask ? "Новая задача" : "Новая заметка"}
-              onClick={create}
-            >
-              <Icon name="plus" />
-            </button>
-          </div>
+          {!isTask && (
+            <div className="notebook-controls">
+              <select
+                aria-label="Область заметок"
+                value={scope}
+                disabled={busy}
+                onChange={(e) => setScope(e.target.value)}
+              >
+                <option value="all">Все заметки</option>
+                {orderedScopes.map(([key, s]) => (
+                  <option key={key} value={key}>
+                    {s ? `${s.name} · ${s.client === "gpt" ? "GPT" : "Codex"}` : "Общие"}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="icon-button"
+                disabled={busy}
+                aria-label={isTask ? "Новая задача" : "Новая заметка"}
+                onClick={create}
+              >
+                <Icon name="plus" />
+              </button>
+            </div>
+          )}
           <input
             type="search"
             aria-label={isTask ? "Найти задачу" : "Найти заметку"}
@@ -648,7 +739,7 @@ export function NotebookPanel({
                   </span>
                 )}
                 <small>
-                  {n.excerpt || n.scope?.name || (isTask ? "Общая задача" : "Общая заметка")}
+                  {isTask ? projectLabel(n.scope) : n.excerpt || n.scope?.name || "Общая заметка"}
                 </small>
               </button>
             </div>
@@ -715,9 +806,9 @@ export function NotebookPanel({
                   value={notebookKey(edit.scope)}
                   onChange={(e) => change({ scope: scopes.get(e.target.value) ?? null })}
                 >
-                  {[...scopes].map(([key, s]) => (
+                  {orderedScopes.map(([key, s]) => (
                     <option key={key} value={key}>
-                      {s ? s.name : isTask ? "Общая задача" : "Общая заметка"}
+                      {isTask ? projectLabel(s) : s?.name || "Общая заметка"}
                     </option>
                   ))}
                 </select>
