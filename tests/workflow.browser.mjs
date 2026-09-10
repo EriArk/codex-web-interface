@@ -243,6 +243,79 @@ for (const [engine, type] of [
       });
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     }
+    // A brand-new job may acquire its native conversation only when it completes.
+    const native = randomUUID(),
+      jobId = randomUUID(),
+      finalId = randomUUID();
+    const longAnswer = Array.from(
+      { length: 55 },
+      (_, n) => `Paragraph ${n + 1}: final answer remains readable.`,
+    ).join("\n\n");
+    const startedAt = Date.now();
+    let liveJob = {
+      id: jobId,
+      nativeId: null,
+      status: "running",
+      text: "New conversation answer",
+      answer: longAnswer,
+      assets: [],
+      files: [],
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      model: "Latest",
+      effort: "2",
+    };
+    await page.route("**/api/gpt/jobs?**", (route) =>
+      route.fulfill({ json: { items: [liveJob], stamp: liveJob.updatedAt } }),
+    );
+    await page.route(`**/api/gpt/conversations/${native}/messages?**`, (route) =>
+      route.fulfill({
+        json: {
+          items: [
+            {
+              id: randomUUID(),
+              role: "user",
+              text: liveJob.text,
+              createdAt: startedAt / 1000,
+              files: [],
+            },
+            {
+              id: finalId,
+              role: "assistant",
+              text: longAnswer,
+              createdAt: (startedAt + 1000) / 1000,
+              files: [],
+            },
+          ],
+          revision: "canonical-final",
+          nextBefore: null,
+          prefix: "",
+          retainOlder: true,
+          notModified: false,
+        },
+      }),
+    );
+    await page.evaluate((id) => {
+      localStorage.removeItem("gpt-conversation");
+      sessionStorage.setItem("gpt-created-job", id);
+    }, jobId);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    const scrollPane = page.locator(".gpt-message-scroll");
+    await expect(page.locator(`[data-message="job:${jobId}"]`)).toBeAttached();
+    liveJob = { ...liveJob, status: "completed", nativeId: native, updatedAt: Date.now() + 2000 };
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(page.locator(`[data-message="${finalId}"]`)).toBeAttached();
+    await expect
+      .poll(() =>
+        scrollPane.evaluate((el, id) => {
+          const target = el.querySelector(`[data-message="${id}"]`);
+          return Math.round(
+            target.getBoundingClientRect().top - el.getBoundingClientRect().top - el.clientTop,
+          );
+        }, finalId),
+      )
+      .toBe(8);
     assert.deepEqual(errors, []);
     assert.equal(applies, 1);
     console.log(

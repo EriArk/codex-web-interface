@@ -158,7 +158,22 @@ for (const [engine, type] of [
       for (const p of data.projects) p.remoteAvailable = true;
       await route.fulfill({ response, json: data });
     });
+    let startupThreads;
+    await page.route("**/api/projects/project/threads", (route) => {
+      startupThreads = route;
+    });
     await page.goto(origin);
+    await expect.poll(() => !!startupThreads).toBe(true);
+    await expect(page.getByRole("button", { name: "Обзор текущего проекта" })).toContainText(
+      "Project",
+    );
+    assert.equal(
+      f.store.preferences().threadId,
+      f.thread.id,
+      "Partial startup must not overwrite the selected conversation",
+    );
+    await startupThreads.continue();
+    await page.unroute("**/api/projects/project/threads");
     const editor = page.getByRole("textbox", { name: "Сообщение Codex" });
     await expect(editor).toBeVisible();
     await editor.fill("Сохранённый черновик");
@@ -217,6 +232,10 @@ for (const [engine, type] of [
       speechRequests.length,
       beforeSystem,
       "explicit system mode does not contact Piper",
+    );
+    assert.equal(
+      await page.evaluate((id) => sessionStorage.getItem("codex-draft-" + id), f.thread.id),
+      "Сохранённый черновик",
     );
     await page.reload();
     await expect(editor).toHaveValue("Сохранённый черновик");

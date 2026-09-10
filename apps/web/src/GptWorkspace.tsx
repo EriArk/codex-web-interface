@@ -793,7 +793,8 @@ export function GptWorkspace({
       try {
         sessionStorage.setItem("gpt-draft-" + pendingNew.nativeId, JSON.stringify({ text, files }));
       } catch {}
-      setCreatedJob("");
+      // Keep the live completion scope through late native identity assignment.
+      // Explicit navigation clears createdJob in choose(); reload restores the native id.
       setSelected(pendingNew.nativeId);
     }
   }, [pendingNew?.nativeId]);

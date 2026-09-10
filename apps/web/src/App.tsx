@@ -492,7 +492,8 @@ function Workspace({
     };
   }, [projectId, view]);
   useEffect(() => {
-    if (!projectId) return;
+    if (!initialized || !projectId) return;
+    // Initial project metadata arrives before its selected thread. Do not persist that partial state.
     // Keep the notification URL recoverable until this selection is durable.
     // Serialize selection writes so a slow predecessor cannot replace the target.
     const target = notificationSelection.current;
@@ -516,7 +517,7 @@ function Workspace({
         }
       })
       .catch(() => {});
-  }, [projectId, threadId, view]);
+  }, [initialized, projectId, threadId, view]);
   const resultRequest = useRef(0);
   const loadResults = useCallback(async () => {
     const request = ++resultRequest.current;

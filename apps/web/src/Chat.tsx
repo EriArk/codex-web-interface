@@ -373,7 +373,7 @@ export function Chat({
     [newMessages, setNewMessages] = useState(false);
   const active = ["running", "starting", "waiting_approval"].includes(state.thread.status);
   const external = state.thread.activitySource === "external";
-  useEffect(() => {
+  useLayoutEffect(() => {
     try {
       setDraft(sessionStorage.getItem(`codex-draft-${threadId}`) ?? "");
     } catch {
