@@ -14,6 +14,7 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import type { NotebookRequest } from "./Notebook";
+import { PlanReconciliation } from "./PlanReconciliation";
 import { ProjectActionPanel } from "./ProjectAction";
 import { reviewLabels } from "./WorkReviewLink";
 import "./work-review.css";
@@ -414,6 +415,7 @@ export default function WorkReviewPanel({
                   )}
                 </details>
               )}
+              {r.plan && <PlanReconciliation key={r.id} review={r} onOpen={open} />}
               {r.parentReviewId && (
                 <button
                   type="button"

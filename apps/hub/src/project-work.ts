@@ -4,6 +4,7 @@ import {
   type NotebookTarget,
   planWriteSchema,
   projectScopeSchema,
+  reconciliationApplySchema,
   reviewDecisionSchema,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
@@ -65,6 +66,17 @@ export function registerProjectWork(
       ...(row ? { correction: actions.get(String(row.id)) } : {}),
     };
   });
+  app.get("/api/workspace/reviews/:id/plan", (req) => {
+    const key = id.parse(req.params).id;
+    actions.get(key);
+    return actions.reviews.reconciliation.detail(key);
+  });
+  app.post("/api/workspace/reviews/:id/plan", (req) =>
+    actions.reviews.reconciliation.apply(
+      id.parse(req.params).id,
+      reconciliationApplySchema.parse(req.body),
+    ),
+  );
   app.post("/api/workspace/reviews/:id/decision", (req) =>
     actions.reviews.decide(id.parse(req.params).id, reviewDecisionSchema.parse(req.body)),
   );

@@ -31,6 +31,9 @@
 .work-review-header > div:last-child {
   display: flex;
 }
+.work-review-dialog .icon-button {
+  color: var(--ink);
+}
 .work-review-layout {
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
@@ -210,6 +213,94 @@
   border-radius: var(--radius-sm, 6px);
   padding: 12px;
   font: inherit;
+}
+.plan-reconcile {
+  margin-block: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  padding: 12px 16px;
+  background: var(--canvas);
+}
+.plan-reconcile > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.plan-reconcile h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.plan-reconcile small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.reconcile-items {
+  max-height: 390px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.reconcile-item {
+  border-top: 1px solid var(--line);
+  padding-block: 8px;
+}
+.reconcile-item > label {
+  display: flex;
+  gap: 10px;
+  min-height: 52px;
+  align-items: center;
+  cursor: pointer;
+}
+.reconcile-item input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+.reconcile-item label > span {
+  min-width: 0;
+}
+.reconcile-item strong {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.reconcile-item em {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: normal;
+  margin-top: 3px;
+}
+.reconcile-item[data-state="verified"] em {
+  color: var(--accent);
+}
+.reconcile-item details {
+  margin-left: 30px;
+  font-size: 13px;
+}
+.reconcile-item summary {
+  min-height: 44px;
+  align-content: center;
+  color: var(--muted);
+  cursor: pointer;
+}
+.reconcile-item details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reconcile-item details button {
+  margin-bottom: 6px;
+}
+.reconcile-applied {
+  display: flex;
+  gap: 8px;
+  color: var(--accent);
+  align-items: center;
+  font-size: 13px;
+}
+.plan-reconcile > button {
+  margin-top: 10px;
 }
 .review-back {
   display: none;

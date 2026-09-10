@@ -275,6 +275,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 22,
+    name: "plan-reconciliation-proposals",
+    up(db) {
+      db.exec(
+        "CREATE TABLE plan_reconciliations(actionId TEXT PRIMARY KEY,planId TEXT NOT NULL,planRevision INTEGER NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL); CREATE INDEX plan_reconciliations_plan ON plan_reconciliations(planId,createdAt DESC)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

@@ -325,6 +325,7 @@ export type {
   OverviewThread,
   ProjectOverview,
 } from "./overview.js";
+export * from "./plan-reconciliation.js";
 export * from "./project-core.js";
 export * from "./project-work.js";
 export * from "./results.js";

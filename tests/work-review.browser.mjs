@@ -19,6 +19,9 @@ for (const [engine, type] of [
   };
   const planId = randomUUID(),
     id = randomUUID();
+  const planItems = ["Исправить меню", "Сохранить черновики", "Проверить физический iPad"].map(
+    (text) => ({ id: randomUUID(), text, checked: false }),
+  );
   const complete = async () => {
     await request("PUT", "/api/workspace/plans/" + planId, {
       scope,
@@ -28,7 +31,7 @@ for (const [engine, type] of [
         {
           id: randomUUID(),
           title: "Интерфейс",
-          items: [{ id: randomUUID(), text: "Исправить меню", checked: false }],
+          items: planItems,
         },
       ],
       links: [],
@@ -50,7 +53,18 @@ for (const [engine, type] of [
       "assistant.completed",
       {
         id: "review-final",
-        text: "## Меню готово\n\nИсправлены жесты и сохранение черновиков. На физическом iPad проверить не удалось.\n\n```txt\nexact copy\n```",
+        text:
+          "## Меню готово\n\nИсправлены жесты и сохранение черновиков. На физическом iPad проверить не удалось.\n\n```txt\nexact copy\n```\n\n```codex-plan-result\n" +
+          JSON.stringify({
+            planId,
+            revision: 1,
+            items: planItems.map((item, i) => ({
+              id: item.id,
+              state: i === 2 ? "unknown" : "complete",
+              commands: i === 0 ? ["pnpm test"] : [],
+            })),
+          }) +
+          "\n```",
         phase: "final",
       },
       sent.turnId,
@@ -110,6 +124,34 @@ for (const [engine, type] of [
     await panel.getByRole("button", { name: "Принять работу", exact: true }).click();
     await expect(panel.locator(".review-state")).toHaveText("Работа принята");
     assert.equal((await request("GET", `/api/workspace/reviews/${id}`)).review.revision, 3);
+    const reconciliation = panel.getByRole("region", { name: "Сверка плана" });
+    await expect(reconciliation.getByRole("checkbox", { name: planItems[2].text })).toBeDisabled();
+    await reconciliation.getByRole("checkbox", { name: planItems[0].text }).check();
+    await reconciliation.getByRole("checkbox", { name: planItems[1].text }).check();
+    await reconciliation.getByRole("checkbox", { name: planItems[1].text }).uncheck();
+    assert.equal((await request("GET", `/api/workspace/plans/${planId}`)).revision, 1);
+    let applyLost = false;
+    await page.route("**/api/workspace/reviews/*/plan", async (route) => {
+      if (route.request().method() === "POST" && !applyLost) {
+        applyLost = true;
+        await route.fetch();
+        await route.abort("failed");
+      } else await route.continue();
+    });
+    await reconciliation
+      .getByRole("button", { name: "Отметить выбранные · 1", exact: true })
+      .click();
+    await expect(reconciliation.getByRole("alert")).toBeVisible();
+    await reconciliation
+      .getByRole("button", { name: "Отметить выбранные · 1", exact: true })
+      .click();
+    await expect(reconciliation.getByRole("status")).toHaveText("Отмечено пунктов: 1 · версия 2");
+    const appliedPlan = await request("GET", `/api/workspace/plans/${planId}`);
+    assert.equal(appliedPlan.revision, 2);
+    assert.deepEqual(
+      appliedPlan.sections[0].items.map((i) => i.checked),
+      [true, false, false],
+    );
     for (const theme of ["classic-dark", "organizer", "crt-green", "hitech-2000s"]) {
       await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
       for (const width of [390, 1366]) {
@@ -128,7 +170,7 @@ for (const [engine, type] of [
     assert.deepEqual(errors, []);
     console.log(
       engine +
-        ": exact review, correction draft, lost acknowledgement, four themes and keyboard passed",
+        ": exact review, correction draft, selected Plan reconciliation, lost acknowledgements, four themes and keyboard passed",
     );
   } catch (e) {
     await page.screenshot({ path: `${out}/failure.png` });
