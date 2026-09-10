@@ -1,4 +1,6 @@
+import {dismissPromotions} from './browser-obstructions.mjs';
 async function picker(page){
+ await dismissPromotions(page);
  const content=page.getByTestId('composer-intelligence-picker-content');
  if(!await content.isVisible()){
   const trigger=page.locator('form').filter({has:page.locator('#prompt-textarea')}).locator('button[aria-haspopup="menu"]:not([data-testid="composer-plus-btn"]):visible');
@@ -104,7 +106,7 @@ export async function selectModels(page,settings){
   try{return await selectModelsOnce(page,settings)}
   catch(error){
    await closePicker(page).catch(()=>{});
-   if(attempt||/GPT_(MODEL|POWER)_UNAVAILABLE/.test(String(error?.message)))throw error;
+   if(attempt||error?.message==='GPT_UI_ATTENTION'||/GPT_(MODEL|POWER)_UNAVAILABLE/.test(String(error?.message)))throw error;
   }
  }
 }

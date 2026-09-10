@@ -1,5 +1,5 @@
-// Verify the navigation effect itself; the extension can lose its acknowledgement
-// when opening an already-new chat or replacing its content-script document.
+import {dismissPromotions} from './browser-obstructions.mjs';
+// Verify navigation itself: replacing the content-script document can lose its ack.
 export async function sessionReady(page, sessionId) {
  return page.evaluate(id=>{
   const url=new URL(location.href),match=url.pathname.match(/\/c\/([a-zA-Z0-9-]+)\/?$/);
@@ -11,22 +11,34 @@ export async function sessionReady(page, sessionId) {
   return !!id||(!editor.textContent.trim()&&!document.querySelector('[data-message-author-role]'));
  },sessionId);
 }
-export async function prepareSession({activePage,health,command,sessionId=null}) {
+export async function prepareSession({activePage,health,command,sessionId=null,clearOverlays=dismissPromotions,timeoutMs=22000,now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms))}) {
  if(sessionId!==null&&(typeof sessionId!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(sessionId)))throw Error('GPT_SESSION_INVALID');
- const ready=async()=>{
-  const state=await health();
-  if(state.activeRequests?.length)throw Error('GPT_BUSY');
-  const page=await activePage();
-  return state.activeClient?.ready===true&&state.activeClient?.pageReady===true&&
-   state.activeClient.url===page.url()&&await sessionReady(page,sessionId);
+ const until=now()+timeoutMs;
+ const probe=async()=>{
+  try {
+   const state=await health();
+   if(state.activeRequests?.length)throw Error('GPT_BUSY');
+   const page=await activePage();
+   // Do not touch an unbound tab or a page still replacing its JS context.
+   if(!state.activeClient?.ready||!state.activeClient?.pageReady||state.activeClient.url!==page.url())return {ready:false,navigable:false};
+   await clearOverlays(page);
+   return {ready:await sessionReady(page,sessionId),navigable:true};
+  } catch(error) {
+   if(['GPT_BUSY','GPT_UI_ATTENTION'].includes(error?.message))throw error;
+   // Target/DOM/extension may disappear briefly during normal navigation.
+   return {ready:false,navigable:false};
+  }
  };
- if(await ready())return {ok:true};
+ let state=await probe();
+ if(state.ready)return {ok:true};
+ while(!state.navigable&&now()<until){await sleep(150);state=await probe();if(state.ready)return {ok:true};}
+ if(!state.navigable)throw Error('GPT_SESSION_NOT_READY');
  let accepted=false;
- try{accepted=await command(sessionId);}catch{/* Only a verified postcondition can confirm this navigation. */}
- const until=Date.now()+8000;
- while(Date.now()<until){
-  if(await ready())return {ok:true};
-  await new Promise(resolve=>setTimeout(resolve,150));
+ // Exactly one command. Never repeat a navigation with an unknown outcome.
+ try{accepted=await command(sessionId);}catch{}
+ while(now()<until){
+  if((await probe()).ready)return {ok:true};
+  await sleep(150);
  }
  throw Error(accepted?'GPT_SESSION_NOT_READY':'GPT_SESSION_NOT_CONFIRMED');
 }

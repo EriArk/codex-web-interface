@@ -3,6 +3,7 @@ export const GPT_BRIDGE_REVISION = "96802cc0d2ea0b7449cf465f8adb3c228decd297";
 export const gptConnectionStateSchema = z.enum([
   "disabled",
   "starting",
+  "attention",
   "healthy",
   "login_required",
   "incompatible",
@@ -55,6 +56,7 @@ export const gptConnectionMessages: Record<GptConnectionState, string> = {
   disabled: "Подключение GPT ещё не настроено.",
   starting: "Подключение GPT запускается.",
   healthy: "GPT на связи.",
+  attention: "В ChatGPT открыто окно, требующее внимания.",
   login_required: "Нужно снова войти в ChatGPT.",
   incompatible: "ChatGPT изменился. Подключение требует обновления.",
   busy: "GPT работает.",

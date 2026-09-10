@@ -7,7 +7,7 @@ import test from "node:test";
 import { GptService } from "../apps/hub/dist/gpt.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { connectorReport } from "../ops/gpt/browser-health.mjs";
-import { configSchema, normalizeGptConnection } from "../packages/shared/dist/index.js";
+import { configSchema, HubError, normalizeGptConnection } from "../packages/shared/dist/index.js";
 import { healthyConnection } from "./fixtures/gpt-connection.mjs";
 
 const wait = async (fn) => {
@@ -22,6 +22,7 @@ test("connector states distinguish login, transport, control drift and unsupport
   assert.equal(normalizeGptConnection(null).state, "unavailable");
   for (const state of [
     "starting",
+    "attention",
     "healthy",
     "login_required",
     "busy",
@@ -206,5 +207,51 @@ test("unconfirmed model readback never dispatches a prompt or uploads its files"
     store.close();
     await rm(root, { recursive: true, force: true });
     delete process.env.GPT_READBACK_FIXTURE;
+  }
+});
+
+test("transient preparation failure preserves draft without latching protocol degradation or replay", async () => {
+  const root = await mkdtemp(join(tmpdir(), "gpt-transient-")),
+    store = new Store(":memory:");
+  process.env.GPT_TRANSIENT_FIXTURE = "fixture";
+  const service = new GptService(
+    configSchema.parse({
+      hub: { publicBaseUrl: "https://qa.example", databasePath: ":memory:", resultsPath: root },
+      auth: {},
+      machines: [],
+      projects: [],
+      gpt: { endpoint: "http://127.0.0.1:1", tokenSecret: "GPT_TRANSIENT_FIXTURE" },
+    }),
+    store,
+  );
+  let sends = 0;
+  try {
+    for (const code of ["GPT_PREPARATION_TIMEOUT", "GPT_UI_ATTENTION"]) {
+      service.json = async (path) => {
+        if (path === "/status") return healthyConnection;
+        if (path === "/settings") throw new HubError(409, code, "Preparation paused");
+        if (path === "/bridge/chat") sends++;
+        return { ok: true };
+      };
+      const id = randomUUID();
+      service.enqueue(id, {
+        nativeId: null,
+        text: "Keep this draft",
+        files: [],
+        model: "Latest",
+        effort: "2",
+      });
+      await wait(() => service.job(id).status === "failed" && !service.working);
+      assert.equal(service.job(id).text, "Keep this draft");
+      assert.equal((await service.connection(true)).state, "healthy");
+      await service.pump();
+      assert.equal(service.job(id).status, "failed");
+      assert.equal(sends, 0);
+    }
+  } finally {
+    await service.close();
+    store.close();
+    await rm(root, { recursive: true, force: true });
+    delete process.env.GPT_TRANSIENT_FIXTURE;
   }
 });
