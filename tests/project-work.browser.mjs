@@ -59,6 +59,7 @@ for (const [engine, type] of [
       .fill("Проверить на телефоне");
     await panel.getByRole("checkbox", { name: "Выполнено: Подготовить меню", exact: true }).check();
     await panel.getByRole("button", { name: "Закрыть рабочий раздел" }).click();
+    await page.getByRole("button", { name: "Обзор текущего проекта" }).click();
     await page
       .getByRole("region", { name: "Планы проекта", exact: true })
       .getByRole("button", { name: "Открыть", exact: true })
@@ -151,11 +152,7 @@ for (const [engine, type] of [
     await expect(panel.getByRole("button", { name: "Копировать отчёт" })).toBeVisible();
     await page.screenshot({ path: `.local/qa-work/${engine}-report-phone.png` });
     await panel.getByRole("button", { name: "Закрыть рабочий раздел" }).click();
-    await page
-      .getByRole("region", { name: "Продолжить работу" })
-      .getByRole("button")
-      .first()
-      .click();
+    // Deeper workspace panels close back to the original chat, without an intermediate page.
     await expect(chat).toHaveValue("Мой несвязанный черновик");
     const callsBeforeRepair = f.calls.length;
     const missing = "00000000-0000-4000-8000-000000000000";

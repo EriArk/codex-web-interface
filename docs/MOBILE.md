@@ -305,3 +305,8 @@ Codex and GPT message headers expose a small copy icon with a 44px touch target.
 ### Results categories
 
 Both clients use one shared Results feed with All, Images, Demos, Files and Work filters. The horizontal category strip keeps the active tab visible and uses 44px controls. Counts cover the conversation, while each category loads 20 records at a time. Native GPT branch changes replace stale results. User uploads remain in conversation messages; assistant files/images get compact result links. Images retain their original colors in every theme. Preview supports images, isolated HTML demos and bounded UTF-8 text files, with downloads for other file types.
+
+
+### Compact workflow update — 2026-09-10
+
+The compact drawer has Search plus close at the top, scrollable project/chat groups in the middle, and Settings / Remote / direct client toggle at the bottom. Refresh and Archive are secondary Settings actions. Native dialog layering preserves the underlying chat for Project Overview and the four-step project wizard. Existing GPT selection remains identifiable while history loads; an uncached chat cannot be mistaken for a new conversation. Final-answer positioning operates in the chat scroller only and respects manual/source navigation. Physical iPhone/iPad behavior continues to be verified through owner usage; Chromium/WebKit simulation does not replace device acceptance.

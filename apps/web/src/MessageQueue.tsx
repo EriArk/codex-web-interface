@@ -23,6 +23,7 @@ export function useMessageQueue(threadId: string) {
     [loadError, setLoadError] = useState(""),
     [busy, setBusy] = useState(false);
   const readFailures = useRef(0);
+  const reads = useRef(new Set<AbortController>());
   const current = useRef(threadId);
   current.current = threadId;
   const request = useRef(0),
@@ -31,8 +32,12 @@ export function useMessageQueue(threadId: string) {
   const refresh = useCallback(async () => {
     if (!threadId) return;
     const seq = ++request.current;
+    const controller = new AbortController();
+    reads.current.add(controller);
     try {
-      const value = await api<QueueState>(`/threads/${threadId}/queue`);
+      const value = await api<QueueState>(`/threads/${threadId}/queue`, {
+        signal: controller.signal,
+      });
       if (current.current === threadId && seq === request.current) {
         setState(value);
         readFailures.current = 0;
@@ -40,6 +45,7 @@ export function useMessageQueue(threadId: string) {
       }
       return value;
     } catch (e) {
+      if (controller.signal.aborted) throw e;
       if (current.current === threadId && seq === request.current) {
         if (e instanceof ApiError && e.code === "MACHINE_RELEASED") {
           readFailures.current = 0;
@@ -49,6 +55,8 @@ export function useMessageQueue(threadId: string) {
         }
       }
       throw e;
+    } finally {
+      reads.current.delete(controller);
     }
   }, [threadId]);
   useEffect(() => {
@@ -69,6 +77,10 @@ export function useMessageQueue(threadId: string) {
           checking = false;
         });
     };
+    const abortReads = () => {
+      for (const controller of reads.current) controller.abort();
+    };
+    window.addEventListener("pagehide", abortReads);
     check();
     const timer = setInterval(check, 2500);
     const change = (e: Event) => {
@@ -79,6 +91,8 @@ export function useMessageQueue(threadId: string) {
     return () => {
       disposed = true;
       request.current++;
+      abortReads();
+      window.removeEventListener("pagehide", abortReads);
       clearInterval(timer);
       window.removeEventListener("codex-queue-changed", change);
       document.removeEventListener("visibilitychange", check);

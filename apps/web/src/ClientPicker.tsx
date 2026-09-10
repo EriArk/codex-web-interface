@@ -1,3 +1,4 @@
+import { Icon } from "./icons";
 import "./clientPicker.css";
 export function ClientPicker({
   value,
@@ -6,17 +7,17 @@ export function ClientPicker({
   value: "codex" | "gpt";
   onChange: (value: "codex" | "gpt") => void;
 }) {
+  const next = value === "codex" ? "gpt" : "codex";
   return (
-    <label className="client-picker">
-      <span>{value === "gpt" ? "GPT" : "codex"}</span>
-      <select
-        aria-label="Режим приложения"
-        value={value}
-        onChange={(event) => onChange(event.target.value as "codex" | "gpt")}
-      >
-        <option value="codex">Codex</option>
-        <option value="gpt">GPT</option>
-      </select>
-    </label>
+    <button
+      type="button"
+      className="client-picker"
+      data-client={value}
+      aria-label={next === "gpt" ? "Переключиться на GPT" : "Переключиться на Codex"}
+      title={value === "gpt" ? "GPT" : "Codex"}
+      onClick={() => onChange(next)}
+    >
+      <Icon name={value === "gpt" ? "chat" : "repository"} size={27} />
+    </button>
   );
 }

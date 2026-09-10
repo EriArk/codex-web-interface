@@ -234,6 +234,15 @@ for (const [engine, type] of [
         .getByRole("button", { name: "Открыть Remote", exact: true })
         .filter({ visible: true });
       await expect(shortcut).toBeVisible();
+      await shortcut.evaluate(async (el) => {
+        await Promise.all(
+          el
+            .closest("dialog")
+            ?.getAnimations({ subtree: true })
+            .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+            .map((a) => a.finished.catch(() => {})) ?? [],
+        );
+      });
       const box = await shortcut.boundingBox();
       assert(box.width >= 44 && box.height >= 44);
       assert.equal(await shortcut.innerText(), "");
@@ -263,9 +272,9 @@ for (const [engine, type] of [
     });
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).tap();
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на GPT" })
       .filter({ visible: true })
-      .selectOption("gpt");
+      .click();
     await expect(page.getByRole("textbox", { name: "Сообщение GPT" })).toBeVisible();
     await expect(page.locator(".mobile-tabs > button")).toHaveCount(2);
     await expect(page.locator(".mobile-tabs > a")).toHaveCount(0);

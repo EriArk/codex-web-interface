@@ -28,9 +28,9 @@ for (const [name, type] of [
       return r.fulfill({ status: 404, body: "missing old release asset" });
     });
     await page.goto(origin);
-    const picker = page.getByRole("combobox", { name: "Режим приложения" });
+    const picker = page.getByRole("button", { name: "Переключиться на GPT" });
     await expect(picker).toBeVisible();
-    await picker.selectOption("gpt");
+    await picker.click();
     await expect.poll(() => missed).toBe(1);
 
     await expect(page.getByRole("alert")).toContainText("Не удалось загрузить GPT");

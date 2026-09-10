@@ -239,6 +239,24 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 18,
+    name: "durable-project-setup",
+    up(db) {
+      db.exec(
+        "CREATE TABLE project_setup_operations(id TEXT PRIMARY KEY,machineId TEXT NOT NULL,state TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL); CREATE INDEX project_setup_pending ON project_setup_operations(machineId,state,updatedAt)",
+      );
+    },
+  },
+  {
+    version: 19,
+    name: "private-bridge-doctor",
+    up(db) {
+      db.exec(
+        "ALTER TABLE threads ADD COLUMN diagnostic INTEGER NOT NULL DEFAULT 0; CREATE TABLE bridge_doctor_config(id INTEGER PRIMARY KEY CHECK(id=1),value TEXT NOT NULL); CREATE TABLE bridge_doctor_incidents(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,state TEXT NOT NULL,lastSeen INTEGER NOT NULL,value TEXT NOT NULL); CREATE INDEX bridge_doctor_fingerprint ON bridge_doctor_incidents(fingerprint,lastSeen);",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

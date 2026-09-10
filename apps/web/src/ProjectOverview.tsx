@@ -24,6 +24,7 @@ export function ProjectOverview({
   onResults,
   onRemote,
   cachedThreads,
+  onClose,
 }: {
   scope: Exclude<NotebookScope, null>;
   onTarget: (t: NotebookLink) => void;
@@ -34,6 +35,7 @@ export function ProjectOverview({
   onResults?: () => void;
   onRemote?: () => void;
   cachedThreads?: OverviewThread[];
+  onClose?: () => void;
 }) {
   const [data, setData] = useState<Overview | null>(null),
     [error, setError] = useState(""),
@@ -168,6 +170,16 @@ export function ProjectOverview({
         >
           <Icon name="refresh" />
         </button>
+        {onClose && (
+          <button
+            type="button"
+            className="icon-button panel-close"
+            aria-label="Закрыть обзор проекта"
+            onClick={onClose}
+          >
+            <Icon name="close" />
+          </button>
+        )}
       </header>
       <div className="project-overview-scroll">
         {error && (

@@ -87,18 +87,26 @@ for (const [engine, type] of [
     assert.equal(statusReads, before);
     assert.equal(seenWrites, 0);
     assert.equal(f.store.thread(unread.id).seenSeq, 0);
-    await expect(chat).not.toBeVisible();
-    await page.screenshot({ path: `.local/qa-overview/${engine}-phone.png` });
+    assert.equal(await page.locator(".project-overview-modal").evaluate((el) => el.open), true);
+    await expect(page.locator('textarea[aria-label="Сообщение Codex"]')).toHaveValue(
+      "Черновик остаётся в чате",
+    );
+    await page.screenshot({
+      animations: "disabled",
+      path: `.local/qa-overview/${engine}-phone.png`,
+    });
     await panel.getByRole("button", { name: "Решение проекта", exact: true }).click();
     const notes = page.getByRole("dialog", { name: "Заметки и ссылки", exact: true });
     await expect(notes.getByRole("textbox", { name: "Текст заметки" })).toHaveValue(
       "Сохранённый контекст",
     );
     await notes.getByRole("button", { name: "Закрыть заметки" }).click();
+    await open();
     await panel.getByRole("button", { name: /Следующий шаг/ }).click();
     const plan = page.getByRole("dialog", { name: "Задачи", exact: true });
     await expect(plan.getByRole("textbox", { name: "Название задачи" })).toHaveValue(task.title);
     await plan.getByRole("button", { name: "Закрыть задачи" }).click();
+    await open();
     await panel.getByRole("button", { name: /^Handoff chat/ }).click();
     await expect(chat).toHaveValue("Черновик остаётся в чате");
     await open();
@@ -106,7 +114,6 @@ for (const [engine, type] of [
     await expect(page.locator(`[data-result="${result}"]`)).toBeVisible();
     assert.equal(seenWrites, 0);
     await page.setViewportSize({ width: 1366, height: 1024 });
-    await open();
     for (const theme of ["organizer", "hitech-2000s", "classic-dark"]) {
       await page
         .getByRole("button", { name: "Настройки", exact: true })
@@ -115,9 +122,16 @@ for (const [engine, type] of [
         .click();
       await page.locator(`.theme-option.${theme} input`).check();
       await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
-      await page.screenshot({ path: `.local/qa-overview/${engine}-tablet-${theme}.png` });
+      await open();
+      await expect(panel.getByRole("button", { name: /Следующий шаг/ })).toBeVisible();
+      await page.screenshot({
+        animations: "disabled",
+        path: `.local/qa-overview/${engine}-tablet-${theme}.png`,
+      });
+      await page.getByRole("button", { name: "Закрыть обзор проекта" }).click();
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     }
+    const preservedSelection = { ...f.store.preferences() };
     await page.locator('.nav-project[data-project-id="empty"]').filter({ visible: true }).click();
     await page
       .locator(".nav-project-group")
@@ -129,8 +143,12 @@ for (const [engine, type] of [
     await expect(empty.getByText("Пока нет диалогов.")).toBeVisible();
     await expect(empty.getByRole("button", { name: "Новый диалог", exact: true })).toBeEnabled();
     await page.reload();
-    await expect(empty.getByText("Пока нет диалогов.")).toBeVisible();
-    assert.equal(f.store.preferences().threadId, null);
+    await expect(page.locator(".project-overview-modal")).toHaveCount(0);
+    await open();
+    await expect(panel).toBeVisible();
+    assert.equal(f.store.preferences().threadId, preservedSelection.threadId);
+    assert.equal(f.store.preferences().projectId, preservedSelection.projectId);
+    await page.getByRole("button", { name: "Закрыть обзор проекта" }).click();
     // GPT Home uses normalized catalog data already present in the client, and only Hub-owned context.
     const gptId = randomUUID();
     await page.route("**/api/gpt/conversations?*", (r) =>
@@ -191,28 +209,26 @@ for (const [engine, type] of [
       true,
     );
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на GPT" })
       .filter({ visible: true })
-      .selectOption("gpt");
+      .click();
     const gpt = page.getByRole("textbox", { name: "Сообщение GPT" });
     await expect(gpt).toBeVisible();
     await gpt.fill("Черновик GPT");
     await page.getByRole("button", { name: "GPT Project", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Обзор проекта", exact: true })
-      .filter({ visible: true })
-      .click();
+    await page.locator(".overview-nav").filter({ visible: true }).first().click();
     const gptHome = page.getByRole("region", { name: "Обзор проекта GPT Project", exact: true });
     await expect(gptHome.getByRole("button", { name: /GPT follow-up/ })).toBeVisible();
     await expect(
       gptHome.getByRole("button", { name: "GPT проектный чат", exact: true }),
     ).toBeVisible();
-    await expect(gpt).not.toBeVisible();
+    await expect(page.locator('textarea[aria-label="Сообщение GPT"]')).toHaveValue("Черновик GPT");
     await gptHome.getByRole("button", { name: "GPT проектный чат", exact: true }).click();
     await expect(gpt).toBeVisible();
     await page
       .getByRole("button", { name: "Обзор проекта", exact: true })
       .filter({ visible: true })
+      .first()
       .click();
     await gptHome.getByRole("button", { name: "Handoff chat", exact: true }).click();
     await expect(chat).toHaveValue("Черновик остаётся в чате");
