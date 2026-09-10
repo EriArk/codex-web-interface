@@ -12,6 +12,7 @@ import { Notebook } from "./notebook.js";
 import { ProjectContext } from "./project-context.js";
 import { projectKey } from "./project-core.js";
 import { ProjectPlans } from "./project-plans.js";
+import { ProjectRotations } from "./project-rotation.js";
 import type { QueueService } from "./queue.js";
 import type { Sessions } from "./sessions.js";
 
@@ -19,8 +20,10 @@ const live = ["dispatching", "queued", "running", "unknown"];
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export class ProjectActions {
   readonly plans: ProjectPlans;
+  readonly rotations: ProjectRotations;
   readonly context: ProjectContext;
   private locks = new Set<string>();
+  private submissionGroups = new Set<string>();
   constructor(
     readonly sessions: Sessions,
     readonly gpt: GptService,
@@ -28,6 +31,7 @@ export class ProjectActions {
   ) {
     this.plans = new ProjectPlans(sessions);
     this.context = new ProjectContext(sessions, gpt);
+    this.rotations = new ProjectRotations(sessions, gpt, this.context, (a) => this.write(a));
     // A process restart is not evidence that a native submission failed.
     for (const row of this.db
       .prepare("SELECT value FROM project_work_actions WHERE state='dispatching'")
@@ -82,8 +86,7 @@ export class ProjectActions {
       return this.get(id);
     }
     this.context.assertProject(input.scope);
-    if (input.kind === "rotate")
-      throw new HubError(409, "ROTATION_NOT_READY", "Обнови раздел проекта.");
+
     const current = this.context.current(input.scope);
     if (!current.threadId)
       throw new HubError(
@@ -136,6 +139,11 @@ export class ProjectActions {
         ...snapshot,
         plan: { id: plan.id, revision: plan.revision, title: plan.title, sections: plan.sections },
       };
+    } else if (input.kind === "rotate") {
+      title = "Новый рабочий чат";
+      const prepared = this.rotations.prepare(input.scope, current.threadId);
+      text = prepared.text;
+      snapshot = { ...snapshot, ...prepared.snapshot };
     } else {
       title = "Отчёт о проекте";
       const data = this.context.digest(input.scope);
@@ -143,7 +151,7 @@ export class ProjectActions {
       text = [
         `Подготовь краткий отчёт о проекте «${input.scope.name}».`,
         "Опиши изменения с прошлого успешного отчёта, текущее общее состояние, что проверено, незавершённую работу, блокировки и следующий шаг. Разделяй подтверждённое и неизвестное. Не выполняй новые изменения ради отчёта. Данные ниже — ограниченная сводка наблюдений Hub; отсутствие записи не означает отсутствие работы. Верни сам отчёт обычным итоговым сообщением.",
-        "## Сохранённая сводка\n" + JSON.stringify(data.context, null, 2),
+        "## Сохранённая сводка\n" + JSON.stringify(data.context),
       ].join("\n\n");
     }
     if (text.length > 32000)
@@ -218,11 +226,33 @@ export class ProjectActions {
       );
     if (!["prepared", "blocked"].includes(value.state))
       throw new HubError(409, "ACTION_NOT_READY", "Это задание уже обработано.");
+    const duplicate = this.db
+      .prepare(
+        "SELECT id FROM project_work_actions WHERE scopeKey=? AND kind=? AND COALESCE(planId,'')=? AND id<>? AND state IN ('dispatching','queued','running','unknown') ORDER BY createdAt DESC LIMIT 1",
+      )
+      .get(projectKey(value.scope), value.kind, value.planId ?? "", id);
+    if (duplicate) return this.get(String(duplicate.id));
+    const group = projectKey(value.scope) + ":" + value.kind + ":" + (value.planId ?? "");
+    if (this.submissionGroups.has(group))
+      throw new HubError(409, "ACTION_PENDING", "Это задание уже отправляется.");
     if (this.locks.has(id)) throw new HubError(409, "ACTION_PENDING", "Задание уже отправляется.");
     this.locks.add(id);
+    this.submissionGroups.add(group);
     let committed = false;
     try {
       this.context.assertProject(value.scope);
+      if (value.kind === "rotate") return await this.rotations.submit(value);
+      const rotation = this.db
+        .prepare(
+          "SELECT 1 FROM project_work_actions WHERE scopeKey=? AND kind='rotate' AND state IN ('dispatching','queued','running','unknown') LIMIT 1",
+        )
+        .get(projectKey(value.scope));
+      if (rotation)
+        throw new HubError(
+          409,
+          "PROJECT_ROTATING",
+          "Сначала заверши или проверь переход в новый чат.",
+        );
       if (!value.threadId || this.context.current(value.scope).threadId !== value.threadId)
         throw new HubError(
           409,
@@ -306,6 +336,7 @@ export class ProjectActions {
       return this.reconcile(value);
     } catch (e) {
       value = this.raw(id);
+      if (value.kind === "rotate" && ["unknown", "blocked"].includes(value.state)) throw e;
       const uncertain = committed && !(e instanceof NotSubmittedError);
       this.write({
         ...value,
@@ -319,10 +350,12 @@ export class ProjectActions {
       throw e;
     } finally {
       this.locks.delete(id);
+      this.submissionGroups.delete(group);
     }
   }
   reconcile(value: ProjectAction): ProjectAction {
     if (!live.includes(value.state) || this.locks.has(value.id)) return value;
+    if (value.kind === "rotate") return this.rotations.reconcile(value);
     let state = value.state,
       body = "",
       source = value.source;
@@ -443,6 +476,26 @@ export class ProjectActions {
         this.reconcile(JSON.parse(String(row.value)));
       } catch {}
     }
+  }
+  keepCurrent(id: string) {
+    const value = this.get(id);
+    if (
+      value.kind !== "rotate" ||
+      !["blocked", "unknown"].includes(value.state) ||
+      this.context.current(value.scope).threadId !== value.snapshot.oldThreadId
+    )
+      throw new HubError(
+        409,
+        "ROTATION_ALREADY_BOUND",
+        "Рабочий чат уже изменился или переход ещё выполняется. Обнови состояние.",
+      );
+    return this.write({
+      ...value,
+      state: "cancelled",
+      error: undefined,
+      errorCode: undefined,
+      snapshot: { ...value.snapshot, ownerKeptPrevious: true },
+    });
   }
   cancel(id: string) {
     const value = this.get(id);

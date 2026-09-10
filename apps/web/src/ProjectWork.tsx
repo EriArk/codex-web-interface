@@ -658,6 +658,7 @@ export function ProjectWorkPanel({
           )}
           {action && (
             <ProjectActionPanel
+              key={action.id}
               initial={action}
               onChange={actionChanged}
               onOpen={onOpen}

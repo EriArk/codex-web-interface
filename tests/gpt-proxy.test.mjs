@@ -61,3 +61,42 @@ test("GPT proxy preserves image-only payloads and labels only proven pre-dispatc
   await result.body.cancel();
   assert.equal(forwarded.length, 6, "the proxy never retries a prompt");
 });
+
+test("a project bootstrap is rejected before dispatch if its native composer changed", async (t) => {
+  const realFetch = globalThis.fetch;
+  let forwarded = 0,
+    ready = false;
+  t.mock.method(globalThis, "fetch", async (_url, opts) => {
+    forwarded++;
+    assert(!("projectId" in JSON.parse(opts.body)));
+    return new Response("data: {}\n\n");
+  });
+  const server = createServer((req, res) =>
+    proxyBridge(req, res, "/bridge/chat", "fixture-token", { beforeChat: async () => ready }),
+  );
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const send = () =>
+    realFetch("http://127.0.0.1:" + server.address().port, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Bootstrap",
+        projectId: "g-p-12345678-1234-1234-1234-123456789abc",
+      }),
+    });
+  let r = await send();
+  assert.equal(r.status, 400);
+  assert.equal(r.headers.get("x-codex-gpt-dispatch"), "not-submitted");
+  await r.body.cancel();
+  assert.equal(forwarded, 0);
+  ready = true;
+  r = await send();
+  assert.equal(r.status, 200);
+  await r.body.cancel();
+  assert.equal(forwarded, 1);
+});

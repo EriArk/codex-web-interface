@@ -3,7 +3,7 @@ export async function readJson(req,limit=128*1024){
  for await(const chunk of req){size+=chunk.length;if(size>limit)throw Error('GPT_REQUEST_TOO_LARGE');chunks.push(chunk)}
  return JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}');
 }
-export async function proxyBridge(req,res,path,token){
+export async function proxyBridge(req,res,path,token,{beforeChat}={}){
  const method=req.method,route=path.slice('/bridge'.length);
  const allowed=method==='POST'
   ? ['/chat','/files','/sessions/new','/sessions/select','/browser/stop','/composer/attachments/clear'].includes(route)||/^\/requests\/[a-zA-Z0-9_-]{1,160}\/steer$/.test(route)
@@ -15,6 +15,12 @@ export async function proxyBridge(req,res,path,token){
  try{
   const body=method==='POST'?await readJson(req,route==='/files'?36*1024*1024:128*1024):undefined;
   if(route==='/chat'){
+   if(body.projectId){
+    if(typeof body.projectId!=='string'||!/^g-p-[a-zA-Z0-9-]{8,90}$/.test(body.projectId)||!beforeChat||!await beforeChat(body)){
+     res.writeHead(400,{'Content-Type':'application/json','X-Codex-Gpt-Dispatch':'not-submitted'}).end(JSON.stringify({error:'GPT_PROJECT_COMPOSER_CHANGED'}));return;
+    }
+    delete body.projectId;
+   }
    // Model/power selection is performed and verified through the current UI before submission.
    delete body.model;delete body.effort;delete body.reasoning_effort;
    if(!Array.isArray(body.attachments))body.attachments=[];

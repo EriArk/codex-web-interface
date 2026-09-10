@@ -405,3 +405,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Maintain an owner-edited Project Core distinct from dynamic Tasks, Notes, Plans, Reports and chat handoffs. Include purpose, behavior, rules, constraints, architecture and preferences.
 - Core writes require explicit revisions; retain the last 40 owner versions with explicit restore. Preserve Core and history through project/chat archive or deletion. Do not rewrite repository instructions or promote model output into Core.
 - New current-chat bootstrap includes the saved Core; ordinary messages do not repeat it automatically.
+
+## Owner-requested complete project workspace (2026-09-10)
+
+- Keep human Tasks, captured Notes, executable ordered Plans, checkpointed Reports and owner-edited Core distinct, with shared project filters and four-theme phone/tablet layouts.
+- Project actions target one Current chat. Explicit rotation sends bounded canonical Core plus separate dynamic state/handoff through ordinary native creation and durable send receipts; change Current only on confirmed identity/submission. Preserve previous chats and every project-owned item/backlink.
+- Never blindly retry unknown creation/bootstrap. For GPT verify canonical project membership and the exact submitted bootstrap. Existing ownership, permissions, model/effort checks and unknown-send recovery still apply.

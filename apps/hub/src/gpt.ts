@@ -44,6 +44,7 @@ const settings = z.object({ model: z.string().min(1).max(120), effort: z.string(
 const input = settings
   .extend({
     replacesJobId: uuid.optional(),
+    projectId: id.optional(),
     nativeId: id.nullable(),
     text: z.string().max(100000),
     files: z.array(uuid).max(8),
@@ -592,6 +593,16 @@ export class GptService {
       throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
     if (this.libraryBusy)
       throw error("GPT_LIBRARY_BUSY", "Обновляем список чатов. Повтори отправку через секунду.");
+    if (value.projectId) {
+      if (value.nativeId)
+        throw error(
+          "GPT_PROJECT_INPUT",
+          "Новый чат проекта не должен содержать старый идентификатор.",
+        );
+      const project = this.library.get("project", value.projectId);
+      if (!project || project.deleted || project.archived)
+        throw error("GPT_PROJECT_UNAVAILABLE", "Проект GPT недоступен. Обнови список проектов.");
+    }
     if (value.nativeId) {
       this.library.assertExists("thread", value.nativeId);
       if (this.library.get("thread", value.nativeId)?.archived)
@@ -634,6 +645,10 @@ export class GptService {
           Date.now(),
           Date.now(),
         );
+      if (value.projectId)
+        this.store.db
+          .prepare("INSERT INTO gpt_project_jobs(jobId,projectId) VALUES(?,?)")
+          .run(jobId, value.projectId);
       if (value.replacesJobId) this.dismissRecord(value.replacesJobId);
       this.store.db.exec("COMMIT");
     } catch (error) {
@@ -719,7 +734,12 @@ export class GptService {
       this.update(jobId, { status: "preparing" });
       preparing = "session";
       if (job.nativeId) await this.json("/bridge/sessions/select", { sessionId: job.nativeId });
-      else await this.json("/bridge/sessions/new", {});
+      else {
+        const project = this.store.db
+          .prepare("SELECT projectId FROM gpt_project_jobs WHERE jobId=?")
+          .get(jobId);
+        await this.json("/bridge/sessions/new", project ? { projectId: project.projectId } : {});
+      }
       if (this.job(jobId).status === "cancelled") return;
       preparing = "settings";
       const selected = await this.json("/settings", { model: job.model, effort: job.effort });
@@ -795,6 +815,9 @@ export class GptService {
         "/bridge/chat",
         {
           message: job.text,
+          ...(this.store.db
+            .prepare("SELECT projectId FROM gpt_project_jobs WHERE jobId=?")
+            .get(jobId) ?? {}),
           sessionId: job.nativeId ?? undefined,
           attachments: files,
           stream: true,
@@ -897,6 +920,8 @@ export class GptService {
     } finally {
       if (monitor) clearInterval(monitor);
       streamController.abort();
+      if (!this.stopped && this.job(jobId).nativeId)
+        await this.verifyProjectJob(jobId).catch(() => {});
       if (!this.stopped && done && this.job(jobId).status === "completed")
         await this.releaseCompletedUploads();
       this.working = false;
@@ -909,6 +934,35 @@ export class GptService {
         );
         this.recoveryTimer.unref();
       }
+    }
+  }
+  private verifyingProjects = new Set<string>();
+  async verifyProjectJob(jobId: string) {
+    const row = this.store.db.prepare("SELECT * FROM gpt_project_jobs WHERE jobId=?").get(jobId);
+    if (!row || row.verified || this.verifyingProjects.has(jobId)) return;
+    const job = this.job(jobId);
+    if (!job.nativeId || Date.now() - Number(row.checkedAt) < 10000) return;
+    this.verifyingProjects.add(jobId);
+    this.store.db
+      .prepare("UPDATE gpt_project_jobs SET checkedAt=? WHERE jobId=?")
+      .run(Date.now(), jobId);
+    try {
+      const raw = await this.json("/conversation?id=" + encodeURIComponent(job.nativeId));
+      const messages = gptHistory(raw, job.nativeId);
+      const user = messages.find(
+        (m) =>
+          m.role === "user" && m.text === job.text && m.createdAt * 1000 >= job.createdAt - 10000,
+      );
+      if (raw.gizmo_id !== row.projectId || !user) return;
+      this.historyCache.seed(job.nativeId, messages);
+      this.library.save("thread", job.nativeId, {
+        name: typeof raw.title === "string" ? raw.title.slice(0, 120) : "Продолжение",
+        projectId: String(row.projectId),
+        activityAt: Date.now() / 1000,
+      });
+      this.store.db.prepare("UPDATE gpt_project_jobs SET verified=1 WHERE jobId=?").run(jobId);
+    } finally {
+      this.verifyingProjects.delete(jobId);
     }
   }
   async close() {
