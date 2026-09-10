@@ -28,6 +28,7 @@ export type CachedProjectGit = {
   error?: boolean;
 };
 export type ProjectOverview = {
+  core?: { revision: number; purpose: string; updatedAt: number };
   scope: NotebookScope;
   generatedAt: number;
   threads: OverviewThread[];

@@ -75,6 +75,7 @@ jobs:
       - run: node tests/note-capture.browser.mjs
       - run: node tests/tasks.browser.mjs
       - run: node tests/project-overview.browser.mjs
+      - run: node tests/project-core.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs
 

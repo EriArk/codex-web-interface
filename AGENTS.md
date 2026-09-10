@@ -399,3 +399,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Save visible messages directly to Notes, preserving exact text and an immutable source snapshot with client, role, native/thread/message/turn identities and capture time. Editing the note does not rewrite its original source.
 - Capture only writes Hub metadata. Preserve chat drafts, selection, scroll, native ownership and unread state. Exact retry idempotency prevents duplicate captures.
 - Source navigation uses bounded history context; it never silently jumps to the newest message or downloads an entire chat. Missing/deleted sources keep the captured note readable.
+
+## Owner-requested project continuity foundation (2026-09-10)
+
+- Maintain an owner-edited Project Core distinct from dynamic Tasks, Notes, Plans, Reports and chat handoffs. Include purpose, behavior, rules, constraints, architecture and preferences.
+- Core writes require explicit revisions; retain the last 40 owner versions with explicit restore. Preserve Core and history through project/chat archive or deletion. Do not rewrite repository instructions or promote model output into Core.
+- New current-chat bootstrap includes the saved Core; ordinary messages do not repeat it automatically.

@@ -9,6 +9,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Notebook } from "./notebook.js";
+import { ProjectCores } from "./project-core.js";
 import type { Sessions } from "./sessions.js";
 import { WorkspaceTasks } from "./tasks.js";
 
@@ -44,6 +45,12 @@ export class ProjectHome {
         pins: this.notes.pins(key, 0, 3).items,
         results: [],
       };
+    const core = new ProjectCores(this.sessions).get(value.scope!);
+    value.core = {
+      revision: core.revision,
+      purpose: core.value.purpose.slice(0, 240),
+      updatedAt: core.updatedAt,
+    };
     if (!project) return value;
     const where =
       "t.projectId=? AND t.archived=0 AND NOT EXISTS(SELECT 1 FROM library_entities e WHERE e.client='codex' AND e.kind='thread' AND e.id=t.codexThreadId AND (json_extract(e.value,'$.deleted')=1 OR json_extract(e.value,'$.archived')=1))";

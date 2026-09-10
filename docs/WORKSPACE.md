@@ -17,3 +17,11 @@ The owner requested an external UI review. Layout principles were reviewed again
 ## Verification
 
 Notes regression tests cover scoping, exact Unicode text, revisions, lost responses, unavailable sources and private-route boundaries. Chromium/WebKit browser tests exercise direct capture, immutable source display, retry without duplication, exact backlinks, draft continuity, phone/tablet geometry and theme screenshots. Physical iPhone/iPad checks remain the owner's everyday usage, not simulated hardware acceptance.
+
+## Project Core / issue #87
+
+Project Home opens the owner-maintained Core: purpose, behavior, rules, constraints, architecture and preferences. Six bounded fields remain distinct from dynamic activity. Edits use explicit revisions and durable device drafts. Lost save acknowledgements with identical contents are idempotent; conflicting edits show the other version before any explicit replacement.
+
+Schema 15 stores Core and its last 40 versions independently of native project/chat records. Restoration creates a new version; it never deletes the intervening history. Version lists page ten metadata rows at a time. Deleting/archiving a native project retains its saved Core; no source folder, repository instructions or native writer is changed. The complete SQLite backup includes both tables.
+
+Core text is available for the forthcoming current-chat bootstrap only. It is not automatically appended to ordinary messages. Chromium/WebKit check phone/tablet editing, draft preservation, conflicts, history and explicit restore with four-theme screenshots.

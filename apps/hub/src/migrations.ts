@@ -204,6 +204,16 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 15,
+    name: "project-core-history",
+    up(db) {
+      db.exec(`
+    CREATE TABLE project_cores(scopeKey TEXT PRIMARY KEY,scope TEXT NOT NULL,value TEXT NOT NULL,revision INTEGER NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+    CREATE TABLE project_core_history(scopeKey TEXT NOT NULL REFERENCES project_cores(scopeKey) ON DELETE CASCADE,revision INTEGER NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL,PRIMARY KEY(scopeKey,revision));
+  `);
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

@@ -264,6 +264,20 @@ export function ProjectOverview({
                 </div>
               </section>
             )}
+            <section className="overview-card" aria-label="Основа проекта">
+              <header>
+                <h2>Основа проекта</h2>
+                <button type="button" onClick={() => onNotebook({ scope, mode: "core" })}>
+                  Открыть <Icon name="chevron" size={14} />
+                </button>
+              </header>
+              <p className="overview-core-summary">
+                {data.core?.purpose || "Назначение, правила и ограничения проекта."}
+              </p>
+              {!!data.core?.revision && (
+                <small className="muted">Версия {data.core.revision}</small>
+              )}
+            </section>
             <section className="overview-card" aria-label="Контекст проекта">
               <header>
                 <h2>Под рукой</h2>
