@@ -108,6 +108,7 @@ export class WorkspaceTasks {
         availability: scope.client === "codex" ? "missing" : "unknown",
       });
     }
+    const referenced = new Set(projects.keys());
     for (const p of this.sessions.catalog.projects()) {
       if (p.unassigned) continue;
       const scope = { client: "codex" as const, projectId: p.id, name: p.name };
@@ -120,6 +121,10 @@ export class WorkspaceTasks {
       .all()) {
       const entry = JSON.parse(String(row.value)),
         key = `${row.client}:${row.id}`;
+      if (entry.deleted && !referenced.has(key)) {
+        projects.delete(key);
+        continue;
+      }
       const previous = projects.get(key);
       // Hidden/deleted entries without tasks do not clutter the task picker.
       if (!previous && (entry.deleted || row.client === "codex")) continue;

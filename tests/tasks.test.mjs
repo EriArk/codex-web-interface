@@ -186,6 +186,12 @@ test("global task project filters use saved Hub metadata, retain missing associa
     123,
   );
   assert.equal(next.nextOffset, null);
+  f.sessions.catalog.library.save("project", "project", { deleted: true });
+  library.save("project", "g-deleted-empty", { name: "Deleted empty", deleted: true });
+  assert(
+    !tasks.projects().items.some((p) => ["project", "g-deleted-empty"].includes(p.scope.projectId)),
+  );
+  assert.equal(tasks.get(saved.id).body, "Keep owner text");
   assert.equal((await f.app.inject({ url: "/api/workspace/tasks/projects" })).statusCode, 401);
   assert.equal(
     (await f.app.inject({ url: "/api/workspace/tasks/projects?offset=-1", headers: f.headers }))
