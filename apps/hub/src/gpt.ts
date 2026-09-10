@@ -235,6 +235,12 @@ export class GptService {
       )
     ).json();
   }
+  async doctorReport() {
+    const raw = await this.json("/status");
+    return this.compatibilityFailure && raw.state === "healthy"
+      ? { ...raw, state: "degraded", doctorStage: "preparation" }
+      : raw;
+  }
   async pins() {
     const raw = await this.json("/pins");
     const rows: Json[] = Array.isArray(raw) ? raw : Array.isArray(raw.items) ? raw.items : [];

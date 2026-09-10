@@ -10,10 +10,11 @@ import {
 } from "react";
 import { AccountControls } from "./AccountControls";
 import { ApiError, api, configureApi, messageOf } from "./api";
+import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { Chat } from "./Chat";
 import type { RecoveryOutcome } from "./ConnectionRecovery";
 import { DesktopControl } from "./DesktopControl";
-import { type LibraryChange, libraryEvent } from "./EntityMenu";
+import { EntityArchive, type LibraryChange, libraryEvent } from "./EntityMenu";
 import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
@@ -24,7 +25,7 @@ import { Notifications, type NotificationTarget, useNotificationPresence } from 
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectFiles } from "./ProjectFiles";
 import { ProjectNavigation } from "./ProjectNavigation";
-import { ProjectOverview } from "./ProjectOverview";
+import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { completePendingSend, pendingSendKey } from "./pendingSend";
 import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
@@ -295,6 +296,8 @@ function Workspace({
     setResultFocusVersion(0);
     setResultCategory("all");
   }, [threadId]);
+  const [overviewId, setOverviewId] = useState("");
+  const overviewProject = projects.find((p) => p.id === overviewId);
   const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "38")));
   const root = useRef<HTMLDivElement>(null),
     settingsDialog = useRef<HTMLDialogElement>(null),
@@ -308,6 +311,7 @@ function Workspace({
       !drawer &&
       !settings &&
       !createProject &&
+      !overviewId &&
       !resultOverlay,
     () => setDrawer(true),
   );
@@ -315,7 +319,13 @@ function Workspace({
   useNotificationPresence(
     "codex",
     threadId,
-    client === "codex" && view === "chat" && !settings && !drawer && !machinePanel && !notebook,
+    client === "codex" &&
+      view === "chat" &&
+      !overviewId &&
+      !settings &&
+      !drawer &&
+      !machinePanel &&
+      !notebook,
   );
   const [notificationTarget, setNotificationTarget] = useState<NotificationTarget | undefined>();
   const notificationHandled = useCallback((id: string) => {
@@ -376,19 +386,6 @@ function Workspace({
   const selectedThread = threads.find((t) => t.id === threadId);
   const selectedThreadTitle =
     navigationState.state.threads.find((t) => t.id === threadId)?.title ?? selectedThread?.title;
-  useEffect(() => {
-    if (
-      initialized &&
-      project &&
-      !project.unassigned &&
-      !threadId &&
-      threadGroups[projectId]?.length === 0 &&
-      !state.loading &&
-      !busy &&
-      view === "chat"
-    )
-      setView("overview");
-  }, [initialized, project, projectId, threadGroups, threadId, state.loading, busy, view]);
   const action = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
     if (busy) return;
     setBusy(true);
@@ -432,7 +429,7 @@ function Workspace({
         setMachines(machineList.machines);
         setProjects(list);
         if (prefs.theme) setTheme(prefs.theme);
-        if (prefs.view) setView(prefs.view === "remote" ? "chat" : prefs.view);
+        if (prefs.view) setView(["remote", "overview"].includes(prefs.view) ? "chat" : prefs.view);
         const visible = list.filter((p) => !p.archived && !p.deleted);
         const id = visible.some((p) => p.id === prefs.projectId)
           ? (prefs.projectId ?? "")
@@ -495,7 +492,8 @@ function Workspace({
     };
   }, [projectId, view]);
   useEffect(() => {
-    if (!projectId) return;
+    if (!initialized || !projectId) return;
+    // Initial project metadata arrives before its selected thread. Do not persist that partial state.
     // Keep the notification URL recoverable until this selection is durable.
     // Serialize selection writes so a slow predecessor cannot replace the target.
     const target = notificationSelection.current;
@@ -519,7 +517,7 @@ function Workspace({
         }
       })
       .catch(() => {});
-  }, [projectId, threadId, view]);
+  }, [initialized, projectId, threadId, view]);
   const resultRequest = useRef(0);
   const loadResults = useCallback(async () => {
     const request = ++resultRequest.current;
@@ -715,14 +713,14 @@ function Workspace({
     setView("results");
   };
   const openProjectOverview = (id: string) => {
-    threadRequest.current++;
-    if (id !== projectId) {
-      setProjectId(id);
-      setThreadId("");
-      setThreads(threadGroups[id] ?? []);
-    }
-    setView("overview");
+    setOverviewId(id);
     setDrawer(false);
+  };
+  const selectOverviewProject = () => {
+    if (!overviewProject || overviewProject.id === projectId) return;
+    setProjectId(overviewProject.id);
+    setThreadId("");
+    setThreads(threadGroups[overviewProject.id] ?? []);
   };
   const openNotebookTarget = (target: NotebookLink) => {
     if (
@@ -947,6 +945,7 @@ function Workspace({
     <ProjectNavigation
       onClient={(value) => {
         setDrawer(false);
+        setOverviewId("");
         setClient(value);
       }}
       projects={projects}
@@ -1146,18 +1145,21 @@ function Workspace({
         </div>
       )}
       <main className="workspace-content">
-        {view === "overview" && project && !project.unassigned && (
-          <ProjectOverview
-            key={projectId}
-            scope={{ client: "codex", projectId, name: project.name }}
+        {overviewProject && !overviewProject.unassigned && (
+          <ProjectOverviewModal
+            key={overviewId}
+            onClose={() => setOverviewId("")}
+            scope={{ client: "codex", projectId: overviewId, name: overviewProject.name }}
             onTarget={openNotebookTarget}
             onNotebook={setNotebook}
-            onNew={() => newThread(projectId)}
+            onNew={() => newThread(overviewId)}
             onFiles={() => {
+              selectOverviewProject();
               setView("files");
               setRightHidden(false);
             }}
             onResults={() => {
+              selectOverviewProject();
               setResultScope("project");
               setFocusResult("");
               setView("results");
@@ -1165,6 +1167,7 @@ function Workspace({
             }}
             onMachines={() => setMachinePanel(true)}
             onRemote={() => {
+              selectOverviewProject();
               setView("remote");
               setRightHidden(false);
             }}
@@ -1207,6 +1210,7 @@ function Workspace({
           writeBlocked={writeBlocked}
           visible={view !== "overview" && (wide || view === "chat")}
           speechVisible={
+            !overviewId &&
             !drawer &&
             !settings &&
             !machinePanel &&
@@ -1216,6 +1220,7 @@ function Workspace({
             !resultOverlay
           }
           canMarkSeen={
+            !overviewId &&
             view !== "overview" &&
             !pendingNotebookResult &&
             !drawer &&
@@ -1486,6 +1491,20 @@ function Workspace({
             </label>
           ))}
         </fieldset>
+        <section className="settings-navigation-actions" aria-label="Навигация">
+          <button type="button" onClick={() => void refreshCatalog(true)} disabled={syncing}>
+            <Icon name="refresh" />
+            Обновить проекты
+          </button>
+          <EntityArchive client="codex" />
+        </section>
+        <BridgeDoctorPanel
+          open={settings}
+          onTarget={(target) => {
+            setSettings(false);
+            openNotebookTarget(target);
+          }}
+        />
         <SpeechSettings />
         <UsageLimits machines={machines} open={settings} />
         <DesktopControl

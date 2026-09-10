@@ -716,7 +716,7 @@ export class Sessions extends EventEmitter {
       this.locks.delete(projectId);
     }
   }
-  async create(projectId: string, title: string): Promise<ThreadRecord> {
+  async create(projectId: string, title: string, diagnostic = false): Promise<ThreadRecord> {
     this.project(projectId);
     return this.locked(projectId, async () => {
       const r = await this.runtime(projectId);
@@ -726,13 +726,14 @@ export class Sessions extends EventEmitter {
           ? { projectId: this.project(projectId).sourceId }
           : {}),
         historyMode: "paginated",
-        approvalPolicy: "on-request",
-        sandbox: "workspace-write",
+        approvalPolicy: diagnostic ? "never" : "on-request",
+        sandbox: diagnostic ? "read-only" : "workspace-write",
       });
       const codexId = text(record(result.thread).id);
       if (!codexId)
         throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не вернул идентификатор диалога");
       const t = this.store.createThread(projectId, codexId, title);
+      if (diagnostic) this.store.db.prepare("UPDATE threads SET diagnostic=1 WHERE id=?").run(t.id);
       if (record(result.thread).historyMode)
         this.store.db
           .prepare("UPDATE threads SET historyMode=?,workingDirectory=? WHERE id=?")
@@ -937,6 +938,7 @@ export class Sessions extends EventEmitter {
     settings?: TurnSettings,
     attachmentIds: string[] = [],
     clientMessageId?: string,
+    diagnostic = false,
   ): Promise<Record<string, unknown>> {
     let committing = false;
     try {
@@ -971,6 +973,7 @@ export class Sessions extends EventEmitter {
         // The Hub is the primary writer. Keep its loaded conversation between turns;
         // releasing and reacquiring it here lets another App Server steal the writer.
         if (
+          !diagnostic &&
           !r.loaded.has(id) &&
           t.origin !== "desktop" &&
           !t.sourceUpdatedAt &&
@@ -983,7 +986,9 @@ export class Sessions extends EventEmitter {
               ? { projectId: this.project(t.projectId).sourceId }
               : {}),
             historyMode: "paginated",
-            ...threadAccess(selection.access),
+            ...(diagnostic
+              ? { sandbox: "read-only", approvalPolicy: "never" }
+              : threadAccess(selection.access)),
           });
           const sourceId = text(record(fresh.thread).id);
           if (!sourceId)
@@ -997,7 +1002,9 @@ export class Sessions extends EventEmitter {
             threadId: t.codexThreadId,
             cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
             excludeTurns: true,
-            ...threadAccess(selection.access),
+            ...(diagnostic
+              ? { sandbox: "read-only", approvalPolicy: "never" }
+              : threadAccess(selection.access)),
           });
           r.loaded.add(id);
         }
@@ -1051,7 +1058,9 @@ export class Sessions extends EventEmitter {
             threadId: t.codexThreadId,
             input: [...(prompt ? [{ type: "text", text: prompt }] : []), ...prepared.input],
             clientUserMessageId: messageId,
-            ...turnAccess(selection.access),
+            ...(diagnostic
+              ? { sandboxPolicy: { type: "readOnly" }, approvalPolicy: "never" }
+              : turnAccess(selection.access)),
             model: selection.model,
             effort: selection.effort,
             ...(r.nativeModes
@@ -1061,7 +1070,9 @@ export class Sessions extends EventEmitter {
                     settings: {
                       model: selection.model,
                       reasoning_effort: selection.effort,
-                      developer_instructions: null,
+                      developer_instructions: diagnostic
+                        ? "Read-only diagnosis. Never edit files, execute project code, change services, credentials, browser state or send external messages. Report findings only."
+                        : null,
                     },
                   },
                 }

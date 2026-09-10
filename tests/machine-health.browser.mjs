@@ -104,9 +104,9 @@ for (const [engine, type] of [
     await panel.getByRole("button", { name: "Project", exact: true }).click();
     await expect(editor).toHaveValue("Сохранить мой черновик");
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на GPT" })
       .filter({ visible: true })
-      .selectOption("gpt");
+      .click();
     const gptEditor = page.getByRole("textbox", { name: "Сообщение GPT" });
     await expect(gptEditor).toBeVisible();
     await gptEditor.fill("Черновик GPT");

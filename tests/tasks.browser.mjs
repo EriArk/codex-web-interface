@@ -180,9 +180,9 @@ for (const [engine, type] of [
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await panel.getByRole("button", { name: "Закрыть задачи" }).click();
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на GPT" })
       .filter({ visible: true })
-      .selectOption("gpt");
+      .click();
     const gpt = page.getByRole("textbox", { name: "Сообщение GPT" });
     await expect(gpt).toBeVisible();
     await gpt.fill("Мой черновик GPT");

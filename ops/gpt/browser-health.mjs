@@ -1,3 +1,4 @@
+import {doctorObstruction} from './browser-doctor.mjs';
 import {inspectObstructions} from './browser-obstructions.mjs';
 import {storageLimits} from './retained-files.mjs';
 import { lstatSync, readFileSync } from "node:fs";
@@ -35,7 +36,7 @@ export async function readConnectorHealth({health,pages,privateState:storage}) {
   try {const response=await fetch("/api/auth/session",{credentials:"include",cache:"no-store",signal:AbortSignal.timeout(8000)});if(response.status===401||response.status===403)return "required";if(!response.ok)return "unknown";const session=await response.json();return typeof session.accessToken==="string"?"authenticated":"required";}catch{return "unknown";}
  });
  const obstruction=await inspectObstructions(target);
- return {...connectorReport({health:state,login,challenge,controls:await inspectComposer(target,obstruction==='promotion'),obstruction,privateState:storage}),storage:bridgeStorage()};
+ return {...connectorReport({health:state,login,challenge,controls:await inspectComposer(target,obstruction==='promotion'),obstruction,privateState:storage}),storage:bridgeStorage(),doctorObstruction:await doctorObstruction(target)};
 }
 
 export function bridgeStorage() {

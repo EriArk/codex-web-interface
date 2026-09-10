@@ -14,9 +14,11 @@ import { mergeGptHistory } from "./gptState";
 export function useGptHistory(selected: string) {
   const [page, setPage] = useState<GptCachedChat | undefined>(() => gptCache.chats[selected]);
   const [loading, setLoading] = useState(false);
+  const [revalidating, setRevalidating] = useState(false);
   const [error, setError] = useState("");
   const scroll = useRef<HTMLDivElement>(null),
     sticky = useRef(page?.sticky ?? true);
+  const pageScope = useRef(selected);
   const selectedRef = useRef(selected),
     mounted = useRef(true);
   const pending = useRef(new Map<string, Promise<void>>());
@@ -30,10 +32,11 @@ export function useGptHistory(selected: string) {
   }, []);
   useLayoutEffect(() => {
     mounted.current = true;
+    pageScope.current = selected;
     const cached = gptCache.chats[selected];
     setPage(cached);
     sticky.current = cached?.sticky ?? true;
-    setLoading(false);
+    setLoading(!!selected && !cached);
     setError("");
     return () => {
       rememberScroll(selected);
@@ -79,6 +82,10 @@ export function useGptHistory(selected: string) {
         serial = beginGptHistory(id);
       const task = (async () => {
         if (mounted.current && selectedRef.current === id && (older || !cached)) setLoading(true);
+        if (mounted.current && selectedRef.current === id) {
+          setRevalidating(true);
+          setError("");
+        }
         try {
           const query = new URLSearchParams();
           if (messageId) query.set("messageId", messageId);
@@ -123,9 +130,13 @@ export function useGptHistory(selected: string) {
             await history(id, undefined, true);
             return;
           }
+          if (mounted.current && selectedRef.current === id) setError(messageOf(error));
           throw error;
         } finally {
-          if (mounted.current && selectedRef.current === id) setLoading(false);
+          if (mounted.current && selectedRef.current === id) {
+            setLoading(false);
+            setRevalidating(false);
+          }
         }
       })();
       pending.current.set(id, task);
@@ -159,13 +170,17 @@ export function useGptHistory(selected: string) {
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [selected, history]);
+  const currentPage =
+    gptCache.chats[selected] ?? (pageScope.current === selected ? page : undefined);
   return {
+    ready: !!currentPage,
+    revalidating,
     error,
     clearError: () => setError(""),
-    messages: page?.messages ?? [],
-    contextMessage: page?.contextMessage,
-    hasNewer: page?.hasNewer,
-    before: page?.before ?? null,
+    messages: currentPage?.messages ?? [],
+    contextMessage: currentPage?.contextMessage,
+    hasNewer: currentPage?.hasNewer,
+    before: currentPage?.before ?? null,
     loading,
     scroll,
     sticky,

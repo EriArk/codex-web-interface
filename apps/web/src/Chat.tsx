@@ -28,6 +28,7 @@ import { MessageQueue, useMessageQueue } from "./MessageQueue";
 import { SpeechButton, useSpeechScope } from "./MessageSpeech";
 import { clearAcknowledgedSend, matchesPendingSend } from "./pendingSend";
 import { TurnDetails } from "./TurnDetails";
+import { useCompletionPosition } from "./useCompletionPosition";
 import "./taskBoundary.css";
 import type { Approval, Message, Result, TurnSettings } from "./types";
 import { UpdateNotice } from "./UpdateNotice";
@@ -372,7 +373,7 @@ export function Chat({
     [newMessages, setNewMessages] = useState(false);
   const active = ["running", "starting", "waiting_approval"].includes(state.thread.status);
   const external = state.thread.activitySource === "external";
-  useEffect(() => {
+  useLayoutEffect(() => {
     try {
       setDraft(sessionStorage.getItem(`codex-draft-${threadId}`) ?? "");
     } catch {
@@ -399,6 +400,43 @@ export function Chat({
       setNewMessages(false);
     } else setNewMessages(true);
   }, [threadId, state.messages, state.loadingOlder, visible]);
+  const liveTurn = useRef("");
+  const liveScope = useRef("");
+  if (liveScope.current !== threadId) {
+    liveScope.current = threadId;
+    liveTurn.current = "";
+  }
+  if (active && state.thread.activeTurnId) liveTurn.current = state.thread.activeTurnId;
+  const finalMessage = state.messages.findLast(
+    (m) =>
+      m.turnId === liveTurn.current &&
+      m.role === "assistant" &&
+      m.phase !== "commentary" &&
+      m.phase !== "analysis",
+  );
+  const completionLocked = useCompletionPosition({
+    scope: threadId,
+    enabled:
+      visible &&
+      speechVisible &&
+      !state.contextTurn &&
+      !state.hasNewer &&
+      !focusMessage &&
+      !focusTurn,
+    following: atBottom,
+    scroller,
+    content,
+    entries: liveTurn.current
+      ? [
+          {
+            id: liveTurn.current,
+            active,
+            complete: state.thread.status === "completed",
+            target: finalMessage?.id ?? "",
+          },
+        ]
+      : [],
+  });
   useEffect(() => {
     if (!visible || (!focusTurn && !focusMessage)) return;
     atBottom.current = false;
@@ -471,7 +509,8 @@ export function Chat({
         onScroll={(e) => {
           const el = e.currentTarget;
           positions.set(threadId, el.scrollTop);
-          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+          if (!completionLocked.current)
+            atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
           if (atBottom.current) setNewMessages(false);
         }}
       >

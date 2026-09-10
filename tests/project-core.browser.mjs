@@ -53,10 +53,8 @@ for (const [engine, type] of [
       .getByRole("textbox", { name: "Архитектура", exact: true })
       .fill("Windows → Hub → iPhone");
     await panel.getByRole("button", { name: "Закрыть основу проекта" }).click();
-    await page
-      .getByRole("region", { name: "Продолжить работу" })
-      .getByRole("button", { name: /Handoff chat/ })
-      .click();
+    // Closing the deeper modal returns directly to the mounted originating chat.
+    await expect(page.getByRole("dialog", { name: "Обзор проекта" })).toHaveCount(0);
     await expect(chat).toHaveValue("Не терять мой вопрос");
     await open();
     await expect(purpose).toHaveValue("Домашняя библиотека");

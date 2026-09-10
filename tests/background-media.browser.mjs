@@ -158,7 +158,22 @@ for (const [engine, type] of [
       for (const p of data.projects) p.remoteAvailable = true;
       await route.fulfill({ response, json: data });
     });
+    let startupThreads;
+    await page.route("**/api/projects/project/threads", (route) => {
+      startupThreads = route;
+    });
     await page.goto(origin);
+    await expect.poll(() => !!startupThreads).toBe(true);
+    await expect(page.getByRole("button", { name: "Обзор текущего проекта" })).toContainText(
+      "Project",
+    );
+    assert.equal(
+      f.store.preferences().threadId,
+      f.thread.id,
+      "Partial startup must not overwrite the selected conversation",
+    );
+    await startupThreads.continue();
+    await page.unroute("**/api/projects/project/threads");
     const editor = page.getByRole("textbox", { name: "Сообщение Codex" });
     await expect(editor).toBeVisible();
     await editor.fill("Сохранённый черновик");
@@ -218,6 +233,10 @@ for (const [engine, type] of [
       beforeSystem,
       "explicit system mode does not contact Piper",
     );
+    assert.equal(
+      await page.evaluate((id) => sessionStorage.getItem("codex-draft-" + id), f.thread.id),
+      "Сохранённый черновик",
+    );
     await page.reload();
     await expect(editor).toHaveValue("Сохранённый черновик");
     await settings.click();
@@ -234,6 +253,15 @@ for (const [engine, type] of [
         .getByRole("button", { name: "Открыть Remote", exact: true })
         .filter({ visible: true });
       await expect(shortcut).toBeVisible();
+      await shortcut.evaluate(async (el) => {
+        await Promise.all(
+          el
+            .closest("dialog")
+            ?.getAnimations({ subtree: true })
+            .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+            .map((a) => a.finished.catch(() => {})) ?? [],
+        );
+      });
       const box = await shortcut.boundingBox();
       assert(box.width >= 44 && box.height >= 44);
       assert.equal(await shortcut.innerText(), "");
@@ -263,9 +291,9 @@ for (const [engine, type] of [
     });
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).tap();
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на GPT" })
       .filter({ visible: true })
-      .selectOption("gpt");
+      .click();
     await expect(page.getByRole("textbox", { name: "Сообщение GPT" })).toBeVisible();
     await expect(page.locator(".mobile-tabs > button")).toHaveCount(2);
     await expect(page.locator(".mobile-tabs > a")).toHaveCount(0);

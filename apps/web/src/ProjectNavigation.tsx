@@ -8,9 +8,9 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
-import { ClientPicker } from "./ClientPicker";
-import { EntityArchive, EntityMenu } from "./EntityMenu";
+import { EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
+import { NavigationFooter } from "./NavigationFooter";
 import { PinnedList } from "./PinnedList";
 import type { Project, Thread } from "./types";
 import { WorkspaceLinks } from "./WorkspaceLinks";
@@ -23,12 +23,10 @@ export function ProjectNavigation({
   threadId,
   busy,
   loading,
-  machine,
   onExpand,
   onThread,
   onNewThread,
   onNewProject,
-  onRefresh,
   onClose,
   onSettings,
   onNotebook,
@@ -249,20 +247,17 @@ export function ProjectNavigation({
   };
   return (
     <div className="navigation-inner" data-section={section}>
-      <div className="nav-brand">
-        <img src="/icon.svg" width="32" height="32" alt="" />
-        <span>{onClient ? <ClientPicker value="codex" onChange={onClient} /> : "codex"}</span>
-        {onRemote && (
-          <button
-            type="button"
-            className="icon-button nav-remote"
-            aria-label="Открыть Remote"
-            title="Remote"
-            onClick={onRemote}
-          >
-            <Icon name="remote" />
-          </button>
-        )}
+      <div className="navigation-top-row">
+        <div className="nav-search">
+          <Icon name="search" size={16} />
+          <input
+            aria-label="Поиск проектов и диалогов"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Найти…"
+            type="search"
+          />
+        </div>
         <button
           type="button"
           className="icon-button mobile-only panel-close"
@@ -319,30 +314,11 @@ export function ProjectNavigation({
           />
         </button>
       </nav>
-      <div className="nav-search">
-        <Icon name="search" size={16} />
-        <input
-          aria-label="Поиск проектов и диалогов"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Найти…"
-          type="search"
-        />
-      </div>
       <div className="nav-scroll">
         <section className="nav-projects">
           <div className="nav-label">
             Проекты{" "}
             <span className="nav-label-actions">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Обновить проекты"
-                disabled={loading}
-                onClick={onRefresh}
-              >
-                <Icon name="refresh" size={16} />
-              </button>
               <button
                 type="button"
                 className="icon-button"
@@ -529,30 +505,18 @@ export function ProjectNavigation({
         </section>
       </div>
       <div className="nav-bottom">
-        <EntityArchive client="codex" />
-        <div className="machine-indicator">
-          <span className={`status-dot ${machine}`} />
-          <span>
-            {selected?.machineName ?? "Компьютер"}
-            <small>
-              {machine === "online"
-                ? "На связи"
-                : machine === "offline"
-                  ? "Нет соединения"
-                  : "Проверяем соединение"}
-            </small>
-          </span>
-        </div>
         <WorkspaceLinks
           onTasks={onPlan}
           onNotes={onNotebook}
           onPlans={onPlans}
           onReports={onReports}
         />
-        <button type="button" className="nav-settings" onClick={onSettings}>
-          <Icon name="settings" size={18} />
-          Настройки
-        </button>
+        <NavigationFooter
+          client="codex"
+          onClient={onClient}
+          onSettings={onSettings}
+          onRemote={onRemote}
+        />
       </div>
     </div>
   );

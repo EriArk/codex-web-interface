@@ -321,6 +321,15 @@ export type {
 export * from "./project-core.js";
 export * from "./project-work.js";
 export * from "./results.js";
+export type {
+  ProjectSetupInput,
+  ProjectSetupOperation,
+  SetupInspection,
+  SetupMachineReceipt,
+  SetupProbeRequest,
+  SetupProbeResult,
+  SetupRepository,
+} from "./setup.js";
 export * from "./storage.js";
 export {
   type TaskFields,

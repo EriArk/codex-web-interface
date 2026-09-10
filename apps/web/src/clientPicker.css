@@ -1,29 +1,109 @@
-.client-picker {
-  position: relative;
-  display: inline-flex;
+.navigation-system-row {
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+.navigation-mode-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.navigation-system-row .nav-settings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-height: 44px;
-  font: inherit;
+  min-width: 0;
+  font-size: 14px;
+  padding: 4px 0;
+  flex: 1;
+  text-align: left;
 }
-.client-picker::after {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.6;
+.navigation-system-row .nav-remote {
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  color: var(--muted);
 }
-.client-picker select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  opacity: 0;
-  font-size: 16px;
+button.client-picker {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  min-width: 54px;
+  min-height: 54px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--selected);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 3px var(--paper);
   cursor: pointer;
+  padding: 0;
 }
-.client-picker:focus-within {
+button.client-picker:hover {
+  filter: brightness(1.08);
+}
+button.client-picker:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+.navigation-top-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+.navigation-top-row .nav-search {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.navigation-top-row .nav-search input {
+  width: 100%;
+  min-width: 0;
+}
+.navigation-top-row .panel-close {
+  flex-shrink: 0;
+}
+.project-sheet .navigation-inner {
+  padding-top: 12px;
+}
+.navigation-inner .workspace-links {
+  margin-top: 6px;
+}
+.settings-navigation-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+.settings-navigation-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  min-height: 44px;
+  text-align: left;
+}
+@media (max-width: 430px) {
+  .navigation-system-row {
+    gap: 5px;
+  }
+  .navigation-mode-controls {
+    gap: 5px;
+  }
+  .navigation-system-row .nav-settings {
+    font-size: 13px;
+  }
 }

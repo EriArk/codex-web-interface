@@ -170,9 +170,9 @@ for (const [engine, type] of [
     });
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).tap();
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на GPT" })
       .filter({ visible: true })
-      .selectOption("gpt");
+      .click();
     await expect(page.getByRole("textbox", { name: "Сообщение GPT" })).toBeVisible();
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).tap();
     await page
@@ -189,9 +189,9 @@ for (const [engine, type] of [
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).tap();
     await expect(gpt.getByRole("button", { name: "Озвучить ответ" })).toBeAttached();
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на Codex" })
       .filter({ visible: true })
-      .selectOption("codex");
+      .click();
     assert.equal(
       await page.getByRole("button", { name: "Остановить озвучивание", exact: true }).count(),
       0,

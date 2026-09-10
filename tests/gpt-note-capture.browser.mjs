@@ -108,9 +108,9 @@ for (const [engine, type] of [
     });
     await page.goto(origin);
     await page
-      .getByRole("combobox", { name: "Режим приложения" })
+      .getByRole("button", { name: "Переключиться на GPT" })
       .filter({ visible: true })
-      .selectOption("gpt");
+      .click();
     await page
       .getByRole("button", { name: "GPT source", exact: true })
       .filter({ visible: true })
@@ -147,11 +147,19 @@ for (const [engine, type] of [
     delayed = true;
     await page.getByRole("button", { name: "К последним сообщениям", exact: true }).click();
     await expect.poll(() => delayedStarted).toBe(true);
+    await page.evaluate(
+      (id) =>
+        sessionStorage.setItem(
+          "gpt-draft-" + id,
+          JSON.stringify({ text: "Черновик второго чата", files: [] }),
+        ),
+      secondId,
+    );
     await page
       .getByRole("button", { name: "Second chat", exact: true })
       .filter({ visible: true })
       .click();
-    await chat.fill("Черновик второго чата");
+    await expect(chat).not.toBeVisible();
     await expect(page.getByText("Связь временно потеряна", { exact: true })).toBeVisible();
     const lateResponse = page.waitForResponse((r) => r.status() === 503 && r.url().includes(id));
     releaseHistory();

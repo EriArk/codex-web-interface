@@ -14,7 +14,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccountControls } from "./AccountControls";
 import { api, messageOf } from "./api";
-import { ClientPicker } from "./ClientPicker";
+import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
@@ -31,15 +31,17 @@ import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { MachineHealthPanel } from "./MachineHealth";
 import { SpeechButton, SpeechSettings, useSpeechScope } from "./MessageSpeech";
+import { NavigationFooter } from "./NavigationFooter";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
-import { ProjectOverview } from "./ProjectOverview";
+import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
 import { StorageUsage } from "./StorageUsage";
 import { type Theme, themes } from "./theme";
 import type { Session } from "./types";
+import { useCompletionPosition } from "./useCompletionPosition";
 import { useGptHistory } from "./useGptHistory";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
@@ -244,6 +246,8 @@ export function GptWorkspace({
     messages,
     before,
     loading,
+    ready: historyReady,
+    revalidating,
     scroll,
     sticky,
     history,
@@ -636,7 +640,14 @@ export function GptWorkspace({
     onNotebook?.({ ...notebookContext(), mode, allProjects: true });
   };
   const send = async () => {
-    if (sending.current || uploading || !model || (!text.trim() && !files.length)) return;
+    if (
+      sending.current ||
+      uploading ||
+      (selected && !historyReady) ||
+      !model ||
+      (!text.trim() && !files.length)
+    )
+      return;
     const version = navigationVersion.current,
       sourceDraft = draftScope;
     sending.current = true;
@@ -741,7 +752,13 @@ export function GptWorkspace({
   useNotificationPresence(
     "gpt",
     selected || createdJob,
-    view === "chat" && !drawer && !settings && !machinePanel && !notebookOpen && !contextMessage,
+    view === "chat" &&
+      !overviewProject &&
+      !drawer &&
+      !settings &&
+      !machinePanel &&
+      !notebookOpen &&
+      !contextMessage,
   );
   const handledNotification = useRef("");
   useEffect(() => {
@@ -776,7 +793,8 @@ export function GptWorkspace({
       try {
         sessionStorage.setItem("gpt-draft-" + pendingNew.nativeId, JSON.stringify({ text, files }));
       } catch {}
-      setCreatedJob("");
+      // Keep the live completion scope through late native identity assignment.
+      // Explicit navigation clears createdJob in choose(); reload restores the native id.
       setSelected(pendingNew.nativeId);
     }
   }, [pendingNew?.nativeId]);
@@ -784,7 +802,13 @@ export function GptWorkspace({
   const speechScope = `gpt:${selected || createdJob}`;
   useSpeechScope(
     speechScope,
-    view === "chat" && !notebookOpen && !settings && !drawer && !machinePanel && !resultOverlay,
+    view === "chat" &&
+      !overviewProject &&
+      !notebookOpen &&
+      !settings &&
+      !drawer &&
+      !machinePanel &&
+      !resultOverlay,
   );
   const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
@@ -794,6 +818,44 @@ export function GptWorkspace({
     setRightHidden(false);
     setView("results");
   };
+  const completionLocked = useCompletionPosition({
+    scope: createdJob || selected,
+    enabled:
+      view === "chat" &&
+      !drawer &&
+      !settings &&
+      !overviewProject &&
+      !notebookOpen &&
+      !machinePanel &&
+      !contextMessage &&
+      !hasNewer,
+    following: sticky,
+    scroller: scroll,
+    content: messageList,
+    entries: currentJobs.map((job) => {
+      const matchingUsers = messages
+        .map((m, index) => ({ m, index }))
+        .filter(
+          ({ m }) =>
+            m.role === "user" &&
+            m.text === job.text &&
+            m.createdAt * 1000 >= job.createdAt - 30000 &&
+            m.createdAt * 1000 <= job.updatedAt,
+        );
+      const user = matchingUsers.length === 1 ? matchingUsers[0]!.index : -1;
+      const subsequent = user >= 0 ? messages.slice(user + 1) : [];
+      const nextUser = subsequent.findIndex((m) => m.role === "user");
+      const answer = (nextUser >= 0 ? subsequent.slice(0, nextUser) : subsequent).findLast(
+        (m) => m.role === "assistant",
+      );
+      return {
+        id: job.id,
+        active: job.status === "preparing" || job.status === "running",
+        complete: job.status === "completed",
+        target: answer?.id ?? "job:" + job.id,
+      };
+    }),
+  });
   const jobElements = currentJobs
     .filter((job) => showGptJob(job, messages, Date.now(), currentJobs))
     .map((job) => {
@@ -818,7 +880,7 @@ export function GptWorkspace({
             </article>
           )}
           {(job.answer || job.assets.length > 0) && (
-            <article className="message assistant">
+            <article className="message assistant" data-message={"job:" + job.id}>
               <div className="message-header">
                 <span className="avatar">G</span>
                 <b>GPT</b>
@@ -992,27 +1054,16 @@ export function GptWorkspace({
     ));
   const navigation = (
     <div className="navigation-inner">
-      <div className="nav-brand">
-        <img src="/icon.svg" width="32" height="32" alt="" />
-        <span>
-          <ClientPicker
-            value="gpt"
-            onChange={(value) => {
-              if (value === "codex") {
-                setDrawer(false);
-                onCodex();
-              }
-            }}
+      <div className="navigation-top-row">
+        <div className="nav-search">
+          <Icon name="search" size={16} />
+          <input
+            aria-label="Найти чат GPT"
+            placeholder="Найти…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
           />
-        </span>
-        <a
-          className="icon-button nav-remote"
-          href="/gpt-connect?immersive=1"
-          aria-label="Открыть Remote"
-          title="Remote"
-        >
-          <Icon name="remote" />
-        </a>
+        </div>
         <button
           type="button"
           className="icon-button mobile-only panel-close"
@@ -1022,15 +1073,6 @@ export function GptWorkspace({
         >
           <Icon name="close" />
         </button>
-      </div>
-      <div className="nav-search">
-        <Icon name="search" size={16} />
-        <input
-          aria-label="Найти чат GPT"
-          placeholder="Найти…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
       </div>
       <div className="gpt-nav-list">
         <PinnedList
@@ -1108,7 +1150,7 @@ export function GptWorkspace({
                   className="nav-new-thread overview-nav"
                   onClick={() => {
                     setOverviewProject(project);
-                    setView("overview");
+
                     setDrawer(false);
                   }}
                 >
@@ -1161,11 +1203,6 @@ export function GptWorkspace({
           </button>
         )}
       </div>
-      <button type="button" className="nav-new-thread" onClick={() => void action(() => catalog())}>
-        <Icon name="refresh" />
-        Обновить
-      </button>
-      <EntityArchive client="gpt" />
       {onNotebook && (
         <WorkspaceLinks
           onTasks={() => openNotebook("tasks")}
@@ -1175,19 +1212,23 @@ export function GptWorkspace({
         />
       )}
 
-      <button
-        type="button"
-        className="nav-new-thread"
-        onClick={() => {
+      <NavigationFooter
+        client="gpt"
+        onClient={() => {
+          setDrawer(false);
+          onCodex();
+        }}
+        onSettings={() => {
           setDrawer(false);
           setSettings(true);
         }}
-      >
-        <Icon name="settings" />
-        Настройки
-      </button>
+        remoteHref="/gpt-connect?immersive=1"
+      />
     </div>
   );
+  const selectedItem = items.find((item) => item.id === selected);
+  const selectedProject = projects.find((project) => project.id === selectedItem?.projectId);
+  const selectedTitle = selectedItem?.title || (selected ? "Разговор GPT" : "Новый чат");
   const resultExtras: ResultItem[] = currentJobs
     .filter((job) => showGptJob(job, messages, Date.now(), currentJobs))
     .flatMap((job) =>
@@ -1220,13 +1261,19 @@ export function GptWorkspace({
         >
           <Icon name="menu" />
         </button>
-        <div className="header-project">
+        <button
+          type="button"
+          className="header-project overview-trigger"
+          disabled={!selectedProject}
+          aria-label="Обзор проекта"
+          onClick={() => selectedProject && setOverviewProject(selectedProject)}
+        >
           <span>
             <Icon name="chat" size={17} />
-            GPT
+            {selectedProject?.name ?? "GPT"}
           </span>
-          <small>{items.find((item) => item.id === selected)?.title ?? "Новый чат"}</small>
-        </div>
+          <small>{selectedTitle}</small>
+        </button>
         {active && <span className="spinner" role="img" aria-label="GPT работает" />}
         <button
           type="button"
@@ -1272,9 +1319,10 @@ export function GptWorkspace({
         </div>
       )}
       <main className="workspace-content">
-        {view === "overview" && overviewProject && (
-          <ProjectOverview
+        {overviewProject && (
+          <ProjectOverviewModal
             key={overviewProject.id}
+            onClose={() => setOverviewProject(null)}
             scope={{ client: "gpt", projectId: overviewProject.id, name: overviewProject.name }}
             cachedThreads={items
               .filter((t) => t.projectId === overviewProject.id && !t.archived && !t.deleted)
@@ -1347,11 +1395,12 @@ export function GptWorkspace({
             }}
             onScroll={() => {
               if (scroll.current && performance.now() < userScrollUntil.current) {
-                sticky.current =
-                  scroll.current.scrollHeight -
-                    scroll.current.scrollTop -
-                    scroll.current.clientHeight <
-                  120;
+                if (!completionLocked.current)
+                  sticky.current =
+                    scroll.current.scrollHeight -
+                      scroll.current.scrollTop -
+                      scroll.current.clientHeight <
+                    120;
                 rememberScroll();
               }
             }}
@@ -1381,10 +1430,41 @@ export function GptWorkspace({
                   Загрузить ещё 20
                 </button>
               )}
-              {loading && !messages.length && (
-                <span className="spinner" role="img" aria-label="Загрузка истории" />
+              {selected && !historyReady && (
+                <div
+                  className="gpt-history-state"
+                  role="status"
+                  aria-label="Состояние выбранного чата"
+                >
+                  <Icon name="chat" size={32} />
+                  <h2>{selectedTitle}</h2>
+                  {historyNotice ? (
+                    <>
+                      <p>Не удалось загрузить разговор.</p>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => void action(() => history(selected, undefined, true))}
+                      >
+                        <Icon name="refresh" />
+                        Повторить загрузку
+                      </button>
+                    </>
+                  ) : (
+                    <p>
+                      <span className="spinner" />
+                      Загружаем разговор…
+                    </p>
+                  )}
+                </div>
               )}
-              {!loading && !messages.length && !currentJobs.length && (
+              {selected && historyReady && revalidating && (
+                <div className="gpt-revalidating" role="status">
+                  <span className="spinner" />
+                  Обновляем разговор…
+                </div>
+              )}
+              {!selected && !messages.length && !currentJobs.length && (
                 <div className="gpt-empty">Что обсудим?</div>
               )}
               {messages.map((message) => (
@@ -1507,6 +1587,7 @@ export function GptWorkspace({
             )}
             <form
               className="composer gpt-composer"
+              hidden={!!selected && !historyReady}
               onSubmit={(event) => {
                 event.preventDefault();
                 void send();
@@ -1583,7 +1664,12 @@ export function GptWorkspace({
                   type="submit"
                   className="send-button"
                   disabled={
-                    busy || uploading || !ready || !model || (!text.trim() && !files.length)
+                    busy ||
+                    uploading ||
+                    !ready ||
+                    (!!selected && !historyReady) ||
+                    !model ||
+                    (!text.trim() && !files.length)
                   }
                   aria-label={active ? "Добавить в очередь GPT" : "Отправить GPT"}
                 >
@@ -1692,6 +1778,24 @@ export function GptWorkspace({
             </button>
           ))}
         </div>
+        <section className="settings-navigation-actions" aria-label="Навигация">
+          <button type="button" onClick={() => void action(() => catalog())}>
+            <Icon name="refresh" />
+            Обновить чаты
+          </button>
+          <EntityArchive client="gpt" />
+        </section>
+        <BridgeDoctorPanel
+          open={settings}
+          onTarget={
+            onWorkspaceTarget
+              ? (target) => {
+                  setSettings(false);
+                  onWorkspaceTarget(target);
+                }
+              : undefined
+          }
+        />
         <SpeechSettings />
         <section className="gpt-connection-settings" aria-label="Состояние GPT">
           <p role="status">{connection?.message ?? "Проверяем подключение GPT…"}</p>

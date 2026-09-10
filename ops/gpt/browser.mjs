@@ -1,3 +1,4 @@
+import {captureDoctorEvidence} from './browser-doctor.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {readFileSync,mkdirSync,existsSync,unlinkSync} from 'node:fs';
@@ -125,6 +126,9 @@ server=createServer(async(req,res)=>{
    res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));
   }catch(error){const reason=error?.message==='GPT_UI_ATTENTION'?'attention':(error?.name==='TimeoutError'||/Execution context was destroyed|Target.*closed|Cannot find context/i.test(error?.message??''))?'timeout':'settings-not-confirmed';console.error('GPT settings:',reason);res.writeHead(409,{'Content-Type':'application/json','X-Codex-Gpt-Preparation':reason}).end(JSON.stringify({error:'GPT_SETTINGS_NOT_CONFIRMED'}))}
   return;
+ }
+ if(req.method==='GET'&&url.pathname==='/doctor-evidence'){
+  try{const result=await captureDoctorEvidence(await activePage());res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));}catch{res.writeHead(503).end('{}');}return;
  }
  if(req.method!=='GET'||!['/status','/catalog','/conversation','/bridge-health','/models','/projects','/active','/pins','/project'].includes(url.pathname)){res.writeHead(404).end();return}
  res.setHeader('Content-Type','application/json');

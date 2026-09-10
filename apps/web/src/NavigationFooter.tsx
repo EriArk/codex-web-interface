@@ -1,0 +1,49 @@
+import { ClientPicker } from "./ClientPicker";
+import { Icon } from "./icons";
+export function NavigationFooter({
+  client,
+  onClient,
+  onSettings,
+  onRemote,
+  remoteHref,
+}: {
+  client: "codex" | "gpt";
+  onClient?: (value: "codex" | "gpt") => void;
+  onSettings: () => void;
+  onRemote?: () => void;
+  remoteHref?: string;
+}) {
+  return (
+    <div className="navigation-system-row">
+      <button type="button" className="nav-settings" onClick={onSettings}>
+        <Icon name="settings" size={19} />
+        Настройки
+      </button>
+      <div className="navigation-mode-controls">
+        {remoteHref ? (
+          <a
+            className="icon-button nav-remote"
+            href={remoteHref}
+            aria-label="Открыть Remote"
+            title="Remote"
+          >
+            <Icon name="remote" />
+          </a>
+        ) : (
+          onRemote && (
+            <button
+              type="button"
+              className="icon-button nav-remote"
+              onClick={onRemote}
+              aria-label="Открыть Remote"
+              title="Remote"
+            >
+              <Icon name="remote" />
+            </button>
+          )
+        )}
+        {onClient && <ClientPicker value={client} onChange={onClient} />}
+      </div>
+    </div>
+  );
+}

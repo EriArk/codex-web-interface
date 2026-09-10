@@ -1,0 +1,105 @@
+.bridge-doctor-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.bridge-doctor-panel > summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.doctor-controls {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0;
+}
+.doctor-controls label {
+  min-height: 44px;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  justify-content: space-between;
+}
+.doctor-controls select {
+  max-width: 62%;
+  min-width: 0;
+}
+.doctor-controls small {
+  color: var(--muted);
+}
+.doctor-incidents {
+  display: grid;
+  gap: 8px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.doctor-incident {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.doctor-incident summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+.doctor-incident small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.doctor-incident p {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.doctor-incident dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px;
+  font-size: 12px;
+}
+.doctor-incident dd {
+  margin: 0;
+  text-align: right;
+}
+.doctor-capabilities {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.doctor-capabilities span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.doctor-incident img {
+  max-width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  margin: 12px auto;
+  display: block;
+}
+.doctor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.doctor-actions button {
+  min-height: 44px;
+}
+
+.doctor-controls input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  accent-color: var(--accent);
+}

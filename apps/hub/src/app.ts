@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
+import type { runProjectSetup } from "@codex-web/machines";
 import {
   type HubConfig,
   HubError,
@@ -18,6 +19,7 @@ import { ZodError, z } from "zod";
 import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
+import { registerBridgeDoctor } from "./bridge-doctor.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
@@ -28,6 +30,7 @@ import { registerNotebook } from "./notebook.js";
 import { registerProjectOverview } from "./overview.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
 import { registerProjectCores } from "./project-core.js";
+import { registerProjectSetup } from "./project-setup.js";
 import { registerProjectWork } from "./project-work.js";
 import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
@@ -58,6 +61,7 @@ export async function createApp(
     push?: PushOptions;
     desktopTransport?: DesktopTransport;
     machineDiagnostics?: MachineProbeDependencies;
+    projectSetupProbe?: typeof runProjectSetup;
   } = {},
 ) {
   const app = Fastify({
@@ -161,6 +165,7 @@ export async function createApp(
     });
   });
   const gpt = registerGpt(app, config, store);
+  const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);
   const push = registerPush(app, store, auth, config.hub.publicBaseUrl, options.push);
   registerNavigation(app, store, sessions, auth, sockets);
   const queue = registerQueue(app, sessions, store);
@@ -592,6 +597,7 @@ export async function createApp(
   });
   registerFilePreviews(app, auth);
   registerProjectInspector(app, sessions);
+  registerProjectSetup(app, sessions, options.projectSetupProbe);
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
@@ -815,6 +821,7 @@ export async function createApp(
   }
   app.addHook("onClose", async () => {
     for (const socket of sockets.keys()) socket.close(1001, "Server restarting");
+    await bridgeDoctor.close();
     await push.close();
     await sessions.close();
     store.close();
