@@ -285,6 +285,8 @@ export type {
   ProjectDirectory,
   ProjectFileEntry,
   ProjectGit,
+  ProjectReleases,
+  ProjectRepository,
 } from "./inspector.js";
 export type {
   DiagnosticCheck,

@@ -411,3 +411,10 @@ Before mobile support is considered complete, the same core workflow must also w
 - Keep human Tasks, captured Notes, executable ordered Plans, checkpointed Reports and owner-edited Core distinct, with shared project filters and four-theme phone/tablet layouts.
 - Project actions target one Current chat. Explicit rotation sends bounded canonical Core plus separate dynamic state/handoff through ordinary native creation and durable send receipts; change Current only on confirmed identity/submission. Preserve previous chats and every project-owned item/backlink.
 - Never blindly retry unknown creation/bootstrap. For GPT verify canonical project membership and the exact submitted bootstrap. Existing ownership, permissions, model/effort checks and unknown-send recovery still apply.
+
+
+## Owner-requested project Files/Git access (2026-09-10)
+
+- Put one Files/Git shortcut between New chat and Settings in the Codex header; bind every read and late response to the selected project. Remove the Settings entry. File actions expand at the selected row.
+- Show the local README, repository identity, branches, tags, recent commits, worktree changes and GitHub releases without acquiring a Codex writer or mutating Git.
+- Private GitHub releases reuse the existing Windows user-session GitHub CLI login through a dedicated fixed read-only Scheduled Task when SSH cannot access that login. It accepts only validated repository coordinates, returns bounded release metadata and adds no listener, credentials copy or desktop process control.

@@ -17,8 +17,21 @@
   border-bottom: 1px solid var(--line);
   min-height: 48px;
 }
-.inspector-heading strong {
+.inspector-heading > div {
   flex: 1;
+  min-width: 0;
+}
+.inspector-heading strong {
+  display: block;
+  font-size: 14px;
+}
+.inspector-heading small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .inspector-tabs {
   border-bottom: 1px solid var(--line);
@@ -61,10 +74,12 @@
   padding: 0;
   margin: 10px 0;
 }
-.inspector-list li {
+.inspector-row {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+.inspector-list > li {
   border-bottom: 1px solid var(--line);
 }
 .inspector-entry {
@@ -91,8 +106,8 @@
   flex-shrink: 0;
 }
 .inspector-selected {
-  margin: 12px 0;
-  padding: 10px;
+  margin: 0 0 10px;
+  padding: 0 10px 10px;
   border: 1px solid var(--line);
   background: var(--canvas);
   border-radius: var(--radius);
@@ -151,4 +166,468 @@
 }
 .inspector-commits span {
   overflow-wrap: anywhere;
+}
+
+.header-files {
+  flex-shrink: 0;
+}
+:root .workspace-header > .header-files {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+.header-files[aria-pressed="true"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: var(--radius);
+}
+.inspector-mode button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.inspector-entry > .inspector-file-icon {
+  flex: 0 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+}
+.inspector-file-icon.directory {
+  color: var(--accent);
+}
+.inspector-entry > span > small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.inspector-list > li.selected {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.inspector-selected {
+  border: 0;
+  border-left: 2px solid var(--accent);
+  background: transparent;
+  border-radius: 0;
+  margin-left: 14px;
+}
+.inspector-file-title strong {
+  font-size: 12px;
+  color: var(--muted);
+}
+.inspector-file-title .icon-button {
+  min-width: 44px;
+}
+.inspector-breadcrumbs {
+  display: flex;
+  align-items: center;
+  overflow: auto;
+  gap: 4px;
+  white-space: nowrap;
+  margin: -6px 0 2px;
+  font-size: 12px;
+  color: var(--muted);
+  scrollbar-width: thin;
+}
+.inspector-breadcrumbs button,
+.inspector-breadcrumbs > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.inspector-breadcrumbs button {
+  min-height: 44px;
+  padding: 0 4px;
+}
+.inspector-search {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  border-radius: var(--radius);
+}
+.inspector-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  min-height: 44px;
+  font: inherit;
+  font-size: 16px;
+}
+.inspector-list-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--muted);
+}
+.inspector-list-tools select {
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  max-width: 55%;
+}
+.inspector-list-tools small {
+  font-size: 11px;
+}
+.inspector-list {
+  margin-top: 0;
+}
+.inspector-empty {
+  color: var(--muted);
+  padding: 16px 4px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.repository-summary {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--canvas));
+}
+.repository-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.repository-identity > div {
+  flex: 1;
+  min-width: 0;
+}
+.repository-identity h2 {
+  margin: 2px 0 0;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+.repository-identity small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.repository-symbol {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  height: 42px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: var(--radius);
+}
+.repository-identity > a {
+  flex: 0 0 44px;
+}
+.repository-address {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+}
+.repository-branch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.repository-branch > strong {
+  overflow-wrap: anywhere;
+}
+.repository-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 11px;
+}
+.repository-health.changed {
+  color: var(--muted);
+}
+.repository-summary > small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.repository-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.repository-counts strong {
+  display: block;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.repository-tabs {
+  padding: 0;
+  margin: 10px 0 14px;
+}
+.repository-tabs button {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.repository-tabs small {
+  margin-left: 5px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.repository-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 12px 0;
+  background: var(--paper);
+  min-width: 0;
+  overflow: hidden;
+}
+.repository-card > header,
+.repository-card > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+.repository-card > header {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+.repository-card > header > span {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+}
+.repository-card > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.repository-card > summary::-webkit-details-marker {
+  display: none;
+}
+.repository-card > summary::after {
+  content: "";
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  width: 6px;
+  height: 6px;
+  transform: rotate(-45deg);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.repository-card[open] > summary::after {
+  transform: rotate(45deg);
+}
+.repository-card > summary > small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.repository-card > summary svg {
+  flex-shrink: 0;
+}
+.repository-card > .secondary {
+  margin: 0 12px 12px;
+}
+.inspector-markdown {
+  padding: 12px;
+  line-height: 1.6;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.inspector-markdown > :first-child {
+  margin-top: 0;
+}
+.inspector-markdown > :last-child {
+  margin-bottom: 0;
+}
+.inspector-markdown :is(h1, h2, h3) {
+  line-height: 1.3;
+  margin: 18px 0 10px;
+}
+.inspector-markdown h1 {
+  font-size: 22px;
+}
+.inspector-markdown h2 {
+  font-size: 18px;
+}
+.inspector-markdown h3 {
+  font-size: 15px;
+}
+.inspector-markdown a,
+.inspector-document-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.inspector-document-link {
+  display: inline;
+  font: inherit;
+  text-align: left;
+}
+.inspector-markdown a svg,
+.inspector-document-link svg {
+  vertical-align: middle;
+  margin-right: 5px;
+}
+.inspector-markdown pre {
+  overflow: auto;
+  font-size: 12px;
+}
+.inspector-markdown table {
+  display: block;
+  overflow: auto;
+  border-collapse: collapse;
+  max-width: 100%;
+}
+.inspector-markdown :is(th, td) {
+  border: 1px solid var(--line);
+  padding: 5px 8px;
+}
+.inspector-markdown blockquote {
+  margin-inline: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+.repository-diff-summary {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.repository-diff-summary b {
+  color: var(--ink);
+  font-weight: 500;
+}
+.repository-card ul {
+  list-style: none;
+  padding: 0 12px;
+  margin: 0;
+}
+.inspector-commits li {
+  display: block;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.inspector-commits li > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inspector-commits li > span {
+  display: block;
+  line-height: 1.5;
+}
+.inspector-commits li > small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.repository-refs li {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.repository-refs strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.repository-refs small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.repository-release summary {
+  padding-block: 10px;
+}
+.repository-release summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.repository-release summary small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+.repository-release > .inspector-actions {
+  padding: 0 12px 12px;
+}
+.repository-all-releases {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.repository-readme > .muted {
+  margin: 0 12px 12px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .inspector-selected {
+    animation: inspector-reveal 140ms ease-out;
+  }
+  @keyframes inspector-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+.inspector-location {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.inspector-location .inspector-breadcrumbs {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.inspector-file-close {
+  margin-left: auto;
+}
+.repository-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.repository-tabs button small {
+  display: inline;
+  margin-left: 0;
 }
