@@ -262,12 +262,12 @@ Add gradually, based on actual use. Each module must have a wide and mobile pres
 - lightweight Markdown;
 - mobile full-width note list/editor.
 
-### Plan / Tasks
+### Tasks
 
 - global/project tasks;
 - status and priority;
 - link task to project/thread;
-- simple plan view, not a project-management suite;
+- global human reminder list with single-tap project filters;
 - compact mobile task list.
 
 ### Machines

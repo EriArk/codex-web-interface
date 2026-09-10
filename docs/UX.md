@@ -392,13 +392,13 @@ Hi-Tech uses a neutral silver chassis, dark panel seams, inset pale screens and 
 
 “Заметки и ссылки” in both sidebars opens project context by default, with Global/All scopes. iPhone uses a full-width list or editor; iPad shows a list beside a spacious editor. Markdown preview shares collapsed copyable blocks. Save is explicit, local drafts survive panel closure/reload, and concurrent changes offer a reviewable conflict rather than overwriting silently. Result cards expose a reference action; new notes can link to the current chat/result without copying large content. Saved references use the existing three-item collapsible pinned panel. Removing a referenced source leaves the note intact and an unavailable link.
 
-## Plan
+## Tasks
 
-Both sidebars expose “План”, defaulting to the current project with an All Projects choice. The compact list filters open/today/doing/blocked/completed tasks and offers one-tap completion/reopen. A spacious editor shares Notes’ Markdown, safe drafts and conflict handling, with status, priority and an optional date. On phones the date gets its own row so the day/month/year remains readable. Result reference actions can switch from Notes to Plan and create a linked task without copying output. Generic pinned references can reopen either module.
+Both sidebars expose “Задачи”, opening the global reminder list. Single-tap filters select All, No project or an individual Codex/GPT project; Project Home opens the same data filtered to its project. Project choices use Hub metadata and remain available independently of the visible task page. Archived or missing projects retain their tasks with a status label. The compact list filters open/today/doing/blocked/completed tasks and offers one-tap completion/reopen. A spacious editor shares Notes’ Markdown, safe drafts and conflict handling, with status, priority and an optional date. On phones the date gets its own row so the day/month/year remains readable. Result reference actions can switch from Notes to Tasks and create a linked task without copying output. Generic pinned references can reopen either module.
 
 ## Project overview
 
-The project title and an entry inside each expanded project open its overview. Project expansion and inline chat navigation remain intact. A confirmed empty Codex project gets an overview with New conversation instead of a blank chat. Continue, Plan, recent Results, pinned context and cached machine/Git state link back to their real modules. iPhone uses one vertical feed above the existing three tabs; iPad keeps the left navigation beside a spacious main view.
+The project title and an entry inside each expanded project open its overview. Project expansion and inline chat navigation remain intact. A confirmed empty Codex project gets an overview with New conversation instead of a blank chat. Continue, Tasks, recent Results, pinned context and cached machine/Git state link back to their real modules. iPhone uses one vertical feed above the existing three tabs; iPad keeps the left navigation beside a spacious main view.
 
 The chat remains mounted with its draft, while read receipts/presence are suppressed when Home covers it. Opening a Result from Home does not briefly acknowledge an unseen phone chat. Empty-project selection stores an explicit null thread preference, preventing a previously selected project’s thread from reappearing on reload.
 
@@ -412,3 +412,6 @@ GPT navigation keeps the pinned panel first as requested by the owner on 2026-09
 A Codex project containing one visible chat is a direct chat shortcut, without a redundant chevron or nested single-item list. Its project menu puts New chat first. Creating a second chat restores expansion in place. An initial unknown group may resolve its single chat on the same tap; stale loads cannot take navigation away from a newer selection or a closed drawer.
 
 The single hidden child keeps its own Pin/Rename/Archive/Delete actions under a named Chat entry in the project menu. The nested menu retains a snapshot of the selected chat identity: background list changes cannot retarget a chat confirmation to the project.
+
+
+Read-aloud mode is an explicit device-local choice in Settings: System voice (the default when supported) or Background audio. System voice uses only the installed browser/device voices and never calls the speech API. Background audio keeps the private Piper track and Media Session controls. Changing mode stops both engines before starting any later playback. The unsupported system option is disabled; an available background worker never silently overrides a supported system voice preference.
