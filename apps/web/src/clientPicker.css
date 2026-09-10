@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
   border-top: 1px solid var(--line);
   padding-top: 10px;
   margin-top: 8px;
@@ -11,19 +11,22 @@
 .navigation-mode-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-shrink: 0;
 }
 .navigation-system-row .nav-settings {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: 44px;
   min-width: 0;
   font-size: 14px;
   padding: 4px 0;
   flex: 1;
   text-align: left;
+}
+.navigation-system-row .nav-settings svg {
+  flex-shrink: 0;
 }
 .navigation-system-row .nav-remote {
   min-width: 44px;
