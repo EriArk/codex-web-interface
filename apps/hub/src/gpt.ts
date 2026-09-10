@@ -995,6 +995,7 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
       q = z
         .object({
           before: id.optional(),
+          messageId: id.optional(),
           known: z
             .string()
             .regex(/^[a-f0-9]{64}$/)

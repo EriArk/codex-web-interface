@@ -195,6 +195,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 14,
+    name: "captured-notes",
+    up(db) {
+      db.exec(
+        "CREATE TABLE workspace_note_sources(noteId TEXT PRIMARY KEY REFERENCES workspace_notes(id) ON DELETE CASCADE,fingerprint TEXT UNIQUE NOT NULL,source TEXT NOT NULL)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

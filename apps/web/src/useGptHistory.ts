@@ -58,22 +58,30 @@ export function useGptHistory(selected: string, onError: (message: string) => vo
     };
   }, [rememberScroll]);
   const history = useCallback(
-    async (id: string, older?: string, force = false): Promise<void> => {
+    async (id: string, older?: string, force = false, messageId?: string): Promise<void> => {
       if (!id) return;
       if (pending.current.has(id)) {
         await pending.current.get(id);
-        if (!older && !force) return;
+        if (!older && !force && !messageId) return;
       }
       const cached = gptCache.chats[id];
-      if (!older && !force && cached && Date.now() - cached.checkedAt < 15000) return;
+      if (
+        !older &&
+        !force &&
+        !messageId &&
+        cached &&
+        (cached.contextMessage || Date.now() - cached.checkedAt < 15000)
+      )
+        return;
       const epoch = gptCacheEpoch(),
         serial = beginGptHistory(id);
       const task = (async () => {
         if (mounted.current && selectedRef.current === id && (older || !cached)) setLoading(true);
         try {
           const query = new URLSearchParams();
-          if (older) query.set("before", older);
-          else if (cached?.revision) {
+          if (messageId) query.set("messageId", messageId);
+          else if (older) query.set("before", older);
+          else if (cached?.revision && !cached.contextMessage) {
             query.set("known", cached.revision);
             if (cached.anchor) query.set("anchor", cached.anchor);
             if (cached.prefix) query.set("prefix", cached.prefix);
@@ -84,6 +92,14 @@ export function useGptHistory(selected: string, onError: (message: string) => vo
           if (epoch !== gptCacheEpoch() || !currentGptHistory(id, serial)) return;
           const current = gptCache.chats[id];
           const next = mergeGptHistory(current, data, !!older);
+          if (messageId) {
+            next.sticky = false;
+            sticky.current = false;
+          }
+          if (force && !messageId && !older && current?.contextMessage) {
+            next.sticky = true;
+            sticky.current = true;
+          }
           gptCache.chats[id] = next;
           saveGptCache();
           if (!mounted.current || selectedRef.current !== id) return;
@@ -136,6 +152,8 @@ export function useGptHistory(selected: string, onError: (message: string) => vo
   }, [selected, history, onError]);
   return {
     messages: page?.messages ?? [],
+    contextMessage: page?.contextMessage,
+    hasNewer: page?.hasNewer,
     before: page?.before ?? null,
     loading,
     scroll,

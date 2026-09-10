@@ -239,10 +239,17 @@ export function GptWorkspace({
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
   const previousJobs = useRef<GptJob[]>(gptCache.jobs);
-  const { messages, before, loading, scroll, sticky, history, rememberScroll } = useGptHistory(
-    selected,
-    setNotice,
-  );
+  const {
+    messages,
+    before,
+    loading,
+    scroll,
+    sticky,
+    history,
+    rememberScroll,
+    contextMessage,
+    hasNewer,
+  } = useGptHistory(selected, setNotice);
   selectedRef.current = selected;
   useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
   useProjectSwipe(settingsRef, settings, () => setSettings(false), "close");
@@ -450,7 +457,7 @@ export function GptWorkspace({
         previousJobs.current = mergeGptJobs(previousJobs.current, data.items);
         if (completed) {
           void catalog().catch(() => {});
-          if (selectedRef.current)
+          if (selectedRef.current && !gptCache.chats[selectedRef.current]?.contextMessage)
             void history(selectedRef.current, undefined, true).catch(() => {});
         }
       } catch {
@@ -577,6 +584,8 @@ export function GptWorkspace({
     const id = t.threadId ?? (t.kind === "thread" ? t.id : "");
     if (id) {
       choose(id);
+      if (t.messageId)
+        void history(id, undefined, true, t.messageId).catch((e) => setNotice(messageOf(e)));
       if (t.kind === "result") {
         setWorkspaceResult(t.id);
         setView("results");
@@ -587,6 +596,17 @@ export function GptWorkspace({
       setDrawer(true);
     }
   }, [workspaceDestination]);
+  useEffect(() => {
+    if (!contextMessage || loading) return;
+    const frame = requestAnimationFrame(() => {
+      const target = scroll.current?.querySelector<HTMLElement>(
+        `[data-message="${CSS.escape(contextMessage)}"]`,
+      );
+      target?.scrollIntoView({ block: "center" });
+      target?.classList.add("message-focus");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [contextMessage, loading, scroll]);
   const notebookContext = (): NotebookRequest => {
     const c = items.find((c) => c.id === selected),
       p = projects.find((p) => p.id === c?.projectId);
@@ -607,7 +627,7 @@ export function GptWorkspace({
   const openNotebook = (mode: "notes" | "tasks" = "notes") => {
     setDrawer(false);
     setSettings(false);
-    onNotebook?.({ ...notebookContext(), mode, allProjects: mode === "tasks" });
+    onNotebook?.({ ...notebookContext(), mode, allProjects: true });
   };
   const send = async () => {
     if (sending.current || uploading || !model || (!text.trim() && !files.length)) return;
@@ -669,6 +689,8 @@ export function GptWorkspace({
         setText("");
         setFiles([]);
         sticky.current = true;
+        if (contextMessage && selected)
+          void history(selected, undefined, true).catch((e) => setNotice(messageOf(e)));
       }
     } catch (e) {
       if (navigationVersion.current === version) setNotice(messageOf(e));
@@ -713,7 +735,7 @@ export function GptWorkspace({
   useNotificationPresence(
     "gpt",
     selected || createdJob,
-    view === "chat" && !drawer && !settings && !machinePanel && !notebookOpen,
+    view === "chat" && !drawer && !settings && !machinePanel && !notebookOpen && !contextMessage,
   );
   const handledNotification = useRef("");
   useEffect(() => {
@@ -1319,6 +1341,17 @@ export function GptWorkspace({
             }}
           >
             <div ref={messageList}>
+              {(contextMessage || hasNewer) && (
+                <div className="history-context">
+                  <span>Фрагмент диалога</span>
+                  <button
+                    type="button"
+                    onClick={() => void action(() => history(selected, undefined, true))}
+                  >
+                    К последним сообщениям
+                  </button>
+                </div>
+              )}
               {before && (
                 <button
                   type="button"
@@ -1339,13 +1372,46 @@ export function GptWorkspace({
                 <div className="gpt-empty">Что обсудим?</div>
               )}
               {messages.map((message) => (
-                <article className={"message " + message.role} key={message.id}>
+                <article
+                  className={"message " + message.role}
+                  key={message.id}
+                  data-message={message.id}
+                >
                   <div className="message-header">
                     <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
                     <b>{message.role === "user" ? "Вы" : "GPT"}</b>
                     <span className="message-actions">
                       {message.role === "assistant" && (
                         <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
+                      )}
+                      {onNotebook && message.text.trim() && (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          aria-label="Сохранить в заметки"
+                          onClick={() => {
+                            const context = notebookContext();
+                            onNotebook({
+                              ...context,
+                              mode: "notes",
+                              capture: {
+                                scope: context.scope,
+                                text: message.text,
+                                role: message.role,
+                                target: {
+                                  client: "gpt",
+                                  kind: "thread",
+                                  id: selected,
+                                  threadId: selected,
+                                  messageId: message.id,
+                                  title: items.find((c) => c.id === selected)?.title || "Чат GPT",
+                                },
+                              },
+                            });
+                          }}
+                        >
+                          <Icon name="file" size={17} />
+                        </button>
                       )}
                       <CopyButton text={message.text} />
                     </span>

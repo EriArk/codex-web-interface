@@ -392,3 +392,10 @@ Before mobile support is considered complete, the same core workflow must also w
 - Tasks is one global human reminder list, separate from native collaboration Plan mode and future AI Plans. Sidebar entries open all projects; Project Home opens the same storage filtered to its project.
 - Provide single-tap Codex/GPT project filters, unassigned tasks, priority/status/due dates and existing links. Keep paged queries, durable drafts, exact retry idempotency and explicit revision conflicts.
 - Task actions use only Hub metadata and never acquire a native writer, submit a prompt or change the selected chat. Preserve tasks and their project association through archive, deletion and future chat rotation; show unavailable associations.
+
+## Owner-requested global Notes and direct capture (2026-09-10)
+
+- Notes is a global personal notebook with project and unassigned filters, shared by Codex/GPT. Project Home opens the same storage filtered to that project.
+- Save visible messages directly to Notes, preserving exact text and an immutable source snapshot with client, role, native/thread/message/turn identities and capture time. Editing the note does not rewrite its original source.
+- Capture only writes Hub metadata. Preserve chat drafts, selection, scroll, native ownership and unread state. Exact retry idempotency prevents duplicate captures.
+- Source navigation uses bounded history context; it never silently jumps to the newest message or downloads an entire chat. Missing/deleted sources keep the captured note readable.

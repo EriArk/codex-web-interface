@@ -3,7 +3,9 @@ import type {
   NotebookPin,
   NotebookScope,
   NotebookTarget,
+  NoteCapture,
   NoteRecord,
+  NoteSource,
   NoteSummary,
   NotesPage,
   NoteWrite,
@@ -15,6 +17,7 @@ import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ApiError, api, messageOf } from "./api";
+import { CaptureNote } from "./CaptureNote";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
@@ -26,16 +29,23 @@ export type NotebookRequest = {
   mode?: "notes" | "tasks";
   itemId?: string;
   allProjects?: boolean;
+  capture?: NoteCapture;
 };
 export type WorkspaceDestination = { target: NotebookLink; version: number };
 export const notebookKey = (scope: NotebookScope) =>
   scope ? `${scope.client}:${scope.projectId}` : "global";
 export function cleanTarget(t: NotebookTarget): NotebookTarget {
-  const { client, kind, id, title, projectId, threadId, turnId } = t;
-  return { client, kind, id, title, projectId, threadId, turnId };
+  const { client, kind, id, title, projectId, threadId, turnId, messageId } = t;
+  return { client, kind, id, title, projectId, threadId, turnId, messageId };
 }
 type Draft = NoteWrite &
-  Partial<TaskFields> & { id: string; changedAt: number; createdAt?: number; savedAt?: number };
+  Partial<TaskFields> & {
+    source?: NoteSource;
+    id: string;
+    changedAt: number;
+    createdAt?: number;
+    savedAt?: number;
+  };
 const drafts = (prefix: string): Draft[] => {
   const rows: Draft[] = [];
   for (let i = 0; i < localStorage.length; i++) {
@@ -55,7 +65,19 @@ const drafts = (prefix: string): Draft[] => {
   }
   return rows.sort((a, b) => b.changedAt - a.changedAt);
 };
-export function NotebookPanel({
+export function NotebookPanel(props: {
+  request: NotebookRequest | undefined;
+  onClose: () => void;
+  onOpen: (target: NotebookLink) => void;
+  onRequest: (request: NotebookRequest) => void;
+}) {
+  return props.request?.capture ? (
+    <CaptureNote capture={props.request.capture} onClose={props.onClose} />
+  ) : (
+    <NotebookEditor {...props} />
+  );
+}
+function NotebookEditor({
   request,
   onClose,
   onOpen,
@@ -193,7 +215,7 @@ export function NotebookPanel({
     generation.current++;
     setBusy(false);
     setEdit(null);
-    setScope(isTask && request.allProjects ? "all" : notebookKey(request.scope));
+    setScope(request.allProjects ? "all" : notebookKey(request.scope));
     setQuery("");
     setFilter("open");
     setError("");
@@ -205,7 +227,7 @@ export function NotebookPanel({
       generation.current++;
       dialog.current?.close();
     };
-  }, [request, refreshDrafts, isTask]);
+  }, [request, refreshDrafts]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh polls only small Hub metadata.
   useEffect(() => {
     if (!request) return;
@@ -221,9 +243,7 @@ export function NotebookPanel({
         api<typeof pins>(`/workspace/pins?scope=${encodeURIComponent(scope)}`, {
           signal: controller.signal,
         }),
-        isTask
-          ? api<TaskProjectsPage>("/workspace/tasks/projects", { signal: controller.signal })
-          : Promise.resolve(undefined),
+        api<TaskProjectsPage>("/workspace/projects", { signal: controller.signal }),
       ])
         .then(([notes, saved, catalog]) => {
           if (!controller.signal.aborted) {
@@ -310,6 +330,7 @@ export function NotebookPanel({
         select(
           {
             ...payload(note),
+            source: note.source,
             id: note.id,
             createdAt: note.createdAt,
             savedAt: note.updatedAt,
@@ -362,6 +383,7 @@ export function NotebookPanel({
         if (!active.current || g !== generation.current) return;
         setEdit({
           ...payload(value),
+          source: value.source,
           id: value.id,
           createdAt: value.createdAt,
           savedAt: value.updatedAt,
@@ -438,6 +460,7 @@ export function NotebookPanel({
         const value = await api<NoteRecord>(`${base}/${n.id}`);
         setEdit({
           ...payload(value),
+          source: value.source,
           id: value.id,
           changedAt: value.updatedAt,
           createdAt: value.createdAt,
@@ -451,9 +474,8 @@ export function NotebookPanel({
   for (const n of [...page.items, ...local, ...pins.items])
     if (n.scope) scopes.set(notebookKey(n.scope), n.scope);
   if (edit?.scope) scopes.set(notebookKey(edit.scope), edit.scope);
-  if (isTask) for (const p of projects.items) scopes.set(notebookKey(p.scope), p.scope);
+  for (const p of projects.items) scopes.set(notebookKey(p.scope), p.scope);
   const orderedScopes = [...scopes].sort(([ak, a], [bk, b]) => {
-    if (!isTask) return 0;
     if (!a || !b) return a ? 1 : b ? -1 : 0;
     return a.name.localeCompare(b.name, "ru") || ak.localeCompare(bk);
   });
@@ -523,9 +545,12 @@ export function NotebookPanel({
           {status}
         </p>
       )}
-      {isTask && (
+      {
         <div className="notebook-task-controls" data-editing={!!edit}>
-          <fieldset className="task-project-filters" aria-label="Проекты задач">
+          <fieldset
+            className="task-project-filters"
+            aria-label={isTask ? "Проекты задач" : "Проекты заметок"}
+          >
             {[
               ["all", "Все"] as const,
               ...orderedScopes.map(([key, s]) => [key, projectLabel(s)] as const),
@@ -547,7 +572,7 @@ export function NotebookPanel({
                 onClick={() =>
                   void operation(async () => {
                     const next = await api<TaskProjectsPage>(
-                      `/workspace/tasks/projects?offset=${projects.nextOffset}`,
+                      `/workspace/projects?offset=${projects.nextOffset}`,
                     );
                     setProjects((old) => ({
                       items: [
@@ -576,35 +601,9 @@ export function NotebookPanel({
             <Icon name="plus" />
           </button>
         </div>
-      )}
+      }
       <div className="notebook-layout" data-editing={!!edit}>
         <aside className="notebook-list" aria-label={isTask ? "Список задач" : "Список заметок"}>
-          {!isTask && (
-            <div className="notebook-controls">
-              <select
-                aria-label="Область заметок"
-                value={scope}
-                disabled={busy}
-                onChange={(e) => setScope(e.target.value)}
-              >
-                <option value="all">Все заметки</option>
-                {orderedScopes.map(([key, s]) => (
-                  <option key={key} value={key}>
-                    {s ? `${s.name} · ${s.client === "gpt" ? "GPT" : "Codex"}` : "Общие"}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="icon-button"
-                disabled={busy}
-                aria-label={isTask ? "Новая задача" : "Новая заметка"}
-                onClick={create}
-              >
-                <Icon name="plus" />
-              </button>
-            </div>
-          )}
           <input
             type="search"
             aria-label={isTask ? "Найти задачу" : "Найти заметку"}
@@ -885,6 +884,24 @@ export function NotebookPanel({
                     />
                   </label>
                 </div>
+              )}
+              {!isTask && edit.source && (
+                <details className="note-source-card">
+                  <summary>
+                    <Icon name="chat" size={16} />{" "}
+                    {edit.source.target.client === "gpt" ? "GPT" : "Codex"} ·{" "}
+                    {edit.source.role === "user" ? "Вы" : "Ответ"}{" "}
+                    <time>{new Date(edit.source.savedAt).toLocaleDateString()}</time>
+                  </summary>
+                  <pre>{edit.source.text}</pre>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => void open(edit.source!.target)}
+                  >
+                    Открыть источник
+                  </button>
+                </details>
               )}
               <div className="notebook-mode">
                 <button type="button" aria-pressed={!preview} onClick={() => setPreview(false)}>

@@ -59,6 +59,8 @@ export interface GptProgress {
   state: "active" | "completed";
 }
 export interface GptHistoryPage {
+  contextMessage?: string;
+  hasNewer?: boolean;
   items: GptMessage[];
   nextBefore: string | null;
   revision: string;

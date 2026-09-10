@@ -930,6 +930,42 @@ export class Catalog {
       ...(turnId ? { contextTurn: turnId, hasNewer: true } : {}),
     };
   }
+  async messageContext(
+    thread: ThreadRecord,
+    messageId: string,
+    turnId?: string,
+  ): Promise<HistoryPage> {
+    // Pages remain bounded. Never scan an entire old conversation to resolve a backlink.
+    for (const [key, entry] of this.pages) {
+      if (!key.startsWith(thread.id + ":") || entry.until === Number.POSITIVE_INFINITY) continue;
+      const page = await entry.value;
+      if (page.messages.some((m) => m.id === messageId))
+        return { ...page, contextTurn: turnId || "source", hasNewer: true };
+    }
+    const local = this.store.db
+      .prepare("SELECT turnId FROM messages WHERE threadId=? AND id=?")
+      .get(thread.id, messageId);
+    if (local)
+      return this.store.context(
+        thread.id,
+        String(local.turnId ?? turnId ?? "source"),
+        messageId,
+      ) as HistoryPage;
+    const deadline = performance.now() + 15000;
+    let before: string | undefined;
+    for (let n = 0; n < 10; n++) {
+      const page = await this.history(thread, before, turnId);
+      if (page.messages.some((m) => m.id === messageId))
+        return { ...page, contextTurn: turnId || "source", hasNewer: true };
+      if (!page.nextBefore || !turnId || performance.now() > deadline) break;
+      before = page.nextBefore;
+    }
+    throw new HubError(
+      404,
+      "MESSAGE_SOURCE_UNAVAILABLE",
+      "Исходное сообщение сейчас недоступно. Сохранённый текст остался в заметке.",
+    );
+  }
   invalidate(threadId: string) {
     for (const key of this.pages.keys()) if (key.startsWith(threadId + ":")) this.pages.delete(key);
   }

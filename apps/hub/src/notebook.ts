@@ -5,22 +5,32 @@ import {
   type NotebookPin,
   type NotebookScope,
   type NotebookTarget,
+  type NoteCapture,
   type NoteRecord,
+  type NoteSource,
   type NotesPage,
   type NoteWrite,
   notebookScopeSchema,
   notebookTargetSchema,
+  noteCaptureSchema,
   noteWriteSchema,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Sessions } from "./sessions.js";
+import { workspaceProjects } from "./workspace-projects.js";
 
 type Row = Record<string, unknown>;
 const scopeKey = (scope: NotebookScope) =>
   scope ? `${scope.client}:${scope.projectId}` : "global";
 const targetKey = (target: NotebookTarget) =>
-  JSON.stringify([target.client, target.kind, target.id, target.threadId ?? ""]);
+  JSON.stringify([
+    target.client,
+    target.kind,
+    target.id,
+    target.threadId ?? "",
+    ...(target.messageId ? [target.messageId] : []),
+  ]);
 const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase("ru");
 export class Notebook {
   constructor(readonly sessions: Sessions) {}
@@ -140,7 +150,69 @@ export class Notebook {
       revision: Number(row.revision),
       createdAt: Number(row.createdAt),
       updatedAt: Number(row.updatedAt),
+      source: this.source(String(row.id)),
     };
+  }
+  source(id: string): NoteSource | undefined {
+    const row = this.db.prepare("SELECT source FROM workspace_note_sources WHERE noteId=?").get(id);
+    return row ? JSON.parse(String(row.source)) : undefined;
+  }
+  capture(id: string, input: NoteCapture) {
+    const fingerprint = createHash("sha256")
+      .update(
+        JSON.stringify([
+          scopeKey(input.scope),
+          input.target.client,
+          input.target.id,
+          input.target.messageId,
+          input.role,
+          input.text,
+        ]),
+      )
+      .digest("hex");
+    const previous = this.db
+      .prepare("SELECT noteId FROM workspace_note_sources WHERE fingerprint=?")
+      .get(fingerprint);
+    if (previous) return this.get(String(previous.noteId));
+    if (this.db.prepare("SELECT 1 FROM workspace_notes WHERE id=?").get(id))
+      throw new HubError(
+        409,
+        "NOTE_CAPTURE_CONFLICT",
+        "Эта запись уже использована. Открой сохранённую заметку.",
+      );
+    const thread =
+      input.target.client === "codex"
+        ? this.db.prepare("SELECT codexThreadId FROM threads WHERE id=?").get(input.target.id)
+        : undefined;
+    const source: NoteSource = {
+      target: input.target,
+      role: input.role,
+      text: input.text,
+      savedAt: Date.now(),
+      nativeThreadId: thread
+        ? String(thread.codexThreadId)
+        : input.target.client === "gpt"
+          ? input.target.id
+          : null,
+    };
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.save(id, {
+        scope: input.scope,
+        title: input.text.replace(/\s+/g, " ").trim().slice(0, 120) || "Из сообщения",
+        body: input.text,
+        links: [input.target],
+        revision: 0,
+      });
+      this.db
+        .prepare("INSERT INTO workspace_note_sources VALUES(?,?,?)")
+        .run(id, fingerprint, JSON.stringify(source));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return this.get(id);
   }
   get(id: string) {
     const row = this.db.prepare("SELECT * FROM workspace_notes WHERE id=?").get(id);
@@ -296,6 +368,16 @@ export function registerNotebook(app: FastifyInstance, sessions: Sessions) {
     const q = page.extend({ q: z.string().max(200).default("") }).parse(req.query);
     return book.list(q.scope, q.q, q.offset);
   });
+  app.get("/api/workspace/projects", (req) => {
+    const q = z
+      .object({ offset: z.coerce.number().int().min(0).max(15000).default(0) })
+      .strict()
+      .parse(req.query);
+    return workspaceProjects(sessions, q.offset);
+  });
+  app.put("/api/workspace/notes/:id/capture", (req) =>
+    book.capture(id.parse(req.params).id, noteCaptureSchema.parse(req.body)),
+  );
   app.get("/api/workspace/notes/:id", (req) => book.get(id.parse(req.params).id));
   app.put("/api/workspace/notes/:id", (req) =>
     book.save(id.parse(req.params).id, noteWriteSchema.parse(req.body)),

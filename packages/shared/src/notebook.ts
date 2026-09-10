@@ -23,6 +23,12 @@ export const notebookTargetSchema = z
     projectId: id.optional(),
     threadId: id.optional(),
     turnId: id.optional(),
+    messageId: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^[a-zA-Z0-9_:.-]+$/)
+      .optional(),
   })
   .strict();
 export type NotebookTarget = z.infer<typeof notebookTargetSchema>;
@@ -37,7 +43,27 @@ export const noteWriteSchema = z
   .strict();
 export type NoteWrite = z.infer<typeof noteWriteSchema>;
 export type NotebookLink = NotebookTarget & { availability: "available" | "missing" | "unknown" };
+export const noteCaptureSchema = z
+  .object({
+    scope: notebookScopeSchema,
+    text: z.string().min(1).max(65536),
+    role: z.enum(["user", "assistant"]),
+    target: notebookTargetSchema.refine(
+      (t) => t.kind === "thread" && !!t.messageId,
+      "Нужен источник сообщения",
+    ),
+  })
+  .strict();
+export type NoteCapture = z.infer<typeof noteCaptureSchema>;
+export type NoteSource = {
+  target: NotebookTarget;
+  role: "user" | "assistant";
+  text: string;
+  savedAt: number;
+  nativeThreadId: string | null;
+};
 export type NoteRecord = NoteWrite & {
+  source?: NoteSource;
   id: string;
   createdAt: number;
   updatedAt: number;
