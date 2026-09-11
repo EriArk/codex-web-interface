@@ -65,6 +65,8 @@
   --field-shadow: inset 0 2px 4px #000a, 0 1px #9ce9ae18;
 }
 :root[data-theme="hitech-2000s"] {
+  --case-top: color-mix(in srgb, var(--polymer-tint) 88%, #c4e6db);
+  --case-muted: #e0eee4;
   --paper: #fcfcf5;
   --canvas: var(--case-low);
   --surface: #f4f7ef;
@@ -108,7 +110,7 @@
   text-shadow: 0 1px 1px var(--case-seam);
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
-  :is(
+  :where(
     .workspace-header,
     .mobile-tabs,
     .pane-heading,
@@ -123,7 +125,7 @@
     .inspector-tabs,
     .core-footer
   )
-  :is(button, a, h1, h2, h3, strong, .icon-button, .header-project, .folder-icon) {
+  :where(button, a, h1, h2, h3, strong, .icon-button, .header-project, .folder-icon) {
   color: inherit;
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
@@ -252,6 +254,9 @@
 :root[data-theme="hitech-2000s"] .desktop-nav::before {
   display: none;
 }
+:root[data-theme="hitech-2000s"] .sheet-content {
+  background: transparent;
+}
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) :is(.nav-scroll, .gpt-nav-list) {
   background: var(--nav);
   border: 1px solid var(--case-seam);
@@ -278,8 +283,17 @@
   color: inherit;
 }
 :root[data-theme="hitech-2000s"] .nav-mobile-switch button.selected {
+  --muted: var(--ink);
   background: var(--tab-material);
   color: var(--ink);
+}
+:root[data-theme="hitech-2000s"] .nav-mobile-switch .nav-tab-title small {
+  opacity: 1;
+}
+:root[data-theme="hitech-2000s"] .nav-mobile-switch button:not(.selected) {
+  --accent: var(--case-ink);
+  --muted: var(--case-muted);
+  --gold: #f4d795;
 }
 :root[data-theme="hitech-2000s"] :is(.chat-pane, .support-pane, .gpt-chat, .gpt-results) {
   background: var(--paper);
@@ -315,6 +329,7 @@
     0 3px 3px #092e332b;
 }
 :root[data-theme="hitech-2000s"] .secondary {
+  color: var(--ink);
   background: var(--card-material);
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -424,6 +439,38 @@
 }
 :root[data-theme="hitech-2000s"] :is(.support-tabs, .pane-heading) svg {
   color: currentColor;
+}
+:root[data-theme="hitech-2000s"] .workspace[data-view="chat"] .support-tabs button:first-child {
+  color: var(--ink);
+  background: var(--tab-material);
+  border-color: var(--case-edge);
+  text-shadow: none;
+}
+
+/* Each control owns its foreground when its surface differs from the casing. */
+:root[data-theme="hitech-2000s"] .workspace-shortcuts button:is(:hover, :focus-visible),
+:root[data-theme="hitech-2000s"] .workspace-shortcuts button:is(:hover, :focus-visible) svg {
+  color: var(--ink);
+}
+:root[data-theme="hitech-2000s"]
+  :is(
+    .navigation-system-row,
+    .notebook-heading,
+    .inspector-heading,
+    .project-overview-heading,
+    .dialog-heading,
+    .gpt-settings-heading
+  )
+  .icon-button:active {
+  color: var(--case-ink);
+  background: var(--case-low);
+  box-shadow: inset 0 2px 3px #0005;
+}
+:root[data-theme="hitech-2000s"] :is(.core-heading-title small, .core-footer > span) {
+  color: var(--case-muted);
+}
+:root[data-theme="hitech-2000s"] :is(.notebook-heading, .inspector-heading) > svg {
+  color: var(--case-muted);
 }
 
 .case-color-picker {
