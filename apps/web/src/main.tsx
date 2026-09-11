@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { applyLayoutPreference } from "./AppearanceSettings";
 import { DeviceWorkspaceHost } from "./DeviceWorkspaceHost";
+import { GuiPreviewHost } from "./GuiPreviewHost";
 import { ProjectDeliveryHost } from "./ProjectDeliveryHost";
 import { QuickCaptureHost } from "./QuickCaptureHost";
 import { applyTheme, cachedTheme } from "./theme";
@@ -26,6 +27,7 @@ createRoot(root).render(
     <DeviceWorkspaceHost />
     <QuickCaptureHost />
     <ProjectDeliveryHost />
+    <GuiPreviewHost />
   </>,
 );
 if ("serviceWorker" in navigator)

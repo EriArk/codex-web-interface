@@ -163,6 +163,7 @@ export async function stageAttachment(
   return transferWindowsAttachment(machine, projectId, id, safeName, sourcePath, deadline);
 }
 
+export { guiPreviewMessage, runGuiPreview } from "./guiPreview.js";
 export { inspectProject } from "./inspector.js";
 export { deliveryMessage, runProjectDelivery } from "./projectDelivery.js";
 export { PROJECT_FILE_LIMIT, projectFilePath, readProjectFile } from "./projectFile.js";

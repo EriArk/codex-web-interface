@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink } from "./DownloadLink";
+import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
 import { DeliveryButton } from "./ProjectDeliveryHost";
 import { ProjectRepositoryView } from "./ProjectRepositoryView";
@@ -20,12 +21,14 @@ const fileDate = (value: number) =>
 export function ProjectFiles({
   projectId,
   projectName,
+  threadId,
   visible,
   focus,
   onBack,
 }: {
   projectId: string;
   projectName: string;
+  threadId?: string;
   visible: boolean;
   focus: { path: string; version: number; projectId: string };
   onBack: () => void;
@@ -305,6 +308,7 @@ export function ProjectFiles({
         ))}
       </div>
       <div className="inspector-scroll" ref={scroller}>
+        <GuiPreviewButton projectId={projectId} projectName={projectName} threadId={threadId} />
         {mode === "files" && (
           <>
             {editingPath ? (

@@ -1,0 +1,64 @@
+.gui-preview-dialog {
+  max-width: 720px;
+}
+.gui-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.gui-preview-actions button {
+  min-height: 44px;
+  gap: 8px;
+  display: flex;
+  align-items: center;
+}
+.gui-preview-actions small {
+  display: block;
+}
+.gui-preview-item {
+  background: var(--card-material, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-block: 12px;
+}
+.gui-preview-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.gui-preview-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.gui-preview-image {
+  display: block;
+  padding: 0;
+  border: 0;
+  width: 100%;
+  background: transparent;
+  margin-block: 10px;
+}
+.gui-preview-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 52dvh;
+  object-fit: contain;
+  margin: auto;
+  border-radius: var(--radius);
+}
+.gui-preview-confirm {
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.gui-preview-confirm p {
+  margin-top: 0;
+}
