@@ -29,6 +29,75 @@ async function fixture() {
   await mkdir(config.hub.resultsPath, { mode: 0o700 });
   return { root, config, store: new Store(config.hub.databasePath) };
 }
+
+test("maintenance waits for newer workspace writers, terminals, Git delivery and pending previews", async (t) => {
+  const { root, config, store } = await fixture();
+  t.after(async () => {
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const cases = [
+    [
+      "device_terminals",
+      "INSERT INTO device_terminals VALUES('terminal','pc','owner','Shell','open','2026-09-11',NULL)",
+    ],
+    [
+      "project_work_actions",
+      "INSERT INTO project_work_actions VALUES('action','codex:p','plan',NULL,'dispatching','fingerprint','{}',1,1)",
+    ],
+    [
+      "project_setup_operations",
+      "INSERT INTO project_setup_operations VALUES('setup','pc','unknown','{}',1,1)",
+    ],
+    [
+      "delivery_operations",
+      "INSERT INTO delivery_operations VALUES('delivery','p','pc','running','{}','binding',1,1)",
+    ],
+    [
+      "gui_previews",
+      `INSERT INTO gui_previews VALUES('preview','p','binding','${JSON.stringify({ state: "waiting", expiresAt: Date.now() + 60000 })}',1,1)`,
+    ],
+  ];
+  for (const [table, sql] of cases) {
+    store.db.exec(sql);
+    assert.equal((await storageReport(config, store.db)).blocked, true, table);
+    await assert.rejects(
+      compactStorage(config, { backupDirectory: join(root, "backups") }),
+      /завершения/,
+    );
+    store.db.exec("DELETE FROM " + table);
+  }
+  assert.equal((await storageReport(config, store.db)).blocked, false);
+});
+
+test("a result or frozen review keeps image bytes when its catalog metadata is missing", async (t) => {
+  const { root, config, store } = await fixture();
+  t.after(async () => {
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const thread = store.createThread("p", "native", "Result"),
+    id = randomUUID(),
+    second = randomUUID(),
+    old = new Date(Date.now() - 40 * 86400000);
+  for (const artifactId of [id, second]) {
+    const path = join(config.hub.resultsPath, artifactId + ".png");
+    await writeFile(path, png);
+    await utimes(path, old, old);
+  }
+  store.result(thread.id, null, "result", "image", "Retained", { url: "/api/artifacts/" + id });
+  store.db
+    .prepare("INSERT INTO work_reviews VALUES('review','codex:p',?,NULL,'accepted',1,?,1)")
+    .run(thread.id, JSON.stringify({ results: [{ payload: { artifactId: second } }] }));
+  const report = await storageReport(config, store.db);
+  assert.equal(report.orphanFiles, 0);
+  assert.equal(report.metadataGaps, 2);
+  await assert.rejects(
+    compactStorage(config, { backupDirectory: join(root, "backups") }),
+    /целостность/,
+  );
+  assert.equal(await readFile(join(config.hub.resultsPath, id + ".png"), "utf8"), png);
+});
 test("compaction keeps full replies, results, receipts and staged uploads, and backs up retired orphans", async () => {
   const { root, config, store } = await fixture(),
     now = Date.now(),

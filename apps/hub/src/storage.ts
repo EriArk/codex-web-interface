@@ -18,7 +18,7 @@ const disposable = new RegExp(
     "|previews/[0-9a-f]{64}\\.html)$",
 );
 const terminal = "('idle','completed','interrupted','failed')";
-function blocked(db: DatabaseSync) {
+export function storageBlocked(db: DatabaseSync) {
   return (
     !!db.prepare("SELECT 1 FROM artifact_captures WHERE status='capturing' LIMIT 1").get() ||
     !!db.prepare("SELECT 1 FROM threads WHERE status NOT IN " + terminal + " LIMIT 1").get() ||
@@ -27,9 +27,29 @@ function blocked(db: DatabaseSync) {
         "SELECT 1 FROM gpt_jobs WHERE status IN ('queued','preparing','running','unknown') LIMIT 1",
       )
       .get() ||
-    !!db.prepare("SELECT 1 FROM commands WHERE state IN ('pending','unknown') LIMIT 1").get()
+    !!db.prepare("SELECT 1 FROM commands WHERE state IN ('pending','unknown') LIMIT 1").get() ||
+    !!db.prepare("SELECT 1 FROM device_terminals WHERE state='open' LIMIT 1").get() ||
+    !!db
+      .prepare(
+        "SELECT 1 FROM project_work_actions WHERE state IN ('dispatching','queued','running','unknown') LIMIT 1",
+      )
+      .get() ||
+    !!db
+      .prepare(
+        "SELECT 1 FROM project_setup_operations WHERE state NOT IN ('prepared','completed','failed','cancelled') LIMIT 1",
+      )
+      .get() ||
+    !!db
+      .prepare("SELECT 1 FROM delivery_operations WHERE state IN ('running','unknown') LIMIT 1")
+      .get() ||
+    !!db
+      .prepare(
+        "SELECT 1 FROM gui_previews WHERE json_extract(value,'$.resultId') IS NULL AND json_extract(value,'$.state') IN ('queued','launching','waiting','unknown','captured') AND json_extract(value,'$.expiresAt')>? LIMIT 1",
+      )
+      .get(Date.now())
   );
 }
+const blocked = storageBlocked;
 function transient(db: DatabaseSync, cutoff: string, limit: number): number[] {
   // A complete native item must still match the durable message projection.
   // Reconnect after any removed delta receives the retained full completion event.
@@ -94,15 +114,19 @@ async function inventory(root: string) {
 }
 function references(db: DatabaseSync) {
   const required = new Set<string>(),
-    optional = new Set<string>();
+    optional = new Set<string>(),
+    artifacts = new Set<string>(),
+    metadataGaps = new Set<string>();
   for (const row of db
     .prepare(
       db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='artifact_files'").get()
         ? "SELECT a.id, CASE WHEN f.id IS NULL THEN '.png' ELSE '.bin' END AS extension FROM artifacts a LEFT JOIN artifact_files f ON f.id=a.id"
         : "SELECT id, '.png' AS extension FROM artifacts",
     )
-    .all())
+    .all()) {
     required.add(String(row.id) + String(row.extension));
+    artifacts.add(String(row.id));
+  }
   for (const row of db.prepare("SELECT id,image FROM attachments").all()) {
     required.add("uploads/" + row.id + ".bin");
     if (row.image) required.add("uploads/" + row.id + ".jpg");
@@ -120,7 +144,32 @@ function references(db: DatabaseSync) {
         required.add("gpt/" + id);
     }
   }
-  return { required, optional };
+  // Frozen reviews and preview receipts can retain an image even if its catalog
+  // row is damaged. Such bytes are not orphans; report the gap instead of GC.
+  for (const [table, column] of [
+    ["results", "payload"],
+    ["work_reviews", "value"],
+    ["gui_previews", "value"],
+    ["workspace_note_sources", "source"],
+  ]) {
+    for (const row of db
+      .prepare(
+        `SELECT j.key,j.value FROM ${table} t,json_tree(t.${column}) j WHERE j.type='text' AND (j.key='artifactId' OR j.value LIKE '/api/artifacts/%')`,
+      )
+      .iterate()) {
+      const value = String(row.value),
+        id =
+          row.key === "artifactId"
+            ? value
+            : new RegExp("^/api/artifacts/(" + uuid + ")(?:[?#].*)?$").exec(value)?.[1];
+      if (id && new RegExp("^" + uuid + "$").test(id) && !artifacts.has(id)) {
+        optional.add(id + ".png");
+        optional.add(id + ".bin");
+        metadataGaps.add(id);
+      }
+    }
+  }
+  return { required, optional, metadataGaps: metadataGaps.size };
 }
 async function plan(config: HubConfig, db: DatabaseSync, now: number) {
   const root = await safeRoot(config.hub.resultsPath),
@@ -148,6 +197,7 @@ async function plan(config: HubConfig, db: DatabaseSync, now: number) {
     orphans,
     deltas,
     missing: [...refs.required].filter((path) => !present.has(path)).length,
+    metadataGaps: refs.metadataGaps,
   };
 }
 export async function storageReport(
@@ -210,6 +260,7 @@ export async function storageReport(
     })),
     partial: data.partial,
     missingFiles: data.missing,
+    metadataGaps: data.metadataGaps,
     orphanFiles: data.orphans.length,
     reclaimableBytes: data.orphans.reduce((n, f) => n + f.bytes, 0),
     transientEvents: data.deltas.length,
@@ -232,7 +283,7 @@ export async function compactStorage(
         "Очистка дождётся завершения работы и проверки неопределённых отправок.",
       );
     const data = await plan(config, db, now);
-    if (data.partial || data.missing)
+    if (data.partial || data.missing || data.metadataGaps)
       throw new HubError(409, "STORAGE_NEEDS_REVIEW", "Сначала проверь целостность хранилища.");
     if (!data.deltas.length && !data.orphans.length)
       return { snapshot: null, removedEvents: 0, removedFiles: 0, reclaimedBytes: 0 };
@@ -269,7 +320,10 @@ export async function compactStorage(
       db.exec("ROLLBACK");
       throw error;
     }
+    let referenceVersion = -1,
+      currentRefs: ReturnType<typeof references> | undefined;
     for (const file of data.orphans) {
+      if (blocked(db)) break;
       const id = file.path.split("/").at(-1)?.split(".")[0] ?? "";
       const table = file.path.startsWith("uploads/")
         ? "attachments"
@@ -302,9 +356,27 @@ export async function compactStorage(
           listed.ino !== current.ino
         )
           continue;
-        await unlink(path);
-        removedFiles++;
-        bytes += file.bytes;
+        db.exec("BEGIN IMMEDIATE");
+        try {
+          if (blocked(db)) {
+            db.exec("COMMIT");
+            break;
+          }
+          const version = Number(db.prepare("PRAGMA data_version").get()?.data_version);
+          if (!currentRefs || referenceVersion !== version) {
+            currentRefs = references(db);
+            referenceVersion = version;
+          }
+          if (!currentRefs.required.has(file.path) && !currentRefs.optional.has(file.path)) {
+            await unlink(path);
+            removedFiles++;
+            bytes += file.bytes;
+          }
+          db.exec("COMMIT");
+        } catch (e) {
+          db.exec("ROLLBACK");
+          throw e;
+        }
       } finally {
         await handle.close();
       }

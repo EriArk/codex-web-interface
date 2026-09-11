@@ -37,7 +37,19 @@ for (const [engine, type] of [
     }),
   };
   const origin = "http://127.0.0.1:18854",
-    f = await handoffFixture(origin, undefined, { machineDiagnostics: diagnostics });
+    f = await handoffFixture(origin, undefined, {
+      machineDiagnostics: diagnostics,
+      stagingProbe: async () => ({
+        bytes: 70 * 1024 ** 2,
+        files: 104,
+        temporaryBytes: 2048,
+        temporaryFiles: 2,
+        previewBytes: 4096,
+        receipts: 10,
+        partial: false,
+        checkedAt: Date.now(),
+      }),
+    });
   f.sessions.config.machines[0].codex.launcher = "C:/fixed/companion.ps1";
   f.sessions.config.machines[0].remote = { host: "private", port: 5900, provider: "vnc" };
   f.store.db.prepare("UPDATE threads SET origin='web' WHERE id=?").run(f.thread.id);
@@ -62,6 +74,32 @@ for (const [engine, type] of [
     const editor = page.getByRole("textbox", { name: "Сообщение Codex" });
     await expect(editor).toBeVisible();
     await editor.fill("Сохранить мой черновик");
+    await page
+      .getByRole("button", { name: "Настройки", exact: true })
+      .filter({ visible: true })
+      .first()
+      .click();
+    await page.locator(".storage-usage summary").click();
+    await page.getByRole("button", { name: "Проверить копии на компьютере", exact: true }).click();
+    await expect(page.locator(".storage-usage")).toContainText("Рабочие копии · 104");
+    await expect(page.locator(".storage-usage")).toContainText("Незавершённые передачи · 2");
+    assert.equal(calls, 0);
+    for (const theme of ["classic-dark", "organizer", "crt-green", "hitech-2000s"]) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      for (const width of [390, 1366]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
+        await page.locator(".storage-usage").scrollIntoViewIfNeeded();
+        assert(
+          await page.locator(".storage-usage").evaluate((el) => el.scrollWidth <= el.clientWidth),
+        );
+        await page.screenshot({
+          path: `.local/qa-machines/${engine}-storage-${theme}-${width}.png`,
+        });
+      }
+    }
+    await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(editor).toHaveValue("Сохранить мой черновик");
     const open = async () => {
       await page
         .getByRole("button", { name: "Настройки", exact: true })

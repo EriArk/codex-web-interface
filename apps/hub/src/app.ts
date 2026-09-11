@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import type { runGuiPreview, runProjectDelivery, runProjectSetup } from "@codex-web/machines";
+import type {
+  inspectMachineStaging,
+  runGuiPreview,
+  runProjectDelivery,
+  runProjectSetup,
+} from "@codex-web/machines";
 import {
   type HubConfig,
   HubError,
@@ -43,6 +48,7 @@ import { registerQuickCapture } from "./quick-capture.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
 import { registerSpeech } from "./speech.js";
+import { registerStagingStorage } from "./staging-storage.js";
 import { storageReport } from "./storage.js";
 import { Store } from "./store.js";
 import { registerWorkspaceTasks } from "./tasks.js";
@@ -69,6 +75,7 @@ export async function createApp(
     projectSetupProbe?: typeof runProjectSetup;
     projectDeliveryProbe?: typeof runProjectDelivery;
     guiPreviewProbe?: typeof runGuiPreview;
+    stagingProbe?: typeof inspectMachineStaging;
     devices?: DeviceDependencies;
   } = {},
 ) {
@@ -615,6 +622,7 @@ export async function createApp(
   registerProjectSetup(app, sessions, options.projectSetupProbe);
   registerProjectDelivery(app, sessions, options.projectDeliveryProbe);
   registerMachineHealth(app, sessions, options.machineDiagnostics);
+  registerStagingStorage(app, config, options.stagingProbe);
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
   const projectWork = registerProjectWork(app, sessions, gpt, queue);
