@@ -47,6 +47,7 @@ import type { Theme } from "./theme";
 import type { Session } from "./types";
 import { useCompletionPosition } from "./useCompletionPosition";
 import { useGptHistory } from "./useGptHistory";
+import { useGrowingComposer } from "./useGrowingComposer";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
 import { useThreadReviews, WorkReviewLink } from "./WorkReviewLink";
@@ -646,14 +647,17 @@ export function GptWorkspace({
     setSettings(false);
     onNotebook?.({ ...notebookContext(), mode, allProjects: true });
   };
-  const send = async () => {
+  const composer = useRef<HTMLTextAreaElement>(null);
+  useGrowingComposer(composer, text);
+  const send = async (dictated?: string) => {
+    const value = dictated ?? text;
     if (
-      dictation.locked ||
+      (dictation.locked && dictated === undefined) ||
       sending.current ||
       uploading ||
       (selected && !historyReady) ||
       !model ||
-      (!text.trim() && !files.length)
+      (!value.trim() && !files.length)
     )
       return;
     const version = navigationVersion.current,
@@ -671,7 +675,7 @@ export function GptWorkspace({
         );
     const body = {
         nativeId: selected || null,
-        text,
+        text: value,
         files: files.map((f) => f.id),
         model,
         effort,
@@ -822,6 +826,7 @@ export function GptWorkspace({
     text,
     setText,
     100000,
+    (text) => send(text),
   );
   useSpeechScope(
     speechScope,
@@ -1699,6 +1704,7 @@ export function GptWorkspace({
                   {uploading ? <span className="spinner" /> : <Icon name="plus" />}
                 </button>
                 <textarea
+                  ref={composer}
                   aria-label="Сообщение GPT"
                   placeholder="Что нужно сделать?"
                   value={text}

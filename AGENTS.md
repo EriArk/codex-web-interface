@@ -481,3 +481,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Add message dictation to Codex and GPT only through native OpenAI recognition using the existing consumer account. The owner explicitly rejected a lower-quality/local recognition substitute. Do not request an API billing key or silently fall back to another engine.
 - Dictation inserts text into the exact current draft and never sends automatically. Preserve typed text/files, stop microphone capture on cancellation or navigation, discard late results from another chat, and allow explicit retry after uncertain recognition acknowledgement.
 - Show an explicit empty state when Codex confirms zero earned usage resets. An unsupported or unavailable native field is not evidence that the account has zero resets.
+
+## Owner-requested recording interaction (2026-09-12)
+
+- The microphone toggles recording: first tap starts, second tap stops, transcribes and submits through the ordinary Codex/GPT send or queue flow. This explicit second tap supersedes draft-only dictation. Preserve handoff/approval checks, attachments, exact retry and drafts on send failure. Cancel, navigation, backgrounding and recording-duration limits never authorize sending.
+- Show a scrolling waveform derived from actual microphone amplitude and elapsed recording time; no fabricated activity. Keep a separate Cancel control and release microphone/audio-meter resources promptly.
+- While editing, both message fields grow with the number of text lines up to twice their normal height, then scroll internally. Keep the shared themes, viewport/keyboard handling and compact layout.

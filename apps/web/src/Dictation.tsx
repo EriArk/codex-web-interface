@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
+import { RecordingWave } from "./RecordingWave";
 import "./dictation.css";
 
 const MAX_BYTES = 6 * 1024 * 1024;
@@ -11,13 +12,14 @@ export function useDictation(
   text: string,
   save: (text: string) => void,
   maxLength = 32000,
+  submit?: (text: string) => Promise<void>,
 ) {
   const [available, setAvailable] = useState(false),
     [phase, setPhase] = useState<Phase>("idle"),
     [error, setError] = useState(""),
     [seconds, setSeconds] = useState(0);
-  const current = useRef({ text, save, enabled, scope });
-  current.current = { text, save, enabled, scope };
+  const current = useRef({ text, save, enabled, scope, submit });
+  current.current = { text, save, enabled, scope, submit };
   const generation = useRef(0),
     recorder = useRef<MediaRecorder | null>(null),
     stream = useRef<MediaStream | null>(null),
@@ -25,12 +27,21 @@ export function useDictation(
     operation = useRef<string | null>(null),
     timer = useRef<ReturnType<typeof setInterval> | null>(null),
     abort = useRef<AbortController | null>(null),
-    processing = useRef(false);
+    processing = useRef(false),
+    sendRequested = useRef(false),
+    meter = useRef<AudioContext | null>(null);
+  const closeMeter = useCallback(() => {
+    const context = meter.current;
+    meter.current = null;
+    if (context && context.state !== "closed") void context.close().catch(() => {});
+  }, []);
   const dispose = useCallback(() => {
     generation.current++;
     abort.current?.abort();
     abort.current = null;
     processing.current = false;
+    sendRequested.current = false;
+    closeMeter();
     const recording = recorder.current;
     recorder.current = null;
     if (recording && recording.state !== "inactive") recording.stop();
@@ -44,7 +55,7 @@ export function useDictation(
       void api(`/dictation/${operation.current}`, { method: "DELETE" }).catch(() => {});
     operation.current = null;
     audio.current = null;
-  }, []);
+  }, [closeMeter]);
   const cancel = () => {
     dispose();
     setPhase("idle");
@@ -73,7 +84,10 @@ export function useDictation(
     setPhase("idle");
     setError("");
     const hide = () => {
-      if (document.hidden && recorder.current?.state === "recording") recorder.current.stop();
+      if (document.hidden && recorder.current?.state === "recording") {
+        sendRequested.current = false;
+        recorder.current.stop();
+      }
     };
     const leave = () => {
       dispose();
@@ -136,6 +150,10 @@ export function useDictation(
           audio.current = null;
           void api(`/dictation/${id}`, { method: "DELETE" }).catch(() => {});
           operation.current = null;
+          if (sendRequested.current) {
+            sendRequested.current = false;
+            await current.current.submit?.(next);
+          }
           return;
         }
         await new Promise<void>((resolve, reject) => {
@@ -167,6 +185,14 @@ export function useDictation(
     setPhase("permission");
     setError("");
     setSeconds(0);
+    sendRequested.current = false;
+    // Start/resume within the microphone click for Safari's audio activation rules.
+    try {
+      meter.current = new AudioContext();
+      void meter.current.resume().catch(() => {});
+    } catch {
+      /* The recording still works if metering is unavailable. */
+    }
     try {
       const microphone = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
@@ -209,6 +235,8 @@ export function useDictation(
         microphone.getTracks().forEach((t) => {
           t.stop();
         });
+        if (generation.current !== version) return;
+        closeMeter();
         if (timer.current) clearInterval(timer.current);
         timer.current = null;
         if (generation.current !== version) return;
@@ -227,9 +255,14 @@ export function useDictation(
       timer.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - started) / 1000);
         setSeconds(elapsed);
-        if (elapsed >= 180 && recording.state === "recording") recording.stop();
+        if (elapsed >= 180 && recording.state === "recording") {
+          sendRequested.current = false;
+          recording.stop();
+        }
       }, 500);
     } catch (e) {
+      if (generation.current !== version) return;
+      closeMeter();
       stream.current?.getTracks().forEach((t) => {
         t.stop();
       });
@@ -250,9 +283,18 @@ export function useDictation(
       <button
         type="button"
         className="icon-button dictation-button"
-        aria-label="Продиктовать сообщение"
-        disabled={!enabled || phase !== "idle"}
-        onClick={() => void start()}
+        aria-label={
+          phase === "recording" ? "Завершить запись и отправить" : "Продиктовать сообщение"
+        }
+        aria-pressed={phase === "recording"}
+        disabled={!enabled || (phase !== "idle" && phase !== "recording")}
+        onClick={() => {
+          if (phase === "recording") {
+            if (recorder.current?.state !== "recording") return;
+            sendRequested.current = true;
+            recorder.current.stop();
+          } else void start();
+        }}
       >
         <Icon name="microphone" />
       </button>
@@ -260,7 +302,13 @@ export function useDictation(
     panel:
       phase !== "idle" ? (
         <section className="dictation-panel" aria-label="Диктовка сообщения">
-          <span role="status">
+          {phase === "recording" && stream.current && (
+            <RecordingWave stream={stream.current} context={meter.current} />
+          )}
+          <span
+            role={phase === "recording" ? undefined : "status"}
+            className={phase === "recording" ? "dictation-time" : undefined}
+          >
             {phase === "recording"
               ? `Запись ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
               : phase === "permission"
@@ -269,11 +317,6 @@ export function useDictation(
                   ? "Распознаю…"
                   : error}
           </span>
-          {phase === "recording" && (
-            <button type="button" className="primary" onClick={() => recorder.current?.stop()}>
-              Готово
-            </button>
-          )}
           {phase === "error" && audio.current && (
             <button
               type="button"
