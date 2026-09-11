@@ -30,4 +30,6 @@ Hidden reasoning, tool internals from GPT, credentials, signed asset URLs and bi
 
 Suggested order after #129: unsupported visible-content placeholders and MCP elicitation → live command output → structured native progress/context → GPT branches and native project editing. Native voice/Canvas/automation management are larger separate features.
 
+Owner-prioritized follow-up: [native message dictation](DICTATION.md) now uses the existing ChatGPT account's recognition route for both composers, with no substitute engine or API key. This closes draft dictation specifically; it is not a full voice conversation. Confirmed zero earned resets also get an explicit empty-state label. The other gaps above remain open.
+
 Protocol reference: [OpenAI App Server documentation](https://learn.chatgpt.com/docs/app-server), checked alongside the installed executable's generated schema.

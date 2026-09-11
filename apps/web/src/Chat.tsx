@@ -22,6 +22,7 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { CopyButton } from "./CopyButton";
+import { useDictation } from "./Dictation";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
@@ -464,6 +465,12 @@ export function Chat({
       /* Storage may be unavailable in private mode. */
     }
   };
+  const dictation = useDictation(
+    "codex:" + threadId,
+    !!threadId && visible && speechVisible && !handoff.pending && !busy,
+    draft,
+    saveDraft,
+  );
   const pendingRetry = matchesPendingSend(
     "codex:" + threadId,
     JSON.stringify({
@@ -475,6 +482,7 @@ export function Chat({
   );
   const send = async () => {
     if (
+      dictation.locked ||
       (!draft.trim() && !attachments.files.length) ||
       busy ||
       queue.busy ||
@@ -793,6 +801,7 @@ export function Chat({
         </div>
       )}
       <MessageQueue key={threadId} queue={queue} turnId={state.thread.activeTurnId} />
+      {dictation.panel}
       <form
         className="composer"
         onDragOver={(e) => {
@@ -884,43 +893,47 @@ export function Chat({
               }
             }}
           />
-          {active && !draft.trim() && !attachments.files.length ? (
-            <button
-              type="button"
-              className="stop-button"
-              onClick={onStop}
-              disabled={busy || state.thread.activitySource === "external"}
-              aria-label="Остановить Codex"
-            >
-              <Icon name="stop" />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              className="send-button"
-              disabled={
-                !threadId ||
-                (!draft.trim() && !attachments.files.length) ||
-                busy ||
-                queue.busy ||
-                handoff.pending ||
-                (active && !external && !pendingRetry && !queue.state.available) ||
-                attachments.busy ||
-                state.loading ||
-                options.loading ||
-                options.saving ||
-                !options.selection ||
-                state.thread.status === "unknown"
-              }
-              aria-label={active && !pendingRetry ? "Добавить в очередь" : "Отправить сообщение"}
-            >
-              {sending || queue.busy ? (
-                <span className="spinner" />
-              ) : (
-                <Icon name={active && !pendingRetry ? "plus" : "send"} />
-              )}
-            </button>
-          )}
+          <div className="composer-submit">
+            {dictation.button}
+            {active && !draft.trim() && !attachments.files.length ? (
+              <button
+                type="button"
+                className="stop-button"
+                onClick={onStop}
+                disabled={busy || state.thread.activitySource === "external"}
+                aria-label="Остановить Codex"
+              >
+                <Icon name="stop" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="send-button"
+                disabled={
+                  dictation.locked ||
+                  !threadId ||
+                  (!draft.trim() && !attachments.files.length) ||
+                  busy ||
+                  queue.busy ||
+                  handoff.pending ||
+                  (active && !external && !pendingRetry && !queue.state.available) ||
+                  attachments.busy ||
+                  state.loading ||
+                  options.loading ||
+                  options.saving ||
+                  !options.selection ||
+                  state.thread.status === "unknown"
+                }
+                aria-label={active && !pendingRetry ? "Добавить в очередь" : "Отправить сообщение"}
+              >
+                {sending || queue.busy ? (
+                  <span className="spinner" />
+                ) : (
+                  <Icon name={active && !pendingRetry ? "plus" : "send"} />
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </section>
