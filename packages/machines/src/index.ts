@@ -169,3 +169,4 @@ export { deliveryMessage, runProjectDelivery } from "./projectDelivery.js";
 export { PROJECT_FILE_LIMIT, projectFilePath, readProjectFile } from "./projectFile.js";
 export { runProjectSetup, setupMessage } from "./projectSetup.js";
 export { readMachineResources } from "./resources.js";
+export { inspectMachineStaging } from "./staging.js";

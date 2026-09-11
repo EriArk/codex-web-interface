@@ -22,6 +22,7 @@ export interface StorageReport {
   buckets: { id: string; bytes: number; limit?: number; warning: boolean; estimated?: boolean }[];
   partial: boolean;
   missingFiles: number;
+  metadataGaps?: number;
   orphanFiles: number;
   reclaimableBytes: number;
   transientEvents: number;

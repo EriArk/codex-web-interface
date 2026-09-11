@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./gui-preview.js";
+export * from "./staging.js";
 
 import { deviceConfigSchema } from "./devices.js";
 

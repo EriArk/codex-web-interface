@@ -1,7 +1,9 @@
 import { DatabaseSync } from "node:sqlite";
 import { parseArgs } from "node:util";
+import { inspectMachineStaging } from "@codex-web/machines";
 import { HubError } from "@codex-web/shared";
 import { loadConfig } from "./config.js";
+import { maintainMachineStaging } from "./staging-maintenance.js";
 import { compactStorage, storageReport } from "./storage.js";
 
 async function run() {
@@ -11,6 +13,7 @@ async function run() {
       apply: { type: "boolean" },
       destination: { type: "string" },
       revision: { type: "string" },
+      "staging-machine": { type: "string" },
     },
   });
   if (!values.config || (values.apply && !values.destination))
@@ -20,6 +23,21 @@ async function run() {
       "Нужен --config; для --apply также --destination с каталогом резервных копий.",
     );
   const config = loadConfig(values.config);
+  if (values["staging-machine"]) {
+    const id = values["staging-machine"],
+      machine = config.machines.find((m) => m.id === id && m.type === "ssh-windows");
+    if (!machine) throw new HubError(404, "MACHINE_NOT_FOUND", "Компьютер не найден.");
+    console.log(
+      JSON.stringify(
+        values.apply
+          ? await maintainMachineStaging(config, id, values.destination!)
+          : await inspectMachineStaging(machine),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   if (values.apply)
     console.log(
       JSON.stringify({
