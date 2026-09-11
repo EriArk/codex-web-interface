@@ -30,6 +30,10 @@ function subscribe(listener: () => void) {
   };
 }
 
+export function useLegacyLayout() {
+  return useSyncExternalStore(subscribe, legacyLayout);
+}
+
 export function AppearanceSettings({
   theme,
   onTheme,
@@ -37,7 +41,7 @@ export function AppearanceSettings({
   theme: Theme;
   onTheme: (id: Theme) => void;
 }) {
-  const legacy = useSyncExternalStore(subscribe, legacyLayout);
+  const legacy = useLegacyLayout();
   return (
     <fieldset className="theme-picker">
       <legend>Оформление</legend>

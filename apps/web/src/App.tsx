@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { AccountControls } from "./AccountControls";
-import { AppearanceSettings } from "./AppearanceSettings";
+import { AppearanceSettings, useLegacyLayout } from "./AppearanceSettings";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { Chat } from "./Chat";
@@ -317,7 +317,8 @@ function Workspace({
   }, [threadId]);
   const [overviewId, setOverviewId] = useState("");
   const overviewProject = projects.find((p) => p.id === overviewId);
-  const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "38")));
+  const legacyLayout = useLegacyLayout();
+  const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "0")));
   const root = useRef<HTMLDivElement>(null),
     settingsDialog = useRef<HTMLDialogElement>(null),
     drawerDialog = useProjectDrawer(drawer);
@@ -1081,7 +1082,7 @@ function Workspace({
       data-right-hidden={rightHidden}
       data-remote-immersive={remoteImmersive}
       ref={root}
-      style={{ "--right-width": `${rightWidth}%` } as CSSProperties}
+      style={{ "--right-width": rightWidth ? `${rightWidth}%` : undefined } as CSSProperties}
     >
       <aside className="desktop-nav">{navigation}</aside>
       <header className="workspace-header">
@@ -1314,7 +1315,7 @@ function Workspace({
           onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
         />
         <PaneDivider
-          value={rightWidth}
+          value={rightWidth || (legacyLayout ? 38 : 34)}
           onChange={(value) => {
             setRightWidth(value);
             try {

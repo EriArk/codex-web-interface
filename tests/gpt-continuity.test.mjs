@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GptHistoryCache } from "../apps/hub/dist/gpt-cache.js";
 import { gptProgress, mergeGptProgress } from "../apps/hub/dist/gpt-progress.js";
-import { mergeGptHistory, mergeGptJobs } from "../apps/web/src/gptState.ts";
+import { mergeGptHistory, mergeGptJobs, showGptJob } from "../apps/web/src/gptState.ts";
 
 const messages = (count) =>
   Array.from({ length: count }, (_, i) => ({
@@ -140,6 +140,35 @@ test("Late GPT polling cannot resurrect a dismissed outbox item or its cached co
   assert.equal(late[0].text, "");
   assert.deepEqual(late[0].files, []);
   assert.deepEqual(late[0].progress, []);
+});
+
+test("GPT status summaries never render as empty messages or failures", () => {
+  const job = {
+    id: "old-job",
+    nativeId: "chat",
+    text: "",
+    files: [],
+    answer: "",
+    assets: [],
+    error: "",
+    createdAt: 1,
+    updatedAt: 2,
+    summaryOnly: true,
+  };
+  for (const status of ["queued", "preparing", "running", "failed", "unknown", "completed"])
+    assert.equal(showGptJob({ ...job, status }, [], 3), false, status);
+  assert.equal(
+    showGptJob(
+      { ...job, summaryOnly: false, status: "failed", text: "Recover me", error: "Failed" },
+      [],
+      3,
+    ),
+    true,
+  );
+  assert.equal(
+    showGptJob({ ...job, summaryOnly: false, status: "unknown", files: [{ id: "image" }] }, [], 3),
+    true,
+  );
 });
 
 test("Confirmed GPT retries hide only exact recent pre-dispatch failures in the same chat", async () => {

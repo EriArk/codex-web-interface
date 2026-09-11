@@ -625,7 +625,7 @@ time {
   background: var(--paper);
 }
 .support-pane {
-  width: var(--right-width, 38%);
+  width: var(--right-width, var(--default-right-width, 38%));
   min-width: 326px;
   display: flex;
   flex-direction: column;
