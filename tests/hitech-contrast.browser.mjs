@@ -9,13 +9,15 @@ async function contrast(locator) {
   return locator.evaluate(async (el) => {
     // WebKit can defer inherited-color transitions until the next paint even
     // with reduced motion. Measure the rendered state after that paint.
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    await Promise.all(
-      el
-        .getAnimations()
-        .filter((a) => a.effect.getTiming().iterations !== Infinity)
-        .map((a) => a.finished.catch(() => {})),
-    );
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Contrast paint timed out")), 3000);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          clearTimeout(timer);
+          resolve();
+        }),
+      );
+    });
     const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
     const rgba = (color) => {
       ctx.clearRect(0, 0, 1, 1);
