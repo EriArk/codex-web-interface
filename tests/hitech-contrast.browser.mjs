@@ -6,18 +6,7 @@ import { handoffFixture } from "./handoff-fixture.mjs";
 // Resolve the actual CSS foreground against the nearest opaque reading surface,
 // including every opaque gradient stop. Translucent grain/glints are decorative.
 async function contrast(locator) {
-  return locator.evaluate(async (el) => {
-    // WebKit can defer inherited-color transitions until the next paint even
-    // with reduced motion. Measure the rendered state after that paint.
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Contrast paint timed out")), 3000);
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          clearTimeout(timer);
-          resolve();
-        }),
-      );
-    });
+  return locator.evaluate((el) => {
     const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
     const rgba = (color) => {
       ctx.clearRect(0, 0, 1, 1);
@@ -108,6 +97,9 @@ for (const [engine, type] of [
   try {
     await f.app.listen({ port: 18897, host: "127.0.0.1" });
     await page.goto(origin);
+    // Assert the endpoints, not an interpolated color halfway through a theme
+    // change. Normal transitions remain covered by tablet/polymer scenarios.
+    await page.addStyleTag({ content: "*, *::before, *::after { transition: none !important; }" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "hitech-2000s");
     await page.evaluate(() => document.fonts.ready);
     const draft = page.getByRole("textbox", { name: "Сообщение Codex" });
