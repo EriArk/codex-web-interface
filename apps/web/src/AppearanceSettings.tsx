@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { CaseColorSettings } from "./CaseColorSettings";
 import { type Theme, themes } from "./theme";
 
 const layoutKey = "codex-legacy-layout";
@@ -52,6 +53,9 @@ export function AppearanceSettings({
           </label>
         ))}
       </div>
+      {(theme === "crt-green" || theme === "hitech-2000s") && (
+        <CaseColorSettings key={theme} theme={theme} />
+      )}
       <label className="layout-preference">
         <input
           type="checkbox"

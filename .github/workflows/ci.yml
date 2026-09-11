@@ -81,6 +81,7 @@ jobs:
       - run: node tests/tasks.browser.mjs
       - run: node tests/project-overview.browser.mjs
       - run: node tests/tablet-themes.browser.mjs
+      - run: node tests/polymer-themes.browser.mjs
       - run: node tests/devices.browser.mjs
       - run: node tests/workflow.browser.mjs
       - run: node tests/completion-position.browser.mjs

@@ -1,0 +1,523 @@
+/* TrainerOS material reference: tinted polymer, contact edges and inset screens. */
+:root,
+[data-case-color="turquoise"] {
+  --polymer-tint: #175755;
+  --polymer-edge: #76b3a4;
+}
+[data-case-color="graphite"] {
+  --polymer-tint: #343d40;
+  --polymer-edge: #8c9b99;
+}
+[data-case-color="green"] {
+  --polymer-tint: #345b40;
+  --polymer-edge: #92b287;
+}
+[data-case-color="blue"] {
+  --polymer-tint: #305477;
+  --polymer-edge: #87b2ca;
+}
+[data-case-color="red"] {
+  --polymer-tint: #713b45;
+  --polymer-edge: #cb9293;
+}
+[data-case-color="orange"] {
+  --polymer-tint: #72472d;
+  --polymer-edge: #c9a375;
+}
+[data-case-color="silver"] {
+  --polymer-tint: #495c65;
+  --polymer-edge: #c0ccd0;
+}
+
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) {
+  --case-top: color-mix(in srgb, var(--polymer-tint) 80%, #c4e6db);
+  --case-mid: var(--polymer-tint);
+  --case-low: color-mix(in srgb, var(--polymer-tint) 70%, #041319);
+  --case-edge: var(--polymer-edge);
+  --case-seam: color-mix(in srgb, var(--polymer-tint) 30%, #020a0b);
+  --case-ink: #f0faf4;
+  --case-muted: #c0d9d1;
+  --case-glint: #d2ffed60;
+  --case-surface:
+    radial-gradient(#ffffff09 0.5px, transparent 0.8px) 0 0 / 3px 3px,
+    radial-gradient(ellipse at 28% -80%, #e0fff222, transparent 72%),
+    linear-gradient(165deg, var(--case-top), var(--case-mid) 42%, var(--case-low));
+  --case-shadow:
+    inset 0 1px 0 var(--case-glint), inset 1px 0 0 #eaffed14, inset 0 -2px 1px var(--case-seam),
+    0 2px 2px #0005;
+  --screen-shadow: inset 0 2px 5px #051d292b, inset 0 0 0 1px #06192026, 0 1px 0 var(--case-glint);
+  --panel-heading: var(--case-surface);
+  --panel-material: var(--surface);
+  --field-shadow: inset 0 2px 3px #00161626, 0 1px #fff8;
+  --status-surface: var(--case-low);
+}
+:root[data-theme="crt-green"] {
+  --case-top: color-mix(in srgb, var(--polymer-tint) 26%, #1b211e);
+  --case-mid: color-mix(in srgb, var(--polymer-tint) 18%, #101613);
+  --case-low: color-mix(in srgb, var(--polymer-tint) 12%, #080d0a);
+  --case-edge: color-mix(in srgb, var(--polymer-edge) 28%, #111b16);
+  --case-seam: #030704;
+  --case-ink: #b3d9bc;
+  --case-muted: #8cae96;
+  --case-glint: #d2ffed23;
+  --screen-shadow: inset 0 2px 6px #000b, inset 0 0 0 1px #000a, 0 1px #b8ebc426;
+  --panel-material: var(--crt-raster), #06140b;
+  --field-shadow: inset 0 2px 4px #000a, 0 1px #9ce9ae18;
+}
+:root[data-theme="hitech-2000s"] {
+  --paper: #fcfcf5;
+  --canvas: var(--case-low);
+  --surface: #f4f7ef;
+  --nav: #edf2e9;
+  --ink: #193f3b;
+  --muted: #526d63;
+  --line: #b1c2b8;
+  --accent: #1c625d;
+  --accent-ink: #f8fff8;
+  --soft: #d4e8df;
+  --radius-sm: 5px;
+  --radius: 9px;
+  --radius-lg: 15px;
+  --card-material: linear-gradient(145deg, #fffef9, #eaf0e5);
+  --card-shadow: inset 0 1px #fff, 0 2px 0 #526e6026, 0 3px 7px #0d302d10;
+  --tab-material: linear-gradient(#e7f4e0, #c8dfbb);
+  --selected-shadow: inset 3px 0 #376b51, inset 0 1px #fff9;
+}
+
+/* Headers and control rails are the casing; reading surfaces remain distinct. */
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+:is(
+  .workspace-header,
+  .mobile-tabs,
+  .pane-heading,
+  .support-tabs,
+  .navigation-system-row,
+  .notebook-heading,
+  .inspector-heading,
+  .project-overview-heading,
+  .dialog-heading,
+  .gpt-settings-heading,
+  .notebook-modules,
+  .inspector-tabs,
+  .core-footer
+) {
+  background: var(--case-surface);
+  color: var(--case-ink);
+  border-color: var(--case-seam);
+  box-shadow: var(--case-shadow);
+  text-shadow: 0 1px 1px var(--case-seam);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(
+    .workspace-header,
+    .mobile-tabs,
+    .pane-heading,
+    .support-tabs,
+    .navigation-system-row,
+    .notebook-heading,
+    .inspector-heading,
+    .project-overview-heading,
+    .dialog-heading,
+    .gpt-settings-heading,
+    .notebook-modules,
+    .inspector-tabs,
+    .core-footer
+  )
+  :is(button, a, h1, h2, h3, strong, .icon-button, .header-project, .folder-icon) {
+  color: inherit;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(
+    .workspace-header .header-subtitle,
+    .navigation-system-row .nav-remote,
+    .navigation-system-row .nav-settings,
+    .pane-heading > span
+  ) {
+  color: var(--case-muted);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .workspace-header {
+  border-width: 1px;
+  border-style: solid;
+  border-top-color: var(--case-edge);
+  border-radius: 13px 13px 6px 6px;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .navigation-system-row {
+  border: 1px solid var(--case-seam);
+  border-top-color: var(--case-edge);
+  border-radius: 12px;
+  padding: 8px;
+  gap: 4px;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .mobile-tabs {
+  border-top: 1px solid var(--case-edge);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(
+    .mobile-tabs > .active,
+    .support-tabs button.active,
+    .notebook-modules button[aria-pressed="true"],
+    .inspector-tabs button.active
+  ) {
+  color: var(--ink);
+  background: var(--tab-material);
+  border: 1px solid color-mix(in srgb, var(--case-edge) 65%, var(--case-seam));
+  box-shadow:
+    inset 0 1px #ffffff35,
+    0 2px 1px var(--case-seam);
+  text-shadow: none;
+}
+
+/* Inset mounting ring and an independent cap: the hit target never moves. */
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) button.client-picker {
+  position: relative;
+  isolation: isolate;
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  min-height: 58px;
+  border: 1px solid var(--case-edge);
+  border-top-color: var(--case-seam);
+  background: linear-gradient(#030909, var(--case-low));
+  color: var(--case-ink);
+  box-shadow:
+    inset 0 3px 5px #000b,
+    0 1px 1px var(--case-glint);
+  filter: none;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) button.client-picker::before {
+  content: "";
+  position: absolute;
+  inset: 5px 5px 7px;
+  border-radius: 50%;
+  border: 1px solid var(--case-seam);
+  background:
+    radial-gradient(ellipse at 35% 5%, #ffffff1c, transparent 65%),
+    linear-gradient(160deg, var(--case-top), var(--case-mid));
+  box-shadow:
+    inset 0 1px 1px var(--case-glint),
+    inset 0 -2px 1px #0005,
+    0 3px 0 var(--case-seam),
+    0 4px 3px #0009;
+  pointer-events: none;
+  transition:
+    transform 100ms,
+    box-shadow 100ms;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) button.client-picker > svg {
+  position: relative;
+  transform: translateY(-1px);
+  filter: drop-shadow(0 1px 1px #0008);
+  transition: transform 100ms;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  button.client-picker:active::before {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 2px #0005,
+    inset 0 -1px var(--case-glint),
+    0 1px 0 var(--case-seam);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) button.client-picker:active > svg {
+  transform: translateY(1px);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) button.client-picker:focus-visible {
+  outline-color: var(--case-ink);
+}
+
+/* One functional layout; a narrow rim connects the light screens to the body. */
+:root[data-theme="hitech-2000s"] .workspace:not([data-remote-immersive="true"]) {
+  padding: 7px;
+  border: 1px solid var(--case-seam);
+  border-top-color: var(--case-edge);
+  background: var(--case-surface);
+  box-shadow: var(--case-shadow);
+}
+:root[data-theme="hitech-2000s"] .workspace::before,
+:root[data-theme="hitech-2000s"] .workspace::after {
+  display: none;
+}
+:root[data-theme="hitech-2000s"] .workspace-header {
+  margin-bottom: 5px;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) :is(.desktop-nav, .project-sheet) {
+  border: 1px solid var(--case-seam);
+  border-top-color: var(--case-edge);
+  border-radius: 14px;
+  background: var(--case-surface);
+  box-shadow: var(--case-shadow);
+}
+:root[data-theme="hitech-2000s"] .desktop-nav {
+  margin-right: 7px;
+}
+:root[data-theme="hitech-2000s"] .desktop-nav::before {
+  display: none;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) :is(.nav-scroll, .gpt-nav-list) {
+  background: var(--nav);
+  border: 1px solid var(--case-seam);
+  border-radius: 8px;
+  box-shadow: var(--screen-shadow);
+  padding: 4px;
+}
+:root[data-theme="hitech-2000s"] .navigation-top-row > button {
+  color: var(--case-ink);
+}
+:root[data-theme="hitech-2000s"] :is(.nav-bottom, .navigation-inner > .workspace-links) {
+  color: var(--case-ink);
+}
+:root[data-theme="hitech-2000s"] .workspace-shortcuts button {
+  color: var(--case-ink);
+}
+:root[data-theme="hitech-2000s"] .nav-mobile-switch {
+  background: var(--case-low);
+  color: var(--case-ink);
+  border-radius: 8px;
+  box-shadow: inset 0 2px 3px #0005;
+}
+:root[data-theme="hitech-2000s"] .nav-mobile-switch button {
+  color: inherit;
+}
+:root[data-theme="hitech-2000s"] .nav-mobile-switch button.selected {
+  background: var(--tab-material);
+  color: var(--ink);
+}
+:root[data-theme="hitech-2000s"] :is(.chat-pane, .support-pane, .gpt-chat, .gpt-results) {
+  background: var(--paper);
+  border: 1px solid var(--case-seam);
+  border-radius: 12px;
+  box-shadow: var(--screen-shadow);
+  overflow: hidden;
+}
+:root[data-theme="hitech-2000s"] :is(.chat-scroll, .gpt-message-scroll, .pane-scroll) {
+  box-shadow: inset 0 3px 4px #133e3317;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) :is(.composer, .gpt-composer) {
+  border: 3px solid var(--case-mid);
+  border-top-color: var(--case-low);
+  border-bottom-color: var(--case-top);
+  border-radius: 9px;
+  background: var(--paper);
+  box-shadow:
+    var(--screen-shadow),
+    0 0 0 1px var(--case-seam);
+}
+:root[data-theme="crt-green"] :is(.composer, .gpt-composer) {
+  border-radius: 5px;
+}
+:root[data-theme="hitech-2000s"] :is(.primary, .send-button) {
+  color: #193c34;
+  background: linear-gradient(#f7dc8e, #dfb95e);
+  border: 1px solid #9e813f;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px #fff5d9,
+    0 2px 0 #8f743b,
+    0 3px 3px #092e332b;
+}
+:root[data-theme="hitech-2000s"] .secondary {
+  background: var(--card-material);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: var(--card-shadow);
+}
+:root[data-theme="hitech-2000s"] :is(.avatar, .gpt-chat .avatar) {
+  color: var(--ink);
+  background: #b4d8a0;
+  border: 1px solid #789775;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px #fff9,
+    0 2px #6b84603b;
+}
+:root[data-theme="hitech-2000s"] :is(.message.user .avatar, .gpt-chat .user .avatar) {
+  background: #98cadd;
+}
+:root[data-theme="hitech-2000s"] .message.user .message-body {
+  background: #edf2e9;
+  border: 1px solid #ccd9ce;
+  border-radius: 8px;
+}
+:root[data-theme="hitech-2000s"] :is(.nav-project.selected, .nav-thread.selected) {
+  background: var(--tab-material);
+  color: var(--ink);
+  border-radius: 7px;
+  box-shadow: var(--selected-shadow);
+}
+:root[data-theme="hitech-2000s"]
+  :is(.result-card, .overview-card, .repository-card, .plan-section) {
+  background: var(--card-material);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--card-shadow);
+}
+:root[data-theme="hitech-2000s"] .result-title {
+  background: linear-gradient(#f7faf0, #dce9d4);
+  border-bottom: 1px solid var(--line);
+}
+:root[data-theme="hitech-2000s"]
+  :is(
+    .settings-dialog,
+    .project-dialog,
+    .notebook-dialog,
+    .project-overview-modal,
+    .project-setup-dialog,
+    .gpt-settings
+  ) {
+  background: var(--surface);
+  border: 3px solid var(--case-mid);
+  border-top-color: var(--case-edge);
+  border-bottom-color: var(--case-low);
+  box-shadow:
+    0 0 0 1px var(--case-seam),
+    inset 0 1px #fff,
+    0 14px 45px #0006;
+  border-radius: 14px;
+}
+:root[data-theme="hitech-2000s"] :is(.notebook-editor, .core-content, .project-overview) {
+  background: var(--paper);
+}
+:root[data-theme="hitech-2000s"] .notebook-list {
+  background: var(--nav);
+}
+:root[data-theme="hitech-2000s"] :is(.notebook-modules, .inspector-tabs) {
+  padding-top: 5px;
+}
+:root[data-theme="hitech-2000s"] :is(.notebook-modules, .inspector-tabs) button {
+  background: var(--case-low);
+  border-color: var(--case-edge);
+  box-shadow: inset 0 1px #fff2;
+}
+.theme-option.hitech-2000s .theme-swatch {
+  background: linear-gradient(145deg, #398b7b, #154c4b);
+  box-shadow:
+    inset -8px 0 #f1f5e9,
+    inset 0 1px #c5edda;
+}
+
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(
+    .header-project small,
+    .header-project svg,
+    .header-connection,
+    .workspace-shortcuts button svg
+  ) {
+  color: var(--case-muted);
+}
+:root[data-theme="hitech-2000s"] .workspace-header > .icon-button {
+  border: 1px solid var(--case-seam);
+  border-top-color: var(--case-edge);
+  border-radius: 8px;
+  background: linear-gradient(145deg, var(--case-top), var(--case-low));
+  color: var(--case-ink);
+  box-shadow:
+    inset 0 1px var(--case-glint),
+    inset 0 -1px #0003,
+    0 1px 2px #0004;
+}
+:root[data-theme="hitech-2000s"] .workspace-header > .icon-button:active {
+  box-shadow:
+    inset 0 2px 3px #0005,
+    0 1px var(--case-glint);
+}
+:root[data-theme="hitech-2000s"] .support-tabs button.active svg {
+  color: var(--ink);
+}
+:root[data-theme="hitech-2000s"] :is(.support-tabs, .pane-heading) svg {
+  color: currentColor;
+}
+
+.case-color-picker {
+  margin: 14px 0 4px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.case-color-picker legend {
+  font-size: 14px;
+  padding: 0 0 8px;
+}
+.case-color-picker legend span {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.case-color-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(44px, 1fr));
+  gap: 5px;
+}
+button.case-swatch {
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #fff;
+  border: 1px solid #0a2428;
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--polymer-tint) 80%, #c4e6db),
+    var(--polymer-tint)
+  );
+  box-shadow:
+    inset 0 1px var(--polymer-edge),
+    inset 0 -2px #0003,
+    0 1px 2px #0003;
+}
+button.case-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.case-color-error {
+  font-size: 13px;
+  color: var(--danger);
+}
+
+@media (min-width: 600px) {
+  .case-color-options {
+    grid-template-columns: repeat(7, minmax(44px, 1fr));
+  }
+}
+@media (min-width: 1100px) {
+  :root:not([data-layout="legacy"])[data-theme="hitech-2000s"]
+    .workspace:not([data-remote-immersive="true"]) {
+    padding: 9px;
+    gap: 0;
+    grid-template-rows: 65px minmax(0, 1fr);
+    border-radius: 18px;
+  }
+  :root:not([data-layout="legacy"])[data-theme="hitech-2000s"] .workspace-header {
+    margin-bottom: 6px;
+  }
+}
+@media (max-width: 1099px) {
+  :root[data-theme="hitech-2000s"] .workspace:not([data-remote-immersive="true"]) {
+    padding: 3px;
+  }
+  :root[data-theme="hitech-2000s"] .workspace-header {
+    margin: 0;
+    border-radius: inherit;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+  }
+  :root[data-theme="hitech-2000s"] :is(.chat-pane, .support-pane, .gpt-chat, .gpt-results) {
+    border-radius: 0;
+  }
+}
+@media (max-width: 400px) {
+  :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .navigation-system-row {
+    padding-inline: 5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root button.client-picker::before,
+  :root button.client-picker > svg {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  :root button.client-picker::before {
+    border: 1px solid ButtonText;
+  }
+}

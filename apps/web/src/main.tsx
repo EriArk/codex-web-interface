@@ -16,6 +16,7 @@ import "./messageImages.css";
 import "./motion.css";
 import "./materials.css";
 import "./tablet.css";
+import "./polymer.css";
 
 applyTheme(cachedTheme());
 applyLayoutPreference();
