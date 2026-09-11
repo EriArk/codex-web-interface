@@ -11,6 +11,9 @@ import "../../src/themes.css";
 import "../../src/compact.css";
 import "../../src/gpt.css";
 import "../../src/project-files.css";
+import "../../src/materials.css";
+import "../../src/tablet.css";
+import "../../src/polymer.css";
 
 const examples = {
   sections: `| Раздел | Для чего |

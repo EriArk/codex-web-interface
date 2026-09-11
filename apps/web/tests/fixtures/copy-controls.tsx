@@ -9,6 +9,9 @@ import "../../src/workspace.css";
 import "../../src/themes.css";
 import "../../src/compact.css";
 import "../../src/gpt.css";
+import "../../src/materials.css";
+import "../../src/tablet.css";
+import "../../src/polymer.css";
 
 const code = "  const текст = '<&>copy';\n\tconsole.log(текст);\n\n";
 const text =

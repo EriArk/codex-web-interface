@@ -464,3 +464,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Needs fixes preserves an owner note and prepares a normal idempotent correction action to confirmed Current Chat; show a changed chat before submission. Never replay the original implementation, implicitly change ownership or commit/push from Accept.
 - Plan reconciliation proposes changes for the exact executed revision. Only explicit owner-selected application changes saved Plan state. Delivery mutations are a narrow owner-approved extension: reviewed commit, normal push and PR creation with machine-local GitHub credentials, operation receipts and verified postconditions. No automatic force push, merge/release or repair loop.
 - Quick Capture writes existing Notes/Tasks without disturbing the current workspace. Windows project previews use a configured allowlist through a fixed local user-session helper and existing SSH; no arbitrary browser command API or listener.
+
+## Owner-requested polymer surfaces (2026-09-11)
+
+- Use TrainerOS's tinted polymer, bevels, contact shadows and recessed screens as the material reference for CRT and Hi-Tech structural panels. CRT uses a substantially darker casing; Hi-Tech may be substantially restyled toward TrainerOS and spend modest additional space on the casing. This supersedes the earlier blanket no-housing constraint for these panels; phone content, safe areas and controls must remain usable.
+- Offer a separately remembered casing color for CRT and Hi-Tech in the shared appearance settings. Keep content/status colors independent, with one functional UI and the existing previous-layout option.
+- Make the circular Codex/GPT control a recessed, dimensional physical button with a mounting well, bevel and pressed feedback. Preserve its direct one-tap action, keyboard focus and touch size.

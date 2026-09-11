@@ -130,6 +130,18 @@ try {
             await wide.focus();
             await page.keyboard.press("ArrowRight");
             await expect.poll(() => wide.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+            // Arrow keys animate native scrolling even without CSS smooth scrolling.
+            // Finish that gesture before resetting or measuring a later stream update.
+            await wide.evaluate(async (el) => {
+              let previous = el.scrollLeft;
+              let stable = 0;
+              for (let frame = 0; frame < 120 && stable < 6; frame++) {
+                await new Promise(requestAnimationFrame);
+                const current = el.scrollLeft;
+                stable = current === previous ? stable + 1 : 0;
+                previous = current;
+              }
+            });
             await wide.evaluate((el) => {
               el.scrollLeft = 0;
             });
@@ -170,6 +182,7 @@ try {
       await selected.evaluate((el) => {
         el.scrollLeft = 80;
       });
+      await expect.poll(() => selected.evaluate((el) => el.scrollLeft)).toBe(80);
       const previousScroll = await selected.evaluate((el) => el.scrollLeft);
       await page.getByRole("button", { name: "Продолжить ответ" }).click();
       await expect(page.locator('[data-client="gpt"] [data-example="features"]')).toContainText(

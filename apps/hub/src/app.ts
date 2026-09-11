@@ -7,6 +7,7 @@ import type {
   runProjectSetup,
 } from "@codex-web/machines";
 import {
+  caseColorIds,
   type HubConfig,
   HubError,
   type HubEvent,
@@ -703,6 +704,8 @@ export async function createApp(
       z
         .object({
           theme: z.enum(["organizer", "crt-green", "hitech-2000s", "classic-dark"]).optional(),
+          crtCaseColor: z.enum(caseColorIds).optional(),
+          hitechCaseColor: z.enum(caseColorIds).optional(),
           projectId: idSchema.optional(),
           threadId: idSchema.nullable().optional(),
           view: z.enum(["chat", "results", "remote", "activity", "files", "overview"]).optional(),

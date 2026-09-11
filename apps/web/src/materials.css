@@ -59,20 +59,6 @@
     inset 0 1px 5px #0007,
     0 1px #80ff9914;
 }
-:root[data-theme="hitech-2000s"] {
-  --radius-sm: 4px;
-  --radius: 6px;
-  --radius-lg: 12px;
-  --panel-material:
-    repeating-linear-gradient(0deg, #ffffff16 0 1px, transparent 1px 3px),
-    linear-gradient(115deg, #c8d3db, #eff4f7 18%, #d7e0e6 65%, #b9c8d2);
-  --panel-heading: linear-gradient(#fafcfd, #d8e1e7 48%, #b6c5cf 51%, #e5edf2);
-  --card-material: linear-gradient(110deg, #f3f8fa, #e7eff3);
-  --card-shadow: inset 0 1px #fff, 0 1px 1px #35546938;
-  --field-shadow: inset 0 1px 3px #24475e29, 0 1px #fff;
-  --tab-material: linear-gradient(#edfcff, #bcebf4 47%, #91d4e5 51%, #d6f5fb);
-  --selected-shadow: inset 2px 0 #1384a3, inset 0 1px #fff, 0 1px #fff9;
-}
 :root[data-theme="classic-dark"] {
   --radius-sm: 6px;
   --radius: 10px;
@@ -214,64 +200,6 @@
   background: linear-gradient(110deg, #fffdf6, #f8f6eb);
 }
 
-/* Recessed displays and small machined controls, in the spirit of 2000s devices. */
-:root[data-theme="hitech-2000s"] :is(.notebook-dialog, .project-overview-modal, .gpt-settings) {
-  border-color: #778f9f;
-  box-shadow:
-    inset 0 0 0 1px #fff,
-    0 12px 35px #10283955;
-}
-:root[data-theme="hitech-2000s"]
-  :is(.notebook-heading, .inspector-heading, .project-overview-heading) {
-  border-bottom: 1px solid #849aa8;
-  box-shadow:
-    inset 0 1px #fff,
-    inset 0 -1px #f3fbff,
-    0 1px 3px #1b3d4e26;
-}
-:root[data-theme="hitech-2000s"] .notebook-modules button {
-  border: 1px solid #92a8b5;
-  border-bottom: 2px solid #8ea8b5;
-  background: linear-gradient(#f7fafc, #d4e0e7);
-  box-shadow: inset 0 1px #fff;
-}
-:root[data-theme="hitech-2000s"] .notebook-modules {
-  padding-top: 5px;
-}
-:root[data-theme="hitech-2000s"] .notebook-modules button[aria-pressed="true"] {
-  background: var(--tab-material);
-  border-bottom-color: #098baa;
-  box-shadow:
-    inset 0 1px #fff,
-    inset 0 -2px #78dcec55;
-}
-:root[data-theme="hitech-2000s"] :is(.notebook-editor, .core-content) {
-  background: linear-gradient(90deg, #e2ecf0, #f5f9fa 5%, #f0f6f8);
-  box-shadow: inset 2px 2px 5px #4869781c;
-}
-:root[data-theme="hitech-2000s"] .notebook-list {
-  background: linear-gradient(90deg, #d1dce4, #e4ecf1 8%, #dce6ec);
-  border-right-color: #9aafbd;
-}
-:root[data-theme="hitech-2000s"] .repository-summary {
-  background: linear-gradient(#e0eff4, #f2f9fc);
-  box-shadow:
-    inset 0 1px 4px #25567526,
-    0 1px #fff;
-}
-:root[data-theme="hitech-2000s"] :is(.gpt-chat, .gpt-results) {
-  background: linear-gradient(90deg, #dfe9ee, #f7fafb 9%, #f1f5f7 92%, #dce7ed);
-  border: 1px solid #587382;
-  border-radius: var(--radius-lg);
-  box-shadow: inset 0 0 0 1px #e6fbff;
-  overflow: hidden;
-}
-:root[data-theme="hitech-2000s"] .gpt-composer {
-  background: linear-gradient(#f8fcff, #ddeaf1);
-  box-shadow:
-    inset 0 0 0 1px #f3fcff,
-    0 0 5px #52bede26;
-}
 :root[data-theme="crt-green"] :is(.notebook-editor, .core-content, .project-overview) {
   background: var(--panel-material);
 }

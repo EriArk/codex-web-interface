@@ -1,4 +1,4 @@
-import type { NotebookLink, ResultCategory } from "@codex-web/shared";
+import type { CasePreferences, NotebookLink, ResultCategory } from "@codex-web/shared";
 import {
   type CSSProperties,
   lazy,
@@ -33,7 +33,7 @@ import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
 import { ActivityPane } from "./Results";
 import { StorageUsage } from "./StorageUsage";
-import { applyTheme, cachedTheme } from "./theme";
+import { applyTheme, cachedTheme, hydrateCaseColors } from "./theme";
 import type {
   Activity,
   History,
@@ -440,14 +440,20 @@ function Workspace({
       try {
         const [{ projects: list }, prefs, machineList] = await Promise.all([
           api<{ projects: Project[] }>("/projects"),
-          api<{ projectId?: string; threadId?: string | null; theme?: Theme; view?: View }>(
-            "/preferences",
-          ),
+          api<
+            CasePreferences & {
+              projectId?: string;
+              threadId?: string | null;
+              theme?: Theme;
+              view?: View;
+            }
+          >("/preferences"),
           api<{ machines: Machine[] }>("/machines"),
         ]);
         setMachines(machineList.machines);
         setProjects(list);
         if (prefs.theme) setTheme(prefs.theme);
+        hydrateCaseColors(prefs);
         if (prefs.view) setView(["remote", "overview"].includes(prefs.view) ? "chat" : prefs.view);
         const visible = list.filter((p) => !p.archived && !p.deleted);
         const id = visible.some((p) => p.id === prefs.projectId)
