@@ -25,7 +25,8 @@ export function showGptJob(
   now = Date.now(),
   jobs: GptJob[] = [],
 ): boolean {
-  if (job.dismissed || completedGptRetry(job, jobs)) return false;
+  // Catalog summaries carry status only: their empty strings are not message content.
+  if (job.summaryOnly || job.dismissed || completedGptRetry(job, jobs)) return false;
   if (["queued", "preparing", "running", "failed", "unknown"].includes(job.status)) return true;
   if (job.status === "cancelled" && !job.answer && !job.assets.length) return false;
   // Completed outbox entries must never append old messages below a paged native history.

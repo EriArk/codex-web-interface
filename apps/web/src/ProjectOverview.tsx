@@ -197,430 +197,440 @@ export function ProjectOverview({
         )}
         {data && (
           <div className="project-overview-grid">
-            {!!data.reviews?.length && (
-              <section className="overview-card" aria-label="Приёмка работы">
+            <div className="overview-main">
+              {!!data.reviews?.length && (
+                <section className="overview-card" aria-label="Приёмка работы">
+                  <header>
+                    <h2>Приёмка</h2>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Все приёмки проекта"
+                      onClick={() => onNotebook({ scope, mode: "reviews" })}
+                    >
+                      <Icon name="chevron" />
+                    </button>
+                  </header>
+                  {data.reviews.map((r) => (
+                    <button
+                      type="button"
+                      className="overview-row"
+                      key={r.id}
+                      onClick={() => onNotebook({ scope, mode: "reviews", itemId: r.id })}
+                    >
+                      <Icon name={r.state === "accepted" ? "check" : "plan"} size={18} />
+                      <span>
+                        <strong>{r.title}</strong>
+                        <small>{reviewLabels[r.state]}</small>
+                      </span>
+                      <Icon name="chevron" size={16} />
+                    </button>
+                  ))}
+                </section>
+              )}
+              <section className="overview-card overview-continue" aria-label="Продолжить работу">
                 <header>
-                  <h2>Приёмка</h2>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label="Все приёмки проекта"
-                    onClick={() => onNotebook({ scope, mode: "reviews" })}
-                  >
-                    <Icon name="chevron" />
+                  <h2>Продолжить</h2>
+                  {data.activity && (
+                    <ActivityBadge active={data.activity.active} unread={data.activity.unread} />
+                  )}
+                </header>
+                {currentRow ? (
+                  <>
+                    <small className="overview-current-label">Текущий чат</small>
+                    {threadButton(currentRow)}
+                    <button type="button" className="secondary" onClick={() => setRotation(true)}>
+                      <Icon name="history" size={18} />
+                      Продолжить в новом чате
+                    </button>
+                    {!!current?.history.length && (
+                      <details className="overview-chat-history">
+                        <summary>Предыдущие чаты · {current.history.length}</summary>
+                        {current.history.map((t) =>
+                          threadButton({
+                            ...t,
+                            id: t.threadId,
+                            status: "idle",
+                            active: false,
+                            unread: false,
+                          }),
+                        )}
+                      </details>
+                    )}
+                    {threads.some(
+                      (t) =>
+                        t.id !== currentRow.id &&
+                        !current?.history.some((h) => h.threadId === t.id),
+                    ) && (
+                      <details className="overview-chat-history">
+                        <summary>Другие чаты</summary>
+                        {threads
+                          .filter(
+                            (t) =>
+                              t.id !== currentRow.id &&
+                              !current?.history.some((h) => h.threadId === t.id),
+                          )
+                          .slice(0, 10)
+                          .map(threadButton)}
+                      </details>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {current?.explicit && (
+                      <p className="muted">Рабочий чат недоступен. Выбери другой.</p>
+                    )}
+                    {threads.slice(0, 4).map((t) => (
+                      <div className="overview-current-repair" key={t.id}>
+                        {threadButton(t)}
+                        {current?.explicit && (
+                          <button
+                            type="button"
+                            className="icon-button"
+                            disabled={opening}
+                            aria-label={"Сделать рабочим: " + t.title}
+                            onClick={async () => {
+                              if (opening) return;
+                              setOpening(true);
+                              setError("");
+                              const controller = new AbortController();
+                              pendingOpen.current = controller;
+                              try {
+                                const next = await api<CurrentProjectChat>(
+                                  "/workspace/current/restore",
+                                  {
+                                    method: "POST",
+                                    body: {
+                                      scope,
+                                      threadId: t.id,
+                                      revision: current.revision,
+                                      confirm: true,
+                                    },
+                                    signal: controller.signal,
+                                  },
+                                );
+                                if (!controller.signal.aborted)
+                                  setData((old) => (old ? { ...old, currentChat: next } : old));
+                              } catch (e) {
+                                if (!controller.signal.aborted) setError(messageOf(e));
+                              } finally {
+                                if (!controller.signal.aborted) setOpening(false);
+                              }
+                            }}
+                          >
+                            <Icon name="check" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+                {!threads.length && <p className="muted">Пока нет диалогов.</p>}
+                {onNew && !currentRow && (
+                  <button type="button" className="secondary" onClick={onNew}>
+                    <Icon name="plus" />
+                    Новый диалог
+                  </button>
+                )}
+              </section>
+              <section className="overview-card" aria-label="Текущие задачи">
+                <header>
+                  <h2>Задачи проекта</h2>
+                  <button type="button" onClick={() => onNotebook({ scope, mode: "tasks" })}>
+                    Задачи <Icon name="chevron" size={14} />
                   </button>
                 </header>
-                {data.reviews.map((r) => (
+                {data.tasks.map((t) => (
                   <button
                     type="button"
                     className="overview-row"
-                    key={r.id}
-                    onClick={() => onNotebook({ scope, mode: "reviews", itemId: r.id })}
+                    key={t.id}
+                    disabled={opening}
+                    onClick={() => onNotebook({ scope, mode: "tasks", itemId: t.id })}
                   >
-                    <Icon name={r.state === "accepted" ? "check" : "plan"} size={18} />
+                    <span className="task-circle" />
                     <span>
-                      <strong>{r.title}</strong>
-                      <small>{reviewLabels[r.state]}</small>
+                      {t.title}
+                      <small>
+                        {t.status === "doing"
+                          ? "В работе"
+                          : t.status === "blocked"
+                            ? "Заблокировано"
+                            : t.priority === 2
+                              ? "Высокий приоритет"
+                              : "Открыта"}
+                        {t.dueAt ? ` · ${t.dueAt}` : ""}
+                      </small>
                     </span>
-                    <Icon name="chevron" size={16} />
                   </button>
                 ))}
-              </section>
-            )}
-            <section className="overview-card overview-continue" aria-label="Продолжить работу">
-              <header>
-                <h2>Продолжить</h2>
-                {data.activity && (
-                  <ActivityBadge active={data.activity.active} unread={data.activity.unread} />
-                )}
-              </header>
-              {currentRow ? (
-                <>
-                  <small className="overview-current-label">Текущий чат</small>
-                  {threadButton(currentRow)}
-                  <button type="button" className="secondary" onClick={() => setRotation(true)}>
-                    <Icon name="history" size={18} />
-                    Продолжить в новом чате
+                {!data.tasks.length && (
+                  <button
+                    type="button"
+                    className="overview-row muted"
+                    onClick={() => onNotebook({ scope, mode: "tasks" })}
+                  >
+                    <Icon name="plus" />
+                    Добавить задачу
                   </button>
-                  {!!current?.history.length && (
-                    <details className="overview-chat-history">
-                      <summary>Предыдущие чаты · {current.history.length}</summary>
-                      {current.history.map((t) =>
-                        threadButton({
-                          ...t,
-                          id: t.threadId,
-                          status: "idle",
-                          active: false,
-                          unread: false,
-                        }),
-                      )}
-                    </details>
-                  )}
-                  {threads.some(
-                    (t) =>
-                      t.id !== currentRow.id && !current?.history.some((h) => h.threadId === t.id),
-                  ) && (
-                    <details className="overview-chat-history">
-                      <summary>Другие чаты</summary>
-                      {threads
-                        .filter(
-                          (t) =>
-                            t.id !== currentRow.id &&
-                            !current?.history.some((h) => h.threadId === t.id),
-                        )
-                        .slice(0, 10)
-                        .map(threadButton)}
-                    </details>
-                  )}
-                </>
-              ) : (
-                <>
-                  {current?.explicit && (
-                    <p className="muted">Рабочий чат недоступен. Выбери другой.</p>
-                  )}
-                  {threads.slice(0, 4).map((t) => (
-                    <div className="overview-current-repair" key={t.id}>
-                      {threadButton(t)}
-                      {current?.explicit && (
-                        <button
-                          type="button"
-                          className="icon-button"
-                          disabled={opening}
-                          aria-label={"Сделать рабочим: " + t.title}
-                          onClick={async () => {
-                            if (opening) return;
-                            setOpening(true);
-                            setError("");
-                            const controller = new AbortController();
-                            pendingOpen.current = controller;
-                            try {
-                              const next = await api<CurrentProjectChat>(
-                                "/workspace/current/restore",
-                                {
-                                  method: "POST",
-                                  body: {
-                                    scope,
-                                    threadId: t.id,
-                                    revision: current.revision,
-                                    confirm: true,
-                                  },
-                                  signal: controller.signal,
-                                },
-                              );
-                              if (!controller.signal.aborted)
-                                setData((old) => (old ? { ...old, currentChat: next } : old));
-                            } catch (e) {
-                              if (!controller.signal.aborted) setError(messageOf(e));
-                            } finally {
-                              if (!controller.signal.aborted) setOpening(false);
-                            }
-                          }}
-                        >
-                          <Icon name="check" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </>
-              )}
-              {!threads.length && <p className="muted">Пока нет диалогов.</p>}
-              {onNew && !currentRow && (
-                <button type="button" className="secondary" onClick={onNew}>
-                  <Icon name="plus" />
-                  Новый диалог
-                </button>
-              )}
-            </section>
-            <section className="overview-card" aria-label="Текущие задачи">
-              <header>
-                <h2>Задачи проекта</h2>
-                <button type="button" onClick={() => onNotebook({ scope, mode: "tasks" })}>
-                  Задачи <Icon name="chevron" size={14} />
-                </button>
-              </header>
-              {data.tasks.map((t) => (
-                <button
-                  type="button"
-                  className="overview-row"
-                  key={t.id}
-                  disabled={opening}
-                  onClick={() => onNotebook({ scope, mode: "tasks", itemId: t.id })}
-                >
-                  <span className="task-circle" />
-                  <span>
-                    {t.title}
-                    <small>
-                      {t.status === "doing"
-                        ? "В работе"
-                        : t.status === "blocked"
-                          ? "Заблокировано"
-                          : t.priority === 2
-                            ? "Высокий приоритет"
-                            : "Открыта"}
-                      {t.dueAt ? ` · ${t.dueAt}` : ""}
-                    </small>
-                  </span>
-                </button>
-              ))}
-              {!data.tasks.length && (
-                <button
-                  type="button"
-                  className="overview-row muted"
-                  onClick={() => onNotebook({ scope, mode: "tasks" })}
-                >
-                  <Icon name="plus" />
-                  Добавить задачу
-                </button>
-              )}
-            </section>
-            {data.results.length > 0 && (
-              <section className="overview-card overview-results" aria-label="Последние результаты">
-                <header>
-                  <h2>Последние результаты</h2>
-                  {onResults && (
-                    <button type="button" onClick={onResults}>
-                      Все <Icon name="chevron" size={14} />
-                    </button>
-                  )}
-                </header>
-                <div>
-                  {data.results.map((result) => (
-                    <button
-                      type="button"
-                      key={result.id}
-                      disabled={opening}
-                      className="overview-result"
-                      onClick={() =>
-                        void open({
-                          client: scope.client,
-                          kind: "result",
-                          id: result.id,
-                          threadId: result.threadId,
-                          turnId: result.turnId,
-                          projectId: scope.projectId,
-                          title: result.title,
-                        })
-                      }
-                    >
-                      {result.imageUrl ? (
-                        <img src={result.imageUrl} loading="lazy" alt="" />
-                      ) : (
-                        <Icon
-                          name={
-                            result.type === "image"
-                              ? "image"
-                              : result.type === "check"
-                                ? "check"
-                                : "file"
-                          }
-                          size={28}
-                        />
-                      )}
-                      <span>{result.title}</span>
-                    </button>
-                  ))}
-                </div>
+                )}
               </section>
-            )}
-            <section className="overview-card" aria-label="Планы проекта">
-              <header>
-                <h2>Планы</h2>
-                <button type="button" onClick={() => onNotebook({ scope, mode: "plans" })}>
-                  Открыть <Icon name="chevron" size={14} />
-                </button>
-              </header>
-              {data.plans?.map((p) => (
-                <button
-                  type="button"
-                  className="overview-row"
-                  key={p.id}
-                  onClick={() => onNotebook({ scope, mode: "plans", itemId: p.id })}
-                >
-                  <Icon name="plan" />
-                  <span>
-                    {p.title}
-                    <small>
-                      {p.checked}/{p.total}
-                      {p.status === "done" ? " · Выполнен" : ""}
-                    </small>
-                  </span>
-                </button>
-              ))}
-              {!data.plans?.length && (
-                <button
-                  type="button"
-                  className="overview-row muted"
-                  onClick={() => onNotebook({ scope, mode: "plans" })}
-                >
-                  <Icon name="plus" />
-                  Создать план
-                </button>
-              )}
-            </section>
-            <section className="overview-card" aria-label="Отчёты проекта">
-              <header>
-                <h2>Последний отчёт</h2>
-                <button type="button" onClick={() => onNotebook({ scope, mode: "reports" })}>
-                  Все отчёты <Icon name="chevron" size={14} />
-                </button>
-              </header>
-              {data.latestReport ? (
-                <button
-                  type="button"
-                  className="overview-row"
-                  onClick={() =>
-                    onNotebook({ scope, mode: "reports", itemId: data.latestReport!.id })
-                  }
-                >
-                  <Icon name="report" />
-                  <span>
-                    {date(data.latestReport.createdAt)}
-                    <small>{data.latestReport.excerpt}</small>
-                  </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="overview-row muted"
-                  onClick={() => onNotebook({ scope, mode: "reports" })}
-                >
-                  <Icon name="report" />
-                  Подготовить отчёт
-                </button>
-              )}
-            </section>
-            <section className="overview-card" aria-label="Основа проекта">
-              <header>
-                <h2>Основа проекта</h2>
-                <button type="button" onClick={() => onNotebook({ scope, mode: "core" })}>
-                  Открыть <Icon name="chevron" size={14} />
-                </button>
-              </header>
-              <p className="overview-core-summary">
-                {data.core?.purpose || "Назначение, правила и ограничения проекта."}
-              </p>
-              {!!data.core?.revision && (
-                <small className="muted">Версия {data.core.revision}</small>
-              )}
-            </section>
-            <section className="overview-card" aria-label="Контекст проекта">
-              <header>
-                <h2>Под рукой</h2>
-                <button type="button" onClick={() => onNotebook({ scope })}>
-                  Заметки <Icon name="chevron" size={14} />
-                </button>
-              </header>
-              <PinnedList
-                items={data.pins}
-                active={() => false}
-                recent={(p) => p.createdAt}
-                storageKey={`overview:${scope.client}:${scope.projectId}`}
-                renderItem={(p) => (
+              <section className="overview-card" aria-label="Планы проекта">
+                <header>
+                  <h2>Планы</h2>
+                  <button type="button" onClick={() => onNotebook({ scope, mode: "plans" })}>
+                    Открыть <Icon name="chevron" size={14} />
+                  </button>
+                </header>
+                {data.plans?.map((p) => (
                   <button
                     type="button"
                     className="overview-row"
                     key={p.id}
-                    disabled={opening || p.target.availability === "missing"}
-                    onClick={() => void open(p.target)}
+                    onClick={() => onNotebook({ scope, mode: "plans", itemId: p.id })}
                   >
-                    <Icon name="pin" size={16} />
+                    <Icon name="plan" />
                     <span>
-                      {p.target.title}
-                      {p.target.availability === "missing" && <small>Источник недоступен</small>}
+                      {p.title}
+                      <small>
+                        {p.checked}/{p.total}
+                        {p.status === "done" ? " · Выполнен" : ""}
+                      </small>
                     </span>
-                  </button>
-                )}
-              />
-              {data.notes
-                .filter(
-                  (n) => !data.pins.some((p) => p.target.kind === "note" && p.target.id === n.id),
-                )
-                .map((n) => (
-                  <button
-                    type="button"
-                    className="overview-row"
-                    key={n.id}
-                    onClick={() => onNotebook({ scope, itemId: n.id })}
-                  >
-                    <Icon name="file" size={16} />
-                    <span>{n.title}</span>
                   </button>
                 ))}
-              {!data.pins.length && !data.notes.length && (
-                <button
-                  type="button"
-                  className="overview-row muted"
-                  onClick={() => onNotebook({ scope })}
-                >
-                  <Icon name="plus" />
-                  Добавить заметку
-                </button>
-              )}
-            </section>
-            {(data.machine || onFiles) && (
-              <section className="overview-card overview-system" aria-label="Состояние проекта">
-                <header>
-                  <h2>Состояние проекта</h2>
-                  {onMachines && (
-                    <button type="button" onClick={onMachines}>
-                      Компьютеры <Icon name="chevron" size={14} />
-                    </button>
-                  )}
-                </header>
-                {data.machine && (
-                  <div className="overview-machine">
-                    <Icon name="remote" />
-                    <div>
-                      <strong>{data.machine.name}</strong>
-                      <p>
-                        {data.machine.checkedAt
-                          ? `${data.machine.stale ? "Прошлая проверка" : "Проверено"}: ${date(data.machine.checkedAt)}`
-                          : "Ещё не проверен"}
-                      </p>
-                      {data.machine.checkedAt && (
-                        <small>
-                          {data.machine.online ? "SSH / хост доступен" : "Хост недоступен"} ·{" "}
-                          {data.machine.codex ? "Codex отвечает" : "Codex не подтверждён"}
-                        </small>
-                      )}
-                    </div>
-                    {data.machine.remoteAvailable && onRemote && (
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label="Remote проекта"
-                        onClick={onRemote}
-                      >
-                        <Icon name="expand" />
-                      </button>
-                    )}
-                  </div>
-                )}
-                {onFiles && <DeliveryButton projectId={scope.projectId} projectName={scope.name} />}
-                {onFiles && (
-                  <GuiPreviewButton projectId={scope.projectId} projectName={scope.name} />
-                )}
-                {onFiles && (
-                  <button type="button" className="overview-row" onClick={onFiles}>
-                    <Icon name="folder" />
-                    <span>
-                      {data.git
-                        ? data.git.repository
-                          ? `${data.git.branch ?? (data.git.detached ? "Detached HEAD" : "Git")} · ${data.git.dirty ? `Изменено: ${data.git.changed}` : "Без изменений"}`
-                          : "Папка без Git"
-                        : "Файлы и Git проекта"}
-                      {data.git && (
-                        <small>
-                          {data.git.stale ? "Прошлая проверка" : "Проверено"}:{" "}
-                          {date(data.git.checkedAt)}
-                        </small>
-                      )}
-                    </span>
-                    <Icon name="chevron" size={15} />
+                {!data.plans?.length && (
+                  <button
+                    type="button"
+                    className="overview-row muted"
+                    onClick={() => onNotebook({ scope, mode: "plans" })}
+                  >
+                    <Icon name="plus" />
+                    Создать план
                   </button>
                 )}
               </section>
-            )}
+              {data.results.length > 0 && (
+                <section
+                  className="overview-card overview-results"
+                  aria-label="Последние результаты"
+                >
+                  <header>
+                    <h2>Последние результаты</h2>
+                    {onResults && (
+                      <button type="button" onClick={onResults}>
+                        Все <Icon name="chevron" size={14} />
+                      </button>
+                    )}
+                  </header>
+                  <div>
+                    {data.results.map((result) => (
+                      <button
+                        type="button"
+                        key={result.id}
+                        disabled={opening}
+                        className="overview-result"
+                        onClick={() =>
+                          void open({
+                            client: scope.client,
+                            kind: "result",
+                            id: result.id,
+                            threadId: result.threadId,
+                            turnId: result.turnId,
+                            projectId: scope.projectId,
+                            title: result.title,
+                          })
+                        }
+                      >
+                        {result.imageUrl ? (
+                          <img src={result.imageUrl} loading="lazy" alt="" />
+                        ) : (
+                          <Icon
+                            name={
+                              result.type === "image"
+                                ? "image"
+                                : result.type === "check"
+                                  ? "check"
+                                  : "file"
+                            }
+                            size={28}
+                          />
+                        )}
+                        <span>{result.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+            <div className="overview-context">
+              <section className="overview-card" aria-label="Контекст проекта">
+                <header>
+                  <h2>Под рукой</h2>
+                  <button type="button" onClick={() => onNotebook({ scope })}>
+                    Заметки <Icon name="chevron" size={14} />
+                  </button>
+                </header>
+                <PinnedList
+                  items={data.pins}
+                  active={() => false}
+                  recent={(p) => p.createdAt}
+                  storageKey={`overview:${scope.client}:${scope.projectId}`}
+                  renderItem={(p) => (
+                    <button
+                      type="button"
+                      className="overview-row"
+                      key={p.id}
+                      disabled={opening || p.target.availability === "missing"}
+                      onClick={() => void open(p.target)}
+                    >
+                      <Icon name="pin" size={16} />
+                      <span>
+                        {p.target.title}
+                        {p.target.availability === "missing" && <small>Источник недоступен</small>}
+                      </span>
+                    </button>
+                  )}
+                />
+                {data.notes
+                  .filter(
+                    (n) => !data.pins.some((p) => p.target.kind === "note" && p.target.id === n.id),
+                  )
+                  .map((n) => (
+                    <button
+                      type="button"
+                      className="overview-row"
+                      key={n.id}
+                      onClick={() => onNotebook({ scope, itemId: n.id })}
+                    >
+                      <Icon name="file" size={16} />
+                      <span>{n.title}</span>
+                    </button>
+                  ))}
+                {!data.pins.length && !data.notes.length && (
+                  <button
+                    type="button"
+                    className="overview-row muted"
+                    onClick={() => onNotebook({ scope })}
+                  >
+                    <Icon name="plus" />
+                    Добавить заметку
+                  </button>
+                )}
+              </section>
+              <section className="overview-card" aria-label="Основа проекта">
+                <header>
+                  <h2>Основа проекта</h2>
+                  <button type="button" onClick={() => onNotebook({ scope, mode: "core" })}>
+                    Открыть <Icon name="chevron" size={14} />
+                  </button>
+                </header>
+                <p className="overview-core-summary">
+                  {data.core?.purpose || "Назначение, правила и ограничения проекта."}
+                </p>
+                {!!data.core?.revision && (
+                  <small className="muted">Версия {data.core.revision}</small>
+                )}
+              </section>
+              <section className="overview-card" aria-label="Отчёты проекта">
+                <header>
+                  <h2>Последний отчёт</h2>
+                  <button type="button" onClick={() => onNotebook({ scope, mode: "reports" })}>
+                    Все отчёты <Icon name="chevron" size={14} />
+                  </button>
+                </header>
+                {data.latestReport ? (
+                  <button
+                    type="button"
+                    className="overview-row"
+                    onClick={() =>
+                      onNotebook({ scope, mode: "reports", itemId: data.latestReport!.id })
+                    }
+                  >
+                    <Icon name="report" />
+                    <span>
+                      {date(data.latestReport.createdAt)}
+                      <small>{data.latestReport.excerpt}</small>
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="overview-row muted"
+                    onClick={() => onNotebook({ scope, mode: "reports" })}
+                  >
+                    <Icon name="report" />
+                    Подготовить отчёт
+                  </button>
+                )}
+              </section>
+              {(data.machine || onFiles) && (
+                <section className="overview-card overview-system" aria-label="Состояние проекта">
+                  <header>
+                    <h2>Состояние проекта</h2>
+                    {onMachines && (
+                      <button type="button" onClick={onMachines}>
+                        Компьютеры <Icon name="chevron" size={14} />
+                      </button>
+                    )}
+                  </header>
+                  {data.machine && (
+                    <div className="overview-machine">
+                      <Icon name="remote" />
+                      <div>
+                        <strong>{data.machine.name}</strong>
+                        <p>
+                          {data.machine.checkedAt
+                            ? `${data.machine.stale ? "Прошлая проверка" : "Проверено"}: ${date(data.machine.checkedAt)}`
+                            : "Ещё не проверен"}
+                        </p>
+                        {data.machine.checkedAt && (
+                          <small>
+                            {data.machine.online ? "SSH / хост доступен" : "Хост недоступен"} ·{" "}
+                            {data.machine.codex ? "Codex отвечает" : "Codex не подтверждён"}
+                          </small>
+                        )}
+                      </div>
+                      {data.machine.remoteAvailable && onRemote && (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          aria-label="Remote проекта"
+                          onClick={onRemote}
+                        >
+                          <Icon name="expand" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {onFiles && (
+                    <DeliveryButton projectId={scope.projectId} projectName={scope.name} />
+                  )}
+                  {onFiles && (
+                    <GuiPreviewButton projectId={scope.projectId} projectName={scope.name} />
+                  )}
+                  {onFiles && (
+                    <button type="button" className="overview-row" onClick={onFiles}>
+                      <Icon name="folder" />
+                      <span>
+                        {data.git
+                          ? data.git.repository
+                            ? `${data.git.branch ?? (data.git.detached ? "Detached HEAD" : "Git")} · ${data.git.dirty ? `Изменено: ${data.git.changed}` : "Без изменений"}`
+                            : "Папка без Git"
+                          : "Файлы и Git проекта"}
+                        {data.git && (
+                          <small>
+                            {data.git.stale ? "Прошлая проверка" : "Проверено"}:{" "}
+                            {date(data.git.checkedAt)}
+                          </small>
+                        )}
+                      </span>
+                      <Icon name="chevron" size={15} />
+                    </button>
+                  )}
+                </section>
+              )}
+            </div>
           </div>
         )}
       </div>

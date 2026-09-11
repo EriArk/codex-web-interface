@@ -144,6 +144,45 @@ for (const [engine, type] of [
     const composer = page.getByRole("textbox", { name: "Сообщение Codex" });
     await composer.fill("Черновик Codex: сохранить при смене оформления");
     await composer.evaluate((e) => e.blur());
+    for (const [width, height] of [
+      [1366, 1024],
+      [1376, 1032],
+      [1920, 1080],
+      [2560, 1440],
+    ]) {
+      await viewport(width, height);
+      const nav = await page.locator(".desktop-nav").boundingBox();
+      const chat = await page.locator(".chat-pane").boundingBox();
+      const results = await page.locator(".support-pane").boundingBox();
+      const reading = await page.locator(".chat-content").boundingBox();
+      assert(nav.width >= 280 && nav.width <= 337, "navigation scales within readable bounds");
+      assert(
+        chat.width > results.width && chat.width >= 700,
+        "conversation has priority at 13-inch widths",
+      );
+      assert(reading.width <= 881, "desktop text retains a readable line length");
+      measurements.push({
+        width,
+        height,
+        nav: nav.width,
+        chat: chat.width,
+        results: results.width,
+        reading: reading.width,
+      });
+      await shot(`workspace-${width}`);
+      await button("Обзор текущего проекта").click();
+      await expect(page.locator(".overview-main .overview-continue")).toBeVisible();
+      const main = await page.locator(".overview-main").boundingBox();
+      const context = await page.locator(".overview-context").boundingBox();
+      assert(
+        main.width > context.width && context.x > main.x,
+        "overview has primary work and secondary context columns",
+      );
+      await shot(`overview-${width}`);
+      await button("Закрыть обзор проекта").click();
+      await expect(composer).toHaveValue("Черновик Codex: сохранить при смене оформления");
+    }
+    await viewport(1366, 1024);
     const pane = page.locator(".support-pane"),
       divider = page.locator(".pane-divider");
     let before = await pane.boundingBox(),
@@ -269,7 +308,25 @@ for (const [engine, type] of [
           currentModel: "Latest",
           currentEffort: "2",
         };
-      else if (path.endsWith("/jobs")) data = { items: [], stamp: 1 };
+      else if (path.endsWith("/jobs"))
+        data = {
+          items: [
+            {
+              id: "old-summary",
+              nativeId: "tablet-gpt",
+              summaryOnly: true,
+              status: "failed",
+              text: "",
+              files: [],
+              answer: "",
+              assets: [],
+              error: "",
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+          stamp: 1,
+        };
       else if (path.endsWith("/conversations"))
         data = {
           items: [{ id: "tablet-gpt", title: "Планшетный интерфейс GPT", updatedAt: 100 }],
@@ -302,6 +359,7 @@ for (const [engine, type] of [
     await button("Переключиться на GPT").click();
     await button("Планшетный интерфейс GPT").click();
     const gptComposer = page.getByRole("textbox", { name: "Сообщение GPT" });
+    await expect(page.locator(".gpt-job")).toHaveCount(0);
     await gptComposer.fill("Черновик GPT: сохранить настройки");
     for (const theme of ["classic-dark", "organizer", "hitech-2000s", "crt-green"]) {
       await button("Настройки").click();

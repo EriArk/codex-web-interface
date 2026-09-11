@@ -115,9 +115,19 @@
 
 /* A little more room for the conversation; the checkbox restores the prior geometry. */
 @media (min-width: 1100px) {
+  :root:not([data-layout="legacy"]) {
+    --default-right-width: 34%;
+  }
+  /* The selected Results tab already supplies this heading in the wide Codex pane. */
+  :root:not([data-layout="legacy"])
+    .support-pane:not(.gpt-results)
+    > .results-pane
+    > .pane-heading {
+    display: none;
+  }
   :root:not([data-layout="legacy"])
     .workspace:not(.nav-collapsed):not([data-remote-immersive="true"]) {
-    grid-template-columns: 268px minmax(0, 1fr);
+    grid-template-columns: clamp(280px, 20.5vw, 336px) minmax(0, 1fr);
   }
   :root:not([data-layout="legacy"]) .workspace:not([data-remote-immersive="true"]) {
     grid-template-rows: 60px minmax(0, 1fr);
@@ -135,10 +145,14 @@
     padding-block: 6px;
   }
   :root:not([data-layout="legacy"]) .chat-scroll {
-    padding-inline: clamp(18px, 2.1vw, 32px);
+    padding-inline: clamp(18px, 1.5vw, 28px);
   }
   :root:not([data-layout="legacy"]) .gpt-message-scroll {
-    padding-inline: clamp(18px, 2.1vw, 32px);
+    padding-inline: clamp(18px, 1.5vw, 28px);
+  }
+  :root:not([data-layout="legacy"]) :is(.chat-content, .gpt-message-scroll > div) {
+    max-width: 880px;
+    margin-inline: auto;
   }
   :root:not([data-layout="legacy"])[data-theme="organizer"]
     .workspace:not([data-remote-immersive="true"]) {

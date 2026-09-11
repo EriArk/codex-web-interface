@@ -4,6 +4,7 @@
   display: none;
 }
 .project-overview {
+  container-type: inline-size;
   background: var(--paper);
   width: 100%;
   flex: 1;
@@ -35,11 +36,23 @@
 }
 .project-overview-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
   max-width: 1200px;
   margin: auto;
+}
+.overview-main,
+.overview-context {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+@container (max-width: 760px) {
+  .project-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .overview-card {
   min-width: 0;
@@ -214,6 +227,23 @@
 }
 .project-overview-modal .project-overview-heading h1 {
   font-size: 1.25em;
+}
+@media (min-width: 1100px) {
+  :root:not([data-layout="legacy"]) .project-overview-modal {
+    width: min(1200px, calc(100vw - 64px));
+    height: min(920px, calc(var(--app-height, 100dvh) - 64px));
+  }
+}
+:root[data-layout="legacy"] :is(.overview-main, .overview-context) {
+  display: contents;
+}
+:root[data-layout="legacy"] .project-overview-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container (max-width: 760px) {
+  :root[data-layout="legacy"] .project-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 @media (max-width: 700px) {
   .project-overview-modal {

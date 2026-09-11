@@ -270,7 +270,7 @@
     display: flex;
   }
   .gpt-workspace .gpt-results {
-    width: var(--right-width, 38%);
+    width: var(--right-width, var(--default-right-width, 38%));
     flex: none;
     border-left: 1px solid var(--line);
   }
