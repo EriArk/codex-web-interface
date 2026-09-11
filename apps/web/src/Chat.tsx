@@ -24,6 +24,7 @@ import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
+import { MarkdownTable } from "./MarkdownTable";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
 import { SpeechButton, useSpeechScope } from "./MessageSpeech";
 import { clearAcknowledgedSend, matchesPendingSend } from "./pendingSend";
@@ -49,6 +50,7 @@ const MessageText = memo(function MessageText({
       remarkPlugins={[remarkGfm]}
       components={{
         pre: CollapsibleCode,
+        table: MarkdownTable,
         ...(onImages
           ? {
               img: ({ node, ...props }) =>

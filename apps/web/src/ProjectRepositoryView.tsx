@@ -7,6 +7,7 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
+import { MarkdownTable } from "./MarkdownTable";
 
 export function projectDocumentPath(source: string, href: string): string | null {
   if (!href || /^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(href)) return null;
@@ -73,6 +74,7 @@ function ProjectMarkdown({
         remarkPlugins={[remarkGfm]}
         components={{
           pre: CollapsibleCode,
+          table: MarkdownTable,
           a: ({ href, children }) => link(href, children),
           img: ({ src, alt }) =>
             link(

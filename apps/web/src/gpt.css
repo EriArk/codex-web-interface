@@ -74,17 +74,6 @@
 .gpt-chat .message-body p:last-child {
   margin-bottom: 0;
 }
-.gpt-chat .message-body table {
-  display: block;
-  max-width: 100%;
-  overflow: auto;
-  border-collapse: collapse;
-}
-.gpt-chat .message-body td,
-.gpt-chat .message-body th {
-  padding: 6px;
-  border: 1px solid var(--line);
-}
 .gpt-chat .message-body img {
   max-width: 100%;
   height: auto;

@@ -13,6 +13,7 @@ import { api, messageOf } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
+import { MarkdownTable } from "./MarkdownTable";
 import type { NotebookRequest } from "./Notebook";
 import { PlanReconciliation } from "./PlanReconciliation";
 import { ProjectActionPanel } from "./ProjectAction";
@@ -385,6 +386,7 @@ export default function WorkReviewPanel({
                   remarkPlugins={[remarkGfm]}
                   components={{
                     pre: CollapsibleCode,
+                    table: MarkdownTable,
                     img: () => null,
                     a: ({ node: _node, ...props }) => (
                       <a {...props} target="_blank" rel="noopener noreferrer" />

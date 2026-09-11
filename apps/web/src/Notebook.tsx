@@ -21,6 +21,7 @@ import { CaptureNote } from "./CaptureNote";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
+import { MarkdownTable } from "./MarkdownTable";
 import { PinnedList } from "./PinnedList";
 import { ProjectCorePanel } from "./ProjectCore";
 import { ProjectWorkPanel } from "./ProjectWork";
@@ -936,6 +937,7 @@ function NotebookEditor({
                     remarkPlugins={[remarkGfm]}
                     components={{
                       pre: CollapsibleCode,
+                      table: MarkdownTable,
                       img: ({ alt }) => <span>{alt || "Изображение"}</span>,
                       a: ({ href, children }) => (
                         <a href={href} target="_blank" rel="noopener noreferrer">

@@ -494,16 +494,6 @@
   overflow: auto;
   font-size: 12px;
 }
-.inspector-markdown table {
-  display: block;
-  overflow: auto;
-  border-collapse: collapse;
-  max-width: 100%;
-}
-.inspector-markdown :is(th, td) {
-  border: 1px solid var(--line);
-  padding: 5px 8px;
-}
 .inspector-markdown blockquote {
   margin-inline: 0;
   padding-left: 12px;

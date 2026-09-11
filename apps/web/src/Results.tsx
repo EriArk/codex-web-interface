@@ -17,6 +17,7 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { CommandOutput } from "./CommandOutput";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
+import { MarkdownTable } from "./MarkdownTable";
 import { PreviewViewer } from "./PreviewViewer";
 import type { Activity, Result } from "./types";
 export function Results({
@@ -224,6 +225,7 @@ export function Results({
                     remarkPlugins={[remarkGfm]}
                     components={{
                       pre: CollapsibleCode,
+                      table: MarkdownTable,
                       a: ({ node: _node, ...props }) => (
                         <a {...props} target="_blank" rel="noopener noreferrer" />
                       ),
