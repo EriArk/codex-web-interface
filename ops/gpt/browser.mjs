@@ -1,4 +1,5 @@
 import {captureDoctorEvidence} from './browser-doctor.mjs';
+import {transcribeDictation} from './browser-dictation.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {readFileSync,mkdirSync,existsSync,unlinkSync} from 'node:fs';
@@ -85,6 +86,11 @@ server=createServer(async(req,res)=>{
    res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}));
   }catch{res.writeHead(409).end('{}');}
   return;
+ }
+ if(req.method==='POST'&&url.pathname==='/dictation'){
+  try{const input=await readJson(req,9*1024*1024);const result=await transcribeDictation(await activePage(),input);
+   res.writeHead(result.status,{'Content-Type':'application/json'}).end(JSON.stringify(result.status===200?{text:result.text}:{error:result.error}));
+  }catch{res.writeHead(503,{'Content-Type':'application/json'}).end(JSON.stringify({error:'DICTATION_NATIVE_UNAVAILABLE'}))}return;
  }
  if(url.pathname.startsWith('/bridge/')){await proxyBridge(req,res,url.pathname,token,{beforeChat:async body=>projectComposer(await activePage(),body.projectId)});return}
  if(req.method==='GET'&&url.pathname==='/asset'){
