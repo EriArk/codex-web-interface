@@ -433,6 +433,7 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
       db.exec(
         "BEGIN IMMEDIATE; DELETE FROM sessions; DELETE FROM bootstrap; UPDATE commands SET state='unknown' WHERE state='pending'; UPDATE threads SET status='unknown' WHERE status IN ('starting','running','waiting_approval'); COMMIT;",
       );
+      db.exec("UPDATE usage_reset_operations SET state='unknown' WHERE state='pending'");
       // A queued job in an older backup may have already reached ChatGPT since
       // that snapshot. Restoration must not replay it, even if submitted was false.
       db.prepare(

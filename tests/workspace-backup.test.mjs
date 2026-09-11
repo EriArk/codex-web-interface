@@ -209,6 +209,16 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
       join(config.hub.resultsPath, "gpt", "profile", "fixture-secret"),
       "not an upload",
     );
+    source.db.prepare("INSERT INTO usage_reset_accounts VALUES('private-account-binding',7)").run();
+    source.db
+      .prepare("INSERT INTO usage_reset_operations VALUES(?,?,?,?,?,'pending',NULL,1,1)")
+      .run(
+        "retained-reset-key",
+        "pc",
+        "private-account-binding",
+        "request-fingerprint",
+        "opaque-credit",
+      );
     const snapshot = await createSnapshot(config, join(root, "backups"));
     const manifest = await verifySnapshot(snapshot);
     assert.equal(manifest.format, 2);
@@ -221,6 +231,14 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
     const target = join(root, "restore");
     await restoreSnapshot(snapshot, target);
     restored = new Store(join(target, "app.db"));
+    const reset = restored.db.prepare("SELECT * FROM usage_reset_operations").get();
+    assert.equal(reset.id, "retained-reset-key");
+    assert.equal(reset.creditId, "opaque-credit");
+    assert.equal(reset.state, "unknown");
+    assert.equal(
+      restored.db.prepare("SELECT revision FROM usage_reset_accounts").get().revision,
+      7,
+    );
     const restoredBook = new Notebook({
       store: restored,
       catalog: { projects: () => [], library: new Library(restored, "codex") },
