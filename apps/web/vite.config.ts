@@ -6,6 +6,7 @@ export default defineConfig({
     react(),
     {
       name: "release-version",
+      enforce: "post",
       transformIndexHtml: {
         order: "post",
         handler(_html, context) {
@@ -19,12 +20,30 @@ export default defineConfig({
           ];
         },
       },
-      generateBundle(_options, bundle) {
-        this.emitFile({
-          type: "asset",
-          fileName: "version.json",
-          source: JSON.stringify(releaseVersion(bundle)),
-        });
+      generateBundle: {
+        order: "post",
+        handler(_options, bundle) {
+          // Shared lazy CSS can be deduplicated after transformIndexHtml. Stamp
+          // both outputs from the final bundle so the installed PWA has one ID.
+          const version = releaseVersion(bundle);
+          for (const asset of Object.values(bundle)) {
+            if (
+              asset.type === "asset" &&
+              asset.fileName.endsWith(".html") &&
+              typeof asset.source === "string"
+            ) {
+              asset.source = asset.source.replace(
+                /(<meta name="codex-release" content=")[a-f0-9]+("\s*\/?>)/,
+                (_match, before, after) => before + version.id + after,
+              );
+            }
+          }
+          this.emitFile({
+            type: "asset",
+            fileName: "version.json",
+            source: JSON.stringify(version),
+          });
+        },
       },
     },
   ],

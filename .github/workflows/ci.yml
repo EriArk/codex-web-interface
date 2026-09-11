@@ -89,6 +89,7 @@ jobs:
       - run: node tests/work-review.browser.mjs
       - run: node tests/quick-capture.browser.mjs
       - run: node tests/project-delivery.browser.mjs
+      - run: node tests/gui-preview.browser.mjs
       - run: node tests/project-rotation.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs
@@ -104,3 +105,6 @@ jobs:
       - name: Check pinned runtime survives desktop cleanup
         shell: powershell
         run: ./tests/companion-runtime.tests.ps1
+      - name: Compile narrow project window capture and verify argument quoting
+        shell: powershell
+        run: ./tests/gui-preview-native.tests.ps1

@@ -501,3 +501,7 @@ Optional incident screenshots intentionally remove all text, images and personal
 ### 2026-09-10 — Private device terminals
 
 The owner requested terminal output in Results and an infrastructure workspace alongside Remote, initially for the Windows PC and actual Linux host. Devices use a separate configured SSH registry; they never become fake Codex projects or acquire chat writers. The owner-approved privileged terminal is confined to the existing Hub session/Origin/CSRF boundary, system OpenSSH, bounded PTYs and explicit device actions. The Companion retains its narrow fixed API. See [Devices](DEVICES.md) for lifecycle, native mount/permission limitations and verification boundaries.
+
+## 2026-09-11 — Configured native project previews
+
+The owner-approved #38 preview uses a separate fixed `CodexWebGuiPreview` interactive Scheduled Task over existing SSH and a private local file mailbox. This is the smallest compatible extension while keeping the currently running Companion untouched. Only a trusted machine-local action allowlist supplies executable/cwd/arguments; browser requests identify an action and an existing project chat. Each launch owns an unnamed Windows Job Object and captures only its own visible windows. Hub schema 25 persists exact operation/result/thread identity; uncertain launches are never repeated automatically. See [GUI previews](GUI_PREVIEW.md) for setup, capture limits, lifecycle and verification.

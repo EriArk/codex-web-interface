@@ -814,10 +814,26 @@ function Workspace({
   }, [pendingNotebookResult, state.loading, state.thread.id]);
   const deliveryNavigation = useRef(openNotebookTarget);
   deliveryNavigation.current = openNotebookTarget;
+  const previewRemote = useRef((id: string) => {
+    openMachineProject(id, false);
+    setRightHidden(false);
+    setView("remote");
+  });
+  previewRemote.current = (id: string) => {
+    openMachineProject(id, false);
+    setRightHidden(false);
+    setView("remote");
+  };
   useEffect(() => {
     const open = (e: Event) => deliveryNavigation.current((e as CustomEvent<NotebookLink>).detail);
+    const remote = (e: Event) =>
+      previewRemote.current((e as CustomEvent<{ projectId: string }>).detail.projectId);
     window.addEventListener("open-delivery-target", open);
-    return () => window.removeEventListener("open-delivery-target", open);
+    window.addEventListener("open-preview-remote", remote);
+    return () => {
+      window.removeEventListener("open-delivery-target", open);
+      window.removeEventListener("open-preview-remote", remote);
+    };
   }, []);
   const notebookPanel = (
     <NotebookPanel
@@ -1402,6 +1418,7 @@ function Workspace({
           <ProjectFiles
             key={`project-files:${projectId}`}
             projectId={projectId}
+            threadId={threadId || undefined}
             projectName={project?.name ?? "Проект"}
             visible={view === "files"}
             focus={fileFocus}

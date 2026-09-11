@@ -13,6 +13,9 @@
   display: flex;
   flex-direction: column;
 }
+.delivery-dialog:focus {
+  outline: none;
+}
 .delivery-dialog::backdrop {
   background: #0008;
 }

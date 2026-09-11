@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import type { runProjectDelivery, runProjectSetup } from "@codex-web/machines";
+import type { runGuiPreview, runProjectDelivery, runProjectSetup } from "@codex-web/machines";
 import {
   type HubConfig,
   HubError,
@@ -25,6 +25,7 @@ import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { type DeviceDependencies, registerDevices } from "./devices.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
+import { registerGuiPreviews } from "./gui-previews.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
 import { registerNavigation } from "./navigation.js";
@@ -67,6 +68,7 @@ export async function createApp(
     machineDiagnostics?: MachineProbeDependencies;
     projectSetupProbe?: typeof runProjectSetup;
     projectDeliveryProbe?: typeof runProjectDelivery;
+    guiPreviewProbe?: typeof runGuiPreview;
     devices?: DeviceDependencies;
   } = {},
 ) {
@@ -616,6 +618,7 @@ export async function createApp(
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
   const projectWork = registerProjectWork(app, sessions, gpt, queue);
+  registerGuiPreviews(app, sessions, artifacts, projectWork.context, options.guiPreviewProbe);
   registerWorkspaceTasks(app, sessions);
   registerQuickCapture(app, sessions);
   registerProjectOverview(app, sessions, projectWork);

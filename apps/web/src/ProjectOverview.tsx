@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
 import { api, messageOf } from "./api";
+import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
 import { PinnedList } from "./PinnedList";
@@ -596,6 +597,9 @@ export function ProjectOverview({
                   </div>
                 )}
                 {onFiles && <DeliveryButton projectId={scope.projectId} projectName={scope.name} />}
+                {onFiles && (
+                  <GuiPreviewButton projectId={scope.projectId} projectName={scope.name} />
+                )}
                 {onFiles && (
                   <button type="button" className="overview-row" onClick={onFiles}>
                     <Icon name="folder" />

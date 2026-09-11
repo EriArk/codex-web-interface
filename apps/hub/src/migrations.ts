@@ -302,6 +302,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 25,
+    name: "configured-gui-previews",
+    up(db) {
+      db.exec(
+        "CREATE TABLE gui_previews(id TEXT PRIMARY KEY,projectId TEXT NOT NULL,binding TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL,checkedAt INTEGER NOT NULL); CREATE INDEX gui_preview_project ON gui_previews(projectId,createdAt DESC)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 
