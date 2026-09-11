@@ -470,3 +470,8 @@ Before mobile support is considered complete, the same core workflow must also w
 - Use TrainerOS's tinted polymer, bevels, contact shadows and recessed screens as the material reference for CRT and Hi-Tech structural panels. CRT uses a substantially darker casing; Hi-Tech may be substantially restyled toward TrainerOS and spend modest additional space on the casing. This supersedes the earlier blanket no-housing constraint for these panels; phone content, safe areas and controls must remain usable.
 - Offer a separately remembered casing color for CRT and Hi-Tech in the shared appearance settings. Keep content/status colors independent, with one functional UI and the existing previous-layout option.
 - Make the circular Codex/GPT control a recessed, dimensional physical button with a mounting well, bevel and pressed feedback. Preserve its direct one-tap action, keyboard focus and touch size.
+
+## Owner-requested server verification (2026-09-11)
+
+- Do not use GitHub Actions for this project. GitHub is for source history, issues, pull requests and releases. Do not wait for hosted CI, troubleshoot its billing or report its absence as a release blocker.
+- Keep builds and appropriate automated verification on Linux, retaining the existing tests, pinned tools, repository guard and safe idle deployment checks. Run Windows-specific checks only when needed for a Windows change; simulate desktop effects as already required.
