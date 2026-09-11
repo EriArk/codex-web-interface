@@ -1,0 +1,50 @@
+.markdown-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin-block: 1em;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+.markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.markdown-table-scroll :is(th, td) {
+  min-width: 8ch;
+  max-width: 32rem;
+  padding: 8px 10px;
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: normal;
+  border: 0;
+  border-inline-end: 1px solid var(--line);
+  border-block-end: 1px solid var(--line);
+}
+.markdown-table-scroll tr > :first-child {
+  min-width: 11ch;
+}
+.markdown-table-scroll th {
+  text-align: start;
+  font-weight: 600;
+  background: var(--soft);
+}
+.markdown-table-scroll tr > :last-child {
+  border-inline-end: 0;
+}
+.markdown-table-scroll tbody tr:last-child > td {
+  border-block-end: 0;
+}
+.markdown-table-scroll :is(td, th) > :first-child {
+  margin-top: 0;
+}
+.markdown-table-scroll :is(td, th) > :last-child {
+  margin-bottom: 0;
+}

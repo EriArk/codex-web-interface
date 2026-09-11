@@ -31,6 +31,7 @@ import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { MachineHealthPanel } from "./MachineHealth";
+import { MarkdownTable } from "./MarkdownTable";
 import { SpeechButton, SpeechSettings, useSpeechScope } from "./MessageSpeech";
 import { NavigationFooter } from "./NavigationFooter";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
@@ -85,6 +86,7 @@ const Text = memo(function Text({ value }: { value: string }) {
       remarkPlugins={[remarkGfm]}
       components={{
         pre: CollapsibleCode,
+        table: MarkdownTable,
         a: ({ node: _node, ...props }) =>
           isDownloadUrl(props.href) ? (
             <DownloadLink href={props.href} className="download-text">

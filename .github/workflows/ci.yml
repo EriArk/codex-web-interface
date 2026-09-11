@@ -55,6 +55,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: node tests/copy-controls.browser.mjs
+      - run: node tests/markdown-tables.browser.mjs
       - run: node tests/message-speech.browser.mjs
       - run: node tests/background-media.browser.mjs
       - run: node tests/gpt-preparation.browser.mjs
