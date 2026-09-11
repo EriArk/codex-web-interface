@@ -62,7 +62,7 @@ export type PlanSummary = {
   latestAction?: Omit<ProjectAction, "text" | "snapshot">;
 };
 export type PlanPage = { items: PlanSummary[]; nextOffset: number | null };
-export type ActionKind = "plan" | "report" | "rotate" | "correction";
+export type ActionKind = "plan" | "report" | "rotate" | "correction" | "ci_fix";
 export type ActionState =
   | "prepared"
   | "dispatching"
@@ -81,6 +81,7 @@ export type ProjectAction = {
   planRevision?: number;
   reviewId?: string;
   reviewRevision?: number;
+  observationId?: string;
   title: string;
   text: string;
   state: ActionState;
@@ -125,13 +126,19 @@ export type CurrentProjectChat = {
 export const actionPrepareSchema = z
   .object({
     scope: projectScopeSchema,
-    kind: z.enum(["plan", "report", "rotate", "correction"]),
+    kind: z.enum(["plan", "report", "rotate", "correction", "ci_fix"]),
     planId: z.string().uuid().optional(),
     planRevision: z.number().int().positive().optional(),
     reviewId: z.string().uuid().optional(),
     reviewRevision: z.number().int().positive().optional(),
+    observationId: z.string().uuid().optional(),
   })
   .strict()
+  .refine(
+    (v) =>
+      v.kind === "ci_fix" ? !!v.observationId && v.scope.client === "codex" : !v.observationId,
+    "Выбери сохранённую проверку CI",
+  )
   .refine((v) => v.kind !== "plan" || (!!v.planId && !!v.planRevision), "Выбери сохранённый план")
   .refine(
     (v) => v.kind !== "correction" || (!!v.reviewId && !!v.reviewRevision),

@@ -88,6 +88,7 @@ jobs:
       - run: node tests/project-work.browser.mjs
       - run: node tests/work-review.browser.mjs
       - run: node tests/quick-capture.browser.mjs
+      - run: node tests/project-delivery.browser.mjs
       - run: node tests/project-rotation.browser.mjs
       - run: node tests/remote-input.browser.mjs
       - run: node tests/preview-isolation.browser.mjs

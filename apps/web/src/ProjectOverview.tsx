@@ -12,6 +12,7 @@ import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
 import { PinnedList } from "./PinnedList";
+import { DeliveryButton } from "./ProjectDeliveryHost";
 import { ProjectRotation } from "./ProjectRotation";
 import { reviewLabels } from "./WorkReviewLink";
 import "./project-overview.css";
@@ -594,6 +595,7 @@ export function ProjectOverview({
                     )}
                   </div>
                 )}
+                {onFiles && <DeliveryButton projectId={scope.projectId} projectName={scope.name} />}
                 {onFiles && (
                   <button type="button" className="overview-row" onClick={onFiles}>
                     <Icon name="folder" />

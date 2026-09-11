@@ -812,6 +812,13 @@ function Workspace({
     showResult(pendingNotebookResult.id);
     setPendingNotebookResult(undefined);
   }, [pendingNotebookResult, state.loading, state.thread.id]);
+  const deliveryNavigation = useRef(openNotebookTarget);
+  deliveryNavigation.current = openNotebookTarget;
+  useEffect(() => {
+    const open = (e: Event) => deliveryNavigation.current((e as CustomEvent<NotebookLink>).detail);
+    window.addEventListener("open-delivery-target", open);
+    return () => window.removeEventListener("open-delivery-target", open);
+  }, []);
   const notebookPanel = (
     <NotebookPanel
       request={notebook}

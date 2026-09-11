@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import type { runProjectSetup } from "@codex-web/machines";
+import type { runProjectDelivery, runProjectSetup } from "@codex-web/machines";
 import {
   type HubConfig,
   HubError,
@@ -32,6 +32,7 @@ import { registerNotebook } from "./notebook.js";
 import { registerProjectOverview } from "./overview.js";
 import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
 import { registerProjectCores } from "./project-core.js";
+import { registerProjectDelivery } from "./project-delivery.js";
 import { registerProjectSetup } from "./project-setup.js";
 import { registerProjectWork } from "./project-work.js";
 import { registerProjectInspector } from "./projectInspector.js";
@@ -65,6 +66,7 @@ export async function createApp(
     desktopTransport?: DesktopTransport;
     machineDiagnostics?: MachineProbeDependencies;
     projectSetupProbe?: typeof runProjectSetup;
+    projectDeliveryProbe?: typeof runProjectDelivery;
     devices?: DeviceDependencies;
   } = {},
 ) {
@@ -609,6 +611,7 @@ export async function createApp(
   registerFilePreviews(app, auth);
   registerProjectInspector(app, sessions);
   registerProjectSetup(app, sessions, options.projectSetupProbe);
+  registerProjectDelivery(app, sessions, options.projectDeliveryProbe);
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);

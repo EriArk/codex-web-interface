@@ -293,6 +293,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 24,
+    name: "project-git-delivery",
+    up(db) {
+      db.exec(
+        "CREATE TABLE delivery_operations(id TEXT PRIMARY KEY,projectId TEXT NOT NULL,machineId TEXT NOT NULL,state TEXT NOT NULL,value TEXT NOT NULL,binding TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL); CREATE INDEX delivery_project ON delivery_operations(projectId,createdAt DESC); CREATE TABLE delivery_observations(id TEXT PRIMARY KEY,projectId TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL); CREATE INDEX delivery_observation_project ON delivery_observations(projectId,createdAt DESC)",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 
