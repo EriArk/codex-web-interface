@@ -14,9 +14,13 @@ Checks were run on the Linux server against the user's Windows machine and in is
 - Public HTTPS assets and password-enrollment form were checked without enrolling the owner. Unauthenticated data access and invalid setup tokens were rejected.
 - After a hostname-specific Windows DNS correction, normal Windows DNS, HTTPS health and the actual browser login page all loaded successfully.
 
-## Repository CI
+## Repository verification
 
-GitHub Actions runs the portable build, Node tests, typecheck and lint on pull requests and main using the pinned Node and pnpm versions and frozen lockfile. A tracked-file guard rejects runtime/build directories, private configuration and recognizable key/token formats without printing their contents. This is a focused guard, not a guarantee that arbitrary secret formats can be identified. No production credentials, Windows host, Codex account or live Remote connection is required.
+Per the owner's 2026-09-11 decision, builds and checks run on the Linux server; GitHub Actions is disabled and its workflow removed. GitHub remains the source history, issues, PR and release service. Hosted check status is not a deployment prerequisite.
+
+Use the pinned Node and pnpm versions and frozen lockfile. The portable commands are `node scripts/check-repository.mjs`, `pnpm install --frozen-lockfile`, `pnpm test` (includes the build), `pnpm typecheck` and `pnpm lint`. Run the relevant `tests/*.browser.mjs` suites in the Linux Playwright 1.62.0 container, preserving Chromium and WebKit coverage. Windows-specific checks remain in `tests/*.tests.ps1` and are run when a Windows change needs them. Select checks appropriate to the change; documentation-only edits do not require a full rebuild.
+
+The tracked-file guard rejects runtime/build directories, private configuration and recognizable key/token formats without printing their contents. This is a focused guard, not a guarantee that arbitrary secret formats can be identified. Portable tests do not require production credentials, a Windows host, a Codex account or a live Remote connection. Existing idle guards and post-deployment verification remain required.
 
 Private integration scripts and physical iOS acceptance remain separate opt-in evidence.
 
