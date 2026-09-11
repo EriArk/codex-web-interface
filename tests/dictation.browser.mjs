@@ -39,7 +39,30 @@ for (const [engine, type] of [
       await context.addCookies([{ name, value, url: origin, httpOnly: true, sameSite: "Strict" }]);
       await context.addInitScript((client) => {
         localStorage.setItem("codex-client", client);
-        window.mic = { stops: 0, late: false, grant: null };
+        window.mic = { stops: 0, late: false, grant: null, amplitude: 0, metersClosed: 0 };
+        window.AudioContext = class {
+          state = "running";
+          resume() {
+            return Promise.resolve();
+          }
+          close() {
+            this.state = "closed";
+            window.mic.metersClosed++;
+            return Promise.resolve();
+          }
+          createMediaStreamSource() {
+            return { connect() {}, disconnect() {} };
+          }
+          createAnalyser() {
+            return {
+              fftSize: 512,
+              disconnect() {},
+              getFloatTimeDomainData(data) {
+                for (let i = 0; i < data.length; i++) data[i] = Math.sin(i) * window.mic.amplitude;
+              },
+            };
+          }
+        };
         const microphone = () => ({
           getTracks: () => [
             {
@@ -84,6 +107,17 @@ for (const [engine, type] of [
         errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
 
+      const sent = [];
+      const rejectSend = (route) => {
+        sent.push(route.request().postDataJSON());
+        return route.fulfill({
+          status: 503,
+          json: {
+            error: { code: "QA_SEND_UNAVAILABLE", message: "QA send temporarily unavailable" },
+          },
+        });
+      };
+      await page.route("**/api/threads/*/turns", rejectSend);
       await page.route("**/api/gpt/**", (route) => {
         const path = new URL(route.request().url()).pathname;
         if (path === "/api/gpt/status")
@@ -97,7 +131,7 @@ for (const [engine, type] of [
               currentEffort: "2",
             },
           });
-        if (path === "/api/gpt/send") throw Error("Dictation must never submit a chat");
+        if (path === "/api/gpt/send") return rejectSend(route);
         return route.fulfill({ json: { items: [], conversations: [], nextOffset: null } });
       });
       try {
@@ -110,11 +144,58 @@ for (const [engine, type] of [
         const mic = button("Продиктовать сообщение"),
           panel = page.getByRole("region", { name: "Диктовка сообщения" });
         await expect(mic).toBeVisible();
+        for (const width of [393, 1366]) {
+          await page.setViewportSize({ width, height: width === 393 ? 852 : 1024 });
+          await draft.fill("Строка");
+          const base = (await draft.boundingBox()).height;
+          await draft.fill("Строка 1\nСтрока 2\nСтрока 3\nСтрока 4");
+          await expect
+            .poll(async () => (await draft.boundingBox()).height)
+            .toBeGreaterThan(base + 5);
+          await draft.fill(Array(20).fill("Длинный текст").join("\n"));
+          await expect
+            .poll(async () => (await draft.boundingBox()).height)
+            .toBeGreaterThanOrEqual(base * 2 - 2);
+          const expanded = (await draft.boundingBox()).height;
+          assert(
+            expanded <= base * 2 + 2 && expanded >= base * 2 - 2,
+            JSON.stringify({
+              client,
+              engine,
+              width,
+              base,
+              expanded,
+              style: await draft.evaluate((e) => ({
+                min: getComputedStyle(e).minHeight,
+                max: getComputedStyle(e).maxHeight,
+                height: e.style.height,
+                scroll: e.scrollHeight,
+              })),
+            }),
+          );
+          assert(await draft.evaluate((e) => e.scrollHeight > e.clientHeight));
+          await draft.fill("Коротко");
+          await expect
+            .poll(async () => (await draft.boundingBox()).height)
+            .toBeLessThanOrEqual(base + 1);
+        }
+        await page.setViewportSize({ width: 393, height: 852 });
         await draft.fill("Написано руками");
         const before = calls;
         await mic.click();
         await expect(panel).toContainText("Запись 0:");
-        await button("Готово").click();
+        const wave = panel.locator("polygon");
+        const quiet = await wave.getAttribute("points");
+        await page.evaluate(() => {
+          window.mic.amplitude = 0.14;
+        });
+        await expect.poll(() => wave.getAttribute("points")).not.toBe(quiet);
+        await expect(panel).toContainText("Запись 0:01", { timeout: 3000 });
+        assert.equal(sent.length, 0);
+        await page.evaluate(() => {
+          window.mic.amplitude = 0;
+        });
+        await button("Завершить запись и отправить").click();
         await expect.poll(() => calls).toBe(before + 1);
         await expect(panel).toContainText("Распознаю");
         await draft.fill("Отредактированный черновик");
@@ -122,6 +203,8 @@ for (const [engine, type] of [
         await expect(draft).toHaveValue("Отредактированный черновик\nРаспознанная фраза");
         await expect(panel).toHaveCount(0);
         assert.equal(calls, before + 1);
+        await expect.poll(() => sent.length).toBe(1);
+        assert.equal(sent[0].text, "Отредактированный черновик\nРаспознанная фраза");
         assert((await page.evaluate(() => window.mic.stops)) > 0);
 
         // Lost HTTP acknowledgement: explicit retry uses the same audio receipt.
@@ -138,7 +221,7 @@ for (const [engine, type] of [
           return route.continue();
         });
         await mic.click();
-        await button("Готово").click();
+        await button("Завершить запись и отправить").click();
         await expect(button("Повторить")).toBeVisible();
         finish.resolve("Без дубля");
         await button("Повторить").evaluate((b) => {
@@ -149,10 +232,11 @@ for (const [engine, type] of [
           "Отредактированный черновик\nРаспознанная фраза\nБез дубля",
         );
         assert.equal(calls, before + 2);
+        await expect.poll(() => sent.length).toBe(2);
         await page.unroute("**/api/dictation/*");
 
         await mic.click();
-        await button("Готово").click();
+        await button("Завершить запись и отправить").click();
         await expect.poll(() => calls).toBe(before + 3);
         finish.reject(Error("Private provider diagnostic"));
         await expect(button("Повторить")).toBeVisible();
@@ -163,7 +247,7 @@ for (const [engine, type] of [
         await expect(draft).toHaveValue(/После повтора$/);
 
         await mic.click();
-        await button("Готово").click();
+        await button("Завершить запись и отправить").click();
         await expect.poll(() => calls).toBe(before + 5);
         const saved = await draft.inputValue();
         await button("Отменить диктовку").click();
@@ -187,7 +271,7 @@ for (const [engine, type] of [
 
         await page.setViewportSize({ width: 1366, height: 1024 });
         await mic.click();
-        await button("Готово").click();
+        await button("Завершить запись и отправить").click();
         await expect.poll(() => calls).toBe(before + 6);
         await button(
           client === "codex" ? "Переключиться на GPT" : "Переключиться на Codex",
@@ -212,8 +296,8 @@ for (const [engine, type] of [
             }, theme);
             await mic.click();
             await expect(panel).toContainText("Запись");
-            assert((await mic.boundingBox()).width >= 44);
-            assert((await mic.boundingBox()).height >= 44);
+            assert((await button("Завершить запись и отправить").boundingBox()).width >= 44);
+            assert((await button("Завершить запись и отправить").boundingBox()).height >= 44);
             assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
             await page.screenshot({
               path: `.local/qa-dictation/${engine}/${client}-${theme}-${width}.png`,
@@ -221,10 +305,12 @@ for (const [engine, type] of [
             await button("Отменить диктовку").click();
           }
         }
+        assert.equal(sent.length, 3); // Recognition retries, cancellation and navigation must not duplicate sends.
+        assert((await page.evaluate(() => window.mic.metersClosed)) > 0);
         assert.deepEqual(errors, []);
         assert(!f.calls.some((c) => ["turn/start", "turn/steer"].includes(c.method)));
         console.log(
-          `${engine}/${client}: draft-only dictation, editing, lost acknowledgement, retry, cancel, late permission, 4 themes and phone/tablet passed`,
+          `${engine}/${client}: two-tap voice send, measured waveform, editing, lost acknowledgement, retry, cancel, late permission, 4 themes and phone/tablet passed`,
         );
       } finally {
         await context.close();

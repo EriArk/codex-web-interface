@@ -31,3 +31,22 @@
 .dictation-panel button {
   min-height: 44px;
 }
+.dictation-button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px currentColor;
+  border-radius: 50%;
+}
+.dictation-wave {
+  flex: 1 1 80px;
+  min-width: 60px;
+  height: 36px;
+  fill: currentColor;
+  color: var(--ink);
+}
+.dictation-panel > .dictation-time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-size: 12px;
+}

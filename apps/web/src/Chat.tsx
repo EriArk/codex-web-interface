@@ -31,6 +31,7 @@ import { SpeechButton, useSpeechScope } from "./MessageSpeech";
 import { clearAcknowledgedSend, matchesPendingSend } from "./pendingSend";
 import { TurnDetails } from "./TurnDetails";
 import { useCompletionPosition } from "./useCompletionPosition";
+import { useGrowingComposer } from "./useGrowingComposer";
 import "./taskBoundary.css";
 import type { Approval, Message, Result, TurnSettings } from "./types";
 import { UpdateNotice } from "./UpdateNotice";
@@ -456,6 +457,7 @@ export function Chat({
       setTimeout(() => target?.classList.remove("message-focus"), 2000);
     });
   }, [focusTurn, focusMessage, visible]);
+  useGrowingComposer(composer, draft);
   const saveDraft = (value: string) => {
     setDraft(value);
     try {
@@ -470,6 +472,8 @@ export function Chat({
     !!threadId && visible && speechVisible && !handoff.pending && !busy,
     draft,
     saveDraft,
+    32000,
+    (text) => send(text),
   );
   const pendingRetry = matchesPendingSend(
     "codex:" + threadId,
@@ -480,10 +484,11 @@ export function Chat({
       attachments: attachments.files.map((f) => f.id),
     }),
   );
-  const send = async () => {
+  const send = async (dictated?: string) => {
+    const value = dictated ?? draft;
     if (
-      dictation.locked ||
-      (!draft.trim() && !attachments.files.length) ||
+      (dictation.locked && dictated === undefined) ||
+      (!value.trim() && !attachments.files.length) ||
       busy ||
       queue.busy ||
       handoff.pending ||
@@ -494,8 +499,7 @@ export function Chat({
       !options.selection
     )
       return;
-    const value = draft,
-      selection = options.selection,
+    const selection = options.selection,
       fileIds = attachments.files.map((f) => f.id);
     if (
       await handoff.run((returned) =>
