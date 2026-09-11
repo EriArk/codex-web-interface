@@ -475,3 +475,9 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Do not use GitHub Actions for this project. GitHub is for source history, issues, pull requests and releases. Do not wait for hosted CI, troubleshoot its billing or report its absence as a release blocker.
 - Keep builds and appropriate automated verification on Linux, retaining the existing tests, pinned tools, repository guard and safe idle deployment checks. Run Windows-specific checks only when needed for a Windows change; simulate desktop effects as already required.
+
+## Owner-requested native message dictation (2026-09-11)
+
+- Add message dictation to Codex and GPT only through native OpenAI recognition using the existing consumer account. The owner explicitly rejected a lower-quality/local recognition substitute. Do not request an API billing key or silently fall back to another engine.
+- Dictation inserts text into the exact current draft and never sends automatically. Preserve typed text/files, stop microphone capture on cancellation or navigation, discard late results from another chat, and allow explicit retry after uncertain recognition acknowledgement.
+- Show an explicit empty state when Codex confirms zero earned usage resets. An unsupported or unavailable native field is not evidence that the account has zero resets.

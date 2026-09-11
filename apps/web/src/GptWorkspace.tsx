@@ -18,6 +18,7 @@ import { api, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
+import { useDictation } from "./Dictation";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import {
   EntityArchive,
@@ -647,6 +648,7 @@ export function GptWorkspace({
   };
   const send = async () => {
     if (
+      dictation.locked ||
       sending.current ||
       uploading ||
       (selected && !historyReady) ||
@@ -806,6 +808,21 @@ export function GptWorkspace({
   }, [pendingNew?.nativeId]);
   const [resultOverlay, setResultOverlay] = useState(false);
   const speechScope = `gpt:${selected || createdJob}`;
+  const dictation = useDictation(
+    "gpt:" + draftScope,
+    view === "chat" &&
+      !overviewProject &&
+      !notebookOpen &&
+      !settings &&
+      !drawer &&
+      !machinePanel &&
+      !resultOverlay &&
+      !busy &&
+      (!selected || historyReady),
+    text,
+    setText,
+    100000,
+  );
   useSpeechScope(
     speechScope,
     view === "chat" &&
@@ -1612,6 +1629,7 @@ export function GptWorkspace({
                 }
               />
             )}
+            {dictation.panel}
             <form
               className="composer gpt-composer"
               hidden={!!selected && !historyReady}
@@ -1687,21 +1705,25 @@ export function GptWorkspace({
                   onChange={(event) => setText(event.target.value)}
                   rows={2}
                 />
-                <button
-                  type="submit"
-                  className="send-button"
-                  disabled={
-                    busy ||
-                    uploading ||
-                    !ready ||
-                    (!!selected && !historyReady) ||
-                    !model ||
-                    (!text.trim() && !files.length)
-                  }
-                  aria-label={active ? "Добавить в очередь GPT" : "Отправить GPT"}
-                >
-                  {busy ? <span className="spinner" /> : <Icon name="arrow-up" />}
-                </button>
+                <div className="composer-submit">
+                  {dictation.button}
+                  <button
+                    type="submit"
+                    className="send-button"
+                    disabled={
+                      dictation.locked ||
+                      busy ||
+                      uploading ||
+                      !ready ||
+                      (!!selected && !historyReady) ||
+                      !model ||
+                      (!text.trim() && !files.length)
+                    }
+                    aria-label={active ? "Добавить в очередь GPT" : "Отправить GPT"}
+                  >
+                    {busy ? <span className="spinner" /> : <Icon name="arrow-up" />}
+                  </button>
+                </div>
               </div>
               <input
                 ref={input}

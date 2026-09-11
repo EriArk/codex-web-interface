@@ -208,9 +208,10 @@ export function UsageResetCredits({
         (c.expiresAt === null || c.expiresAt * 1000 > Date.now()),
     ) ?? [];
   const hasCredits = !!summary && summary.availableCount > 0;
-  if (!hasCredits && !operation && !attempt && !error) return null;
+  if (!summary && !operation && !attempt && !error) return null;
   return (
     <section className="usage-resets" aria-label="Сохранённые сбросы Codex">
+      {summary?.availableCount === 0 && <p>Доступных сбросов нет.</p>}
       {hasCredits && (
         <>
           <div className="usage-reset-heading">

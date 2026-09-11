@@ -29,6 +29,7 @@ import { registerBridgeDoctor } from "./bridge-doctor.js";
 import { registerCommandOutput } from "./command-output.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { type DeviceDependencies, registerDevices } from "./devices.js";
+import { registerDictation, type Transcribe } from "./dictation.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
 import { registerGuiPreviews } from "./gui-previews.js";
@@ -79,6 +80,7 @@ export async function createApp(
     guiPreviewProbe?: typeof runGuiPreview;
     stagingProbe?: typeof inspectMachineStaging;
     devices?: DeviceDependencies;
+    transcribe?: Transcribe;
   } = {},
 ) {
   const app = Fastify({
@@ -141,6 +143,7 @@ export async function createApp(
   registerCommandOutput(app, sessions);
   const devices = registerDevices(app, config, store, auth, options.devices);
   registerSpeech(app, config, auth);
+  registerDictation(app, config, auth, options.transcribe);
   app.addContentTypeParser(
     "application/octet-stream",
     { parseAs: "buffer", bodyLimit: MAX_FILE_BYTES },

@@ -177,6 +177,12 @@ for (const [engine, browserType] of [
     await expect(panel.getByText("37% осталось", { exact: true })).toBeVisible();
 
     nextAccount();
+    f.state.raw.rateLimitResetCredits.availableCount = 0;
+    f.state.raw.rateLimitResetCredits.credits = [];
+    await page.evaluate(() => window.dispatchEvent(new Event("codex-usage-changed")));
+    await expect(reset.getByText("Доступных сбросов нет.", { exact: true })).toBeVisible();
+    assert.equal(await reset.getByRole("button", { name: "Активировать", exact: true }).count(), 0);
+    nextAccount();
     delete f.state.raw.rateLimitResetCredits;
     await page.evaluate(() => window.dispatchEvent(new Event("codex-usage-changed")));
     await expect(reset).toHaveCount(0);
