@@ -286,6 +286,8 @@ The status row toggles a small scrollable recent-work panel. The Hub contract re
 
 ## D32 — Native usage and task boundaries
 
+Owner-approved extension (#129, 2026-09-11): earned rate-limit reset credits may be shown and explicitly redeemed below the limits through a durable, account-bound native operation. This does not expose billing credits/balances. See [earned resets](USAGE_RESETS.md).
+
 Settings reads account/rateLimits/read through the existing machine transport. The stable Hub response contains only group labels, bounded window durations, remaining percentages and reset timestamps. Weekly means 10080 minutes and can occur in either the primary or secondary slot. Prefer the main codex bucket and retain additional named buckets in collapsed sections; do not infer unavailable values or expose credit/billing fields. Read-only usage checks remain possible after desktop handoff and do not acquire a thread writer.
 
 Conversation separators mark the end of a finished turn, including interrupted/failed boundaries without describing them as successful. Do not split multiple messages or accepted Steer input within the same active turn. Native thread/turn IDs and pagination remain unchanged.

@@ -582,14 +582,27 @@ export class Sessions extends EventEmitter {
   }
 
   async usage(machineId: string) {
-    const project = this.catalog.projects().find((p) => p.machineId === machineId && p.enabled);
-    if (!project) throw new HubError(404, "MACHINE_NOT_FOUND", "Компьютер не найден");
-    const r = await this.runtime(project.id);
+    const connection = await this.usageConnection(machineId);
     try {
-      return normalizeLimits(await r.rpc.request("account/rateLimits/read", {}));
+      return normalizeLimits(await connection.read());
     } catch {
       throw new HubError(503, "LIMITS_UNAVAILABLE", "Лимиты сейчас недоступны.");
     }
+  }
+  async usageConnection(machineId: string) {
+    const project = this.catalog.projects().find((p) => p.machineId === machineId && p.enabled);
+    if (!project) throw new HubError(404, "MACHINE_NOT_FOUND", "Компьютер не найден");
+    const r = await this.runtime(project.id);
+    r.touched = Date.now();
+    return {
+      read: () => r.rpc.request("account/rateLimits/read", {}),
+      account: () => r.rpc.request("account/read", { refreshToken: false }),
+      consume: (idempotencyKey: string, creditId?: string) =>
+        r.rpc.request("account/rateLimitResetCredit/consume", {
+          idempotencyKey,
+          ...(creditId !== undefined ? { creditId } : {}),
+        }),
+    };
   }
   async capabilities(projectId: string): Promise<Capabilities> {
     const r = await this.runtime(projectId);

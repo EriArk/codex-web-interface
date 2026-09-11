@@ -54,3 +54,68 @@
   color: var(--muted);
   font-size: 12px;
 }
+.usage-resets {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 10px);
+  background: var(--panel);
+  color: var(--ink);
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.usage-reset-heading,
+.usage-reset-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.usage-reset-count {
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.usage-reset-credit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.usage-reset-credit > div {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.usage-resets p {
+  margin: 6px 0;
+}
+.usage-resets small {
+  display: block;
+  color: var(--muted);
+}
+.usage-resets button {
+  min-height: 44px;
+  max-width: 100%;
+}
+.usage-reset-confirm {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.usage-reset-confirm .usage-reset-actions {
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+.usage-reset-error {
+  color: var(--danger, var(--ink));
+}

@@ -311,6 +311,15 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 26,
+    name: "earned-limit-reset-receipts",
+    up(db) {
+      db.exec(
+        "CREATE TABLE usage_reset_accounts(accountKey TEXT PRIMARY KEY,revision INTEGER NOT NULL); CREATE TABLE usage_reset_operations(id TEXT PRIMARY KEY,machineId TEXT NOT NULL,accountKey TEXT NOT NULL,fingerprint TEXT NOT NULL,creditId TEXT,state TEXT NOT NULL,outcome TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL); CREATE INDEX usage_reset_account ON usage_reset_operations(accountKey,createdAt DESC); CREATE UNIQUE INDEX usage_reset_active ON usage_reset_operations(accountKey) WHERE state IN ('pending','unknown');",
+      );
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

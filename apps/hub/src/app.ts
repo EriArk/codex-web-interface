@@ -53,6 +53,7 @@ import { registerStagingStorage } from "./staging-storage.js";
 import { storageReport } from "./storage.js";
 import { Store } from "./store.js";
 import { registerWorkspaceTasks } from "./tasks.js";
+import { registerUsageResets } from "./usage-resets.js";
 
 const idSchema = z.string().min(1).max(100);
 const paramId = (req: FastifyRequest): string => z.object({ id: idSchema }).parse(req.params).id;
@@ -365,7 +366,7 @@ export async function createApp(
     await sessions.catalog.refresh();
     return { machines: sessions.catalog.machines() };
   });
-  app.get("/api/machines/:id/limits", async (req) => sessions.usage(paramId(req)));
+  registerUsageResets(app, sessions);
   app.get("/api/machines/:id/directories", async (req) => {
     const query = z.object({ path: z.string().min(1).max(2048) }).parse(req.query);
     return sessions.catalog.directories(paramId(req), query.path);
