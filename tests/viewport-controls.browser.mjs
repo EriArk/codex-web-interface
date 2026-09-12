@@ -42,7 +42,10 @@ for (const [engine, type] of [
     for (const width of [393, 1366]) {
       await page.setViewportSize({ width, height: width === 393 ? 852 : 1024 });
       for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
-        await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+        await page.evaluate((theme) => {
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.dataset.caseColor = "red";
+        }, theme);
         await expect(page.locator(".workspace-header .wide-pane-control")).toBeVisible({
           visible: width >= 1100,
         });
