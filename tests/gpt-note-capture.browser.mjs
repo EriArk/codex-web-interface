@@ -117,6 +117,12 @@ for (const [engine, type] of [
       .click();
     const chat = page.getByRole("textbox", { name: "Сообщение GPT" });
     await expect(chat).toBeVisible();
+    for (const width of [393, 1024, 1099, 1100, 1366]) {
+      await page.setViewportSize({ width, height: width < 1100 ? 844 : 1024 });
+      await expect(page.locator(".workspace-header .wide-pane-control")).toBeVisible({
+        visible: width >= 1100,
+      });
+    }
     await chat.fill("Не отправлять черновик");
     await page.setViewportSize({ width: 390, height: 844 });
     await page

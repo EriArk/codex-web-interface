@@ -33,10 +33,19 @@ for (const [engine, type] of [
     const chat = page.getByRole("textbox", { name: "Сообщение Codex" });
     await chat.fill("Сохранённый черновик");
     await chat.blur();
+    for (const width of [393, 1024, 1099, 1100, 1366]) {
+      await page.setViewportSize({ width, height: width < 1100 ? 852 : 1024 });
+      await expect(page.locator(".workspace-header .wide-pane-control")).toBeVisible({
+        visible: width >= 1100,
+      });
+    }
     for (const width of [393, 1366]) {
       await page.setViewportSize({ width, height: width === 393 ? 852 : 1024 });
       for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
         await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+        await expect(page.locator(".workspace-header .wide-pane-control")).toBeVisible({
+          visible: width >= 1100,
+        });
         await page.evaluate(() => document.fonts.ready);
         const buttons = await page
           .locator(".workspace-header > .icon-button:visible")
@@ -51,7 +60,9 @@ for (const [engine, type] of [
         if (width === 393) await page.getByRole("button", { name: "Открыть проекты" }).click();
         const nav = page.locator(width === 393 ? ".project-sheet" : ".desktop-nav");
         if (width === 393)
-          await expect.poll(async () => Math.round((await nav.boundingBox()).x)).toBeGreaterThanOrEqual(0);
+          await expect
+            .poll(async () => Math.round((await nav.boundingBox()).x))
+            .toBeGreaterThanOrEqual(0);
         const rail = nav.locator(".navigation-system-row");
         const centers = await rail.evaluate((node) =>
           [
