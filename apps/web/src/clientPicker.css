@@ -16,6 +16,7 @@
   flex-shrink: 0;
 }
 .navigation-system-row .nav-settings {
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 6px;

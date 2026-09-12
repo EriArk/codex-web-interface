@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { createReadStream, mkdirSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream, mkdirSync, readFileSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stageAttachment } from "@codex-web/machines";
@@ -20,12 +20,30 @@ sharp.cache({ memory: 32, files: 0, items: 20 });
 export class Attachments {
   private processing = false;
   private protectedIds = new Set<string>();
+  private imageKeys = new Map<string, string>();
   constructor(
     readonly root: string,
     readonly store: Store,
     readonly maxBytes = defaultStoragePolicy.attachmentBytes,
   ) {
     mkdirSync(root, { recursive: true, mode: 0o700 });
+    store.attachmentImageKey = (id) => {
+      const cached = this.imageKeys.get(id);
+      if (cached) return cached;
+      try {
+        // Codex returns localImage inputs as inline JPEGs in canonical history.
+        // Match exactly, including already cached native images whose source was cleared.
+        const key = createHash("sha256")
+          .update("data:image/jpeg;base64,")
+          .update(readFileSync(this.path(id, true)).toString("base64"))
+          .digest("hex");
+        if (this.imageKeys.size >= 256) this.imageKeys.delete(this.imageKeys.keys().next().value!);
+        this.imageKeys.set(id, key);
+        return key;
+      } catch {
+        return undefined;
+      }
+    };
   }
   private path(id: string, preview = false): string {
     if (!/^[0-9a-f-]{36}$/.test(id))

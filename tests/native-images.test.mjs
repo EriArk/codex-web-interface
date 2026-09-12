@@ -4,11 +4,74 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { Attachments } from "../apps/hub/dist/attachments.js";
 import { displayUserText, NativeImages } from "../apps/hub/dist/nativeImages.js";
 import { Store } from "../apps/hub/dist/store.js";
 
 const require = createRequire(new URL("../apps/hub/package.json", import.meta.url)),
   sharp = require("sharp");
+test("uploaded previews reconcile with native echoes without hiding distinct or other-message images", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-image-echo-")),
+    store = new Store(":memory:");
+  try {
+    const t = store.createThread("p", "native", "Pictures"),
+      files = new Attachments(join(root, "uploads"), store),
+      images = new NativeImages({ hub: { resultsPath: join(root, "results") } }, store, () => ({
+        type: "local-linux",
+      }));
+    const bytes = await sharp({ create: { width: 60, height: 40, channels: 3, background: "red" } })
+      .png()
+      .toBuffer();
+    const file = await files.put(t.id, "image.png", bytes);
+    store.append(t.id, "user.message", { id: "sent", text: "Look" });
+    files.bind(t.id, "sent", [file]);
+    const { readFileSync } = await import("node:fs");
+    const source =
+      "data:image/jpeg;base64," +
+      readFileSync(join(root, "uploads", file.id + ".jpg")).toString("base64");
+    const echo = images.register(t.id, "sent", source);
+    const pathEcho = images.register(
+      t.id,
+      "sent",
+      `C:\\Uploads\\${file.id}\\upload-image-preview.jpg`,
+    );
+    const other = images.register(
+      t.id,
+      "sent",
+      "data:image/png;base64," + bytes.toString("base64"),
+    );
+    await images.get(echo.id); // source removed after caching; the fingerprint still identifies it.
+    let message = store.history(t.id).messages[0];
+    assert.equal(message.attachments.length, 1);
+    assert.deepEqual(
+      message.images.map((image) => image.id),
+      [other.id],
+    );
+    assert.equal(
+      store.withAttachments([{ ...message, images: [echo, pathEcho, other] }])[0].images.length,
+      1,
+    );
+    store.append(t.id, "user.message", { id: "separate", text: "Another message" });
+    const distinct = images.register(t.id, "separate", source);
+    message = store.history(t.id).messages.find((m) => m.id === "separate");
+    assert.deepEqual(
+      message.images.map((image) => image.id),
+      [distinct.id],
+    );
+    // Restart the attachment service: old history is repaired without a migration or re-send.
+    new Attachments(join(root, "uploads"), store);
+    assert.deepEqual(
+      store
+        .history(t.id)
+        .messages.find((m) => m.id === "sent")
+        .images.map((image) => image.id),
+      [other.id],
+    );
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true });
+  }
+});
 test("native attachments become private cached images with no exposed source path; only matching file wrappers are removed", async () => {
   const root = mkdtempSync(join(tmpdir(), "codex-native-images-")),
     store = new Store(":memory:");
