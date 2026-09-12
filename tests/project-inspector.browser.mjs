@@ -170,6 +170,7 @@ for (const [engine, type] of [
         .filter({ visible: true })
         .first()
         .click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await expect(
         page
           .locator(".settings-dialog")

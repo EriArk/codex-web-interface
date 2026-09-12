@@ -167,6 +167,7 @@ for (const [engine, type] of [
         .getByRole("button", { name: "Настройки", exact: true })
         .filter({ visible: true })
         .click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       const settings = page.locator(".settings-dialog[open]");
       await settings.locator(".theme-option." + theme + " input").check();
       await settings.getByRole("button", { name: "Закрыть настройки" }).click();

@@ -45,6 +45,7 @@ import { PinnedList } from "./PinnedList";
 import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
+import { SettingsSections } from "./SettingsSections";
 import { StorageUsage } from "./StorageUsage";
 import type { Theme } from "./theme";
 import type { Session } from "./types";
@@ -1858,68 +1859,85 @@ export function GptWorkspace({
       >
         <div className="sheet-content">{navigation}</div>
       </dialog>
-      <dialog className="gpt-settings" ref={settingsRef} onCancel={() => setSettings(false)}>
-        <div className="gpt-settings-heading">
-          <h2>Настройки</h2>
-          <button
-            type="button"
-            className="icon-button panel-close"
-            aria-label="Закрыть настройки"
-            onClick={() => setSettings(false)}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        <AppearanceSettings theme={theme} onTheme={onTheme} />
-        <DeploymentStatus open={settings} />
-        <section className="settings-navigation-actions" aria-label="Навигация">
-          <button type="button" onClick={() => void action(() => catalog())}>
-            <Icon name="refresh" />
-            Обновить чаты
-          </button>
-          <EntityArchive client="gpt" />
-        </section>
-        <BridgeDoctorPanel
+      <dialog
+        className="gpt-settings settings-browser"
+        aria-label="Настройки"
+        ref={settingsRef}
+        onCancel={() => setSettings(false)}
+      >
+        <SettingsSections
           open={settings}
-          onTarget={
-            onWorkspaceTarget
-              ? (target) => {
-                  setSettings(false);
-                  onWorkspaceTarget(target);
-                }
-              : undefined
-          }
-        />
-        <SpeechSettings />
-        <section className="gpt-connection-settings" aria-label="Состояние GPT">
-          <p role="status">{connection?.message ?? "Проверяем подключение GPT…"}</p>
-          <button
-            type="button"
-            className="secondary"
-            disabled={checkingConnection}
-            onClick={() => void checkConnection()}
-          >
-            <Icon name="refresh" />
-            {checkingConnection ? "Проверяем…" : "Перепроверить подключение"}
-          </button>
-          <a className="primary" href="/gpt-connect">
-            {connection?.state === "login_required" ? "Войти в ChatGPT" : "Подключение ChatGPT"}
-          </a>
-        </section>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => {
-            setSettings(false);
-            setMachinePanel(true);
+          client="GPT"
+          onClose={() => setSettings(false)}
+          sections={{
+            appearance: () => <AppearanceSettings theme={theme} onTheme={onTheme} />,
+            sound: (visible) => (
+              <>
+                <SpeechSettings />
+                <Notifications visible={visible} />
+              </>
+            ),
+            connections: () => (
+              <>
+                <section className="gpt-connection-settings" aria-label="Состояние GPT">
+                  <p role="status">{connection?.message ?? "Проверяем подключение GPT…"}</p>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={checkingConnection}
+                    onClick={() => void checkConnection()}
+                  >
+                    <Icon name="refresh" />
+                    {checkingConnection ? "Проверяем…" : "Перепроверить подключение"}
+                  </button>
+                  <a className="primary" href="/gpt-connect">
+                    {connection?.state === "login_required"
+                      ? "Войти в ChatGPT"
+                      : "Подключение ChatGPT"}
+                  </a>
+                </section>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setSettings(false);
+                    setMachinePanel(true);
+                  }}
+                >
+                  <Icon name="remote" />
+                  Компьютеры
+                </button>
+              </>
+            ),
+            library: () => (
+              <section className="settings-navigation-actions" aria-label="Навигация">
+                <button type="button" onClick={() => void action(() => catalog())}>
+                  <Icon name="refresh" />
+                  Обновить чаты
+                </button>
+                <EntityArchive client="gpt" />
+              </section>
+            ),
+            maintenance: (visible) => (
+              <>
+                <DeploymentStatus open={visible} />
+                <BridgeDoctorPanel
+                  open={visible}
+                  onTarget={
+                    onWorkspaceTarget
+                      ? (target) => {
+                          setSettings(false);
+                          onWorkspaceTarget(target);
+                        }
+                      : undefined
+                  }
+                />
+                <StorageUsage visible={visible} />
+              </>
+            ),
+            access: () => <AccountControls onSession={onSession} onLogout={onLogout} />,
           }}
-        >
-          <Icon name="remote" />
-          Компьютеры
-        </button>
-        <Notifications visible={settings} />
-        <StorageUsage visible={settings} />
-        <AccountControls onSession={onSession} onLogout={onLogout} />
+        />
       </dialog>
       <MachineHealthPanel
         open={machinePanel}

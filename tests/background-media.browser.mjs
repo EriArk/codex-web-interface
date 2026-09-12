@@ -190,6 +190,7 @@ for (const [engine, type] of [
       .getByRole("button", { name: "Настройки", exact: true })
       .filter({ visible: true });
     await settings.click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     const mode = page
       .getByRole("combobox", { name: "Режим озвучивания" })
       .filter({ visible: true });
@@ -221,6 +222,7 @@ for (const [engine, type] of [
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await settings.click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     await mode.selectOption("system");
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
     const beforeSystem = speechRequests.length;
@@ -240,6 +242,7 @@ for (const [engine, type] of [
     await page.reload();
     await expect(editor).toHaveValue("Сохранённый черновик");
     await settings.click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     await expect(mode).toHaveValue("system");
     await page.screenshot({ path: `.local/qa-background-media/${engine}-speech-mode.png` });
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();

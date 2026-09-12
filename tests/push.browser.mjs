@@ -83,6 +83,7 @@ for (const [engine, type] of [
     await expect(editor).toBeVisible();
     await editor.fill("Черновик должен сохраниться");
     await page.getByRole("button", { name: "Настройки", exact: true }).click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     const panel = page.getByRole("region", { name: "Уведомления", exact: true });
     const enable = panel.getByRole("button", { name: "Включить на этом устройстве" });
     await expect(enable).toBeEnabled();
@@ -188,6 +189,7 @@ for (const [engine, type] of [
     await page.unroute("**/api/preferences");
     await expect(page.getByText("Ответ по уведомлению", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Настройки", exact: true }).click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     // A disappeared OS subscription is revoked server-side on opening settings.
     await expect(enable).toBeEnabled();
     assert.equal(f.store.db.prepare("SELECT count(*) n FROM push_subscriptions").get().n, 0);
@@ -258,6 +260,7 @@ for (const [engine, type] of [
       .filter({ visible: true })
       .last()
       .click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     await expect(panel.getByRole("button", { name: "Включить на этом устройстве" })).toBeEnabled();
     await panel.screenshot({ path: `.local/qa-push/${engine}-gpt-settings.png` });
     assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 0);

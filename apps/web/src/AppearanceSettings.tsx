@@ -44,7 +44,7 @@ export function AppearanceSettings({
   const legacy = useLegacyLayout();
   return (
     <fieldset className="theme-picker">
-      <legend>Оформление</legend>
+      <legend>Тема</legend>
       <div className="theme-options">
         {themes.map(({ id, title, description }) => (
           <label key={id} className={`theme-option ${id}`}>
