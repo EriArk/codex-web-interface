@@ -12,6 +12,8 @@ export interface GptMessage {
   text: string;
   createdAt: number;
   files: GptFile[];
+  /** Visible native content that the web renderer cannot yet display. Never raw payloads. */
+  unsupported?: ("audio" | "video" | "interactive" | "other")[];
 }
 export interface GptConversation {
   pinned?: boolean;

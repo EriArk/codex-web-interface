@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
 import { api, messageOf } from "./api";
+import { GptProjectButton } from "./GptProjectContent";
 import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
@@ -465,6 +466,9 @@ export function ProjectOverview({
               )}
             </div>
             <div className="overview-context">
+              {scope.client === "gpt" && (
+                <GptProjectButton key={scope.projectId} projectId={scope.projectId} />
+              )}
               {scope.client === "codex" && (
                 <ProjectRelays
                   key={scope.projectId}

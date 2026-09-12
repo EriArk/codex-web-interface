@@ -508,3 +508,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Deepen casing colors and separate keycap tones using crisp contact shadows, edge highlights and restrained one-pixel lettering relief. CRT is the evening variant: darken its plastic with neutral charcoal, without a green filter. Organizer and Classic Dark use the same independently remembered palette for accents while retaining their paper/graphite reading surfaces.
 - White, yellow and silver are deliberately very light, glossy plastic exceptions in both material themes. Keep dark lettering on these shells and the green CRT reading surface; deepen the remaining CRT casing colors further.
 - The remaining dark CRT shells are matte and deeper still: remove casing light washes and bright edge glints, keeping relief through contact shadows and restrained seams.
+
+## Owner-prioritized personal installation (2026-09-12)
+
+- Focus current development on completing the owner's personal daily workflow, missing Codex/GPT functionality and reliability on the existing installation.
+- Defer guided installers, transfer to other people's infrastructure, clean second-user installations and distribution-specific packaging/generalization. This supersedes the earlier distribution milestone sequencing; #11 and the distribution portion of #14 are outside the current work scope until the owner explicitly resumes them.
+- Continue backups, recovery, security and compatible updates needed by the owner's installation. Existing owner deferrals for #6 and #37 remain unchanged.

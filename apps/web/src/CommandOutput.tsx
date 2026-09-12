@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { CopyButton } from "./CopyButton";
+import { DownloadLink } from "./DownloadLink";
 
-type Output = { available: boolean; text: string | null; truncated: boolean };
+type Output = {
+  available: boolean;
+  text: string | null;
+  truncated: boolean;
+  tail?: boolean;
+  downloadUrl?: string;
+};
 export function CommandOutput({ threadId, resultId }: { threadId: string; resultId: string }) {
   const [output, setOutput] = useState<Output | null>(null);
   const [error, setError] = useState(false);
@@ -52,7 +59,18 @@ export function CommandOutput({ threadId, resultId }: { threadId: string; result
           (output.available ? (
             <>
               {output.text ? <pre>{output.text}</pre> : <p>Команда не вывела текст.</p>}
-              {output.truncated && <small>Сохранена первая часть вывода.</small>}
+              {output.truncated && (
+                <small>
+                  {output.tail
+                    ? "Показан конец сохранённого лога."
+                    : "Сохранена первая часть вывода."}
+                </small>
+              )}
+              {output.downloadUrl && (
+                <DownloadLink href={output.downloadUrl} name="command-output.txt">
+                  Скачать лог
+                </DownloadLink>
+              )}
             </>
           ) : (
             <p>Вывод этой команды не сохранён.</p>

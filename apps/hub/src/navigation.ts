@@ -13,6 +13,7 @@ export function registerNavigation(
   sockets: Map<WebSocket, string>,
 ): void {
   const snapshot = () => ({
+    usageRevision: Object.fromEntries(sessions.usageRevision ?? []),
     ...store.navigation(sessions.catalog.projects().map((p) => p.id)),
     library: sessions.catalog.library.all().map((e) => ({
       ...e,

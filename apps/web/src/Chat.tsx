@@ -21,6 +21,7 @@ import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
+import { ContextUsage } from "./ContextUsage";
 import { CopyButton } from "./CopyButton";
 import { useDictation } from "./Dictation";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
@@ -797,6 +798,7 @@ export function Chat({
         <TurnDetails threadId={threadId} turnId={state.thread.activeTurnId} />
       )}
       {handoff.panel}
+      <ContextUsage key={`context:${threadId}`} threadId={threadId} active={active} />
       {sendError && (
         <div className="send-error" role="alert">
           <span>{sendError}</span>

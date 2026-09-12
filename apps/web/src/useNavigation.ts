@@ -10,6 +10,7 @@ export function useNavigation() {
       socket: WebSocket | undefined,
       retry: ReturnType<typeof setTimeout> | undefined,
       attempt = 0;
+    let usageRevision = "";
     const connect = () => {
       clearTimeout(retry);
       if (
@@ -28,6 +29,14 @@ export function useNavigation() {
         try {
           const value = JSON.parse(data) as NavigationState;
           if (!Array.isArray(value.threads) || !Array.isArray(value.projects)) return;
+          const revision = JSON.stringify(
+            (value as NavigationState & { usageRevision?: Record<string, number> }).usageRevision ??
+              {},
+          );
+          if (revision !== usageRevision) {
+            usageRevision = revision;
+            window.dispatchEvent(new Event("codex-usage-changed"));
+          }
           setState(value);
           setConnected(true);
           attempt = 0;

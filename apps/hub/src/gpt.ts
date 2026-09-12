@@ -25,7 +25,9 @@ import {
   gptProjects,
 } from "./gpt-history.js";
 import { gptLinkedText } from "./gpt-links.js";
+import { GptOperations, gptOperationInput } from "./gpt-operations.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
+import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
 import { gptResults, resultPage } from "./gpt-results.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 import {
@@ -58,6 +60,16 @@ export class GptService {
   readonly historyCache = new GptHistoryCache(async (id) =>
     gptHistory(await this.json("/conversation?id=" + encodeURIComponent(id)), id),
   );
+  readonly operations: GptOperations;
+  readonly projectContent: GptProjectContent;
+  nativeBlocked() {
+    return this.operations.blocked() || this.projectContent.blocked();
+  }
+  nativeCounts() {
+    const a = this.operations.counts(),
+      b = this.projectContent.counts();
+    return { active: a.active + b.active, unknown: a.unknown + b.unknown };
+  }
   private working = false;
   private libraryBusy = false;
   readonly library: Library;
@@ -124,10 +136,16 @@ export class GptService {
         canSend: false,
         message: gptConnectionMessages.degraded,
       };
-    return { ...value, activeJobs, unknownJobs };
+    const operations = this.nativeCounts();
+    return {
+      ...value,
+      canSend: value.canSend && !this.nativeBlocked(),
+      activeJobs: activeJobs + operations.active,
+      unknownJobs: unknownJobs + operations.unknown,
+    };
   }
   async reconnect(): Promise<GptConnection> {
-    if (this.working || this.libraryBusy) return this.connection();
+    if (this.working || this.libraryBusy || this.nativeBlocked()) return this.connection();
     this.compatibilityFailure = false;
     this.modelCache = undefined;
     const state = await this.connection(true);
@@ -151,6 +169,35 @@ export class GptService {
     readonly store: Store,
   ) {
     this.library = new Library(store, "gpt");
+    this.operations = new GptOperations(
+      store,
+      (path, body) => this.json(path, body),
+      () =>
+        !this.projectContent?.blocked() &&
+        !this.stopped &&
+        !this.working &&
+        !this.libraryBusy &&
+        !this.modelsPending &&
+        !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
+      (id) => this.historyCache.invalidate(id),
+      this.lifetime.signal,
+    );
+    this.projectContent = new GptProjectContent(
+      store,
+      (path, body) => this.json(path, body),
+      () =>
+        !this.stopped &&
+        !this.working &&
+        !this.libraryBusy &&
+        !this.modelsPending &&
+        !this.operations.blocked() &&
+        !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
+      (id) => {
+        const file = this.upload(id);
+        return { ...file, base64: readFileSync(join(this.root, id)).toString("base64") };
+      },
+      this.lifetime.signal,
+    );
     this.token = config.gpt ? (process.env[config.gpt.tokenSecret] ?? "") : "";
     this.root = join(config.hub.resultsPath, "gpt");
     this.previews = new Previews(join(config.hub.resultsPath, "previews"), store, () => {
@@ -224,12 +271,33 @@ export class GptService {
       throw error("GPT_CONNECTION_LOST", "Нет связи с подключением GPT.", 503);
     }
   }
+  async projectFile(projectId: string, fileId: string) {
+    this.library.assertExists("project", projectId);
+    const project = await this.projectContent.read(projectId),
+      file = project.files.find((f) => f.id === fileId);
+    if (!file) throw error("GPT_PROJECT_FILE_MISSING", "Файл больше не находится в проекте.", 404);
+    return {
+      file,
+      response: await this.response(
+        "/project-file?" + new URLSearchParams({ projectId, fileId }),
+        undefined,
+        60000,
+      ),
+    };
+  }
   async json(path: string, body?: unknown): Promise<Json> {
     return (
       await this.response(
         path,
         body,
-        ["/settings", "/models", "/bridge/sessions/new", "/bridge/sessions/select"].includes(path)
+        [
+          "/project-content",
+          "/native-operation",
+          "/settings",
+          "/models",
+          "/bridge/sessions/new",
+          "/bridge/sessions/select",
+        ].includes(path)
           ? 60000
           : 30000,
       )
@@ -237,6 +305,7 @@ export class GptService {
   }
   async doctorReport() {
     const raw = await this.json("/status");
+    if (this.nativeCounts().active) return { ...raw, state: "busy" };
     return this.compatibilityFailure && raw.state === "healthy"
       ? { ...raw, state: "degraded", doctorStage: "preparation" }
       : raw;
@@ -356,6 +425,7 @@ export class GptService {
     if (
       this.working ||
       this.libraryBusy ||
+      this.nativeBlocked() ||
       this.jobs().some((job) => active.includes(job.status) || job.status === "unknown")
     )
       throw error("GPT_BUSY", "Дождись завершения текущей работы GPT.");
@@ -408,7 +478,7 @@ export class GptService {
     if (this.modelCache && (this.working || this.modelCache.expires > Date.now()))
       return this.modelCache.value;
     if (this.modelsPending) return this.modelsPending;
-    if (this.working || this.libraryBusy)
+    if (this.working || this.libraryBusy || this.nativeBlocked())
       throw error("GPT_BUSY", "Модели обновятся после текущего ответа.");
     this.modelsPending = this.loadModels();
     try {
@@ -597,6 +667,11 @@ export class GptService {
     }
     if (!this.available())
       throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
+    if (this.nativeBlocked())
+      throw error(
+        "GPT_NATIVE_BUSY",
+        "Сначала дождись завершения или проверь изменение ветки GPT. Черновик сохранён.",
+      );
     if (this.libraryBusy)
       throw error("GPT_LIBRARY_BUSY", "Обновляем список чатов. Повтори отправку через секунду.");
     if (value.projectId) {
@@ -700,6 +775,7 @@ export class GptService {
     if (
       this.working ||
       this.libraryBusy ||
+      this.nativeBlocked() ||
       this.stopped ||
       !this.available() ||
       this.jobs().some((job) => job.status === "unknown")
@@ -977,6 +1053,8 @@ export class GptService {
     clearInterval(this.storageTimer);
     this.lifetime.abort();
     await this.completion;
+    await this.operations.close();
+    await this.projectContent.close();
   }
   async sandboxFile(conversationId: string, messageId: string, key: string) {
     const raw = await this.json("/conversation?id=" + encodeURIComponent(conversationId));
@@ -1048,6 +1126,95 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
       ],
       nextOffset: page.nextOffset,
     };
+  });
+  app.get("/api/gpt/native-operations", async (req) => {
+    const q = z.object({ nativeId: id.optional() }).parse(req.query);
+    return service.operations.list(q.nativeId);
+  });
+  app.get("/api/gpt/conversations/:id/messages/:messageId/action", async (req) => {
+    const p = z.object({ id, messageId: id }).parse(req.params);
+    service.library.assertExists("thread", p.id);
+    return service.operations.preview(p.id, p.messageId);
+  });
+  app.get("/api/gpt/conversations/:id/messages/:messageId/versions", async (req) => {
+    const p = z.object({ id, messageId: id }).parse(req.params),
+      q = z.object({ targetMessageId: id.optional() }).parse(req.query);
+    service.library.assertExists("thread", p.id);
+    return service.operations.versions(p.id, p.messageId, q.targetMessageId);
+  });
+  app.post("/api/gpt/native-operations", async (req, reply) => {
+    const input = gptOperationInput.parse(req.body);
+    service.library.assertExists("thread", input.nativeId);
+    return reply
+      .code(202)
+      .send(service.operations.start(uuid.parse(req.headers["idempotency-key"]), input));
+  });
+  app.post("/api/gpt/native-operations/:id/check", async (req) => {
+    await service.operations.confirm(z.object({ id: uuid }).parse(req.params).id);
+    return { ok: true };
+  });
+  app.post("/api/gpt/native-operations/:id/checked", async (req) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    await service.operations.checked(z.object({ id: uuid }).parse(req.params).id);
+    void service.pump();
+    return { ok: true };
+  });
+  app.get("/api/gpt/projects/:id/files/:fileId", async (req, reply) => {
+    const p = z.object({ id, fileId: id }).parse(req.params),
+      { file, response } = await service.projectFile(p.id, p.fileId);
+    if (!response.body) throw error("GPT_PROJECT_FILE_MISSING", "Файл недоступен.", 404);
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    for await (const chunk of response.body) {
+      bytes += chunk.length;
+      if (bytes > 32 * 1024 * 1024)
+        throw error("GPT_RESULT_TOO_LARGE", "Файл слишком большой.", 413);
+      chunks.push(Buffer.from(chunk));
+    }
+    return reply
+      .header(
+        "Content-Disposition",
+        "attachment; filename*=UTF-8''" + encodeURIComponent(file.name),
+      )
+      .header("X-Content-Type-Options", "nosniff")
+      .type("application/octet-stream")
+      .send(Buffer.concat(chunks));
+  });
+  app.get("/api/gpt/projects/:id/content", async (req) => {
+    const p = z.object({ id }).parse(req.params);
+    service.library.assertExists("project", p.id);
+    return {
+      project: await service.projectContent.read(p.id),
+      operations: service.projectContent.list(p.id),
+    };
+  });
+  app.get("/api/gpt/project-operations", async () => ({
+    items: service.store.db
+      .prepare(
+        "SELECT id,projectId,action,state,error,createdAt FROM gpt_project_operations WHERE state IN ('pending','unknown') ORDER BY createdAt LIMIT 10",
+      )
+      .all(),
+  }));
+  app.post("/api/gpt/project-operations", async (req, reply) => {
+    const input = gptProjectInput.parse(req.body);
+    service.library.assertExists("project", input.projectId);
+    return reply
+      .code(202)
+      .send(service.projectContent.start(uuid.parse(req.headers["idempotency-key"]), input));
+  });
+  app.post("/api/gpt/project-operations/:id/check", async (req) => {
+    await service.projectContent.check(z.object({ id: uuid }).parse(req.params).id);
+    return { ok: true };
+  });
+  app.post("/api/gpt/project-operations/:id/checked", async (req) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    await service.projectContent.checked(z.object({ id: uuid }).parse(req.params).id);
+    void service.pump();
+    return { ok: true };
   });
   app.get("/api/gpt/status", async () => service.connection());
   app.post("/api/gpt/reconnect", async () => service.reconnect());

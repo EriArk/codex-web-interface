@@ -135,3 +135,36 @@
     top: var(--app-top, 0px);
   }
 }
+
+.content-search .quick-capture-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.content-search form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.content-search input {
+  width: 100%;
+  min-height: 44px;
+}
+.content-search select {
+  flex: 1;
+  min-width: 0;
+}
+.content-search-result {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+}
+.nav-search > .icon-button {
+  flex: 0 0 44px;
+  padding: 0;
+}

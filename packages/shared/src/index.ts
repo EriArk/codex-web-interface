@@ -294,6 +294,8 @@ export type {
   GptProject,
 } from "./gpt.js";
 export * from "./gpt-connection.js";
+export * from "./gpt-operations.js";
+export * from "./gpt-project.js";
 export type {
   InspectRequest,
   ProjectDiff,
@@ -309,6 +311,7 @@ export type {
   MachineProbe,
   MachinesOverview,
 } from "./machineHealth.js";
+export * from "./native-work.js";
 export type {
   NotebookLink,
   NotebookPin,

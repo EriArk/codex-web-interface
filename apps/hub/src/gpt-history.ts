@@ -79,7 +79,36 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
       !["final", "commentary"].includes(message.channel)
     )
       return [];
-    if (!["text", "multimodal_text"].includes(content.content_type)) return [];
+    // Some old native records omit channel: explicitly exclude private formats as well.
+    const privateTypes = new Set([
+      "thoughts",
+      "reasoning",
+      "reasoning_recap",
+      "tool_call",
+      "computer_output",
+    ]);
+    if (privateTypes.has(content.content_type)) return [];
+    const unsupported = new Set<"audio" | "video" | "interactive" | "other">();
+    const missing = (kind: unknown) => {
+      if (typeof kind === "string" && privateTypes.has(kind)) return;
+      unsupported.add(
+        typeof kind !== "string"
+          ? "other"
+          : /audio/.test(kind)
+            ? "audio"
+            : /video/.test(kind)
+              ? "video"
+              : /canvas|widget|interactive/.test(kind)
+                ? "interactive"
+                : "other",
+      );
+    };
+    if (
+      typeof content.content_type === "string" &&
+      content.content_type &&
+      !["text", "multimodal_text"].includes(content.content_type)
+    )
+      missing(content.content_type);
     const parts = Array.isArray(content.parts) ? content.parts : [];
     let body = generatedImage
       ? ""
@@ -103,11 +132,17 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
     for (const file of Array.isArray(metadata.attachments) ? metadata.attachments : [])
       add(record(file));
     for (const part of parts) {
+      if (typeof part === "string") continue;
       const p = record(part);
-      if (p.content_type !== "image_asset_pointer") continue;
+      if (p.content_type !== "image_asset_pointer") {
+        missing(p.content_type);
+        continue;
+      }
       const pointer = text(p.asset_pointer),
         fileId = pointer.replace(/^(?:sediment|file-service):\/\//, "");
-      add({ id: fileId, mime_type: "image/png", size: p.size_bytes, name: "Изображение" });
+      if (gptId(fileId))
+        add({ id: fileId, mime_type: "image/png", size: p.size_bytes, name: "Изображение" });
+      else missing("image");
     }
     if (author.role === "assistant") {
       const linked = gptSandboxFiles(
@@ -118,7 +153,7 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
       body = linked.text;
       for (const file of linked.files) files.set(file.id, file);
     }
-    return body || files.size
+    return body || files.size || unsupported.size
       ? [
           {
             id: text(message.id) || text(node.id),
@@ -126,6 +161,7 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
             text: body,
             createdAt: Number(message.create_time) || 0,
             files: [...files.values()],
+            ...(unsupported.size ? { unsupported: [...unsupported] } : {}),
           },
         ]
       : [];

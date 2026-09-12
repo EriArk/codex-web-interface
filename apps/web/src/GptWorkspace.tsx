@@ -17,6 +17,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { api, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
+import { openContentSearch } from "./ContentSearch";
 import { CopyButton } from "./CopyButton";
 import { DeploymentStatus } from "./DeploymentStatus";
 import { useDictation } from "./Dictation";
@@ -28,7 +29,9 @@ import {
   type LibraryEntity,
   libraryEvent,
 } from "./EntityMenu";
+import { useGptNativeOperations } from "./GptNativeOperations";
 import { GptProgress } from "./GptProgress";
+import { GptProjectPending } from "./GptProjectContent";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
@@ -265,6 +268,17 @@ export function GptWorkspace({
     error: historyNotice,
     clearError: clearHistoryNotice,
   } = useGptHistory(selected);
+  const nativeOperations = useGptNativeOperations(
+    selected,
+    { model, effort },
+    (id) => {
+      if (selectedRef.current === id) void history(id, undefined, true);
+    },
+    (id) => {
+      choose(id);
+      void catalog().catch(() => {});
+    },
+  );
   selectedRef.current = selected;
   useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
   useProjectSwipe(settingsRef, settings, () => setSettings(false), "close");
@@ -1084,7 +1098,17 @@ export function GptWorkspace({
     <div className="navigation-inner">
       <div className="navigation-top-row">
         <div className="nav-search">
-          <Icon name="search" size={16} />
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Поиск по содержимому"
+            title="Поиск по содержимому"
+            onClick={() =>
+              openContentSearch({ client: "gpt", threadId: selected || undefined, query: search })
+            }
+          >
+            <Icon name="search" size={18} />
+          </button>
           <input
             aria-label="Найти чат GPT"
             placeholder="Найти…"
@@ -1509,6 +1533,7 @@ export function GptWorkspace({
                     <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
                     <b>{message.role === "user" ? "Вы" : "GPT"}</b>
                     <span className="message-actions">
+                      {nativeOperations.button(message, !!active || busy)}
                       {message.role === "assistant" && (
                         <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
                       )}
@@ -1568,6 +1593,31 @@ export function GptWorkspace({
                         )
                         .map((job) => <GptProgress key={job.id} items={job.progress ?? []} />)}
                     <Text value={message.text} />
+                    {!!message.unsupported?.length && (
+                      <aside className="native-content-notice">
+                        <p>
+                          {message.unsupported
+                            .map(
+                              (kind) =>
+                                ({
+                                  audio: "Аудио",
+                                  video: "Видео",
+                                  interactive: "Интерактивное содержимое",
+                                  other: "Дополнительное содержимое",
+                                })[kind],
+                            )
+                            .join(" · ")}{" "}
+                          доступно в оригинале.
+                        </p>
+                        <a
+                          href={`https://chatgpt.com/c/${encodeURIComponent(selected)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Открыть этот диалог в ChatGPT
+                        </a>
+                      </aside>
+                    )}
                     {message.role === "user" ? (
                       <Files files={message.files} />
                     ) : (
@@ -1597,6 +1647,8 @@ export function GptWorkspace({
             </div>
           </div>
           <div className="gpt-composer-wrap">
+            {nativeOperations.panel}
+            <GptProjectPending />
             {connection && !connection.canSend && (
               <div className="gpt-connection-notice" role="status">
                 <span>{connection.message}</span>
@@ -1713,6 +1765,7 @@ export function GptWorkspace({
                     type="submit"
                     className="send-button"
                     disabled={
+                      nativeOperations.blocked ||
                       dictation.locked ||
                       busy ||
                       uploading ||

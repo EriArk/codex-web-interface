@@ -20,6 +20,14 @@ const disposable = new RegExp(
 const terminal = "('idle','completed','interrupted','failed')";
 export function storageBlocked(db: DatabaseSync) {
   return (
+    !!db
+      .prepare("SELECT 1 FROM gpt_project_operations WHERE state IN ('pending','unknown') LIMIT 1")
+      .get() ||
+    !!db
+      .prepare(
+        "SELECT 1 FROM gpt_native_operations WHERE state IN ('preparing','running','unknown') LIMIT 1",
+      )
+      .get() ||
     !!db.prepare("SELECT 1 FROM artifact_captures WHERE status='capturing' LIMIT 1").get() ||
     !!db.prepare("SELECT 1 FROM threads WHERE status NOT IN " + terminal + " LIMIT 1").get() ||
     !!db

@@ -370,7 +370,7 @@ export class Store {
   progressDetails(
     threadId: string,
     turnId: string | null,
-  ): { items: { seq: number; kind: string; label: string; text: string }[] } {
+  ): { items: { seq: number; itemId?: string; kind: string; label: string; text: string }[] } {
     if (!turnId) return { items: [] };
     const rows = this.db
       .prepare(
@@ -378,7 +378,7 @@ export class Store {
       )
       .all(threadId, turnId);
     const seen = new Set<string>(),
-      items: { seq: number; kind: string; label: string; text: string }[] = [];
+      items: { seq: number; itemId?: string; kind: string; label: string; text: string }[] = [];
     for (const row of rows) {
       const p = JSON.parse(String(row.payload));
       const key = String(p.itemId || (row.type === "turn.progress" ? p.label : row.seq));
@@ -392,6 +392,7 @@ export class Store {
             : "step";
       items.push({
         seq: Number(row.seq),
+        ...(p.itemId ? { itemId: String(p.itemId) } : {}),
         kind,
         label:
           row.type === "activity.summary"

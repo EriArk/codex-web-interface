@@ -5,6 +5,14 @@ import { Icon } from "./icons";
 import "./download.css";
 
 export function isDownloadUrl(value: string | undefined): value is string {
+  if (value && /^\/api\/threads\/[a-zA-Z0-9_-]+\/commands\/[^/?#]+\?[^#]+$/.test(value)) {
+    const query = new URLSearchParams(value.split("?")[1]);
+    return (
+      query.size === 2 &&
+      query.get("download") === "1" &&
+      /^[a-zA-Z0-9_-]{1,200}$/.test(query.get("turnId") ?? "")
+    );
+  }
   if (value && /^\/api\/projects\/[a-zA-Z0-9_-]+\/files\/content\?[^#]+$/.test(value)) {
     const query = new URLSearchParams(value.split("?")[1]);
     return (
@@ -16,7 +24,7 @@ export function isDownloadUrl(value: string | undefined): value is string {
   }
   return (
     !!value &&
-    /^\/api\/(?:gpt\/(?:assets|results|uploads)\/[a-zA-Z0-9_-]+|gpt\/downloads\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/sandbox-[a-f0-9]{64}|(?:attachments|native-images|artifacts)\/[a-zA-Z0-9_-]+)$/.test(
+    /^\/api\/(?:gpt\/projects\/[a-zA-Z0-9_-]+\/files\/[a-zA-Z0-9_-]+|gpt\/(?:assets|results|uploads)\/[a-zA-Z0-9_-]+|gpt\/downloads\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/sandbox-[a-f0-9]{64}|(?:attachments|native-images|artifacts)\/[a-zA-Z0-9_-]+)$/.test(
       value,
     )
   );

@@ -332,6 +332,25 @@ export const migrations: readonly Migration[] = [
     `);
     },
   },
+  {
+    version: 28,
+    name: "native-work-snapshots",
+    up(db) {
+      db.exec(`
+        CREATE TABLE gpt_native_operations(
+          id TEXT PRIMARY KEY,nativeId TEXT NOT NULL,messageId TEXT NOT NULL,action TEXT NOT NULL,
+          text TEXT NOT NULL,state TEXT NOT NULL,error TEXT NOT NULL,createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL,fingerprint TEXT NOT NULL,input TEXT NOT NULL,baseline TEXT,resultNativeId TEXT
+        );
+        CREATE INDEX gpt_native_state ON gpt_native_operations(state,createdAt);
+        CREATE TABLE gpt_project_operations(id TEXT PRIMARY KEY,projectId TEXT NOT NULL,action TEXT NOT NULL,state TEXT NOT NULL,error TEXT NOT NULL,createdAt INTEGER NOT NULL,fingerprint TEXT NOT NULL,input TEXT NOT NULL,baseline TEXT);
+        CREATE INDEX gpt_project_state ON gpt_project_operations(state,createdAt);
+        CREATE TABLE native_work(threadId TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,turnId TEXT NOT NULL,kind TEXT NOT NULL,value TEXT NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(threadId,turnId,kind));
+        CREATE TABLE command_logs(threadId TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,turnId TEXT NOT NULL,itemId TEXT NOT NULL,value TEXT NOT NULL,bytes INTEGER NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(threadId,turnId,itemId));
+        CREATE INDEX command_logs_age ON command_logs(updatedAt);
+      `);
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 

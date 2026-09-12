@@ -234,7 +234,7 @@ test("UI publication is atomic, retains old assets, rejects incompatible schema 
     writeFileSync(join(source, "assets", "second.js"), "// second");
     writeFileSync(
       join(source, "engine-compat.json"),
-      JSON.stringify({ protocol: 1, minSchema: 28, maxSchema: 28 }),
+      JSON.stringify({ protocol: 1, minSchema: 29, maxSchema: 29 }),
     );
     await assert.rejects(
       () =>
@@ -244,7 +244,7 @@ test("UI publication is atomic, retains old assets, rejects incompatible schema 
     assert.equal(currentRelease(f.releaseRoot).id, before.id);
     writeFileSync(
       join(source, "engine-compat.json"),
-      JSON.stringify({ protocol: 1, minSchema: 27, maxSchema: 27 }),
+      JSON.stringify({ protocol: 1, minSchema: 28, maxSchema: 28 }),
     );
     await assert.rejects(
       () =>

@@ -20,6 +20,16 @@ export function deploymentBlockers(store: Pick<Store, "db" | "preferences">) {
     "GPT: отправка или ответ ещё не завершены",
   );
   add(
+    "gpt_project",
+    "SELECT count(*) n FROM gpt_project_operations WHERE state IN ('pending','unknown')",
+    "GPT: изменение проекта ещё не подтверждено",
+  );
+  add(
+    "gpt_native",
+    "SELECT count(*) n FROM gpt_native_operations WHERE state IN ('preparing','running','unknown')",
+    "GPT: изменение ветки ещё не подтверждено",
+  );
+  add(
     "terminal",
     "SELECT count(*) n FROM device_terminals WHERE state='open'",
     "Открыт терминал; состояние команды не проверено",
