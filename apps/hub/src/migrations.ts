@@ -320,6 +320,18 @@ export const migrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 27,
+    name: "linked-project-relays",
+    up(db) {
+      db.exec(`
+      CREATE TABLE project_links(id TEXT PRIMARY KEY,sourceId TEXT NOT NULL,targetId TEXT NOT NULL,value TEXT NOT NULL);
+      CREATE UNIQUE INDEX project_link_pair ON project_links(sourceId,targetId);
+      CREATE TABLE project_relays(id TEXT PRIMARY KEY,sourceId TEXT NOT NULL,targetId TEXT NOT NULL,state TEXT NOT NULL,value TEXT NOT NULL,fingerprint TEXT NOT NULL,updatedAt INTEGER NOT NULL);
+      CREATE INDEX project_relays_state ON project_relays(state,updatedAt);
+    `);
+    },
+  },
 ];
 export const SCHEMA_VERSION = migrations.at(-1)?.version ?? 0;
 
