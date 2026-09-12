@@ -154,7 +154,7 @@ export default function QuickCapture({
       onCancel={onClose}
     >
       <header>
-        <Icon name="plus" size={20} />
+        <Icon name="note-edit" />
         <h2>Быстрая запись</h2>
         <button type="button" className="icon-button" aria-label="Закрыть запись" onClick={onClose}>
           <Icon name="close" />

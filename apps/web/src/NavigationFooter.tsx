@@ -1,18 +1,22 @@
+import type { NotebookScope } from "@codex-web/shared";
 import { ClientPicker } from "./ClientPicker";
 import { openDevices } from "./DeviceWorkspaceHost";
 import { Icon } from "./icons";
+import { QuickCaptureButton } from "./QuickCaptureHost";
 export function NavigationFooter({
   client,
   onClient,
   onSettings,
   onRemote,
   remoteHref,
+  captureScope,
 }: {
   client: "codex" | "gpt";
   onClient?: (value: "codex" | "gpt") => void;
   onSettings: () => void;
   onRemote?: () => void;
   remoteHref?: string;
+  captureScope: NotebookScope;
 }) {
   return (
     <div className="navigation-system-row">
@@ -27,6 +31,7 @@ export function NavigationFooter({
         <span className="nav-settings-label">Настройки</span>
       </button>
       <div className="navigation-mode-controls">
+        <QuickCaptureButton scope={captureScope} />
         <button
           type="button"
           className="icon-button"

@@ -12,7 +12,6 @@ import { EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
 import { NavigationFooter } from "./NavigationFooter";
 import { PinnedList } from "./PinnedList";
-import { QuickCaptureButton } from "./QuickCaptureHost";
 import type { Project, Thread } from "./types";
 import { WorkspaceLinks } from "./WorkspaceLinks";
 
@@ -259,13 +258,6 @@ export function ProjectNavigation({
             type="search"
           />
         </div>
-        <QuickCaptureButton
-          scope={
-            selected && !selected.unassigned
-              ? { client: "codex", projectId: selected.id, name: selected.name }
-              : null
-          }
-        />
         <button
           type="button"
           className="icon-button mobile-only panel-close"
@@ -521,6 +513,11 @@ export function ProjectNavigation({
         />
         <NavigationFooter
           client="codex"
+          captureScope={
+            selected && !selected.unassigned
+              ? { client: "codex", projectId: selected.id, name: selected.name }
+              : null
+          }
           onClient={onClient}
           onSettings={onSettings}
           onRemote={onRemote}
