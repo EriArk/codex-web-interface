@@ -74,7 +74,7 @@ function caseChrome(color: CaseColor, evening: boolean) {
   return `#${([0, 1, 2] as const)
     .map((i) => {
       const tint = parseInt(caseTints[color].slice(1 + i * 2, 3 + i * 2), 16);
-      const base = darkCase ? tint * 0.24 + ([10, 12, 17] as const)[i] * 0.76 : tint;
+      const base = darkCase ? tint * 0.16 + ([7, 8, 11] as const)[i] * 0.84 : tint;
       return Math.round(base * 0.9 + ([19, 26, 34] as const)[i] * 0.1)
         .toString(16)
         .padStart(2, "0");

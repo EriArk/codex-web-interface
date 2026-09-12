@@ -94,7 +94,7 @@
 }
 :root[data-theme="crt-green"] {
   /* Evening casing: a neutral charcoal mix, never a green filter. */
-  --case-tint: color-mix(in srgb, var(--polymer-tint) 24%, #0a0c11);
+  --case-tint: color-mix(in srgb, var(--polymer-tint) 16%, #07080b);
   --case-top: color-mix(in srgb, var(--case-tint) 98%, #fff);
   --case-edge: color-mix(in srgb, var(--case-tint) 72%, #fff);
   --case-glint: #ffffff70;
@@ -138,6 +138,20 @@
   --cap-shadow:
     inset 0 1px 0 #fff, inset 1px 0 0 #fff9, inset 0 -1px 0 #0004,
     0 2px 0 var(--case-seam), 0 3px 3px #0005;
+}
+/* Dark CRT plastic is matte: relief comes from seams, not illuminated edges. */
+:root[data-theme="crt-green"]:not(
+    :is([data-case-color="white"], [data-case-color="yellow"], [data-case-color="silver"])
+  ) {
+  --case-top: var(--case-tint);
+  --case-edge: color-mix(in srgb, var(--case-tint) 88%, #46505a);
+  --case-glint: transparent;
+  --case-surface: linear-gradient(180deg, var(--case-mid), var(--case-low));
+  --case-shadow:
+    inset 0 0 0 1px #0005, inset 0 -2px 0 var(--case-seam), 0 2px 0 #0005, 0 4px 5px #0004;
+  --cap-top: color-mix(in srgb, var(--case-tint) 92%, #46505a);
+  --cap-shadow:
+    inset 0 1px 0 #ffffff0c, inset 0 -1px 0 #0009, 0 2px 0 var(--case-seam), 0 3px 3px #0007;
 }
 :root[data-theme="hitech-2000s"] {
   --paper: #fcfcf5;
