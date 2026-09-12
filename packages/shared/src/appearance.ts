@@ -1,11 +1,16 @@
 export const caseColorIds = [
   "graphite",
-  "turquoise",
-  "green",
-  "blue",
+  "white",
+  "silver",
   "red",
   "orange",
-  "silver",
+  "yellow",
+  "green",
+  "mint",
+  "turquoise",
+  "blue",
+  "purple",
+  "pink",
 ] as const;
 export type CaseColor = (typeof caseColorIds)[number];
 export interface CasePreferences {

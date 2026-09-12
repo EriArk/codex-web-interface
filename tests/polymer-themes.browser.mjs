@@ -85,7 +85,12 @@ for (const [engine, type] of [
       await button("Настройки").click();
       await page.locator(`.settings-dialog .theme-option.${theme} input`).check();
       for (const [label, id] of [
-        ["Графит", "graphite"],
+        ["Чёрный", "graphite"],
+        ["Белый", "white"],
+        ["Жёлтый", "yellow"],
+        ["Мятный", "mint"],
+        ["Фиолетовый", "purple"],
+        ["Розовый", "pink"],
         ["Красный", "red"],
         ["Оранжевый", "orange"],
         ["Серебристый", "silver"],
@@ -269,7 +274,7 @@ for (const [engine, type] of [
     assert.equal(f.store.preferences().projectId, "project");
     assert.equal(f.store.preferences().threadId, f.thread.id);
     console.log(
-      `${engine}: seven case colors, independent Hub persistence, fresh device, failed save recovery, Codex/GPT drafts, phone/landscape/tablet and physical toggle passed`,
+      `${engine}: twelve case colors, independent Hub persistence, fresh device, failed save recovery, Codex/GPT drafts, phone/landscape/tablet and physical toggle passed`,
     );
   } catch (error) {
     await page.screenshot({ path: `${out}/failure.png` });
