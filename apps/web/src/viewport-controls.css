@@ -9,9 +9,6 @@
   min-height: 44px;
   max-height: 44px;
   padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* iOS can pan the visual viewport independently while focusing an editor.
