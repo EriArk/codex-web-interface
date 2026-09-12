@@ -131,7 +131,8 @@ export function shellTracking(token: string, platform: string): string {
       "function global:CodexWebTerminalSignal($phase,$jobs){[Console]::Write(([char]27)+']777;codexweb;'+$global:CodexWebTerminalToken+';'+$phase+';'+$PID+';'+$global:CodexWebTerminalBirth+';'+$jobs+([char]7))}",
       "$global:CodexWebOriginalPrompt=(Get-Command prompt).ScriptBlock",
       "function global:CodexWebPendingJobs { @(Get-Job | Where-Object { $_ -isnot [System.Management.Automation.PSEventJob] -and $_.State -notin @('Completed','Failed','Stopped') }) }",
-      "function global:prompt { $pending=@(CodexWebPendingJobs); $jobs=0; if($pending.Count){$jobs=1;if(@($pending | Where-Object {$_.PSJobTypeName -ne 'BackgroundJob' -or $_.State -ne 'Running'}).Count){$jobs=2}}; CodexWebTerminalSignal 'prompt' $jobs; & $global:CodexWebOriginalPrompt }",
+      // ConsoleHost invokes a bare prompt pipeline. A script calling prompt is still work.
+      "function global:prompt { if(($MyInvocation.Line -ceq 'prompt') -and [string]::IsNullOrEmpty($MyInvocation.ScriptName) -and @(Get-PSCallStack).Count -eq 2){ $pending=@(CodexWebPendingJobs); $jobs=0; if($pending.Count){$jobs=1;if(@($pending | Where-Object {$_.PSJobTypeName -ne 'BackgroundJob' -or $_.State -ne 'Running'}).Count){$jobs=2}}; CodexWebTerminalSignal 'prompt' $jobs }; & $global:CodexWebOriginalPrompt }",
       "Import-Module PSReadLine -ErrorAction SilentlyContinue",
       "$reader=Get-Command PSConsoleHostReadLine -ErrorAction SilentlyContinue",
       "if($reader){$global:CodexWebOriginalReadLine=$reader.ScriptBlock; function global:PSConsoleHostReadLine { $line=& $global:CodexWebOriginalReadLine; CodexWebTerminalSignal 'busy' 0; return $line }}",
