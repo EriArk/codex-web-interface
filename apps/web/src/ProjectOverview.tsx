@@ -14,6 +14,7 @@ import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
 import { PinnedList } from "./PinnedList";
 import { DeliveryButton } from "./ProjectDeliveryHost";
+import { ProjectRelays } from "./ProjectRelays";
 import { ProjectRotation } from "./ProjectRotation";
 import { reviewLabels } from "./WorkReviewLink";
 import "./project-overview.css";
@@ -464,6 +465,14 @@ export function ProjectOverview({
               )}
             </div>
             <div className="overview-context">
+              {scope.client === "codex" && (
+                <ProjectRelays
+                  key={scope.projectId}
+                  projectId={scope.projectId}
+                  onTarget={onTarget}
+                  onNotebook={onNotebook}
+                />
+              )}
               <section className="overview-card" aria-label="Контекст проекта">
                 <header>
                   <h2>Под рукой</h2>

@@ -1,0 +1,94 @@
+.project-relays {
+  container-type: inline-size;
+}
+.relay-link,
+.relay-entry {
+  min-width: 0;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.relay-link {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.relay-link > strong,
+.relay-entry strong {
+  overflow-wrap: anywhere;
+}
+.relay-link summary,
+.relay-entry > summary {
+  min-height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.relay-entry {
+  margin-top: 8px;
+}
+.relay-entry > summary > span {
+  min-width: 0;
+  flex: 1;
+}
+.relay-entry small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.relay-form {
+  display: grid;
+  gap: 10px;
+  padding-block: 10px;
+}
+.relay-form label {
+  display: grid;
+  gap: 6px;
+}
+.relay-form :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px;
+}
+.relay-form label.relay-check {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 10px;
+}
+.relay-check input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.relay-form input[type="range"] {
+  padding: 0;
+}
+.relay-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 12px;
+}
+.relay-filters [aria-pressed="true"] {
+  background: var(--selected);
+  color: var(--ink);
+}
+.relay-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.relay-step {
+  border-top: 1px solid var(--line);
+  padding-block: 10px;
+}
+.project-relays .button-row {
+  flex-wrap: wrap;
+}

@@ -57,7 +57,7 @@ export class WorkReviews {
       if (!terminal || JSON.parse(String(terminal.payload)).status !== "completed") return null;
       const messages = this.db
         .prepare(
-          "SELECT id,text FROM messages WHERE threadId=? AND turnId=? AND role='assistant' AND phase='final' ORDER BY firstSeq LIMIT 20",
+          "SELECT id,text FROM messages WHERE threadId=? AND turnId=? AND role='assistant' AND phase IN ('final','final_answer') ORDER BY firstSeq LIMIT 20",
         )
         .all(action.threadId, action.turnId);
       answer = messages.map((m) => String(m.text)).join("\n\n");

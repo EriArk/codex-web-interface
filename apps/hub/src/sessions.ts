@@ -59,6 +59,11 @@ interface Approval {
   requestId: string | number;
 }
 export class Sessions extends EventEmitter {
+  relayTools: Record<string, unknown>[] = [];
+  relayTool?: (
+    thread: ThreadRecord,
+    request: ServerRequest,
+  ) => Promise<Record<string, unknown> | null>;
   private runtimes = new Map<string, Promise<Runtime>>();
   private locks = new Set<string>();
   private approvals = new Map<string, Approval>();
@@ -783,6 +788,7 @@ export class Sessions extends EventEmitter {
     return this.locked(projectId, async () => {
       const r = await this.runtime(projectId);
       const result = await r.rpc.request("thread/start", {
+        ...(diagnostic || !this.relayTools.length ? {} : { dynamicTools: this.relayTools }),
         cwd: this.project(projectId).workingDirectory,
         ...(this.project(projectId).sourceId
           ? { projectId: this.project(projectId).sourceId }
@@ -905,6 +911,7 @@ export class Sessions extends EventEmitter {
         // No native conversation history existed yet. Recreate only the empty placeholder.
         const project = this.project(t.projectId);
         result = await r.rpc.request("thread/start", {
+          ...(this.relayTools.length ? { dynamicTools: this.relayTools } : {}),
           cwd: t.workingDirectory || project.workingDirectory,
           ...(project.sourceId ? { projectId: project.sourceId } : {}),
           historyMode: "paginated",
@@ -1001,6 +1008,7 @@ export class Sessions extends EventEmitter {
     attachmentIds: string[] = [],
     clientMessageId?: string,
     diagnostic = false,
+    internal?: { beforeCommit?: () => void; outputSchema?: Record<string, unknown> },
   ): Promise<Record<string, unknown>> {
     let committing = false;
     try {
@@ -1043,6 +1051,7 @@ export class Sessions extends EventEmitter {
         ) {
           // An unsent draft may disappear with its App Server. Recreate only that empty draft.
           const fresh = await r.rpc.request("thread/start", {
+            ...(diagnostic || !this.relayTools.length ? {} : { dynamicTools: this.relayTools }),
             cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
             ...(this.project(t.projectId).sourceId
               ? { projectId: this.project(t.projectId).sourceId }
@@ -1078,6 +1087,7 @@ export class Sessions extends EventEmitter {
         );
         try {
           this.assertWritable(t.projectId);
+          internal?.beforeCommit?.();
         } catch (error) {
           prepared.release();
           throw error;
@@ -1093,8 +1103,10 @@ export class Sessions extends EventEmitter {
           prepared.release();
           throw error;
         }
-        this.store.setThreadSettings(id, selection);
-        this.emitEvent(id, "thread.settings", { settings: selection });
+        if (!diagnostic) {
+          this.store.setThreadSettings(id, selection);
+          this.emitEvent(id, "thread.settings", { settings: selection });
+        }
         r.active.add(id);
         r.touched = Date.now();
         this.store.db.prepare("UPDATE threads SET activitySource='hub' WHERE id=?").run(id);
@@ -1120,6 +1132,7 @@ export class Sessions extends EventEmitter {
             threadId: t.codexThreadId,
             input: [...(prompt ? [{ type: "text", text: prompt }] : []), ...prepared.input],
             clientUserMessageId: messageId,
+            ...(internal?.outputSchema ? { outputSchema: internal.outputSchema } : {}),
             ...(diagnostic
               ? { sandboxPolicy: { type: "readOnly" }, approvalPolicy: "never" }
               : turnAccess(selection.access)),
@@ -1270,6 +1283,11 @@ export class Sessions extends EventEmitter {
       return;
     const t = this.store.threadByCodex(text(request.params.threadId));
     if (request.method === "item/tool/call" && t) {
+      const relayResponse = await this.relayTool?.(t, request);
+      if (relayResponse) {
+        if (!r.rpc.closed) r.rpc.respond(request.id, relayResponse);
+        return;
+      }
       const p = this.project(t.projectId);
       const machine = this.config.machines.find((m) => m.id === p.machineId)!;
       const response = await workspaceTool(request.params, machine, async (m) => {
@@ -1495,6 +1513,12 @@ export class Sessions extends EventEmitter {
           "SELECT id FROM messages WHERE threadId=? AND (id=? OR (turnId=? AND role='user' AND text=?)) LIMIT 1",
         )
         .get(t.id, messageId, turnId, value);
+      if (existing && item.clientId === messageId && turnId)
+        this.store.db
+          .prepare(
+            "UPDATE messages SET turnId=? WHERE threadId=? AND id=? AND role='user' AND text=? AND turnId IS NULL",
+          )
+          .run(turnId, t.id, messageId, value);
       if (!existing) {
         const files = this.store.db
           .prepare("SELECT * FROM attachments WHERE threadId=? AND messageId=?")

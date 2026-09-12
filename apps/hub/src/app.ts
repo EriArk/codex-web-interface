@@ -47,6 +47,7 @@ import { registerProjectInspector } from "./projectInspector.js";
 import { type PushOptions, registerPush } from "./push.js";
 import { registerQueue } from "./queue.js";
 import { registerQuickCapture } from "./quick-capture.js";
+import { registerRelays } from "./relay-routes.js";
 import { connectRemote, remoteProvider } from "./remote.js";
 import { Sessions } from "./sessions.js";
 import { registerSpeech } from "./speech.js";
@@ -658,6 +659,7 @@ export async function createApp(
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
   const projectWork = registerProjectWork(app, sessions, gpt, queue);
+  registerRelays(app, sessions, projectWork, queue);
   registerGuiPreviews(app, sessions, artifacts, projectWork.context, options.guiPreviewProbe);
   registerWorkspaceTasks(app, sessions);
   registerQuickCapture(app, sessions);
