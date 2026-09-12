@@ -84,7 +84,7 @@ export function useGptHistory(selected: string) {
         if (mounted.current && selectedRef.current === id && (older || !cached)) setLoading(true);
         if (mounted.current && selectedRef.current === id) {
           setRevalidating(true);
-          setError("");
+          if (!cached) setError("");
         }
         try {
           const query = new URLSearchParams();

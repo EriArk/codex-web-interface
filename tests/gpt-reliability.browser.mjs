@@ -93,6 +93,37 @@ try {
               currentEffort: "2",
             },
           });
+        if (path === "/api/gpt/conversations/history-chat/messages") {
+          if (mode === "history-error")
+            return route.fulfill({
+              status: 429,
+              json: {
+                error: {
+                  code: "GPT_HISTORY_RATE_LIMITED",
+                  message:
+                    "ChatGPT временно ограничил обновление истории. Повторим автоматически после паузы.",
+                },
+              },
+            });
+          return route.fulfill({
+            json: {
+              items: [
+                {
+                  id: "public-answer",
+                  role: "assistant",
+                  text: "Сохранённый настоящий ответ",
+                  files: [],
+                  createdAt: 100,
+                },
+              ],
+              nextBefore: null,
+              revision: "a".repeat(64),
+              prefix: "",
+              notModified: false,
+              retainOlder: false,
+            },
+          });
+        }
         if (path === "/api/gpt/jobs") {
           polls++;
           if (mode === "hang") return;
@@ -210,6 +241,34 @@ try {
       assert.equal(attempts.length, beforeRecovery);
       console.log(
         name + ": native attention has a direct Open action and preserves an unsent draft",
+      );
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("private-session-ended"));
+        localStorage.setItem("gpt-conversation", "history-chat");
+      });
+      await page.reload();
+      await expect(page.getByText("Сохранённый настоящий ответ", { exact: true })).toBeVisible();
+      await editor.fill("Черновик во время задержки истории");
+      mode = "history-error";
+      await page.clock.runFor(31000);
+      const sync = page.getByRole("status", { name: "Обновление истории" });
+      await expect(sync).toContainText("ограничил обновление истории");
+      await expect(page.locator(".global-notice")).toHaveCount(0);
+      await expect(editor).toHaveValue("Черновик во время задержки истории");
+      await expect(page.getByText("Сохранённый настоящий ответ", { exact: true })).toBeVisible();
+      await page.screenshot({ path: `.local/qa-gpt-outbox/history-cooldown-${name}.png` });
+      await page.setViewportSize({ width: 1366, height: 1024 });
+      await expect(sync).toBeVisible();
+      await page.screenshot({ path: `.local/qa-gpt-outbox/history-cooldown-tablet-${name}.png` });
+      await page.setViewportSize({ width: 390, height: 844 });
+      mode = "ok";
+      await page.clock.runFor(16000);
+      await expect(sync).toHaveCount(0);
+      await expect(editor).toHaveValue("Черновик во время задержки истории");
+      assert.equal(attempts.length, beforeRecovery, "history recovery never sends a message");
+      console.log(
+        name +
+          ": history throttling keeps messages and draft, uses inline sync status and clears on recovery",
       );
       const now = await page.evaluate(() => Date.now());
       const failed = {

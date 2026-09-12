@@ -75,8 +75,9 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
       return [];
     if (
       author.role === "assistant" &&
-      message.channel &&
-      !["final", "commentary"].includes(message.channel)
+      ((message.channel && !["final", "commentary"].includes(message.channel)) ||
+        (message.recipient && message.recipient !== "all") ||
+        metadata.tool_invoking_message === true)
     )
       return [];
     // Some old native records omit channel: explicitly exclude private formats as well.

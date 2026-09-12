@@ -268,7 +268,6 @@ export function GptWorkspace({
     contextMessage,
     hasNewer,
     error: historyNotice,
-    clearError: clearHistoryNotice,
   } = useGptHistory(selected);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const nativeOperations = useGptNativeOperations(
@@ -735,8 +734,7 @@ export function GptWorkspace({
         setText("");
         setFiles([]);
         sticky.current = true;
-        if (contextMessage && selected)
-          void history(selected, undefined, true).catch((e) => setNotice(messageOf(e)));
+        if (contextMessage && selected) void history(selected, undefined, true).catch(() => {});
       }
     } catch (e) {
       if (navigationVersion.current === version) setNotice(messageOf(e));
@@ -1369,9 +1367,9 @@ export function GptWorkspace({
           <Icon name="settings" />
         </button>
       </header>
-      {(notice || loadNotice || historyNotice) && (
+      {(notice || loadNotice) && (
         <div className="global-notice" role="status">
-          <span>{notice || loadNotice || historyNotice}</span>
+          <span>{notice || loadNotice}</span>
           <button
             type="button"
             className="icon-button"
@@ -1379,7 +1377,6 @@ export function GptWorkspace({
             onClick={() => {
               setNotice("");
               setLoadNotice("");
-              clearHistoryNotice();
             }}
           >
             <Icon name="close" />
@@ -1456,6 +1453,11 @@ export function GptWorkspace({
           />
         )}
         <section className="gpt-chat" hidden={view !== "chat"}>
+          {historyReady && historyNotice && (
+            <div className="gpt-revalidating" role="status" aria-label="Обновление истории">
+              {historyNotice}
+            </div>
+          )}
           <div
             className="gpt-message-scroll"
             ref={scroll}
@@ -1515,7 +1517,7 @@ export function GptWorkspace({
                   <h2>{selectedTitle}</h2>
                   {historyNotice ? (
                     <>
-                      <p>Не удалось загрузить разговор.</p>
+                      <p>{historyNotice}</p>
                       <button
                         type="button"
                         className="secondary"
@@ -1533,7 +1535,7 @@ export function GptWorkspace({
                   )}
                 </div>
               )}
-              {selected && historyReady && revalidating && (
+              {selected && historyReady && revalidating && !historyNotice && (
                 <div className="gpt-revalidating" role="status">
                   <span className="spinner" />
                   Обновляем разговор…

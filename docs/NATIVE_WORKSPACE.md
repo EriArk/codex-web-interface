@@ -34,6 +34,13 @@ Native resource options are returned by their exact values. Implicit defaults ar
 
 ## Verification
 
+### History recovery — 2026-09-13
+
+- Assistant records addressed to tools, including native `code` calls with a null/commentary channel, are internal activity. They must not become unsupported-content notices or expose command arguments. Public commentary, final answers and genuinely unsupported visible media keep their existing projection.
+- History HTTP 429 is a delayed read, not a failed message send. The connector preserves `Retry-After`; the Hub shares concurrent conversation reads and applies an account-wide cooldown with bounded exponential backoff. It never replays a write or supplies stale data as confirmation of a native mutation.
+- Idle history/Results share a 60-second cache. Live history and canonical completion monitoring use 15-second intervals. Cached browser messages and drafts remain visible during errors; a small history status clears after a successful read, separately from action errors.
+- The reported 317-node conversation was checked from a private saved snapshot: 75 tool-call placeholders disappeared, while all 94 public messages and their files remained byte-for-byte equivalent. The private conversation is not a repository fixture; synthetic tests cover its structural shapes.
+
 - `tests/gpt-workspace.test.mjs`: exact retry, uncertainty/restart, canonical reconciliation, revision/permission/activity rejection, manual recovery, Canvas identity/version bounds, metadata projection and observed native HTTP statuses.
 - `tests/gpt-workspace.browser.mjs`: real shared UI with simulated upstream replies in Chromium/WebKit, stale drafts, lost acknowledgement, native creation requests, Canvas version/restore controls, inert code, phone/tablet geometry and four themes.
 - Existing elicitation unit/browser checks additionally exercise multi-file URI answers and inline image choice, preserving the message draft.
