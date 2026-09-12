@@ -19,8 +19,8 @@ const systemPlayer = new Controller(device);
 let previousAudioType: string | undefined;
 const audioPlayer = new AudioMessageSpeech({
   audio: () => new Audio(),
-  create: (id, text, language) =>
-    api("/speech/" + id, { method: "POST", body: { text, language } }),
+  create: (id, text, language, voice) =>
+    api("/speech/" + id, { method: "POST", body: { text, language, ...(voice ? { voice } : {}) } }),
   remove: (id) => api("/speech/" + id, { method: "DELETE" }),
   media: () => navigator.mediaSession,
   playback: (active) => {
@@ -38,11 +38,62 @@ const audioPlayer = new AudioMessageSpeech({
   },
 });
 let backgroundAvailable = false;
+type ServerVoice = "eugene" | "kseniya" | "ruslan";
+const voiceNames: Record<ServerVoice, string> = {
+  eugene: "Евгений · Silero",
+  kseniya: "Ксения · Silero",
+  ruslan: "Руслан · Piper",
+};
+let backgroundVoices: ServerVoice[] = [];
+let mixedLanguage = false;
+const voiceKey = "codex-speech-server-voice";
+const readVoice = (): ServerVoice => {
+  try {
+    const value = localStorage.getItem(voiceKey);
+    if (value && Object.hasOwn(voiceNames, value)) return value as ServerVoice;
+  } catch {}
+  return "eugene";
+};
+let selectedVoice = readVoice();
+const voiceListeners = new Set<() => void>();
+const serverVoice = {
+  snapshot: () => selectedVoice,
+  subscribe: (listener: () => void) => {
+    voiceListeners.add(listener);
+    return () => {
+      voiceListeners.delete(listener);
+    };
+  },
+  select: (voice: ServerVoice, persist = true) => {
+    if (voice === selectedVoice) return;
+    player.stop();
+    selectedVoice = voice;
+    if (persist)
+      try {
+        localStorage.setItem(voiceKey, voice);
+      } catch {}
+    for (const listener of voiceListeners) listener();
+  },
+};
 let backgroundCheck: Promise<boolean> | undefined;
 const checkBackground = () =>
-  (backgroundCheck ??= api<{ available: boolean }>("/speech/status")
-    .then((value) => (backgroundAvailable = value.available === true))
-    .catch(() => false));
+  (backgroundCheck ??= api<{ available: boolean; voices?: string[]; mixedLanguage?: boolean }>(
+    "/speech/status",
+  )
+    .then((value) => {
+      backgroundVoices = (Object.keys(voiceNames) as ServerVoice[]).filter((id) =>
+        value.voices?.includes(id),
+      );
+      mixedLanguage = value.mixedLanguage === true;
+      backgroundAvailable = value.available === true;
+      return backgroundAvailable;
+    })
+    .catch(() => {
+      backgroundAvailable = false;
+      backgroundVoices = [];
+      mixedLanguage = false;
+      return false;
+    }));
 const player = {
   snapshot: () => (audioPlayer.snapshot().id ? audioPlayer.snapshot() : systemPlayer.snapshot()),
   subscribe: (listener: () => void) => {
@@ -70,7 +121,12 @@ const player = {
       const cyrillic = text.match(/[а-яё]/giu)?.length ?? 0,
         latin = text.match(/[a-z]/giu)?.length ?? 0;
       if (backgroundAvailable && text.length <= 30000)
-        audioPlayer.start(id, text, cyrillic > latin / 2 ? "ru" : "en");
+        audioPlayer.start(
+          id,
+          text,
+          cyrillic > latin / 2 ? "ru" : "en",
+          backgroundVoices.includes(selectedVoice) ? selectedVoice : backgroundVoices[0],
+        );
     } else systemPlayer.start(id, speechChunks(text), navigator.language);
   },
 };
@@ -108,6 +164,7 @@ const speechMode = {
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (event) => {
     if (event.key === modeKey || event.key === null) speechMode.select(readMode(), false);
+    if (event.key === voiceKey || event.key === null) serverVoice.select(readVoice(), false);
   });
 }
 function useSpeechMode() {
@@ -132,27 +189,60 @@ function useSpeechMode() {
   return { mode, supported, background };
 }
 export function SpeechSettings() {
-  const { mode, supported } = useSpeechMode();
+  const { mode, supported, background } = useSpeechMode();
+  const voice = useSyncExternalStore(
+    serverVoice.subscribe,
+    serverVoice.snapshot,
+    serverVoice.snapshot,
+  );
   return (
-    <label className="speech-settings">
-      <span>Озвучивание</span>
-      <select
-        aria-label="Режим озвучивания"
-        value={mode}
-        onChange={(event) => speechMode.select(event.target.value as SpeechMode)}
-      >
-        <option value="system" disabled={!supported}>
-          Системный голос
-        </option>
-        <option value="background">Фоновое аудио</option>
-      </select>
-    </label>
+    <div>
+      <label className="speech-settings">
+        <span>Озвучивание</span>
+        <select
+          aria-label="Режим озвучивания"
+          value={mode}
+          onChange={(event) => speechMode.select(event.target.value as SpeechMode)}
+        >
+          <option value="system" disabled={!supported}>
+            Системный голос
+          </option>
+          <option value="background">Фоновое аудио</option>
+        </select>
+      </label>
+      {mode === "background" && background && backgroundVoices.length > 0 && (
+        <>
+          <label className="speech-settings">
+            <span>Русский голос</span>
+            <select
+              aria-label="Серверный голос"
+              value={backgroundVoices.includes(voice) ? voice : backgroundVoices[0]}
+              onChange={(event) => serverVoice.select(event.target.value as ServerVoice)}
+            >
+              {backgroundVoices.map((id) => (
+                <option key={id} value={id}>
+                  {voiceNames[id]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="speech-settings-hint">
+            Темп 0,85×.{mixedLanguage ? " Английские вставки читает английский голос." : ""}
+          </p>
+        </>
+      )}
+      {mode === "background" && !background && (
+        <p className="speech-settings-hint">Серверное озвучивание пока недоступно.</p>
+      )}
+    </div>
   );
 }
 if (typeof window !== "undefined")
   window.addEventListener("private-session-ended", () => {
     player.stop();
     backgroundAvailable = false;
+    backgroundVoices = [];
+    mixedLanguage = false;
     backgroundCheck = undefined;
   });
 export function useSpeechScope(scope: string, visible: boolean) {

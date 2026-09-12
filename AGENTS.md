@@ -520,3 +520,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Codex and GPT share six settings categories: Appearance, Sound and notifications, Connections, Projects and history, Maintenance, and Access. Keep all existing controls and their safety/ownership rules.
 - On phones, open a category index and provide a clear Back action from each category. Wider dialogs keep category navigation beside independently scrolling content. Preserve unsaved forms across category changes, and keep the header within the visible software-keyboard viewport.
 - Poll settings diagnostics/status only while their category is visible. Browsing settings does not authorize a native send, restart or handoff.
+
+## Owner-requested books voices and mixed-language speech (2026-09-12)
+
+- Reuse the books narrator's Eugene and Kseniya Silero voices alongside Piper Ruslan, with a device-local server-voice choice in shared Sound settings. Retain System voice as an independent mode.
+- Route English insertions through the existing local English Piper model and combine Russian/English into one private audio track with consistent sample rate, restrained pauses and matched level. No hosted TTS or larger future speech system is required.
+- Match the books player default of 0.85× for every server voice, preserving pitch. Keep the copied narration tuning, network-isolated worker, resource limits and guarded engine maintenance.
