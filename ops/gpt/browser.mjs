@@ -1,3 +1,4 @@
+import {scheduledList,scheduledRead,canvasList,canvasVersion,mutateSchedule,restoreCanvas} from './browser-workspace.mjs';
 import {projectResource,projectFields,projectRevision,mutateProjectContent} from './browser-project-content.mjs';
 import {captureDoctorEvidence} from './browser-doctor.mjs';
 import {forkNativeVersion} from './browser-branches.mjs';
@@ -148,6 +149,21 @@ server=createServer(async(req,res)=>{
  }
  if(req.method==='GET'&&url.pathname==='/doctor-evidence'){
   try{const result=await captureDoctorEvidence(await activePage());res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));}catch{res.writeHead(503).end('{}');}return;
+ }
+ if(['/scheduled','/scheduled/item','/canvas','/canvas/version','/workspace-mutation'].includes(url.pathname)){
+  try{
+   let result;
+   if(req.method==='GET'&&url.pathname==='/scheduled')result=await scheduledList(await activePage(),url.searchParams.get('cursor'));
+   else if(req.method==='GET'&&url.pathname==='/scheduled/item')result={item:await scheduledRead(await activePage(),url.searchParams.get('id'))};
+   else if(req.method==='GET'&&url.pathname==='/canvas')result=await canvasList(await activePage(),url.searchParams.get('conversationId'));
+   else if(req.method==='GET'&&url.pathname==='/canvas/version')result=await canvasVersion(await activePage(),url.searchParams.get('conversationId'),url.searchParams.get('id'),Number(url.searchParams.get('version')));
+   else if(req.method==='POST'&&url.pathname==='/workspace-mutation'){
+    const input=await readJson(req,420000);
+    const health=await(await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)})).json();
+    result=health.activeRequests?.length?{dispatched:false,code:'GPT_BUSY'}:await (input.kind==='canvas'?restoreCanvas:mutateSchedule)(await activePage(),input);
+   }else{res.writeHead(405).end();return;}
+   res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));
+  }catch{res.writeHead(503).end('{}');}return;
  }
  if(url.pathname==='/project-content'){
   try{

@@ -4,6 +4,7 @@ import {
   type ElicitationValue,
   HubError,
 } from "@codex-web/shared";
+import { extendedField, safeFormPattern, selectedFileUri } from "./elicitation-extended.js";
 
 const object = (v: unknown): Record<string, unknown> => {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw Error("INVALID_SCHEMA");
@@ -43,8 +44,8 @@ export function parseElicitation(p: Record<string, unknown>): { form: Elicitatio
         throw Error("INVALID_URL");
       return { form: { ...base, mode: "url", host: url.host }, url: url.href };
     }
-    // Extended OpenAI forms are not negotiated: standard MCP forms are strictly typed.
-    if (p.mode !== "form") throw Error("UNSUPPORTED_FORM");
+    const extended = p.mode === "openai/form" || p.mode === "openaiForm";
+    if (p.mode !== "form" && !extended) throw Error("UNSUPPORTED_FORM");
     const schema = object(p.requestedSchema),
       properties = object(schema.properties);
     if (
@@ -64,7 +65,10 @@ export function parseElicitation(p: Record<string, unknown>): { form: Elicitatio
     const fields = Object.entries(properties).map(([key, raw]): ElicitationField => {
       if (!key || key.length > 200 || ["__proto__", "constructor", "prototype"].includes(key))
         throw Error("INVALID_SCHEMA");
-      const v = object(raw);
+      const prepared = extended
+        ? extendedField(object(raw), p.mode === "openai/form")
+        : { field: object(raw), decoration: {} };
+      const v = prepared.field;
       if (!["string", "number", "integer", "boolean", "array"].includes(String(v.type)))
         throw Error("UNSUPPORTED_FIELD");
       const f: ElicitationField = {
@@ -73,7 +77,16 @@ export function parseElicitation(p: Record<string, unknown>): { form: Elicitatio
         description: string(v.description ?? "", 4000),
         type: v.type as ElicitationField["type"],
         required: required.includes(key),
+        ...prepared.decoration,
       };
+      const images = (
+        prepared.decoration as { images?: { value: string; title: string; image: string }[] }
+      ).images;
+      delete (f as unknown as Record<string, unknown>).images;
+      if (extended && v.pattern != null) {
+        f.pattern = safeFormPattern(v.pattern);
+        delete v.pattern;
+      }
       const allowed = new Set([
         "type",
         "title",
@@ -105,11 +118,12 @@ export function parseElicitation(p: Record<string, unknown>): { form: Elicitatio
       if (f.type === "array" && !f.options) throw Error("UNSUPPORTED_ARRAY");
       if (
         f.options &&
-        (!f.options.length ||
+        ((!f.options.length && !f.allowFileUri) ||
           f.options.length > 100 ||
           new Set(f.options.map((o) => o.value)).size !== f.options.length)
       )
         throw Error("INVALID_OPTIONS");
+      if (images) f.options = images;
       for (const k of [
         "minimum",
         "maximum",
@@ -145,7 +159,8 @@ export function parseElicitation(p: Record<string, unknown>): { form: Elicitatio
       }
       return f;
     });
-    if (JSON.stringify(fields).length > 100000) throw Error("SCHEMA_TOO_LARGE");
+    if (JSON.stringify(fields).length > (extended ? 2_000_000 : 100000))
+      throw Error("SCHEMA_TOO_LARGE");
     return { form: { ...base, mode: "form", fields } };
   } catch {
     return { form: { ...base, mode: "unsupported" } };
@@ -173,7 +188,13 @@ function validateField(f: ElicitationField, value: unknown): void {
       new Set(value).size !== value.length ||
       value.length < (f.minItems ?? 0) ||
       value.length > (f.maxItems ?? 100) ||
-      value.some((v) => typeof v !== "string" || !f.options?.some((o) => o.value === v))
+      value.some(
+        (v) =>
+          typeof v !== "string" ||
+          v.length > 8000 ||
+          (!f.options?.some((o) => o.value === v) &&
+            !(f.allowFileUri && selectedFileUri(v, f.accept))),
+      )
     )
       invalid(f);
   } else {
@@ -183,7 +204,13 @@ function validateField(f: ElicitationField, value: unknown): void {
       [...value].length > Math.min(f.maxLength ?? 8000, 8000)
     )
       invalid(f);
-    if (f.options && !f.options.some((o) => o.value === value)) invalid(f);
+    if (
+      f.options &&
+      !f.options.some((o) => o.value === value) &&
+      !(f.allowFileUri && selectedFileUri(value, f.accept))
+    )
+      invalid(f);
+    if (f.pattern && !new RegExp(f.pattern, "u").test(value)) invalid(f);
     if (f.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) invalid(f);
     if (f.format === "uri") {
       try {

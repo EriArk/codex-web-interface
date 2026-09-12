@@ -16,6 +16,7 @@ import { AccountControls } from "./AccountControls";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { api, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
+import CanvasPanel from "./CanvasPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { openContentSearch } from "./ContentSearch";
 import { CopyButton } from "./CopyButton";
@@ -269,6 +270,7 @@ export function GptWorkspace({
     error: historyNotice,
     clearError: clearHistoryNotice,
   } = useGptHistory(selected);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const nativeOperations = useGptNativeOperations(
     selected,
     { model, effort },
@@ -1352,6 +1354,15 @@ export function GptWorkspace({
         <button
           type="button"
           className="icon-button"
+          aria-label="Документы Canvas"
+          disabled={!selected}
+          onClick={() => setCanvasOpen(true)}
+        >
+          <Icon name="file" />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
           aria-label="Настройки"
           onClick={() => setSettings(true)}
         >
@@ -1374,6 +1385,13 @@ export function GptWorkspace({
             <Icon name="close" />
           </button>
         </div>
+      )}
+      {canvasOpen && selected && (
+        <CanvasPanel
+          key={selected}
+          conversationId={selected}
+          onClose={() => setCanvasOpen(false)}
+        />
       )}
       <main className="workspace-content">
         {overviewProject && (

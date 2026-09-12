@@ -246,14 +246,22 @@ test("slow terminal readers stay bounded and reconnect to the saved tail without
     };
     const slow = await connect(false),
       closed = once(slow.socket, "close");
+    // The fixture emits its startup prompt asynchronously. Finish that phase before
+    // defining the final output marker; otherwise a late prompt follows TAIL-END.
+    const startupDeadline = Date.now() + 5000;
+    while (Date.now() < startupDeadline && !slow.text().includes("Device ready"))
+      await new Promise((r) => setTimeout(r, 20));
+    assert(slow.text().includes("Device ready"));
     for (let i = 0; i < 40; i++) f.processes[0].output("x".repeat(4096));
     f.processes[0].output("TAIL-END");
     await closed;
     assert(slow.text().length <= 32768);
     assert(!f.processes[0].killed);
     const recovered = await connect(true);
-    for (let i = 0; i < 100 && !recovered.text().endsWith("TAIL-END"); i++)
-      await new Promise((r) => setTimeout(r, 10));
+    // A full parallel suite can delay WebSocket ACK/flush cycles beyond one second.
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline && !recovered.text().endsWith("TAIL-END"))
+      await new Promise((r) => setTimeout(r, 20));
     assert(recovered.text().endsWith("TAIL-END"));
     assert(recovered.text().length <= 65536);
     assert.equal(f.processes.length, 1);

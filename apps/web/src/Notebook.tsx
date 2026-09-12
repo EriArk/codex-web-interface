@@ -30,7 +30,7 @@ import "./notebook.css";
 export type NotebookRequest = {
   scope: NotebookScope;
   target?: NotebookTarget;
-  mode?: "notes" | "tasks" | "core" | "plans" | "reports" | "reviews";
+  mode?: "notes" | "tasks" | "core" | "plans" | "reports" | "reviews" | "scheduled";
   itemId?: string;
   allProjects?: boolean;
   capture?: NoteCapture;
@@ -69,6 +69,7 @@ const drafts = (prefix: string): Draft[] => {
   }
   return rows.sort((a, b) => b.changedAt - a.changedAt);
 };
+const ScheduledPanel = lazy(() => import("./ScheduledPanel"));
 const WorkReviewPanel = lazy(() => import("./WorkReview"));
 export function NotebookPanel(props: {
   request: NotebookRequest | undefined;
@@ -76,6 +77,12 @@ export function NotebookPanel(props: {
   onOpen: (target: NotebookLink) => void;
   onRequest: (request: NotebookRequest) => void;
 }) {
+  if (props.request?.mode === "scheduled")
+    return (
+      <Suspense fallback={<p role="status">Открываем расписания…</p>}>
+        <ScheduledPanel onClose={props.onClose} onOpen={props.onOpen} onRequest={props.onRequest} />
+      </Suspense>
+    );
   if (props.request?.mode === "reviews")
     return (
       <Suspense fallback={<p role="status">Открываем приёмку…</p>}>
@@ -619,6 +626,18 @@ function NotebookEditor({
           </button>
         </div>
       }
+      {isTask && (
+        <div className="notebook-controls">
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => onRequest({ mode: "scheduled", scope: null, allProjects: true })}
+          >
+            <Icon name="history" />
+            Расписания ChatGPT
+          </button>
+        </div>
+      )}
       <div className="notebook-layout" data-editing={!!edit}>
         <aside className="notebook-list" aria-label={isTask ? "Список задач" : "Список заметок"}>
           <input

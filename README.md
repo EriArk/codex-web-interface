@@ -73,3 +73,5 @@ The Codex/GPT switch can connect a separately signed-in private ChatGPT browser 
 Self-contained HTML designs can appear as interactive Results from native HTML resources, HTML file changes, assistant HTML blocks or local project-file links. See [the artifact contract](docs/CODEX_INTEGRATION.md#interactive-html-result-contract). Previews run in an isolated frame and do not require a public Windows development server.
 
 Background read-aloud setup, limits and local voice attribution: [ops/speech/README.md](ops/speech/README.md).
+
+Native ChatGPT schedules, saved Canvas versions and extended OpenAI MCP forms are documented in [Native workspace](docs/NATIVE_WORKSPACE.md), including current native availability and guarded installation requirements.

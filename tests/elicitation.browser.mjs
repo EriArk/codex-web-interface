@@ -124,6 +124,64 @@ for (const [name, type] of [
     });
     await expect(card).toHaveCount(0);
     assert.equal(replies.length, 4);
+    await request(6, {
+      mode: "openaiForm",
+      serverName: "Resources",
+      message: "Choose files",
+      requestedSchema: {
+        type: "object",
+        required: ["files"],
+        properties: {
+          files: {
+            type: "array",
+            items: { type: "string", format: "uri" },
+            "x-openai-input": {
+              type: "file",
+              selection: "implicit",
+              options: [{ uri: "file:///D:/one.md", name: "One document" }],
+              userOptions: { kind: "file", accept: [".md"] },
+            },
+          },
+        },
+      },
+    });
+    const resources = page.getByRole("region", { name: "Запрос Resources" });
+    await expect(resources.getByLabel("One document", { exact: true })).toBeChecked();
+    await resources.getByLabel("Другой файл на машине").fill("file:///D:/two.md");
+    await resources.getByRole("button", { name: "Выбрать", exact: true }).click();
+    await resources.getByRole("button", { name: "Ответить", exact: true }).click();
+    await expect.poll(() => replies.length).toBe(5);
+    assert.deepEqual(replies[4].result.content, {
+      files: ["file:///D:/one.md", "file:///D:/two.md"],
+    });
+    await request(7, {
+      mode: "openai/form",
+      serverName: "Images",
+      message: "Choose image",
+      requestedSchema: {
+        type: "object",
+        required: ["image"],
+        properties: {
+          image: {
+            type: "openai/imagePicker",
+            items: [
+              {
+                id: "cover",
+                title: "Cover",
+                image:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=",
+              },
+            ],
+          },
+        },
+      },
+    });
+    const images = page.getByRole("region", { name: "Запрос Images" });
+    await images.getByRole("radio", { name: "Cover" }).check();
+    await images.getByRole("button", { name: "Ответить", exact: true }).click();
+    await expect.poll(() => replies.length).toBe(6);
+    assert.deepEqual(replies[5].result.content, { image: "cover" });
+    await expect(composer).toHaveValue("Черновик не меняется");
     assert.deepEqual(errors, []);
     console.log(
       name +

@@ -1,0 +1,169 @@
+.native-workspace-dialog {
+  width: min(1060px, calc(100vw - 24px));
+}
+.native-workspace-dialog > .native-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.native-workspace-dialog button {
+  min-height: 44px;
+}
+.native-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 31%) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.native-workspace-list {
+  overflow: auto;
+  padding: 12px;
+  border-right: 1px solid var(--line);
+  overscroll-behavior: contain;
+}
+.native-workspace-list > button {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  color: var(--ink);
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  overflow-wrap: anywhere;
+}
+.native-workspace-list > button[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.native-workspace-list small,
+.native-caption {
+  color: var(--muted);
+}
+.native-workspace-editor {
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.native-workspace-editor > * {
+  flex-shrink: 0;
+}
+.native-workspace-editor :is(input, select, textarea) {
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px;
+  margin-top: 5px;
+}
+.native-workspace-editor input[type="checkbox"] {
+  width: 22px;
+  min-height: 22px;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.native-workspace-editor textarea {
+  min-height: 180px;
+  resize: vertical;
+  max-height: 50dvh;
+}
+.native-workspace-editor label {
+  display: block;
+}
+.native-workspace-editor footer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.native-workspace-editor h3 {
+  margin: 0;
+  font-size: 20px;
+}
+.native-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.native-workspace-editor .native-caption {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.native-receipts:empty {
+  display: none;
+}
+.native-receipts {
+  max-height: 180px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.native-receipt {
+  padding: 10px 14px;
+  background: var(--soft);
+  border-bottom: 1px solid var(--line);
+}
+.native-receipt p {
+  margin: 0 0 8px;
+}
+.native-receipt summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+.native-workspace-editor pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font: inherit;
+  line-height: 1.55;
+}
+.native-mobile-back {
+  display: none;
+}
+.native-empty {
+  padding: 24px;
+  max-width: 65ch;
+  line-height: 1.6;
+}
+@media (max-width: 650px) {
+  .native-workspace-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .native-workspace-list {
+    border-right: 0;
+    flex: 1;
+  }
+  .native-workspace-layout[data-selected="true"] > .native-workspace-list {
+    display: none;
+  }
+  .native-workspace-layout[data-selected="false"] > .native-workspace-editor {
+    display: none;
+  }
+  .native-workspace-editor {
+    padding: 14px;
+    flex: 1;
+  }
+  .native-mobile-back {
+    display: inline-flex;
+    align-items: center;
+  }
+  .native-form-row {
+    grid-template-columns: 1fr;
+  }
+}
