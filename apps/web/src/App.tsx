@@ -35,6 +35,7 @@ import { completePendingSend, pendingSendKey } from "./pendingSend";
 import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
 import { ActivityPane } from "./Results";
+import { SettingsSections } from "./SettingsSections";
 import { StorageUsage } from "./StorageUsage";
 import { applyTheme, cachedTheme, hydrateCaseColors } from "./theme";
 import type {
@@ -1511,70 +1512,97 @@ function Workspace({
       >
         <div className="sheet-content">{navigation}</div>
       </dialog>
-      <dialog className="settings-dialog" ref={settingsDialog} onCancel={() => setSettings(false)}>
-        <div className="dialog-heading">
-          <h2>Настройки</h2>
-          <button
-            type="button"
-            className="icon-button panel-close"
-            onClick={() => setSettings(false)}
-            aria-label="Закрыть настройки"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        <AppearanceSettings theme={theme} onTheme={setTheme} />
-        <DeploymentStatus open={settings} />
-        <section className="settings-navigation-actions" aria-label="Навигация">
-          <button type="button" onClick={() => void refreshCatalog(true)} disabled={syncing}>
-            <Icon name="refresh" />
-            Обновить проекты
-          </button>
-          <EntityArchive client="codex" />
-        </section>
-        <BridgeDoctorPanel
+      <dialog
+        className="settings-dialog settings-browser"
+        aria-label="Настройки"
+        ref={settingsDialog}
+        onCancel={() => setSettings(false)}
+      >
+        <SettingsSections
           open={settings}
-          onTarget={(target) => {
-            setSettings(false);
-            openNotebookTarget(target);
+          client="Codex"
+          onClose={() => setSettings(false)}
+          sections={{
+            appearance: () => <AppearanceSettings theme={theme} onTheme={setTheme} />,
+            sound: (visible) => (
+              <>
+                <SpeechSettings />
+                <Notifications visible={visible} />
+              </>
+            ),
+            connections: (visible) => (
+              <>
+                <UsageLimits machines={machines} open={visible} />
+                <NativeInventory projectId={projectId} visible={visible} />
+                <DesktopControl
+                  machines={machines}
+                  open={visible}
+                  threadId={threadId}
+                  machineId={project?.machineId}
+                />
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setSettings(false);
+                    setMachinePanel(true);
+                  }}
+                >
+                  <Icon name="remote" />
+                  Компьютеры
+                </button>
+              </>
+            ),
+            library: () => (
+              <>
+                <section className="settings-navigation-actions" aria-label="Навигация">
+                  <button
+                    type="button"
+                    onClick={() => void refreshCatalog(true)}
+                    disabled={syncing}
+                  >
+                    <Icon name="refresh" />
+                    Обновить проекты
+                  </button>
+                  <EntityArchive client="codex" />
+                </section>
+                <button
+                  type="button"
+                  className="secondary settings-activity"
+                  onClick={() => {
+                    setRightHidden(false);
+                    setView("activity");
+                    setSettings(false);
+                  }}
+                >
+                  <Icon name="activity" />
+                  Активность диалога
+                </button>
+              </>
+            ),
+            maintenance: (visible) => (
+              <>
+                <DeploymentStatus open={visible} />
+                <BridgeDoctorPanel
+                  open={visible}
+                  onTarget={(target) => {
+                    setSettings(false);
+                    openNotebookTarget(target);
+                  }}
+                />
+                <StorageUsage visible={visible} />
+              </>
+            ),
+            access: () => (
+              <>
+                <AccountControls onSession={onSession} onLogout={onLogout} />
+                <p className="small muted">
+                  Для установки на iPhone: Поделиться → На экран «Домой».
+                </p>
+              </>
+            ),
           }}
         />
-        <SpeechSettings />
-        <UsageLimits machines={machines} open={settings} />
-        <NativeInventory projectId={projectId} visible={settings} />
-        <DesktopControl
-          machines={machines}
-          open={settings}
-          threadId={threadId}
-          machineId={project?.machineId}
-        />
-        <button
-          type="button"
-          className="secondary settings-activity"
-          onClick={() => {
-            setRightHidden(false);
-            setView("activity");
-            setSettings(false);
-          }}
-        >
-          <Icon name="activity" />
-          Активность диалога
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => {
-            setSettings(false);
-            setMachinePanel(true);
-          }}
-        >
-          <Icon name="remote" />
-          Компьютеры
-        </button>
-        <Notifications visible={settings} />
-        <StorageUsage visible={settings} />
-        <AccountControls onSession={onSession} onLogout={onLogout} />
-        <p className="small muted">Для установки на iPhone: Поделиться → На экран «Домой».</p>
       </dialog>
       {notebookPanel}
       {contentSearch && (

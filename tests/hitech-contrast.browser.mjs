@@ -205,6 +205,7 @@ for (const [engine, type] of [
       await capture.getByRole("button", { name: "Закрыть", exact: true }).click();
       if (await button("Закрыть проекты").isVisible()) await button("Закрыть проекты").click();
       await button("Настройки").click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await check(
         page.locator(".settings-dialog .theme-option.hitech-2000s small"),
         `${width} settings description`,
@@ -315,6 +316,7 @@ for (const [engine, type] of [
       await page.screenshot({ path: `${out}/gpt-navigation-${width}.png`, animations: "disabled" });
       if (width < 1100) await button("Закрыть проекты").click();
       await button("Настройки").click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await check(
         page.locator(".gpt-settings .theme-option.hitech-2000s small"),
         `${width} GPT Settings`,

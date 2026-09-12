@@ -211,6 +211,7 @@ for (const [engine, type] of [
     await page.keyboard.press("ArrowLeft");
     const storedWidth = await page.evaluate(() => localStorage.getItem("codex-right-width"));
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     const settings = page.locator(".settings-dialog");
     const legacy = settings.getByRole("checkbox", { name: "Прежняя компоновка" });
     const refinedWidth = (await page.locator(".desktop-nav").boundingBox()).width;
@@ -219,7 +220,9 @@ for (const [engine, type] of [
       (await page.locator(".desktop-nav").boundingBox()).width > refinedWidth,
       "previous layout restores navigation width",
     );
-    await settings.evaluate((e) => (e.scrollTop = e.scrollHeight));
+    await settings
+      .locator(".settings-section:visible")
+      .evaluate((e) => (e.scrollTop = e.scrollHeight));
     await inViewport(button("Закрыть настройки"));
     await shot("settings-sticky-close");
     await button("Закрыть настройки").click();
@@ -228,10 +231,12 @@ for (const [engine, type] of [
     await expect(page.locator("html")).toHaveAttribute("data-layout", "legacy");
     assert.equal(await page.evaluate(() => localStorage.getItem("codex-right-width")), storedWidth);
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     await legacy.uncheck();
     await button("Закрыть настройки").click();
     for (const theme of ["classic-dark", "organizer", "hitech-2000s", "crt-green"]) {
       await button("Настройки").click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await settings.locator(`.theme-option.${theme} input`).check();
       await button("Закрыть настройки").click();
       await viewport(1366, 1024);
@@ -363,9 +368,12 @@ for (const [engine, type] of [
     await gptComposer.fill("Черновик GPT: сохранить настройки");
     for (const theme of ["classic-dark", "organizer", "hitech-2000s", "crt-green"]) {
       await button("Настройки").click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       const gptSettings = page.locator(".gpt-settings");
       await gptSettings.locator(`.theme-option.${theme} input`).check();
-      await gptSettings.evaluate((e) => (e.scrollTop = e.scrollHeight));
+      await gptSettings
+        .locator(".settings-section:visible")
+        .evaluate((e) => (e.scrollTop = e.scrollHeight));
       await inViewport(button("Закрыть настройки"));
       await button("Закрыть настройки").click();
       await shot(`gpt-${theme}`);
@@ -374,6 +382,7 @@ for (const [engine, type] of [
       await viewport(1366, 1024);
     }
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     await page
       .locator(".gpt-settings")
       .getByRole("checkbox", { name: "Прежняя компоновка" })

@@ -83,6 +83,7 @@ for (const [engine, type] of [
     await composer.blur();
     for (const theme of ["organizer", "classic-dark", "hitech-2000s", "crt-green"]) {
       await button("Настройки").click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await page.locator(`.settings-dialog .theme-option.${theme} input`).check();
       for (const [label, id] of [
         ["Чёрный", "graphite"],
@@ -157,6 +158,7 @@ for (const [engine, type] of [
     }
     // A failed preference write rolls back the preview and stays explicitly retryable.
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     await page.route("**/api/preferences", (route) =>
       route.request().method() === "PATCH"
         ? route.fulfill({ status: 503, json: { code: "TEST_UNAVAILABLE", message: "Unavailable" } })
@@ -188,6 +190,7 @@ for (const [engine, type] of [
         .filter({ visible: true })
         .first()
         .click();
+      await other.locator('.settings-browser[open] [data-category="appearance"]').click();
       await other.locator(".settings-dialog .theme-option.hitech-2000s input").check();
       await expect(other.locator("html")).toHaveAttribute("data-case-color", "turquoise");
       for (const theme of ["organizer", "classic-dark"]) {
@@ -254,6 +257,7 @@ for (const [engine, type] of [
     await gpt.blur();
     await expect(gpt).toHaveValue("Черновик GPT тоже остаётся");
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     assert.equal(
       await page.evaluate(
         () => JSON.parse(sessionStorage.getItem("gpt-draft-polymer-gpt") ?? "{}").text,

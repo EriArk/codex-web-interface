@@ -79,6 +79,7 @@ for (const [engine, type] of [
       .filter({ visible: true })
       .first()
       .click();
+    await page.locator('.settings-browser[open] [data-category="maintenance"]').click();
     await page.locator(".deployment-status summary").click();
     await expect(
       page.getByText("Открыт терминал; состояние команды не проверено", { exact: false }),

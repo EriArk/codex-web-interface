@@ -121,6 +121,7 @@ for (const [engine, type] of [
     await page.goto(origin);
     await page.getByRole("textbox", { name: "Сообщение Codex" }).fill("Сохранить мой черновик");
     await page.getByRole("button", { name: "Настройки", exact: true }).click();
+    await page.locator('.settings-browser[open] [data-category="maintenance"]').click();
     const doctor = page.locator(".bridge-doctor-panel");
     await doctor.locator(":scope > summary").click();
     await expect(doctor.getByLabel("Проект Bridge Doctor")).toHaveValue("project");

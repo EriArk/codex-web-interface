@@ -42,6 +42,7 @@ for (const [engine, browserType] of [
     replacingDocument = true;
     await page.reload();
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="connections"]').click();
     await expect(panel.getByText("Лимиты Codex", { exact: true })).toBeVisible();
     replacingDocument = false;
   };
@@ -68,6 +69,7 @@ for (const [engine, browserType] of [
     const draft = page.getByRole("textbox", { name: "Сообщение Codex" });
     await draft.fill("Черновик должен сохраниться после сброса лимитов");
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="connections"]').click();
     await expect(panel.getByText("37% осталось", { exact: true })).toBeVisible();
     await expect(reset.locator(".usage-reset-count")).toHaveText("2");
     await reset.getByRole("button", { name: "Активировать", exact: true }).first().click();
@@ -102,6 +104,7 @@ for (const [engine, browserType] of [
     await button("Закрыть настройки").click();
     await expect(draft).toHaveValue("Черновик должен сохраниться после сброса лимитов");
     await button("Настройки").click();
+    await page.locator('.settings-browser[open] [data-category="connections"]').click();
 
     // Failed HTTP acknowledgement: Hub/native succeeded; reopen only reads receipt.
     nextAccount();

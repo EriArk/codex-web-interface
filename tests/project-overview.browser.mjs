@@ -120,6 +120,7 @@ for (const [engine, type] of [
         .filter({ visible: true })
         .first()
         .click();
+      await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await page.locator(`.theme-option.${theme} input`).check();
       await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
       await open();

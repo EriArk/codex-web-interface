@@ -514,3 +514,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Focus current development on completing the owner's personal daily workflow, missing Codex/GPT functionality and reliability on the existing installation.
 - Defer guided installers, transfer to other people's infrastructure, clean second-user installations and distribution-specific packaging/generalization. This supersedes the earlier distribution milestone sequencing; #11 and the distribution portion of #14 are outside the current work scope until the owner explicitly resumes them.
 - Continue backups, recovery, security and compatible updates needed by the owner's installation. Existing owner deferrals for #6 and #37 remain unchanged.
+
+## Owner-requested settings organization (2026-09-12)
+
+- Codex and GPT share six settings categories: Appearance, Sound and notifications, Connections, Projects and history, Maintenance, and Access. Keep all existing controls and their safety/ownership rules.
+- On phones, open a category index and provide a clear Back action from each category. Wider dialogs keep category navigation beside independently scrolling content. Preserve unsaved forms across category changes, and keep the header within the visible software-keyboard viewport.
+- Poll settings diagnostics/status only while their category is visible. Browsing settings does not authorize a native send, restart or handoff.

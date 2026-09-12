@@ -79,6 +79,7 @@ for (const [engine, type] of [
       .filter({ visible: true })
       .first()
       .click();
+    await page.locator('.settings-browser[open] [data-category="maintenance"]').click();
     await page.locator(".storage-usage summary").click();
     await page.getByRole("button", { name: "Проверить копии на компьютере", exact: true }).click();
     await expect(page.locator(".storage-usage")).toContainText("Рабочие копии · 104");
@@ -106,6 +107,7 @@ for (const [engine, type] of [
         .filter({ visible: true })
         .first()
         .click();
+      await page.locator('.settings-browser[open] [data-category="connections"]').click();
       await page.getByRole("button", { name: "Компьютеры", exact: true }).click();
     };
     await open();
@@ -135,7 +137,9 @@ for (const [engine, type] of [
       .filter({ visible: true })
       .first()
       .click();
+    await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     await page.locator(".theme-option.hitech-2000s input").check();
+    await page.locator('.settings-browser[open] [data-category="connections"]').click();
     await page.getByRole("button", { name: "Компьютеры", exact: true }).click();
     await expect(panel).toBeVisible();
     await page.screenshot({ path: `.local/qa-machines/${engine}-tablet.png` });
