@@ -1,7 +1,7 @@
 name: codex-web
 services:
   hub:
-    image: codex-web-hub:local
+    image: codex-web-hub:${WEB_REVISION:-local}
     build:
       context: ../..
       args:
@@ -14,12 +14,44 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    mem_limit: 512m
+    mem_limit: 256m
     cpus: 1.5
     tmpfs: ["/tmp:size=32m,mode=1777"]
-    env_file: ["${CODEX_WEB_STATE}/remote.env"]
+    command: [node, dist/web-main.js]
+    environment:
+      HUB_ROLE: web
+      HUB_ENGINE_SOCKET: /run/codex-engine/engine.sock
+      HUB_RELEASE_ROOT: /releases
     volumes:
       - "${CODEX_WEB_STATE}/config.json:/config/config.json:ro"
+      - "${CODEX_WEB_STATE}/engine:/run/codex-engine:ro"
+      - "${CODEX_WEB_STATE}/web-releases:/releases:ro"
+    depends_on:
+      engine:
+        condition: service_healthy
+  engine:
+    image: codex-web-hub:${ENGINE_REVISION:-local}
+    container_name: codex-web-engine
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1.5
+    stop_grace_period: 45s
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    env_file: ["${CODEX_WEB_STATE}/remote.env"]
+    environment:
+      HUB_ROLE: engine
+      HUB_ENGINE_SOCKET: /run/codex-engine/engine.sock
+      HUB_RELEASE_ROOT: /releases
+    volumes:
+      - "${CODEX_WEB_STATE}/config.json:/config/config.json:ro"
+      - "${CODEX_WEB_STATE}/engine:/run/codex-engine"
+      - "${CODEX_WEB_STATE}/web-releases:/releases:ro"
       - "${CODEX_WEB_STATE}/ssh:${CODEX_WEB_STATE}/ssh:ro"
       - "${CODEX_WEB_STATE}/data:${CODEX_WEB_STATE}/data"
       - "${CODEX_WEB_STATE}/speech:/run/codex-speech:ro"
