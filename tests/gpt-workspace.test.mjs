@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { deploymentBlockers } from "../apps/hub/dist/deployment-status.js";
 import { GptWorkspaceWork, workspaceInput } from "../apps/hub/dist/gpt-workspace.js";
 import { Store } from "../apps/hub/dist/store.js";
 import {
@@ -97,6 +98,7 @@ test("lost acknowledgement survives restart, blocks other writes and checks with
     assert.throws(() => f.service.start(randomUUID(), pause), /Сначала/);
     const resumed = new GptWorkspaceWork(f.store, json, () => true);
     assert.equal(resumed.blocked(), true);
+    assert(deploymentBlockers(f.store).some((b) => b.kind === "gpt_workspace"));
     assert.equal(await resumed.check(id), true);
     assert.equal(resumed.get(id).state, "completed");
     assert.equal(writes, 1);
@@ -145,6 +147,7 @@ test("in-flight operations cannot be manually released and maintenance sees acti
     f.service.start(id, pause);
     await entered.promise;
     assert.deepEqual(f.service.counts(), { active: 1, unknown: 0 });
+    assert(deploymentBlockers(f.store).some((b) => b.kind === "gpt_workspace" && b.count === 1));
     assert.equal(await f.service.check(id), false);
     await assert.rejects(f.service.checked(id), /Дождись/);
     pending.resolve({ dispatched: false });
