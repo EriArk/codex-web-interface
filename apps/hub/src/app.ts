@@ -137,9 +137,13 @@ export async function createApp(
     },
   });
   auth.install(app);
-  registerDeploymentStatus(app, store);
   registerCommandOutput(app, sessions);
   const devices = registerDevices(app, config, store, auth, options.devices);
+  registerDeploymentStatus(app, store, () => devices.maintenance());
+  if (options.executionService) {
+    app.get("/internal/terminals/maintenance", () => devices.maintenance());
+    app.post("/internal/terminals/maintenance", () => devices.maintenance(true));
+  }
   registerSpeech(app, config, auth);
   registerDictation(app, config, auth, options.transcribe);
   app.addContentTypeParser(

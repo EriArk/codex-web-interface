@@ -213,7 +213,7 @@ test("gateway restart retains terminal process/buffer and never replays input or
     assert.notEqual((await f.http(`/api/threads/${f.thread.id}/turns`, body, key)).status, 200);
     assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
     const status = await (await f.http("/api/deployment")).json();
-    assert(status.blockers.some((b) => b.kind === "terminal"));
+    assert(status.blockers.some((b) => b.kind === "terminal_unknown"));
     second.ws.close();
   } finally {
     await f.close();

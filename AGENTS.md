@@ -526,3 +526,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Reuse the books narrator's Eugene and Kseniya Silero voices alongside Piper Ruslan, with a device-local server-voice choice in shared Sound settings. Retain System voice as an independent mode.
 - Route English insertions through the existing local English Piper model and combine Russian/English into one private audio track with consistent sample rate, restrained pauses and matched level. No hosted TTS or larger future speech system is required.
 - Match the books player default of 0.85× for every server voice, preserving pitch. Keep the copied narration tuning, network-isolated worker, resource limits and guarded engine maintenance.
+
+## Owner-approved idle terminal maintenance (2026-09-13)
+
+- An open terminal at a verified idle shell prompt must not block engine updates. The owner authorizes replacing these idle sessions during maintenance. Active commands, background jobs and unverified shell state still block it; quiet output or low CPU is not proof of idle work.
+- Use shell lifecycle signals and bounded read-only process checks. Freeze terminal creation/input during the final maintenance check so a verified idle terminal cannot accept a new command before engine replacement. Never replay terminal input after reconnect.
+- This supersedes the earlier blanket rule that every open terminal blocks deployment. Preserve all unrelated Codex/GPT work and the gateway/engine separation.

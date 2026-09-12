@@ -72,10 +72,10 @@ def main():
     def status(value, **extra):
         atomic(web / 'maintenance.json', dict(kind='engine', revision=a.revision, state=value, startedAt=started, updatedAt=int(time.time()*1000), **extra))
 
-    def idle():
+    def idle(reserve_terminals=False):
         try:
             if old_engine:
-                return subprocess.run(['docker', 'exec', container, 'node', 'dist/maintenance-check.js'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25).returncode == 0
+                return subprocess.run(['docker', 'exec', container, 'node', 'dist/maintenance-check.js'] + (['--reserve-terminals'] if reserve_terminals else []), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40).returncode == 0
             # Compatibility with the pre-split production service. These guards
             # were already installed/verified by its maintenance releases.
             for name in ['send-handoff-idle.mjs', 'reliability-gpt-idle.mjs', 'workflow-deploy-guard.mjs']:
@@ -115,7 +115,7 @@ def main():
             db = sqlite3.connect(database, timeout=5)
             try:
                 db.execute('BEGIN IMMEDIATE')
-                if not idle():
+                if not idle(reserve_terminals=True):
                     continue
                 assert inspect(container)['Config']['Labels']['org.opencontainers.image.revision'] == a.expected
                 status('installing')

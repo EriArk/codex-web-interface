@@ -3,7 +3,10 @@ import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { Store } from "./store.js";
 
-export function deploymentBlockers(store: Pick<Store, "db" | "preferences">) {
+export function deploymentBlockers(
+  store: Pick<Store, "db" | "preferences">,
+  terminals?: { busy: number; unknown: number },
+) {
   const blockers: { kind: string; count: number; label: string }[] = [];
   const add = (kind: string, sql: string, label: string) => {
     const count = Number(store.db.prepare(sql).get()?.n ?? 0);
@@ -34,11 +37,25 @@ export function deploymentBlockers(store: Pick<Store, "db" | "preferences">) {
     "SELECT count(*) n FROM commands WHERE scope='gpt-workspace' AND state IN ('pending','unknown')",
     "GPT: изменение расписания или Canvas ещё не подтверждено",
   );
-  add(
-    "terminal",
-    "SELECT count(*) n FROM device_terminals WHERE state='open'",
-    "Открыт терминал; состояние команды не проверено",
-  );
+  if (terminals) {
+    if (terminals.busy)
+      blockers.push({
+        kind: "terminal",
+        count: terminals.busy,
+        label: "В терминале выполняется команда или фоновое задание",
+      });
+    if (terminals.unknown)
+      blockers.push({
+        kind: "terminal_unknown",
+        count: terminals.unknown,
+        label: "Не удалось подтвердить, что терминал свободен",
+      });
+  } else
+    add(
+      "terminal_unknown",
+      "SELECT count(*) n FROM device_terminals WHERE state='open'",
+      "Не удалось подтвердить, что терминал свободен",
+    );
   add(
     "receipt",
     "SELECT count(*) n FROM commands WHERE state='pending'",
@@ -94,8 +111,12 @@ export function deploymentBlockers(store: Pick<Store, "db" | "preferences">) {
     });
   return blockers;
 }
-export function registerDeploymentStatus(app: FastifyInstance, store: Store) {
-  app.get("/api/deployment", () => {
+export function registerDeploymentStatus(
+  app: FastifyInstance,
+  store: Store,
+  terminalWork?: () => Promise<{ busy: number; unknown: number }>,
+) {
+  app.get("/api/deployment", async () => {
     const root = process.env.HUB_RELEASE_ROOT;
     const readStatus = (file: string) => {
       if (!root) return null;
@@ -130,7 +151,7 @@ export function registerDeploymentStatus(app: FastifyInstance, store: Store) {
       schema: store.schemaVersion,
       web: readStatus("status.json"),
       maintenance: readStatus("maintenance.json"),
-      blockers: deploymentBlockers(store),
+      blockers: deploymentBlockers(store, await terminalWork?.()),
     };
   });
 }

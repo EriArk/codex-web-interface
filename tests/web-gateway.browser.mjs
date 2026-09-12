@@ -82,7 +82,7 @@ for (const [engine, type] of [
     await page.locator('.settings-browser[open] [data-category="maintenance"]').click();
     await page.locator(".deployment-status summary").click();
     await expect(
-      page.getByText("Открыт терминал; состояние команды не проверено", { exact: false }),
+      page.getByText("Не удалось подтвердить, что терминал свободен", { exact: false }),
     ).toBeVisible();
     await expect(page.getByText("Ожидание: 3 мин.", { exact: true })).toBeVisible();
     for (const theme of ["crt-green", "hitech-2000s", "organizer", "classic-dark"]) {

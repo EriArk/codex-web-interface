@@ -15,10 +15,13 @@ import { z } from "zod";
 import { type Auth, tokenHash } from "./auth.js";
 import { probeDevice, terminalCommand } from "./device-transport.js";
 import type { Store } from "./store.js";
+import { TerminalActivity, type TerminalIdentity, type TerminalWork } from "./terminal-activity.js";
+import { probeTerminal } from "./terminal-probe.js";
 
 export interface DeviceDependencies {
   spawn?: (args: string[]) => IPty;
   probe?: (device: DeviceConfig) => Promise<DeviceSnapshot>;
+  terminalProbe?: (device: DeviceConfig, identity: TerminalIdentity) => Promise<TerminalWork>;
 }
 type LiveTerminal = {
   info: DeviceTerminalInfo;
@@ -27,6 +30,7 @@ type LiveTerminal = {
   buffer: string;
   clients: Set<WebSocket>;
   created: number;
+  activity: TerminalActivity;
 };
 const params = (req: FastifyRequest) =>
   z.object({ id: z.string().min(1).max(100) }).parse(req.params).id;
@@ -51,6 +55,15 @@ export function registerDevices(
   const flow = new Map<WebSocket, { queue: string; outstanding: number }>();
   const tickets = new Map<string, { id: string; owner: string; expires: number }>();
   const cache = new Map<string, { until: number; pending: Promise<DeviceSnapshot> }>();
+  let maintenanceUntil = 0;
+  const assertTerminalAdmission = () => {
+    if (maintenanceUntil > Date.now())
+      throw new HubError(
+        503,
+        "TERMINAL_MAINTENANCE",
+        "Устанавливается обновление. Подключись к терминалу после его завершения.",
+      );
+  };
   store.db.prepare("UPDATE device_terminals SET state='closed' WHERE state='open'").run();
   store.db
     .prepare("DELETE FROM device_terminals WHERE state='closed' AND createdAt < ?")
@@ -180,8 +193,10 @@ export function registerDevices(
     const d = device(params(req)),
       owner = auth.session(req).tokenHash;
     const action = deviceActionSchema.parse(req.body),
-      args = terminalCommand(d, action);
+      activity = new TerminalActivity(),
+      args = terminalCommand(d, action, activity.token);
     const key = z.string().uuid().parse(req.headers["idempotency-key"]);
+    assertTerminalAdmission();
     return store.once(`device-terminal:${owner}`, key, { deviceId: d.id, action }, async () => {
       sweep();
       if ([...live.values()].filter((t) => t.info.state === "open").length >= 8)
@@ -228,6 +243,7 @@ export function registerDevices(
         buffer: "",
         clients: new Set(),
         created: Date.now(),
+        activity,
       };
       try {
         store.db
@@ -239,8 +255,9 @@ export function registerDevices(
       }
       live.set(info.id, terminal);
       pty.onData((data) => {
-        terminal.buffer = (terminal.buffer + data).slice(-BUFFER);
-        for (const s of terminal.clients) output(s, data);
+        const visible = terminal.activity.output(data);
+        terminal.buffer = (terminal.buffer + visible).slice(-BUFFER);
+        for (const s of terminal.clients) if (visible) output(s, visible);
       });
       pty.onExit(({ exitCode }) => finish(terminal, exitCode));
       return info;
@@ -325,8 +342,11 @@ export function registerDevices(
           return;
         }
         if (attached.info.state !== "open") return;
-        if (value.type === "input") attached.pty.write(value.data);
-        else attached.pty.resize(value.cols, value.rows);
+        if (value.type === "input") {
+          assertTerminalAdmission();
+          attached.activity.input(value.data);
+          attached.pty.write(value.data);
+        } else attached.pty.resize(value.cols, value.rows);
       } catch {
         socket.close(1008, "Reconnect");
       }
@@ -338,5 +358,35 @@ export function registerDevices(
     });
     socket.on("error", () => {});
   });
-  return { sweep };
+  const maintenance = async (reserve = false) => {
+    if (reserve) maintenanceUntil = Date.now() + 60000;
+    const states = await Promise.all(
+      [...live.values()]
+        .filter((t) => t.info.state === "open")
+        .map(async (t) => {
+          const revision = t.activity.revision;
+          if (!t.activity.candidate()) return t.activity.state === "busy" ? "busy" : "unknown";
+          let state: TerminalWork = "unknown";
+          try {
+            state = await (deps.terminalProbe ?? probeTerminal)(
+              device(t.info.deviceId),
+              t.activity.identity!,
+            );
+          } catch {}
+          if (t.info.state === "closed") return "closed";
+          return revision === t.activity.revision && t.activity.candidate() ? state : "unknown";
+        }),
+    );
+    // Rows without an owned PTY are not evidence of idle work.
+    const open = Number(
+      store.db.prepare("SELECT count(*) n FROM device_terminals WHERE state='open'").get()?.n ?? 0,
+    );
+    const busy = states.filter((s) => s === "busy").length;
+    const unknown =
+      states.filter((s) => s === "unknown").length +
+      Math.max(0, open - states.filter((s) => s !== "closed").length);
+    if (reserve && (busy || unknown)) maintenanceUntil = 0;
+    return { busy, unknown, idle: !busy && !unknown, reserved: reserve && !busy && !unknown };
+  };
+  return { sweep, maintenance };
 }
