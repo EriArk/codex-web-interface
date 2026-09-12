@@ -32,7 +32,8 @@ export function CaseColorSettings({ theme }: { theme: Theme }) {
   return (
     <fieldset className="case-color-picker" disabled={pending}>
       <legend>
-        Цвет корпуса <span>{caseColorNames[current]}</span>
+        {theme === "crt-green" || theme === "hitech-2000s" ? "Цвет корпуса" : "Цвет акцентов"}
+        <span>{caseColorNames[current]}</span>
       </legend>
       <div className="case-color-options">
         {caseColorIds.map((color) => (

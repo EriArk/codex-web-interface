@@ -57,9 +57,7 @@ export function AppearanceSettings({
           </label>
         ))}
       </div>
-      {(theme === "crt-green" || theme === "hitech-2000s") && (
-        <CaseColorSettings key={theme} theme={theme} />
-      )}
+      <CaseColorSettings key={theme} theme={theme} />
       <label className="layout-preference">
         <input
           type="checkbox"

@@ -735,6 +735,8 @@ export async function createApp(
           theme: z.enum(["organizer", "crt-green", "hitech-2000s", "classic-dark"]).optional(),
           crtCaseColor: z.enum(caseColorIds).optional(),
           hitechCaseColor: z.enum(caseColorIds).optional(),
+          organizerAccentColor: z.enum(caseColorIds).optional(),
+          darkAccentColor: z.enum(caseColorIds).optional(),
           projectId: idSchema.optional(),
           threadId: idSchema.nullable().optional(),
           view: z.enum(["chat", "results", "remote", "activity", "files", "overview"]).optional(),
