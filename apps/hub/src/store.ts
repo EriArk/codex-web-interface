@@ -57,6 +57,8 @@ export interface MessageRecord {
   images?: { id: string; name: string; url: string }[];
 }
 export class Store {
+  /** Supplied by attachment storage; only immutable preview fingerprints are cached. */
+  attachmentImageKey?: (id: string) => string | undefined;
   readonly changes = new EventEmitter();
   readonly schemaVersion: number;
   readonly db: DatabaseSync;
@@ -126,23 +128,46 @@ export class Store {
       .run(id, JSON.stringify(settings));
   }
   withAttachments(messages: MessageRecord[]): MessageRecord[] {
-    return messages.map((message) => ({
-      ...message,
-      images:
-        message.images ??
-        this.db
-          .prepare("SELECT id,name FROM native_images WHERE threadId=? AND messageId=?")
-          .all(message.threadId, message.id)
-          .map((row) => ({
-            id: String(row.id),
-            name: String(row.name),
-            url: `/api/native-images/${row.id}`,
-          })),
-      attachments: this.db
+    return messages.map((message) => {
+      const attachments = this.db
         .prepare("SELECT * FROM attachments WHERE threadId=? AND messageId=? ORDER BY createdAt")
         .all(message.threadId, message.id)
-        .map((row) => this.attachmentPublic(row)),
-    }));
+        .map((row) => this.attachmentPublic(row));
+      const native = this.db
+        .prepare(
+          "SELECT id,name,CASE WHEN substr(source,1,5)='data:' THEN '' ELSE source END AS source,sourceKey FROM native_images WHERE threadId=? AND messageId=?",
+        )
+        .all(message.threadId, message.id);
+      const keys = new Set(
+        attachments
+          .filter((file) => file.image)
+          .map((file) => this.attachmentImageKey?.(file.id))
+          .filter(Boolean),
+      );
+      const duplicates = new Set(
+        native
+          .filter((image) => {
+            if (keys.has(String(image.sourceKey))) return true;
+            const path = String(image.source).replaceAll("\\", "/");
+            return attachments.some(
+              (file) => file.image && path.endsWith(`/${file.id}/upload-image-preview.jpg`),
+            );
+          })
+          .map((image) => String(image.id)),
+      );
+      const images =
+        message.images ??
+        native.map((row) => ({
+          id: String(row.id),
+          name: String(row.name),
+          url: `/api/native-images/${row.id}`,
+        }));
+      return {
+        ...message,
+        attachments,
+        images: images.filter((image) => !duplicates.has(image.id)),
+      };
+    });
   }
   attachmentPublic(row: Record<string, unknown>): Attachment {
     return {
