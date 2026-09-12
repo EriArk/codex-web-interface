@@ -79,16 +79,35 @@ for (const [engine, type] of [
   page.on("pageerror", (error) => errors.push(error.message));
   const button = (name) =>
     page.getByRole("button", { name, exact: true }).filter({ visible: true }).first();
-  const colors = ["graphite", "turquoise", "green", "blue", "red", "orange", "silver"];
+  const colors = [
+    "graphite",
+    "white",
+    "silver",
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "mint",
+    "turquoise",
+    "blue",
+    "purple",
+    "pink",
+  ];
   const check = async (locator, label, minimum = 4.5) => {
-    for (const color of colors) {
-      await page.evaluate((c) => {
-        document.documentElement.dataset.caseColor = c;
-      }, color);
-      const result = await contrast(locator);
-      if (result.ratio < minimum) failures.push({ label, caseColor: color, ...result });
+    for (const theme of ["hitech-2000s", "crt-green"]) {
+      await page.evaluate((t) => {
+        document.documentElement.dataset.theme = t;
+      }, theme);
+      for (const color of colors) {
+        await page.evaluate((c) => {
+          document.documentElement.dataset.caseColor = c;
+        }, color);
+        const result = await contrast(locator);
+        if (result.ratio < minimum) failures.push({ label, theme, caseColor: color, ...result });
+      }
     }
     await page.evaluate(() => {
+      document.documentElement.dataset.theme = "hitech-2000s";
       document.documentElement.dataset.caseColor = "turquoise";
     });
   };
@@ -108,6 +127,11 @@ for (const [engine, type] of [
     for (const width of [393, 1366]) {
       await page.setViewportSize({ width, height: width === 393 ? 852 : 1024 });
       await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+      await check(
+        page.locator(".header-project small").filter({ visible: true }).first(),
+        `${width} header subtitle`,
+      );
+      await check(draft, `${width} composer`);
       for (const el of await page
         .locator(".mobile-tabs > button, .support-tabs > button")
         .filter({ visible: true })
@@ -115,6 +139,29 @@ for (const [engine, type] of [
         await check(el, `${width} workspace tab ${await el.innerText()}`);
       }
       if (width < 1100) await button("Открыть проекты").click();
+      await check(
+        button("Закрыть проекты").or(button("Быстрая запись")).filter({ visible: true }).first(),
+        `${width} casing icon`,
+        3,
+      );
+      for (const theme of ["hitech-2000s", "crt-green"]) {
+        for (const color of ["white", "graphite", "red"]) {
+          await page.evaluate(
+            ([t, c]) => {
+              document.documentElement.dataset.theme = t;
+              document.documentElement.dataset.caseColor = c;
+            },
+            [theme, color],
+          );
+          await page.screenshot({
+            path: `${out}/${theme}-${color}-navigation-${width}.png`,
+            animations: "disabled",
+          });
+        }
+      }
+      await page.evaluate(() => {
+        document.documentElement.dataset.theme = "hitech-2000s";
+      });
       for (const count of await page
         .locator(".nav-mobile-switch small, .nav-mobile-switch .activity-badge b")
         .filter({ visible: true })
@@ -142,6 +189,16 @@ for (const [engine, type] of [
       await page.mouse.up();
       await page.screenshot({ path: `${out}/navigation-${width}.png`, animations: "disabled" });
       if (width < 1100) await button("Закрыть проекты").click();
+      // Quick capture has a case header and independent paper inputs.
+      if (width < 1100) await button("Открыть проекты").click();
+      await button("Быстрая запись").click();
+      const capture = page.getByRole("dialog", { name: "Быстрая запись", exact: true });
+      await check(capture.locator("header h2"), `${width} capture title`);
+      await check(capture.locator("select").first(), `${width} capture project`);
+      await capture.locator("textarea").fill("Читаемый текст на своём экране");
+      await check(capture.locator("textarea"), `${width} capture body`);
+      await capture.getByRole("button", { name: "Закрыть", exact: true }).click();
+      if (await button("Закрыть проекты").isVisible()) await button("Закрыть проекты").click();
       await button("Настройки").click();
       await check(
         page.locator(".settings-dialog .theme-option.hitech-2000s small"),
@@ -266,9 +323,9 @@ for (const [engine, type] of [
         .length,
       0,
     );
-    assert.deepEqual(failures, [], "Hi-Tech controls must contrast with their own surface");
+    assert.deepEqual(failures, [], "Both material themes must contrast with their own surface");
     console.log(
-      `${engine}: Hi-Tech text and pressed/focused controls across seven casing colors, phone/tablet and preserved draft passed`,
+      `${engine}: CRT/Hi-Tech text and pressed/focused controls across twelve casing colors, phone/tablet and preserved draft passed`,
     );
   } finally {
     await context.close();

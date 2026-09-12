@@ -10,7 +10,7 @@ export const themes = [
   {
     id: "crt-green",
     title: "Зелёный терминал",
-    description: "Тёмный полимер и зелёный фосфор",
+    description: "Цветной пластик и зелёный фосфор",
     chrome: "#061009",
   },
   {
@@ -44,7 +44,8 @@ export function applyTheme(id: Theme) {
   document.documentElement.dataset.theme = theme.id;
   const color = caseColor(theme.id);
   document.documentElement.dataset.caseColor = color;
-  const chrome = theme.id === "hitech-2000s" ? caseChrome[color] : theme.chrome;
+  const chrome =
+    theme.id === "hitech-2000s" || theme.id === "crt-green" ? caseChrome[color] : theme.chrome;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", chrome);
 }
 
@@ -52,16 +53,26 @@ const caseEvent = "codex-case-color-change";
 const memory: CasePreferences = {};
 const edited = new Set<keyof CasePreferences>();
 const caseChrome: Record<CaseColor, string> = {
-  graphite: "#253033",
-  turquoise: "#114345",
-  green: "#284634",
-  blue: "#233f5b",
-  red: "#532f38",
-  orange: "#53372a",
-  silver: "#344750",
+  graphite: "#272b32",
+  white: "#d2d4d0",
+  silver: "#929ba1",
+  red: "#c37377",
+  orange: "#cb9561",
+  yellow: "#d1bc6b",
+  green: "#6ea37b",
+  mint: "#94beaa",
+  turquoise: "#6aabad",
+  blue: "#7fa0c9",
+  purple: "#a389be",
+  pink: "#c798b2",
 };
 export const caseColorNames: Record<CaseColor, string> = {
-  graphite: "Графит",
+  graphite: "Чёрный",
+  white: "Белый",
+  yellow: "Жёлтый",
+  mint: "Мятный",
+  purple: "Фиолетовый",
+  pink: "Розовый",
   turquoise: "Бирюзовый",
   green: "Зелёный",
   blue: "Синий",

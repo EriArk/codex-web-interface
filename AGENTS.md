@@ -499,3 +499,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Header icon controls share square 44px geometry while retaining each theme's rounded corners. Center the sidebar Settings control vertically and put Tasks, Notes, Plans and Reports in one evenly spaced row.
 - Keep modal editors within the visible software-keyboard viewport, including its iOS pan offset; their close controls remain reachable and long fields scroll inside the editor. Apply the shared behavior to both clients and project forms.
 - Reconcile native image echoes against the exact bound upload preview or staged preview path. Repair existing history presentation without deleting files, hiding unrelated images or resending messages.
+
+## Owner-requested casing palette and continuous frames (2026-09-12)
+
+- Offer twelve clearly distinguishable pastel plastic colors, including black and white. Preserve existing color preference identifiers and independent CRT/Hi-Tech choices.
+- In both material themes, connect control rails to narrow continuous rims around the navigation, chat and Files/Git/Results reading wells. CRT content stays dark phosphor green; its casing is no longer forced almost black. Keep phone trim compact and preserve the previous-layout option.
+- Selected casing controls use a recessed cap in the chosen plastic color, including mobile Chat/Results tabs. Resolve casing text/icons independently of screen text, with dark ink on light plastic and light ink on dark plastic. Content/status semantics remain intact.
