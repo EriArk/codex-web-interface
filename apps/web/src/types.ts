@@ -65,6 +65,7 @@ export interface Question {
   options: { label: string; description: string }[];
 }
 export interface Approval {
+  elicitation?: import("@codex-web/shared").Elicitation;
   id: string;
   threadId?: string;
   turnId?: string | null;

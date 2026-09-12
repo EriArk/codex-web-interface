@@ -6,6 +6,7 @@ import { CodexClient, type ServerRequest } from "@codex-web/codex";
 import { readWorkspaceDependencies, spawnCodex } from "@codex-web/machines";
 import {
   type Capabilities,
+  type Elicitation,
   type HubConfig,
   HubError,
   type HubEvent,
@@ -17,6 +18,7 @@ import {
 import { accessCapabilities, requireAccess, threadAccess, turnAccess } from "./access.js";
 import { Attachments } from "./attachments.js";
 import { Catalog, type CatalogProject } from "./catalog.js";
+import { elicitationResponse, parseElicitation } from "./elicitation.js";
 import { ExternalActivity } from "./externalActivity.js";
 import type { EntityAction, EntityKind } from "./library.js";
 import type { Store, ThreadRecord } from "./store.js";
@@ -47,7 +49,9 @@ interface Approval {
   id: string;
   threadId: string;
   turnId: string | null;
-  kind: "command" | "files" | "question" | "permissions";
+  kind: "command" | "files" | "question" | "permissions" | "elicitation";
+  elicitation?: Elicitation;
+  elicitationUrl?: string;
   questions?: Record<string, unknown>[];
   permissions?: Record<string, unknown>;
   description: string;
@@ -119,7 +123,7 @@ export class Sessions extends EventEmitter {
   pending(id: string): Record<string, unknown>[] {
     return [...this.approvals.values()]
       .filter((a) => a.threadId === id)
-      .map(({ rpc: _rpc, requestId: _request, ...safe }) => safe);
+      .map(({ rpc: _rpc, requestId: _request, elicitationUrl: _url, ...safe }) => safe);
   }
   private emitEvent(
     threadId: string,
@@ -155,6 +159,12 @@ export class Sessions extends EventEmitter {
       );
       rpc.on("fault", (error: HubError) => {
         if (this.runtimes.get(runtimeId) === existing) this.runtimes.delete(runtimeId);
+        for (const [id, approval] of this.approvals) {
+          if (approval.rpc !== rpc) continue;
+          this.approvals.delete(id);
+          this.emitEvent(approval.threadId, "approval.resolved", { id, decision: "expired" });
+          runtime.active.add(approval.threadId);
+        }
         for (const threadId of runtime.active) {
           this.store.setStatus(threadId, "unknown", this.store.thread(threadId).activeTurnId);
           this.emitEvent(threadId, "session.state", {
@@ -163,7 +173,6 @@ export class Sessions extends EventEmitter {
             message: "Связь с Codex прервалась. Исход текущей работы нужно проверить.",
           });
         }
-        for (const [id, a] of this.approvals) if (a.rpc === rpc) this.approvals.delete(id);
       });
       let account: Record<string, unknown>;
       try {
@@ -1171,7 +1180,8 @@ export class Sessions extends EventEmitter {
     if (!a || a.rpc.closed)
       throw new HubError(409, "APPROVAL_EXPIRED", "Запрос подтверждения уже недействителен");
     this.thread(a.threadId);
-    if (a.kind === "question") throw new HubError(400, "ANSWER_REQUIRED", "Нужен ответ на вопрос");
+    if (a.kind === "question" || a.kind === "elicitation")
+      throw new HubError(400, "ANSWER_REQUIRED", "Нужен ответ на запрос");
     this.approvals.delete(id);
     this.store.setStatus(a.threadId, "running", a.turnId);
     this.emitEvent(a.threadId, "approval.resolved", { id, decision }, a.turnId);
@@ -1200,6 +1210,40 @@ export class Sessions extends EventEmitter {
     a.rpc.respond(a.requestId, { answers: formatted });
     return { resolved: true };
   }
+  elicitationUrl(id: string): string {
+    const a = this.approvals.get(id);
+    if (!a || a.rpc.closed || !a.elicitationUrl)
+      throw new HubError(409, "APPROVAL_EXPIRED", "Запрос больше не актуален");
+    this.thread(a.threadId);
+    return a.elicitationUrl;
+  }
+  async elicit(
+    id: string,
+    action: "accept" | "decline" | "cancel",
+    content?: unknown,
+  ): Promise<Record<string, unknown>> {
+    const a = this.approvals.get(id);
+    if (!a || a.rpc.closed || !a.elicitation)
+      throw new NotSubmittedError(
+        new HubError(409, "APPROVAL_EXPIRED", "Запрос больше не актуален"),
+      );
+    let response: ReturnType<typeof elicitationResponse>;
+    try {
+      this.thread(a.threadId);
+      response = elicitationResponse(a.elicitation, action, content);
+    } catch (e) {
+      throw new NotSubmittedError(e);
+    }
+    a.rpc.respond(a.requestId, response);
+    this.approvals.delete(id);
+    this.store.setStatus(
+      a.threadId,
+      this.pending(a.threadId).length ? "waiting_approval" : "running",
+      a.turnId,
+    );
+    this.emitEvent(a.threadId, "approval.resolved", { id, decision: action }, a.turnId);
+    return { resolved: true };
+  }
   private toolProblem(
     t: ThreadRecord,
     request: ServerRequest,
@@ -1222,6 +1266,8 @@ export class Sessions extends EventEmitter {
     if (id) this.emitEvent(t.id, "result.created", { id, type: "error" }, turnId);
   }
   private async request(r: Runtime, request: ServerRequest): Promise<void> {
+    if ([...this.approvals.values()].some((a) => a.rpc === r.rpc && a.requestId === request.id))
+      return;
     const t = this.store.threadByCodex(text(request.params.threadId));
     if (request.method === "item/tool/call" && t) {
       const p = this.project(t.projectId);
@@ -1276,6 +1322,7 @@ export class Sessions extends EventEmitter {
       return;
     }
     const supported = [
+      "mcpServer/elicitation/request",
       "item/commandExecution/requestApproval",
       "item/fileChange/requestApproval",
       "item/tool/requestUserInput",
@@ -1294,13 +1341,16 @@ export class Sessions extends EventEmitter {
       id: randomUUID(),
       threadId: t.id,
       turnId: text(request.params.turnId) || t.activeTurnId,
-      kind: request.method.includes("commandExecution")
-        ? "command"
-        : request.method.includes("requestUserInput")
-          ? "question"
-          : request.method.includes("permissions")
-            ? "permissions"
-            : "files",
+      kind:
+        request.method === "mcpServer/elicitation/request"
+          ? "elicitation"
+          : request.method.includes("commandExecution")
+            ? "command"
+            : request.method.includes("requestUserInput")
+              ? "question"
+              : request.method.includes("permissions")
+                ? "permissions"
+                : "files",
       permissions: request.method.includes("permissions")
         ? record(request.params.permissions)
         : undefined,
@@ -1328,6 +1378,12 @@ export class Sessions extends EventEmitter {
       rpc: r.rpc,
       requestId: request.id,
     };
+    if (a.kind === "elicitation") {
+      const parsed = parseElicitation(request.params);
+      a.elicitation = parsed.form;
+      a.elicitationUrl = parsed.url;
+      a.description = parsed.form.message;
+    }
     this.approvals.set(a.id, a);
     this.store.setStatus(t.id, "waiting_approval", a.turnId);
     this.emitEvent(
@@ -1339,6 +1395,7 @@ export class Sessions extends EventEmitter {
         description: a.description,
         questions: a.questions ?? [],
         permissions: a.permissions,
+        elicitation: a.elicitation,
       },
       a.turnId,
     );
@@ -1384,6 +1441,8 @@ export class Sessions extends EventEmitter {
       for (const [key, a] of this.approvals)
         if (a.rpc === r.rpc && a.requestId === p.requestId) {
           this.approvals.delete(key);
+          if (this.store.thread(t.id).status === "waiting_approval" && !this.pending(t.id).length)
+            this.store.setStatus(t.id, "running", turnId);
           this.emitEvent(t.id, "approval.resolved", { id: key, decision: "resolved" }, turnId);
         }
     } else if (method === "turn/started") {

@@ -612,6 +612,33 @@ export async function createApp(
         .parse(req.body);
     return store.once(`answer:${id}`, key(req), body, () => sessions.answer(id, body.answers));
   });
+  app.get("/api/approvals/:id/open", async (req, reply) => {
+    reply.header("Cache-Control", "no-store").header("Referrer-Policy", "no-referrer");
+    return reply.redirect(sessions.elicitationUrl(paramId(req)));
+  });
+  app.post("/api/approvals/:id/elicitation", async (req) => {
+    const id = paramId(req),
+      body = z
+        .object({
+          action: z.enum(["accept", "decline", "cancel"]),
+          content: z
+            .record(
+              z.string().max(200),
+              z.union([
+                z.string().max(8000),
+                z.number().finite(),
+                z.boolean(),
+                z.array(z.string().max(2000)).max(100),
+              ]),
+            )
+            .optional(),
+        })
+        .strict()
+        .parse(req.body);
+    return store.once(`elicitation:${id}`, key(req), body, () =>
+      sessions.elicit(id, body.action, body.content),
+    );
+  });
   app.get("/api/native-images/:id", async (req, reply) => {
     const id = z.string().uuid().parse(paramId(req));
     sessions.thread(sessions.catalog.images.thread(id));

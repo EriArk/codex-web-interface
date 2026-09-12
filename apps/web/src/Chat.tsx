@@ -33,6 +33,7 @@ import { TurnDetails } from "./TurnDetails";
 import { useCompletionPosition } from "./useCompletionPosition";
 import { useGrowingComposer } from "./useGrowingComposer";
 import "./taskBoundary.css";
+import { ElicitationCard } from "./ElicitationCard";
 import type { Approval, Message, Result, TurnSettings } from "./types";
 import { UpdateNotice } from "./UpdateNotice";
 import type { ChatState } from "./useWorkspace";
@@ -122,6 +123,15 @@ function ApprovalCard({
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [custom, setCustom] = useState<Record<string, boolean>>({});
+  if (approval.kind === "elicitation" && approval.elicitation)
+    return (
+      <ElicitationCard
+        key={approval.id}
+        id={approval.id}
+        form={approval.elicitation}
+        disabled={busy}
+      />
+    );
   return (
     <section className="approval" aria-label="Запрос Codex">
       <div className="eyebrow">Твоё решение</div>
@@ -590,14 +600,17 @@ export function Chat({
                   </button>
                 </div>
               )}
-              {!state.messages.length && !state.hasMore && !state.error && (
-                <div className="empty-state chat-empty">
-                  <div className="empty-symbol">
-                    <Icon name="folder" size={30} />
+              {!state.messages.length &&
+                !state.approvals.length &&
+                !state.hasMore &&
+                !state.error && (
+                  <div className="empty-state chat-empty">
+                    <div className="empty-symbol">
+                      <Icon name="folder" size={30} />
+                    </div>
+                    <h2>Новый диалог, чистый лист.</h2>
                   </div>
-                  <h2>Новый диалог, чистый лист.</h2>
-                </div>
-              )}
+                )}
               {state.messages.map((message, index) => (
                 <Fragment key={message.id}>
                   <article

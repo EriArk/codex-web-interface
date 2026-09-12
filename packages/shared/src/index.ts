@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./appearance.js";
+export * from "./elicitation.js";
 
 export * from "./gui-preview.js";
 export * from "./staging.js";
