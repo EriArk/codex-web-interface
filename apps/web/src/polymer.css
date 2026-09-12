@@ -116,10 +116,10 @@
 }
 /* Deliberately bright, polished shells, even around the evening CRT screen. */
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]):is(
-    [data-case-color="white"],
-    [data-case-color="yellow"],
-    [data-case-color="silver"]
-  ) {
+  [data-case-color="white"],
+  [data-case-color="yellow"],
+  [data-case-color="silver"]
+) {
   --case-tint: var(--polymer-tint);
   --case-top: color-mix(in srgb, var(--case-tint) 70%, #fff);
   --case-edge: color-mix(in srgb, var(--case-tint) 32%, #fff);
@@ -136,13 +136,13 @@
   --cap-ink: #172125;
   --cap-letter-shadow: 0 1px 0 #ffffffc9;
   --cap-shadow:
-    inset 0 1px 0 #fff, inset 1px 0 0 #fff9, inset 0 -1px 0 #0004,
-    0 2px 0 var(--case-seam), 0 3px 3px #0005;
+    inset 0 1px 0 #fff, inset 1px 0 0 #fff9, inset 0 -1px 0 #0004, 0 2px 0 var(--case-seam),
+    0 3px 3px #0005;
 }
 /* Dark CRT plastic is matte: relief comes from seams, not illuminated edges. */
 :root[data-theme="crt-green"]:not(
-    :is([data-case-color="white"], [data-case-color="yellow"], [data-case-color="silver"])
-  ) {
+  :is([data-case-color="white"], [data-case-color="yellow"], [data-case-color="silver"])
+) {
   --case-top: var(--case-tint);
   --case-edge: color-mix(in srgb, var(--case-tint) 88%, #46505a);
   --case-glint: transparent;

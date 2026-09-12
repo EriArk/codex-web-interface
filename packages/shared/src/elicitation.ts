@@ -5,7 +5,12 @@ export interface ElicitationField {
   description: string;
   type: "string" | "number" | "integer" | "boolean" | "array";
   required: boolean;
-  options?: { value: string; title: string }[];
+  options?: { value: string; title: string; image?: string }[];
+  input?: "files" | "images";
+  allowFileUri?: boolean;
+  fileKind?: "file" | "directory";
+  accept?: string[];
+  pattern?: string;
   default?: ElicitationValue;
   minimum?: number;
   maximum?: number;

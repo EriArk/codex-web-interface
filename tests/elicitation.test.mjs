@@ -6,6 +6,81 @@ import { formRequest } from "./elicitation-fixture.mjs";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
 const valid = { title: "Demo", enabled: false, count: 0, labels: ["x"] };
+test("extended OpenAI forms return selected resources and images without fetching external previews", () => {
+  const request = {
+    mode: "openaiForm",
+    serverName: "Files",
+    message: "Pick",
+    requestedSchema: {
+      type: "object",
+      required: ["files"],
+      properties: {
+        files: {
+          type: "array",
+          items: { type: "string", format: "uri" },
+          "x-openai-input": {
+            type: "file",
+            selection: "implicit",
+            options: [
+              {
+                uri: "file:///D:/demo.md",
+                name: "Demo",
+                icons: [{ src: "https://private.test/secret" }],
+              },
+            ],
+            userOptions: { kind: "file", accept: [".md"] },
+          },
+        },
+      },
+    },
+  };
+  const { form } = parseElicitation(request);
+  assert.equal(form.mode, "form");
+  assert.equal(form.fields[0].input, "files");
+  assert.deepEqual(form.fields[0].default, ["file:///D:/demo.md"]);
+  assert(!JSON.stringify(form).includes("private.test"));
+  assert.deepEqual(
+    elicitationResponse(form, "accept", { files: ["file:///D:/other.md"] }).content.files,
+    ["file:///D:/other.md"],
+  );
+  for (const uri of ["https://example.com/foo.md", "file:///D:/other.exe", "file:///D:/%00.md"])
+    assert.throws(() => elicitationResponse(form, "accept", { files: [uri] }));
+  const image = "data:image/png;base64,iVBORw0KGgo=";
+  const legacy = parseElicitation({
+    mode: "openai/form",
+    requestedSchema: {
+      type: "object",
+      properties: {
+        cover: { type: "openai/imagePicker", items: [{ id: "one", title: "Обложка", image }] },
+      },
+    },
+  }).form;
+  assert.equal(legacy.mode, "form");
+  assert.equal(legacy.fields[0].options[0].image, image);
+  assert.equal(elicitationResponse(legacy, "accept", { cover: "one" }).content.cover, "one");
+  assert.throws(() => elicitationResponse(legacy, "accept", { cover: "other" }));
+});
+test("extended form patterns are bounded and unknown constraints remain explicit", () => {
+  const parse = (pattern) =>
+    parseElicitation({
+      mode: "openaiForm",
+      requestedSchema: { type: "object", properties: { code: { type: "string", pattern } } },
+    }).form;
+  const form = parse("^[a-z]+$");
+  assert.equal(form.mode, "form");
+  assert.equal(elicitationResponse(form, "accept", { code: "abc" }).content.code, "abc");
+  assert.throws(() => elicitationResponse(form, "accept", { code: "123" }));
+  for (const p of ["(a+)+$", "a*a*a*", "(?=bad)", ".*suffix"])
+    assert.equal(parse(p).mode, "unsupported");
+  const unknown = parseElicitation({
+    mode: "openaiForm",
+    requestedSchema: {
+      type: "object",
+      properties: { x: { type: "string", "x-openai-input": { type: "secret-widget" } } },
+    },
+  }).form;
+  assert.equal(unknown.mode, "unsupported");
+});
 test("typed elicitation preserves values and validates standard schema constraints", () => {
   const { form } = parseElicitation(formRequest);
   assert.equal(form.mode, "form");

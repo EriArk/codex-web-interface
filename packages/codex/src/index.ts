@@ -46,7 +46,11 @@ export class CodexClient extends EventEmitter {
   async initialize(): Promise<RecordValue> {
     const result = await this.request("initialize", {
       clientInfo: { name: "codex_web_interface", title: "Codex Web Interface", version: "0.1.0" },
-      capabilities: { experimentalApi: true },
+      capabilities: {
+        experimentalApi: true,
+        mcpServerOpenaiFormElicitation: true,
+        extensions: { "openai/elicitation": { form: {} } },
+      },
     });
     this.notify("initialized", {});
     return result;

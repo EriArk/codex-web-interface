@@ -312,6 +312,7 @@ export type {
   MachinesOverview,
 } from "./machineHealth.js";
 export * from "./native-work.js";
+export * from "./native-workspace.js";
 export type {
   NotebookLink,
   NotebookPin,

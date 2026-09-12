@@ -30,6 +30,7 @@ import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
 import { gptResults, resultPage } from "./gpt-results.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
+import { GptWorkspaceWork, workspaceId, workspaceInput } from "./gpt-workspace.js";
 import {
   type EntityAction,
   type EntityKind,
@@ -62,13 +63,17 @@ export class GptService {
   );
   readonly operations: GptOperations;
   readonly projectContent: GptProjectContent;
+  readonly workspaceWork: GptWorkspaceWork;
   nativeBlocked() {
-    return this.operations.blocked() || this.projectContent.blocked();
+    return (
+      this.operations.blocked() || this.projectContent.blocked() || this.workspaceWork.blocked()
+    );
   }
   nativeCounts() {
     const a = this.operations.counts(),
-      b = this.projectContent.counts();
-    return { active: a.active + b.active, unknown: a.unknown + b.unknown };
+      b = this.projectContent.counts(),
+      c = this.workspaceWork.counts();
+    return { active: a.active + b.active + c.active, unknown: a.unknown + b.unknown + c.unknown };
   }
   private working = false;
   private libraryBusy = false;
@@ -174,6 +179,7 @@ export class GptService {
       (path, body) => this.json(path, body),
       () =>
         !this.projectContent?.blocked() &&
+        !this.workspaceWork?.blocked() &&
         !this.stopped &&
         !this.working &&
         !this.libraryBusy &&
@@ -191,12 +197,25 @@ export class GptService {
         !this.libraryBusy &&
         !this.modelsPending &&
         !this.operations.blocked() &&
+        !this.workspaceWork?.blocked() &&
         !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
       (id) => {
         const file = this.upload(id);
         return { ...file, base64: readFileSync(join(this.root, id)).toString("base64") };
       },
       this.lifetime.signal,
+    );
+    this.workspaceWork = new GptWorkspaceWork(
+      store,
+      (path, body) => this.json(path, body),
+      () =>
+        !this.stopped &&
+        !this.working &&
+        !this.libraryBusy &&
+        !this.modelsPending &&
+        !this.operations.blocked() &&
+        !this.projectContent.blocked() &&
+        !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
     );
     this.token = config.gpt ? (process.env[config.gpt.tokenSecret] ?? "") : "";
     this.root = join(config.hub.resultsPath, "gpt");
@@ -1055,6 +1074,7 @@ export class GptService {
     await this.completion;
     await this.operations.close();
     await this.projectContent.close();
+    await this.workspaceWork.close();
   }
   async sandboxFile(conversationId: string, messageId: string, key: string) {
     const raw = await this.json("/conversation?id=" + encodeURIComponent(conversationId));
@@ -1215,6 +1235,59 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
     await service.projectContent.checked(z.object({ id: uuid }).parse(req.params).id);
     void service.pump();
     return { ok: true };
+  });
+  app.get("/api/gpt/scheduled", async (req) => {
+    const q = z
+      .object({ cursor: z.string().max(4000).optional() })
+      .strict()
+      .parse(req.query);
+    return service.workspaceWork.schedules(q.cursor);
+  });
+  app.get("/api/gpt/scheduled/:id", async (req) => ({
+    item: await service.workspaceWork.schedule(z.object({ id: workspaceId }).parse(req.params).id),
+  }));
+  app.get("/api/gpt/canvas", async (req) => {
+    const q = z.object({ conversationId: workspaceId }).strict().parse(req.query);
+    return service.workspaceWork.canvases(q.conversationId);
+  });
+  app.get("/api/gpt/canvas/version", async (req) => {
+    const q = z
+      .object({
+        conversationId: workspaceId,
+        id: workspaceId,
+        version: z.coerce.number().int().min(1).max(1000000),
+      })
+      .strict()
+      .parse(req.query);
+    return service.workspaceWork.version(q.conversationId, q.id, q.version);
+  });
+  app.get("/api/gpt/workspace-operations", async () => ({ items: service.workspaceWork.list() }));
+  app.get("/api/gpt/workspace-operations/:id", async (req) =>
+    service.workspaceWork.get(z.object({ id: uuid }).parse(req.params).id),
+  );
+  app.post("/api/gpt/workspace-operations", async (req, reply) =>
+    reply
+      .code(202)
+      .send(
+        service.workspaceWork.start(
+          uuid.parse(req.headers["idempotency-key"]),
+          workspaceInput.parse(req.body),
+        ),
+      ),
+  );
+  app.post("/api/gpt/workspace-operations/:id/check", async (req) => {
+    const id = z.object({ id: uuid }).parse(req.params).id;
+    await service.workspaceWork.check(id);
+    return service.workspaceWork.get(id);
+  });
+  app.post("/api/gpt/workspace-operations/:id/checked", async (req) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    const id = z.object({ id: uuid }).parse(req.params).id;
+    await service.workspaceWork.checked(id);
+    void service.pump();
+    return service.workspaceWork.get(id);
   });
   app.get("/api/gpt/status", async () => service.connection());
   app.post("/api/gpt/reconnect", async () => service.reconnect());

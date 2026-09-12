@@ -20,6 +20,7 @@ export function ElicitationCard({
         .map((f) => [f.key, (f.default ?? []) as ElicitationValue]),
     ),
   );
+  const [fileUris, setFileUris] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [resolved, setResolved] = useState(false),
@@ -81,7 +82,22 @@ export function ElicitationCard({
                     {f.required ? " *" : ""}
                   </label>
                   {f.description && <small id={`${id}-${f.key}-help`}>{f.description}</small>}
-                  {f.type === "array" ? (
+                  {f.input === "images" ? (
+                    <fieldset className="elicitation-images" aria-label={f.title}>
+                      {f.options?.map((o) => (
+                        <label className="choice" key={o.value}>
+                          <input
+                            type="radio"
+                            name={`${id}-${f.key}`}
+                            checked={values[f.key] === o.value}
+                            onChange={() => update(f.key, o.value)}
+                          />
+                          {o.image && <img src={o.image} alt="" />}
+                          <span>{o.title}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  ) : f.type === "array" ? (
                     <fieldset id={`${id}-${f.key}`} aria-label={f.title}>
                       {f.options?.map((o) => (
                         <label className="choice" key={o.value}>
@@ -120,7 +136,7 @@ export function ElicitationCard({
                                 (f.options?.findIndex((o) => o.value === values[f.key]) ?? -1) + 1,
                               )
                       }
-                      required={f.required}
+                      required={f.required && !f.allowFileUri}
                       onChange={(e) =>
                         update(
                           f.key,
@@ -178,6 +194,78 @@ export function ElicitationCard({
                         )
                       }
                     />
+                  )}
+                  {f.allowFileUri && (
+                    <div className="elicitation-file-uri">
+                      <label htmlFor={`${id}-${f.key}-uri`}>
+                        {f.fileKind === "directory"
+                          ? "Другая папка на машине"
+                          : "Другой файл на машине"}
+                      </label>
+                      <input
+                        id={`${id}-${f.key}-uri`}
+                        type="text"
+                        autoComplete="off"
+                        placeholder="file:///…"
+                        value={fileUris[f.key] ?? ""}
+                        onChange={(e) =>
+                          setFileUris((old) => ({ ...old, [f.key]: e.target.value }))
+                        }
+                      />
+                      {f.accept?.length ? <small>{f.accept.join(", ")}</small> : null}
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={!fileUris[f.key]?.trim()}
+                        onClick={() => {
+                          const value = fileUris[f.key]?.trim();
+                          if (!value) return;
+                          update(
+                            f.key,
+                            f.type === "array"
+                              ? [
+                                  ...new Set([
+                                    ...(Array.isArray(values[f.key])
+                                      ? (values[f.key] as string[])
+                                      : []),
+                                    value,
+                                  ]),
+                                ]
+                              : value,
+                          );
+                          setFileUris((old) => ({ ...old, [f.key]: "" }));
+                        }}
+                      >
+                        Выбрать
+                      </button>
+                      {(Array.isArray(values[f.key])
+                        ? (values[f.key] as string[])
+                        : typeof values[f.key] === "string"
+                          ? [values[f.key] as string]
+                          : []
+                      )
+                        .filter((v) => !f.options?.some((o) => o.value === v))
+                        .map((value) => (
+                          <div className="choice" key={value}>
+                            <span>{value}</span>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label="Убрать выбранный файл"
+                              onClick={() =>
+                                update(
+                                  f.key,
+                                  f.type === "array"
+                                    ? (values[f.key] as string[]).filter((v) => v !== value)
+                                    : undefined,
+                                )
+                              }
+                            >
+                              <Icon name="close" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
                   )}
                 </div>
               ))}

@@ -30,6 +30,11 @@ export function deploymentBlockers(store: Pick<Store, "db" | "preferences">) {
     "GPT: изменение ветки ещё не подтверждено",
   );
   add(
+    "gpt_workspace",
+    "SELECT count(*) n FROM commands WHERE scope='gpt-workspace' AND state IN ('pending','unknown')",
+    "GPT: изменение расписания или Canvas ещё не подтверждено",
+  );
+  add(
     "terminal",
     "SELECT count(*) n FROM device_terminals WHERE state='open'",
     "Открыт терминал; состояние команды не проверено",
