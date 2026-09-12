@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import type {
@@ -27,9 +28,11 @@ import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { registerBridgeDoctor } from "./bridge-doctor.js";
 import { registerCommandOutput } from "./command-output.js";
+import { registerDeploymentStatus } from "./deployment-status.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { type DeviceDependencies, registerDevices } from "./devices.js";
 import { registerDictation, type Transcribe } from "./dictation.js";
+import { ENGINE_PROTOCOL } from "./engine-client.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
 import { registerGuiPreviews } from "./gui-previews.js";
@@ -38,7 +41,7 @@ import { type MachineProbeDependencies, registerMachineHealth } from "./machineH
 import { registerNavigation } from "./navigation.js";
 import { registerNotebook } from "./notebook.js";
 import { registerProjectOverview } from "./overview.js";
-import { assertPreviewFrame, previewCsp, previewFrameSources } from "./previews.js";
+import { assertPreviewFrame, previewCsp } from "./previews.js";
 import { registerProjectCores } from "./project-core.js";
 import { registerProjectDelivery } from "./project-delivery.js";
 import { registerProjectSetup } from "./project-setup.js";
@@ -56,6 +59,7 @@ import { storageReport } from "./storage.js";
 import { Store } from "./store.js";
 import { registerWorkspaceTasks } from "./tasks.js";
 import { registerUsageResets } from "./usage-resets.js";
+import { webSecurity } from "./web-security.js";
 
 const idSchema = z.string().min(1).max(100);
 const paramId = (req: FastifyRequest): string => z.object({ id: idSchema }).parse(req.params).id;
@@ -69,6 +73,7 @@ export async function createApp(
   config: HubConfig,
   options: {
     setupToken?: string;
+    executionService?: boolean;
     webRoot?: string;
     store?: Store;
     sessions?: Sessions;
@@ -103,29 +108,19 @@ export async function createApp(
   const store = options.store ?? new Store(config.hub.databasePath);
   const sessions = options.sessions ?? new Sessions(config, store);
   const auth = new Auth(config, store);
+  if (options.executionService) {
+    const instance = randomUUID();
+    app.get("/internal/runtime", async () => ({
+      protocol: ENGINE_PROTOCOL,
+      schema: store.schemaVersion,
+      revision: process.env.HUB_REVISION ?? "unknown",
+      instance,
+    }));
+  }
   const artifacts = new Artifacts(config.hub.resultsPath, store, config.hub.storage.artifactBytes);
   await auth.prepare(options.setupToken);
   await app.register(cookie);
-  await app.register(helmet, {
-    // Explicit OAC opt-in breaks painting/input in sandboxed frames in Chromium.
-    // Keep the opaque-origin sandbox, CSP, COOP and CORP; use browser-default clustering.
-    originAgentCluster: false,
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
-        frameAncestors: ["'none'"],
-        frameSrc: previewFrameSources(config.hub.publicBaseUrl),
-        objectSrc: ["'none'"],
-        baseUri: ["'none'"],
-        upgradeInsecureRequests: config.hub.secureCookies ? [] : null,
-      },
-    },
-  });
+  await app.register(helmet, webSecurity(config));
   await app.register(rateLimit, {
     // Static assets and normal multi-device reading must not exhaust write/login budgets.
     max: (req) => (req.method === "GET" || req.method === "HEAD" ? 600 : 240),
@@ -141,6 +136,7 @@ export async function createApp(
     },
   });
   auth.install(app);
+  registerDeploymentStatus(app, store);
   registerCommandOutput(app, sessions);
   const devices = registerDevices(app, config, store, auth, options.devices);
   registerSpeech(app, config, auth);

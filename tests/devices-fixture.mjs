@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { handoffFixture } from "./handoff-fixture.mjs";
-export async function devicesFixture(origin = "http://127.0.0.1:18873") {
+export async function devicesFixture(origin = "http://127.0.0.1:18873", appOptions = {}) {
   const processes = [],
     probes = [];
   const dependencies = {
@@ -65,7 +65,7 @@ export async function devicesFixture(origin = "http://127.0.0.1:18873") {
       };
     },
   };
-  const f = await handoffFixture(origin, undefined, { devices: dependencies });
+  const f = await handoffFixture(origin, undefined, { ...appOptions, devices: dependencies });
   f.sessions.config.devices.push(
     ...["linux", "windows"].map((platform, i) => ({
       id: i ? "pc" : "server",

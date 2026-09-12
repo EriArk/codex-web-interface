@@ -37,6 +37,7 @@ export async function handoffFixture(
     ],
     projects: [{ id: "project", name: "Project", machineId: "pc", workingDirectory: "C:/Project" }],
   });
+  appOptions.configure?.(config);
   const store = new Store(":memory:"),
     calls = [],
     desktopCalls = [];

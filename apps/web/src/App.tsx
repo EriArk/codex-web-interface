@@ -14,6 +14,7 @@ import { ApiError, api, configureApi, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { Chat } from "./Chat";
 import type { RecoveryOutcome } from "./ConnectionRecovery";
+import { DeploymentStatus } from "./DeploymentStatus";
 import { DesktopControl } from "./DesktopControl";
 import { EntityArchive, type LibraryChange, libraryEvent } from "./EntityMenu";
 import { GptLoadBoundary } from "./GptLoadBoundary";
@@ -1501,6 +1502,7 @@ function Workspace({
           </button>
         </div>
         <AppearanceSettings theme={theme} onTheme={setTheme} />
+        <DeploymentStatus open={settings} />
         <section className="settings-navigation-actions" aria-label="Навигация">
           <button type="button" onClick={() => void refreshCatalog(true)} disabled={syncing}>
             <Icon name="refresh" />

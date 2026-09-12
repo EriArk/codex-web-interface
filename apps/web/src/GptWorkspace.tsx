@@ -18,6 +18,7 @@ import { api, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
+import { DeploymentStatus } from "./DeploymentStatus";
 import { useDictation } from "./Dictation";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import {
@@ -1822,6 +1823,7 @@ export function GptWorkspace({
           </button>
         </div>
         <AppearanceSettings theme={theme} onTheme={onTheme} />
+        <DeploymentStatus open={settings} />
         <section className="settings-navigation-actions" aria-label="Навигация">
           <button type="button" onClick={() => void action(() => catalog())}>
             <Icon name="refresh" />

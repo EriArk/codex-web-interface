@@ -1,0 +1,41 @@
+.deployment-status {
+  border-block: 1px solid var(--line);
+  padding: 12px 0;
+}
+.deployment-status > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+.deployment-status > summary::-webkit-details-marker {
+  display: none;
+}
+.deployment-status summary small {
+  margin-left: auto;
+  color: var(--muted);
+}
+.deployment-status p,
+.deployment-status li {
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.deployment-release {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.deployment-release > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.deployment-release small {
+  color: var(--muted);
+}
