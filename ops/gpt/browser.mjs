@@ -1,4 +1,7 @@
+import {projectResource,projectFields,projectRevision,mutateProjectContent} from './browser-project-content.mjs';
 import {captureDoctorEvidence} from './browser-doctor.mjs';
+import {forkNativeVersion} from './browser-branches.mjs';
+import {nativeFeatures,operateMessage} from './browser-native-work.mjs';
 import {transcribeDictation} from './browser-dictation.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
@@ -93,6 +96,16 @@ server=createServer(async(req,res)=>{
   }catch{res.writeHead(503,{'Content-Type':'application/json'}).end(JSON.stringify({error:'DICTATION_NATIVE_UNAVAILABLE'}))}return;
  }
  if(url.pathname.startsWith('/bridge/')){await proxyBridge(req,res,url.pathname,token,{beforeChat:async body=>projectComposer(await activePage(),body.projectId)});return}
+ if(req.method==='GET'&&url.pathname==='/project-file'){
+  try{
+   const projectId=url.searchParams.get('projectId'),fileId=url.searchParams.get('fileId'),page=await activePage();
+   const project=projectFields(await projectResource(page,projectId));
+   if(!project.files.some(f=>f.id===fileId)){res.writeHead(404).end();return;}
+   const result=await readAsset(page,fileId,undefined,projectId);
+   if(result.status!==200){res.writeHead(result.status).end();return;}
+   res.writeHead(200,{'Content-Type':'application/octet-stream'}).end(Buffer.from(result.base64,'base64'));
+  }catch{res.writeHead(503).end();}return;
+ }
  if(req.method==='GET'&&url.pathname==='/asset'){
   const id=url.searchParams.get('id')??'';
   if(!/^file[-_][a-zA-Z0-9_-]{1,100}$/.test(id)){res.writeHead(400).end();return}
@@ -135,6 +148,34 @@ server=createServer(async(req,res)=>{
  }
  if(req.method==='GET'&&url.pathname==='/doctor-evidence'){
   try{const result=await captureDoctorEvidence(await activePage());res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));}catch{res.writeHead(503).end('{}');}return;
+ }
+ if(url.pathname==='/project-content'){
+  try{
+   if(req.method==='GET'){
+    const fields=projectFields(await projectResource(await activePage(),url.searchParams.get('id')));
+    const {emoji,theme,...project}=fields;
+    res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({...project,revision:projectRevision(fields)}));return;
+   }
+   if(req.method==='POST'){
+    const input=await readJson(req,36*1024*1024);
+    const health=await(await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)})).json();
+    const result=health.activeRequests?.length?{dispatched:false,code:'GPT_BUSY'}:await mutateProjectContent(await activePage(),input);
+    res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));return;
+   }
+   res.writeHead(405).end();
+  }catch{res.writeHead(503).end('{}');}return;
+ }
+ if(req.method==='POST'&&url.pathname==='/native-operation'){
+  try{
+   const input=await readJson(req,420000);
+   const health=await(await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)})).json();
+   if(health.activeRequests?.length){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({ok:false,dispatched:false,code:'GPT_BUSY'}));return;}
+   const result=await (input.action==='fork'?forkNativeVersion:operateMessage)(await activePage(),input);
+   res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));
+  }catch{res.writeHead(503).end('{}');}return;
+ }
+ if(req.method==='GET'&&url.pathname==='/native-features'){
+  try{res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(await nativeFeatures(await activePage())));}catch{res.writeHead(503).end('{}');}return;
  }
  if(req.method!=='GET'||!['/status','/catalog','/conversation','/bridge-health','/models','/projects','/active','/pins','/project'].includes(url.pathname)){res.writeHead(404).end();return}
  res.setHeader('Content-Type','application/json');

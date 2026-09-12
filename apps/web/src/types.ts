@@ -106,6 +106,7 @@ export interface Activity {
     status?: string;
     exitCode?: number;
     output?: string;
+    logUrl?: string;
     message?: string;
   };
 }

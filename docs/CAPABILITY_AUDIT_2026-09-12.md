@@ -1,6 +1,6 @@
 # Remaining web-client functionality — 2026-09-12
 
-Reviewed source `af078b4`, the current GitHub issue/PR lists, the previous capability audit and the locally saved generated Codex protocol schema. This is a source and backlog review, not a new live-account or physical-device acceptance pass. No prompts, reset credits or desktop actions were exercised. Presence in a saved native schema is evidence for implementation planning, not a promise that every account enables the feature.
+Initial review: source `af078b4`, the current GitHub issue/PR lists, the previous capability audit and the locally saved generated Codex protocol schema. The initial review below describes the gaps before implementation; its implementation follow-up is recorded at the end. Presence in a saved native schema is evidence for implementation planning, not a promise that every account enables the feature.
 
 ## GitHub backlog
 
@@ -76,3 +76,13 @@ Inventory actual rejected tool names and add useful integrations individually. A
 First complete items 1–4 as focused changes: preserve GPT content, live command output, structured progress/context/diff and account updates. Then implement GPT branch navigation/editing and native project settings/files. Triage desktop tools from actual failures alongside that work. Additional execution machines remain deferred. Installers, transfer to other people and distribution-specific work are excluded until the owner explicitly resumes that direction. Canvas/full voice and automation remain separate features to assess for personal use.
 
 Validation for implementation should cover reconnect/late events, independent chats and machines, exact mutation retries, unsupported formats, bounds/truncation and the shared phone/tablet shell. This review itself required no deployment or functional changes.
+
+## Implementation follow-up
+
+The personal-workflow pass implements priorities 1–7 and content search. See [Native work and GPT actions](NATIVE_WORK.md) for the contracts, limits and access points. Specifically, command output streams into a bounded retained log; native plan/context/diff and machine-scoped quota refresh are exposed; unsupported visible GPT formats keep a source link; native GPT editing/regeneration/version continuation and project instructions/files use durable receipts; Skills/Plugins/MCP availability and content search are available in the shared UI.
+
+The read-only production inventory found no rejected desktop-hosted tool names to implement individually. The availability screen reports actual native list failures independently, rather than claiming that every installed desktop integration is hosted by this web client. Extended OpenAI-specific forms and future dynamic tools still require a verified contract for each integration.
+
+Native Canvas editing, two-way voice and scheduled automation management are **not implemented by this pass**. The native voice control was observed, but the current consumer browser connector has no verified duplex-audio transport. The saved App Server/CLI contract also does not expose the native scheduled-task management UI. Dictation, read-aloud, HTML demos and human Tasks remain separate features; they are not substitutes. These native features remain accessible in the protected original interface while their integrations need separate design and validation. References: [native voice](https://learn.chatgpt.com/docs/features/voice), [native automations](https://learn.chatgpt.com/docs/automations).
+
+Issue recheck found the same five open issues and no new functional issue. #6 and #37 retain their earlier explicit deferrals; #10 continues through owner hardware usage. #11 and the distribution portion of #14 are excluded by the owner's personal-installation instruction. No GitHub Actions, public Windows listener, installer, credential transfer or desktop interruption was added.

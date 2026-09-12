@@ -14,6 +14,7 @@ import { ApiError, api, configureApi, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { Chat } from "./Chat";
 import type { RecoveryOutcome } from "./ConnectionRecovery";
+import { ContentSearch, type SearchRequest } from "./ContentSearch";
 import { DeploymentStatus } from "./DeploymentStatus";
 import { DesktopControl } from "./DesktopControl";
 import { EntityArchive, type LibraryChange, libraryEvent } from "./EntityMenu";
@@ -22,6 +23,7 @@ import { Icon } from "./icons";
 import { Login } from "./Login";
 import { MachineHealthPanel } from "./MachineHealth";
 import { SpeechSettings } from "./MessageSpeech";
+import { NativeInventory } from "./NativeInventory";
 import { NotebookPanel, type NotebookRequest, type WorkspaceDestination } from "./Notebook";
 import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PaneDivider } from "./PaneDivider";
@@ -266,6 +268,18 @@ function Workspace({
     [activity, setActivity] = useState<Activity[]>([]),
     [activityCursor, setActivityCursor] = useState<number | null>(null);
   const [notebook, setNotebook] = useState<NotebookRequest>();
+  const [contentSearch, setContentSearch] = useState<SearchRequest | null>(null);
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<SearchRequest>).detail;
+      if (detail && ["codex", "gpt"].includes(detail.client)) {
+        setContentSearch(detail);
+        setDrawer(false);
+      }
+    };
+    window.addEventListener("workspace-content-search", open);
+    return () => window.removeEventListener("workspace-content-search", open);
+  }, []);
   const [workspaceDestination, setWorkspaceDestination] = useState<WorkspaceDestination>();
   useEffect(() => {
     const open = (event: Event) => {
@@ -766,7 +780,7 @@ function Workspace({
                 notebook?.scope?.name ??
                 "Проект GPT",
             }
-          : (notebook?.scope ?? null),
+          : null,
         mode:
           target.kind === "task"
             ? "tasks"
@@ -1050,6 +1064,13 @@ function Workspace({
     return (
       <>
         {notebookPanel}
+        {contentSearch && (
+          <ContentSearch
+            request={contentSearch}
+            onClose={() => setContentSearch(null)}
+            onTarget={openNotebookTarget}
+          />
+        )}
         <GptLoadBoundary onCodex={() => setClient("codex")}>
           <Suspense
             fallback={
@@ -1433,6 +1454,7 @@ function Workspace({
             onBack={() => setView("chat")}
           />
           <ActivityPane
+            threadId={threadId}
             items={activity}
             visible={view === "activity"}
             hasMore={!!activityCursor}
@@ -1519,6 +1541,7 @@ function Workspace({
         />
         <SpeechSettings />
         <UsageLimits machines={machines} open={settings} />
+        <NativeInventory projectId={projectId} visible={settings} />
         <DesktopControl
           machines={machines}
           open={settings}
@@ -1554,6 +1577,13 @@ function Workspace({
         <p className="small muted">Для установки на iPhone: Поделиться → На экран «Домой».</p>
       </dialog>
       {notebookPanel}
+      {contentSearch && (
+        <ContentSearch
+          request={contentSearch}
+          onClose={() => setContentSearch(null)}
+          onTarget={openNotebookTarget}
+        />
+      )}
       <MachineHealthPanel
         open={machinePanel}
         onClose={() => setMachinePanel(false)}

@@ -28,6 +28,7 @@ import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { registerBridgeDoctor } from "./bridge-doctor.js";
 import { registerCommandOutput } from "./command-output.js";
+import { registerContentSearch } from "./content-search.js";
 import { registerDeploymentStatus } from "./deployment-status.js";
 import { type DesktopTransport, registerDesktop } from "./desktop.js";
 import { type DeviceDependencies, registerDevices } from "./devices.js";
@@ -185,6 +186,7 @@ export async function createApp(
     });
   });
   const gpt = registerGpt(app, config, store);
+  registerContentSearch(app, sessions, gpt);
   const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);
   const push = registerPush(app, store, auth, config.hub.publicBaseUrl, {
     ...options.push,
@@ -500,8 +502,16 @@ export async function createApp(
     const id = paramId(req),
       thread = sessions.thread(id);
     const query = z.object({ turnId: idSchema.optional() }).strict().parse(req.query);
-    return store.progressDetails(id, query.turnId ?? thread.activeTurnId);
+    const turnId = query.turnId ?? thread.activeTurnId;
+    const work = sessions.nativeWork.snapshot(id, turnId);
+    return { ...store.progressDetails(id, turnId || work.turnId), ...work };
   });
+  app.get("/api/threads/:id/context", async (req) => {
+    const id = paramId(req);
+    sessions.thread(id);
+    return { usage: sessions.nativeWork.snapshot(id).usage };
+  });
+  app.get("/api/projects/:id/native-inventory", async (req) => sessions.inventory(paramId(req)));
   app.get("/api/threads/:id/activity", async (req) => {
     const id = paramId(req);
     sessions.thread(id);

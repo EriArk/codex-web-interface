@@ -436,3 +436,105 @@
 .gpt-composer[hidden] {
   display: none;
 }
+.native-content-notice {
+  margin-block: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-inline-start: 3px solid currentColor;
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+.native-content-notice p {
+  margin: 0 0 0.5rem;
+}
+.gpt-native-editor textarea {
+  min-height: 8rem;
+  max-height: 40dvh;
+  resize: vertical;
+  background: var(--input-bg, var(--surface));
+  color: var(--ink);
+}
+.gpt-native-editor footer {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.gpt-versions-dialog {
+  width: min(720px, calc(100% - 24px));
+}
+.gpt-version-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+.gpt-version-list button {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  min-width: 0;
+}
+.gpt-version-list span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.gpt-version-list [aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.gpt-version-preview {
+  min-height: 0;
+  max-height: 40dvh;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+}
+.gpt-version-preview article + article {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.gpt-project-content .quick-capture-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gpt-project-content textarea {
+  display: block;
+  width: 100%;
+  min-height: 140px;
+  max-height: 35dvh;
+  resize: vertical;
+}
+.gpt-project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gpt-project-file {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.gpt-project-file a,
+.gpt-project-file button {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  white-space: normal;
+  text-align: left;
+}
+.gpt-project-file > small {
+  grid-column: 1;
+  grid-row: 2;
+}
+.gpt-project-file > .danger {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}

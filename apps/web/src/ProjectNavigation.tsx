@@ -8,6 +8,7 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
+import { openContentSearch } from "./ContentSearch";
 import { EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
 import { NavigationFooter } from "./NavigationFooter";
@@ -249,7 +250,17 @@ export function ProjectNavigation({
     <div className="navigation-inner" data-section={section}>
       <div className="navigation-top-row">
         <div className="nav-search">
-          <Icon name="search" size={16} />
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Поиск по содержимому"
+            title="Поиск по содержимому"
+            onClick={() =>
+              openContentSearch({ client: "codex", threadId: threadId || undefined, query: query })
+            }
+          >
+            <Icon name="search" size={18} />
+          </button>
           <input
             aria-label="Поиск проектов и диалогов"
             value={query}

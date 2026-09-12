@@ -69,3 +69,68 @@
   overflow-wrap: anywhere;
   font-size: 11px;
 }
+.native-plan {
+  margin-block-end: 12px;
+}
+.native-plan ol {
+  margin-block-start: 8px;
+}
+.native-plan li[data-state="inProgress"] {
+  color: var(--ink);
+  font-weight: 700;
+}
+.native-plan li[data-state="completed"] {
+  color: var(--muted);
+}
+.native-plan li > span {
+  display: inline-block;
+  width: 18px;
+}
+.command-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.context-usage {
+  margin: 0 12px 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.context-usage > summary {
+  min-height: 28px;
+  padding-block: 5px;
+  cursor: pointer;
+}
+.context-usage p {
+  margin: 4px 0;
+}
+.native-inventory {
+  padding: 12px 0;
+  border-block: 1px solid var(--line);
+}
+.native-inventory > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.native-inventory ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.native-inventory li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-block-end: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.native-inventory li p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.native-inventory section {
+  margin-block: 16px;
+}

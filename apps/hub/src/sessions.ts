@@ -21,6 +21,8 @@ import { Catalog, type CatalogProject } from "./catalog.js";
 import { elicitationResponse, parseElicitation } from "./elicitation.js";
 import { ExternalActivity } from "./externalActivity.js";
 import type { EntityAction, EntityKind } from "./library.js";
+import { readNativeInventory } from "./native-inventory.js";
+import { NativeWorkStore } from "./native-work.js";
 import type { Store, ThreadRecord } from "./store.js";
 import { normalizeLimits } from "./usage.js";
 import { workspaceTool } from "./workspaceTools.js";
@@ -34,6 +36,7 @@ function text(value: unknown, max = 200000): string {
   return typeof value === "string" ? value.slice(0, max) : "";
 }
 interface Runtime {
+  machineId?: string;
   rpc: CodexClient;
   loaded: Set<string>;
   active: Set<string>;
@@ -71,6 +74,8 @@ export class Sessions extends EventEmitter {
   readonly attachments: Attachments;
   readonly catalog: Catalog;
   readonly externalActivity: ExternalActivity;
+  readonly nativeWork: NativeWorkStore;
+  readonly usageRevision = new Map<string, number>();
   private idleTimer: NodeJS.Timeout;
   constructor(
     readonly config: HubConfig,
@@ -79,6 +84,7 @@ export class Sessions extends EventEmitter {
       new CodexClient(spawnCodex(m, cwd)),
   ) {
     super();
+    this.nativeWork = new NativeWorkStore(store);
     this.attachments = new Attachments(
       join(config.hub.resultsPath, "uploads"),
       store,
@@ -151,7 +157,13 @@ export class Sessions extends EventEmitter {
       const anchor =
         this.config.projects.find((seed) => seed.machineId === machine.id && seed.enabled) ?? p;
       const rpc = this.clientFactory(machine, anchor.workingDirectory);
-      const runtime: Runtime = { rpc, loaded: new Set(), active: new Set(), touched: Date.now() };
+      const runtime: Runtime = {
+        machineId: machine.id,
+        rpc,
+        loaded: new Set(),
+        active: new Set(),
+        touched: Date.now(),
+      };
       rpc.on("notification", (method: string, params: Record<string, unknown>) =>
         this.notification(runtime, method, params),
       );
@@ -171,6 +183,8 @@ export class Sessions extends EventEmitter {
           runtime.active.add(approval.threadId);
         }
         for (const threadId of runtime.active) {
+          const activeTurnId = this.store.thread(threadId).activeTurnId;
+          if (activeTurnId) this.nativeWork.finish(threadId, activeTurnId);
           this.store.setStatus(threadId, "unknown", this.store.thread(threadId).activeTurnId);
           this.emitEvent(threadId, "session.state", {
             status: "unknown",
@@ -602,6 +616,26 @@ export class Sessions extends EventEmitter {
     } catch {
       throw new HubError(503, "LIMITS_UNAVAILABLE", "Лимиты сейчас недоступны.");
     }
+  }
+  async inventory(projectId: string) {
+    const project = this.project(projectId),
+      r = await this.runtime(projectId);
+    r.touched = Date.now();
+    const groups = await readNativeInventory(
+      (method, params) => r.rpc.request(method, params),
+      project.workingDirectory,
+    );
+    const unsupportedTools = this.store.db
+      .prepare(
+        "SELECT json_extract(r.payload,'$.tool') AS name,count(*) AS n FROM results r JOIN threads t ON t.id=r.threadId WHERE t.projectId=? AND r.type='error' AND r.sourceKey LIKE 'client-tool:%' GROUP BY name ORDER BY n DESC LIMIT 40",
+      )
+      .all(projectId)
+      .flatMap((row) =>
+        typeof row.name === "string" && /^[a-zA-Z0-9_./-]{1,100}$/.test(row.name)
+          ? [{ name: row.name, count: Number(row.n) }]
+          : [],
+      );
+    return { groups, unsupportedTools };
   }
   async usageConnection(machineId: string) {
     const project = this.catalog.projects().find((p) => p.machineId === machineId && p.enabled);
@@ -1419,11 +1453,39 @@ export class Sessions extends EventEmitter {
     );
   }
   private notification(r: Runtime, method: string, p: Record<string, unknown>): void {
+    if (method === "account/rateLimits/updated") {
+      // Invalidate at machine scope, before resolving a thread. Never publish account payloads.
+      if (r.machineId) {
+        this.usageRevision.set(r.machineId, (this.usageRevision.get(r.machineId) ?? 0) + 1);
+        this.store.changes.emit("navigation");
+      }
+      return;
+    }
     const t = this.store.threadByCodex(text(p.threadId));
     if (!t) return;
+    if (r.machineId) {
+      const project = this.catalog.projects().find((project) => project.id === t.projectId);
+      // A project can leave the catalog before its already-loaded writer completes.
+      if (project ? project.machineId !== r.machineId : !r.loaded.has(t.id)) return;
+    }
     r.touched = Date.now();
     const turnId = text(p.turnId) || t.activeTurnId;
-    if (method === "item/reasoning/summaryTextDelta") {
+    if (["turn/plan/updated", "thread/tokenUsage/updated", "turn/diff/updated"].includes(method)) {
+      if (turnId)
+        this.nativeWork.update(
+          t.id,
+          turnId,
+          method === "turn/plan/updated"
+            ? "plan"
+            : method === "turn/diff/updated"
+              ? "diff"
+              : "usage",
+          p,
+        );
+    } else if (method === "item/commandExecution/outputDelta") {
+      if (turnId && typeof p.delta === "string")
+        this.nativeWork.command(t.id, turnId, text(p.itemId, 200), {}, p.delta);
+    } else if (method === "item/reasoning/summaryTextDelta") {
       // Only the native public summary stream is used. Never expose raw reasoning text/content.
       const itemId = text(p.itemId, 200),
         key = t.id + ":" + itemId;
@@ -1474,6 +1536,7 @@ export class Sessions extends EventEmitter {
         id = text(turn.id),
         status = text(turn.status);
       r.active.delete(t.id);
+      this.nativeWork.finish(t.id, id);
       for (const key of this.summaries.keys())
         if (key.startsWith(t.id + ":")) this.summaries.delete(key);
       this.catalog.invalidate(t.id);
@@ -1537,6 +1600,8 @@ export class Sessions extends EventEmitter {
       }
     } else if (method === "item/started") {
       const kind = text(record(p.item).type);
+      if (kind === "commandExecution" && turnId)
+        this.nativeWork.command(t.id, turnId, text(record(p.item).id, 200), record(p.item));
       const labels: Record<string, string> = {
         reasoning: "Обдумывает задачу",
         commandExecution: "Выполняет команду",
@@ -1610,6 +1675,7 @@ export class Sessions extends EventEmitter {
         }
       } else if (type === "commandExecution") {
         const command = text(item.command, 4000);
+        if (turnId) this.nativeWork.command(t.id, turnId, id, item);
         this.emitEvent(
           t.id,
           "activity.command",
@@ -1620,6 +1686,11 @@ export class Sessions extends EventEmitter {
             status: text(item.status),
             exitCode: item.exitCode,
             output: text(item.aggregatedOutput, 64000),
+            ...(turnId
+              ? {
+                  logUrl: `/api/threads/${encodeURIComponent(t.id)}/commands/${encodeURIComponent(id)}?turnId=${encodeURIComponent(turnId)}`,
+                }
+              : {}),
           },
           turnId,
         );
@@ -1708,6 +1779,7 @@ export class Sessions extends EventEmitter {
     }
     this.runtimes.clear();
     this.summaries.clear();
+    this.nativeWork.close();
     await this.catalog.artifacts.close();
   }
 }

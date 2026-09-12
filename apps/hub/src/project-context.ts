@@ -56,10 +56,21 @@ export class ProjectContext {
         "SELECT status FROM gpt_jobs WHERE nativeId=? AND status IN ('queued','preparing','running','unknown') ORDER BY createdAt DESC LIMIT 1",
       )
       .get(id);
+    const native = this.db
+      .prepare(
+        "SELECT state FROM gpt_native_operations WHERE (nativeId=? OR resultNativeId=?) AND state IN ('preparing','running','unknown') ORDER BY createdAt DESC LIMIT 1",
+      )
+      .get(id, id);
     return {
       threadId: id,
       title: entry.name || "Диалог GPT",
-      status: String(run?.status ?? "idle"),
+      status: String(
+        native?.state
+          ? native.state === "unknown"
+            ? "unknown"
+            : "running"
+          : (run?.status ?? "idle"),
+      ),
     };
   }
   current(scope: ProjectScope): CurrentProjectChat {

@@ -17,8 +17,10 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { CommandOutput } from "./CommandOutput";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
+import { LiveCommandOutput } from "./LiveCommandOutput";
 import { MarkdownTable } from "./MarkdownTable";
 import { PreviewViewer } from "./PreviewViewer";
+import { TurnDetails } from "./TurnDetails";
 import type { Activity, Result } from "./types";
 export function Results({
   focusVersion = 0,
@@ -303,11 +305,13 @@ export function Results({
   );
 }
 export function ActivityPane({
+  threadId,
   items,
   visible,
   hasMore,
   onOlder,
 }: {
+  threadId: string;
   items: Activity[];
   visible: boolean;
   hasMore: boolean;
@@ -322,6 +326,14 @@ export function ActivityPane({
         </span>
       </div>
       <div className="pane-scroll">
+        {visible && threadId && (
+          <TurnDetails
+            key={threadId}
+            id="activity-turn-details"
+            threadId={threadId}
+            turnId={null}
+          />
+        )}
         {!items.length && (
           <div className="empty-state">
             <Icon name="activity" size={30} />
@@ -343,7 +355,11 @@ export function ActivityPane({
                   : (item.payload.status ?? "")}
               </span>
             </summary>
-            <pre>{item.payload.output ?? item.payload.message ?? "Без текстового вывода"}</pre>
+            {item.payload.logUrl ? (
+              <LiveCommandOutput url={item.payload.logUrl} />
+            ) : (
+              <pre>{item.payload.output ?? item.payload.message ?? "Без текстового вывода"}</pre>
+            )}
           </details>
         ))}
         {hasMore && (
