@@ -59,10 +59,10 @@ export class GptHistoryCache {
   peek(id: string): GptMessage[] {
     return this.entries.get(id)?.items ?? [];
   }
-  async snapshot(id: string, ttl = 15000) {
+  async snapshot(id: string, ttl = 60000) {
     return this.get(id, ttl);
   }
-  async messages(id: string, ttl = 15000): Promise<GptMessage[]> {
+  async messages(id: string, ttl = 60000): Promise<GptMessage[]> {
     return (await this.get(id, ttl)).items;
   }
   async page(
@@ -74,7 +74,7 @@ export class GptHistoryCache {
       prefix?: string;
       messageId?: string;
     },
-    ttl = 15000,
+    ttl = 60000,
   ): Promise<GptHistoryPage> {
     const entry = await this.get(id, ttl),
       list = entry.items;

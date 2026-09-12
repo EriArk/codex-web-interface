@@ -231,12 +231,13 @@ server=createServer(async(req,res)=>{
    const session=await sessionResponse.json();
    if(typeof session.accessToken!=='string')return {status:401,error:'GPT_LOGIN_REQUIRED'};
    const response=await fetch(path,{credentials:'include',cache:'no-store',headers:{Authorization:'Bearer '+session.accessToken},signal:AbortSignal.timeout(20000)});
-   if(!response.ok)return {status:response.status,error:'GPT_READ_FAILED'};
+   if(!response.ok)return {status:response.status,error:'GPT_READ_FAILED',retryAfter:response.headers.get('retry-after')};
    const reader=response.body.getReader(),chunks=[];let size=0;
    while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>8*1024*1024){await reader.cancel();return {status:413,error:'GPT_HISTORY_TOO_LARGE'}}chunks.push(part.value)}
    const bytes=new Uint8Array(size);let pos=0;for(const chunk of chunks){bytes.set(chunk,pos);pos+=chunk.length}
    return {status:200,data:JSON.parse(new TextDecoder().decode(bytes))};
   },path);
+  if(typeof result.retryAfter==='string'&&/^[\x20-\x7e]{1,120}$/.test(result.retryAfter))res.setHeader('Retry-After',result.retryAfter);
   res.statusCode=result.status;res.end(JSON.stringify(result.data??{error:result.error}));
  }catch{res.statusCode=503;res.end(JSON.stringify({error:'GPT_BROWSER_UNAVAILABLE'}))}
 });

@@ -28,6 +28,7 @@ import { gptLinkedText } from "./gpt-links.js";
 import { GptOperations, gptOperationInput } from "./gpt-operations.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
+import { GptReadBackoff } from "./gpt-read-backoff.js";
 import { gptResults, resultPage } from "./gpt-results.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 import { GptWorkspaceWork, workspaceId, workspaceInput } from "./gpt-workspace.js";
@@ -58,6 +59,8 @@ type Json = Record<string, any>;
 const active = ["queued", "preparing", "running"];
 const error = (code: string, message: string, status = 409) => new HubError(status, code, message);
 export class GptService {
+  private readonly historyBackoff = new GptReadBackoff();
+  private readonly historyReads = new Map<string, Promise<Json>>();
   readonly historyCache = new GptHistoryCache(async (id) =>
     gptHistory(await this.json("/conversation?id=" + encodeURIComponent(id)), id),
   );
@@ -236,6 +239,8 @@ export class GptService {
   private async response(path: string, body?: unknown, timeout = 30000, signal?: AbortSignal) {
     if (!this.available())
       throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
+    const historyRead = body === undefined && path.startsWith("/conversation?");
+    if (historyRead) this.historyBackoff.check();
     try {
       const response = await fetch(new URL(path, this.config.gpt?.endpoint), {
         headers: { Authorization: "Bearer " + this.token, "Content-Type": "application/json" },
@@ -249,6 +254,14 @@ export class GptService {
       });
       if (!response.ok) {
         await response.body?.cancel();
+        if (historyRead && (response.status === 429 || response.status >= 500))
+          throw this.historyBackoff.fail(response.status, response.headers.get("retry-after"));
+        if (historyRead)
+          throw error(
+            "GPT_HISTORY_UNAVAILABLE",
+            "Не удалось прочитать историю ChatGPT. Проверь доступ к диалогу в оригинале.",
+            response.status === 404 ? 404 : 503,
+          );
         if (
           path === "/bridge/chat" &&
           response.status === 400 &&
@@ -284,9 +297,11 @@ export class GptService {
           503,
         );
       }
+      if (historyRead) this.historyBackoff.success();
       return response;
     } catch (e) {
       if (e instanceof HubError) throw e;
+      if (historyRead) throw this.historyBackoff.fail(503, null);
       throw error("GPT_CONNECTION_LOST", "Нет связи с подключением GPT.", 503);
     }
   }
@@ -305,6 +320,20 @@ export class GptService {
     };
   }
   async json(path: string, body?: unknown): Promise<Json> {
+    if (body === undefined && path.startsWith("/conversation?")) {
+      const pending = this.historyReads.get(path);
+      if (pending) return pending;
+      const task = this.readJson(path);
+      this.historyReads.set(path, task);
+      try {
+        return await task;
+      } finally {
+        if (this.historyReads.get(path) === task) this.historyReads.delete(path);
+      }
+    }
+    return this.readJson(path, body);
+  }
+  private async readJson(path: string, body?: unknown): Promise<Json> {
     return (
       await this.response(
         path,
@@ -910,7 +939,7 @@ export class GptService {
             checking = false;
           }
         })();
-      }, 5000);
+      }, 15000);
       monitor.unref();
       const response = await this.response(
         "/bridge/chat",
@@ -1324,7 +1353,7 @@ export function registerGpt(app: FastifyInstance, config: HubConfig, store: Stor
       )
       .get(p.id);
     service.library.assertExists("thread", p.id);
-    return service.historyCache.page(p.id, q, running ? 3000 : 15000);
+    return service.historyCache.page(p.id, q, running ? 15000 : 60000);
   });
   app.get("/api/gpt/conversations/:id/results", async (req) => {
     const p = z.object({ id }).parse(req.params);

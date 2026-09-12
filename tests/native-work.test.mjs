@@ -95,6 +95,47 @@ test("visible unsupported GPT parts remain source-bound without private content"
   assert.equal(gptHistory(value).length, 1);
 });
 
+test("GPT tool-directed assistant records never become content notices or exposed commands", () => {
+  const mapping = {};
+  let parent = null;
+  const add = (id, recipient, channel, content, metadata = {}) => {
+    mapping[id] = {
+      id,
+      parent,
+      message: { id, author: { role: "assistant" }, recipient, channel, content, metadata },
+    };
+    parent = id;
+  };
+  add(
+    "preamble",
+    "all",
+    "commentary",
+    { content_type: "text", parts: ["Проверяю материалы"] },
+    { hide_inline_actions: true },
+  );
+  for (const channel of [null, "commentary", "final"])
+    for (const content of [
+      { content_type: "code", text: "PRIVATE_TOOL_ARGUMENTS" },
+      { content_type: "text", parts: ["PRIVATE_TOOL_ARGUMENTS"] },
+    ])
+      add("tool-" + Object.keys(mapping).length, "api_tool.call_tool", channel, content);
+  add(
+    "legacy-call",
+    null,
+    null,
+    { content_type: "code", text: "PRIVATE_TOOL_ARGUMENTS" },
+    { tool_invoking_message: true },
+  );
+  add("final", "all", "final", { content_type: "text", parts: ["Настоящий ответ"] });
+  const messages = gptHistory({ mapping, current_node: parent });
+  assert.deepEqual(
+    messages.map((m) => m.id),
+    ["preamble", "final"],
+  );
+  assert(messages.every((m) => !m.unsupported));
+  assert.doesNotMatch(JSON.stringify(messages), /PRIVATE_/);
+});
+
 test("native snapshots and logs survive reconstruction, keep a bounded tail and isolate identities", () => {
   const store = new Store(":memory:");
   const thread = store.createThread("p", randomUUID(), "test"),

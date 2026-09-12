@@ -39,7 +39,7 @@ test("GPT history shares native reads, confirms unchanged pages and preserves ex
   client.scrollTop = 742;
   client.sticky = false;
   assert.equal(mergeGptHistory(client, unchanged).scrollTop, 742);
-  now += 16000;
+  now += 61000;
   list = messages(62);
   const latest = await cache.page("chat", {
     known: client.revision,
@@ -53,7 +53,7 @@ test("GPT history shares native reads, confirms unchanged pages and preserves ex
   assert.equal(client.before, "m20");
   assert.equal(client.sticky, false);
   assert.equal(calls, 2);
-  now += 16000;
+  now += 61000;
   list = messages(62);
   list[10] = { ...list[10], text: "edited native branch" };
   const changed = await cache.page("chat", {
@@ -63,7 +63,7 @@ test("GPT history shares native reads, confirms unchanged pages and preserves ex
   });
   assert.equal(changed.retainOlder, false);
   assert.equal(mergeGptHistory(client, changed).messages.length, 20);
-  now += 16000;
+  now += 61000;
   list = messages(4);
   await assert.rejects(cache.page("chat", { before: "m20" }), /История изменилась/);
 });
