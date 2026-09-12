@@ -81,7 +81,7 @@ for (const [engine, type] of [
     const composer = page.getByRole("textbox", { name: "Сообщение Codex" });
     await composer.fill("Черновик остаётся при смене оформления");
     await composer.blur();
-    for (const theme of ["hitech-2000s", "crt-green"]) {
+    for (const theme of ["organizer", "classic-dark", "hitech-2000s", "crt-green"]) {
       await button("Настройки").click();
       await page.locator(`.settings-dialog .theme-option.${theme} input`).check();
       for (const [label, id] of [
@@ -102,7 +102,14 @@ for (const [engine, type] of [
         await expect(button(label)).toBeEnabled();
         await expect(page.locator("html")).toHaveAttribute("data-case-color", id);
         assert.equal(
-          f.store.preferences()[theme === "crt-green" ? "crtCaseColor" : "hitechCaseColor"],
+          f.store.preferences()[
+            {
+              "crt-green": "crtCaseColor",
+              "hitech-2000s": "hitechCaseColor",
+              organizer: "organizerAccentColor",
+              "classic-dark": "darkAccentColor",
+            }[theme]
+          ],
           id,
         );
       }
@@ -123,14 +130,26 @@ for (const [engine, type] of [
         await shot(`${theme}-chat-${width}`);
         if (width < 1100) await button("Открыть проекты").click();
         const toggle = button("Переключиться на GPT");
-        const box = await toggle.boundingBox();
-        assert(
-          box && box.width >= 54 && box.height >= 54 && box.y >= 0 && box.y + box.height <= height,
-        );
-        assert.notEqual(
-          await toggle.evaluate((el) => getComputedStyle(el, "::before").content),
-          "none",
-        );
+        await expect
+          .poll(
+            async () => {
+              const box = await toggle.boundingBox();
+              return (
+                !!box &&
+                box.width >= 54 &&
+                box.height >= 54 &&
+                box.y >= 0 &&
+                box.y + box.height <= height
+              );
+            },
+            { message: `${engine} ${theme} ${width}: mode toggle fits after drawer animation` },
+          )
+          .toBe(true);
+        if (theme === "crt-green" || theme === "hitech-2000s")
+          assert.notEqual(
+            await toggle.evaluate((el) => getComputedStyle(el, "::before").content),
+            "none",
+          );
         await shot(`${theme}-navigation-${width}`);
         if (width < 1100) await button("Закрыть проекты").click();
       }
@@ -154,7 +173,7 @@ for (const [engine, type] of [
     await page.reload();
     await expect(composer).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-case-color", "red");
-    // A fresh device restores both independent casing preferences from Hub metadata.
+    // A fresh device restores all four independent color preferences from Hub metadata.
     const second = await browser.newContext({
       viewport: { width: 393, height: 852 },
       serviceWorkers: "block",
@@ -171,6 +190,11 @@ for (const [engine, type] of [
         .click();
       await other.locator(".settings-dialog .theme-option.hitech-2000s input").check();
       await expect(other.locator("html")).toHaveAttribute("data-case-color", "turquoise");
+      for (const theme of ["organizer", "classic-dark"]) {
+        await other.locator(`.settings-dialog .theme-option.${theme} input`).check();
+        await expect(other.locator(".case-color-picker legend")).toContainText("Цвет акцентов");
+        await expect(other.locator("html")).toHaveAttribute("data-case-color", "turquoise");
+      }
     } finally {
       await second.close();
     }

@@ -94,7 +94,7 @@ for (const [engine, type] of [
     "pink",
   ];
   const check = async (locator, label, minimum = 4.5) => {
-    for (const theme of ["hitech-2000s", "crt-green"]) {
+    for (const theme of ["organizer", "classic-dark", "hitech-2000s", "crt-green"]) {
       await page.evaluate((t) => {
         document.documentElement.dataset.theme = t;
       }, theme);
@@ -132,6 +132,11 @@ for (const [engine, type] of [
         `${width} header subtitle`,
       );
       await check(draft, `${width} composer`);
+      await check(
+        page.locator(".workspace-header > .icon-button").filter({ visible: true }).first(),
+        `${width} header keycap`,
+        3,
+      );
       for (const el of await page
         .locator(".mobile-tabs > button, .support-tabs > button")
         .filter({ visible: true })
@@ -144,8 +149,8 @@ for (const [engine, type] of [
         `${width} casing icon`,
         3,
       );
-      for (const theme of ["hitech-2000s", "crt-green"]) {
-        for (const color of ["white", "graphite", "red"]) {
+      for (const theme of ["organizer", "classic-dark", "hitech-2000s", "crt-green"]) {
+        for (const color of ["white", "graphite", "red", "blue"]) {
           await page.evaluate(
             ([t, c]) => {
               document.documentElement.dataset.theme = t;
@@ -323,7 +328,7 @@ for (const [engine, type] of [
         .length,
       0,
     );
-    assert.deepEqual(failures, [], "Both material themes must contrast with their own surface");
+    assert.deepEqual(failures, [], "All four themes must contrast with their own surface");
     console.log(
       `${engine}: CRT/Hi-Tech text and pressed/focused controls across twelve casing colors, phone/tablet and preserved draft passed`,
     );

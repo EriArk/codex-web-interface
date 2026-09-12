@@ -1,0 +1,94 @@
+/* Paper and graphite keep their materials. The shared palette colors accents only. */
+:root[data-case-color="graphite"] {
+  --paper-accent: #343c45;
+}
+:root[data-case-color="white"] {
+  --paper-accent: #525b62;
+}
+:root[data-case-color="silver"] {
+  --paper-accent: #515d67;
+}
+:root[data-case-color="red"] {
+  --paper-accent: #9f3f47;
+}
+:root[data-case-color="orange"] {
+  --paper-accent: #935022;
+}
+:root[data-case-color="yellow"] {
+  --paper-accent: #7c6017;
+}
+:root[data-case-color="green"] {
+  --paper-accent: #346447;
+}
+:root[data-case-color="mint"] {
+  --paper-accent: #376958;
+}
+:root[data-case-color="turquoise"] {
+  --paper-accent: #286b70;
+}
+:root[data-case-color="blue"] {
+  --paper-accent: #3c6292;
+}
+:root[data-case-color="purple"] {
+  --paper-accent: #74508f;
+}
+:root[data-case-color="pink"] {
+  --paper-accent: #914762;
+}
+
+:root[data-theme="organizer"] {
+  --muted: #52614f;
+  --accent: var(--paper-accent, #3d6d4f);
+  --accent-ink: #fffdf5;
+  --soft: color-mix(in srgb, var(--polymer-tint) 20%, var(--paper));
+  --tab-material: linear-gradient(
+    color-mix(in srgb, var(--polymer-tint) 16%, var(--paper)),
+    color-mix(in srgb, var(--polymer-tint) 30%, var(--paper))
+  );
+  --selected-shadow: inset 3px 0 var(--accent), inset 0 1px #fff9;
+}
+:root[data-theme="organizer"]
+  :is(.nav-project.selected, .nav-thread.selected, .mobile-tabs > .active) {
+  background: var(--soft);
+  color: var(--accent);
+  box-shadow: var(--selected-shadow);
+}
+:root[data-theme="organizer"] .notebook-modules button {
+  background: var(--tab-material);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+:root[data-theme="organizer"] .notebook-modules button[aria-pressed="true"] {
+  background: var(--soft);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+:root[data-theme="organizer"] :is(.message.user .avatar, .message.user .message-body) {
+  color: var(--ink);
+  background: var(--soft);
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+}
+
+:root[data-theme="classic-dark"] {
+  --accent: color-mix(in srgb, var(--polymer-tint) 45%, #f5f2e8);
+  --accent-ink: #10191d;
+  --soft: color-mix(in srgb, var(--polymer-tint) 24%, var(--nav));
+  --tab-material: var(--soft);
+}
+:root[data-theme="classic-dark"]
+  :is(.nav-project.selected, .nav-thread.selected, .mobile-tabs > .active) {
+  background: var(--soft);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+:root[data-theme="classic-dark"] .composer {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+:root[data-theme="classic-dark"] :is(.message.user .avatar, .message.user .message-body) {
+  background: var(--soft);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+:root:is([data-theme="organizer"], [data-theme="classic-dark"]) ::selection {
+  color: var(--accent-ink);
+  background: var(--accent);
+}

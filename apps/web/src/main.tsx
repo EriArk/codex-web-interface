@@ -17,6 +17,7 @@ import "./motion.css";
 import "./materials.css";
 import "./tablet.css";
 import "./polymer.css";
+import "./accent-colors.css";
 import "./viewport-controls.css";
 
 applyTheme(cachedTheme());

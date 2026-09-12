@@ -45,27 +45,47 @@ export function applyTheme(id: Theme) {
   const color = caseColor(theme.id);
   document.documentElement.dataset.caseColor = color;
   const chrome =
-    theme.id === "hitech-2000s" || theme.id === "crt-green" ? caseChrome[color] : theme.chrome;
+    theme.id === "hitech-2000s" || theme.id === "crt-green"
+      ? caseChrome(color, theme.id === "crt-green")
+      : theme.chrome;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", chrome);
 }
 
 const caseEvent = "codex-case-color-change";
 const memory: CasePreferences = {};
 const edited = new Set<keyof CasePreferences>();
-const caseChrome: Record<CaseColor, string> = {
-  graphite: "#272b32",
-  white: "#d2d4d0",
-  silver: "#929ba1",
-  red: "#c37377",
-  orange: "#cb9561",
-  yellow: "#d1bc6b",
-  green: "#6ea37b",
-  mint: "#94beaa",
-  turquoise: "#6aabad",
-  blue: "#7fa0c9",
-  purple: "#a389be",
-  pink: "#c798b2",
+const caseTints: Record<CaseColor, string> = {
+  graphite: "#262b32",
+  white: "#e2e2db",
+  silver: "#929da6",
+  red: "#9f3f47",
+  orange: "#d08b50",
+  yellow: "#dbba5c",
+  green: "#3d6d4f",
+  mint: "#80baa5",
+  turquoise: "#286b70",
+  blue: "#3c6292",
+  purple: "#74508f",
+  pink: "#c07e9c",
 };
+// Match the opaque low casing stop before the first React render (including iOS chrome).
+function caseChrome(color: CaseColor, evening: boolean) {
+  return `#${([0, 1, 2] as const)
+    .map((i) => {
+      const tint = parseInt(caseTints[color].slice(1 + i * 2, 3 + i * 2), 16);
+      const base = evening ? tint * 0.42 + ([17, 19, 25] as const)[i] * 0.58 : tint;
+      return Math.round(base * 0.9 + ([19, 26, 34] as const)[i] * 0.1)
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
+}
+const preferenceKeys = [
+  "crtCaseColor",
+  "hitechCaseColor",
+  "organizerAccentColor",
+  "darkAccentColor",
+] as const;
 export const caseColorNames: Record<CaseColor, string> = {
   graphite: "Чёрный",
   white: "Белый",
@@ -81,7 +101,12 @@ export const caseColorNames: Record<CaseColor, string> = {
   silver: "Серебристый",
 };
 export function casePreferenceKey(theme: Theme): keyof CasePreferences {
-  return theme === "crt-green" ? "crtCaseColor" : "hitechCaseColor";
+  return {
+    "crt-green": "crtCaseColor",
+    "hitech-2000s": "hitechCaseColor",
+    organizer: "organizerAccentColor",
+    "classic-dark": "darkAccentColor",
+  }[theme] as keyof CasePreferences;
 }
 export function caseColor(theme: Theme): CaseColor {
   const key = casePreferenceKey(theme);
@@ -91,7 +116,10 @@ export function caseColor(theme: Theme): CaseColor {
   } catch {
     /* Optional cache. */
   }
-  return caseColorIds.find((id) => id === value) ?? (theme === "crt-green" ? "green" : "turquoise");
+  return (
+    caseColorIds.find((id) => id === value) ??
+    (theme === "hitech-2000s" ? "turquoise" : theme === "classic-dark" ? "blue" : "green")
+  );
 }
 function cacheCaseColor(key: keyof CasePreferences, value: CaseColor) {
   memory[key] = value;
@@ -102,7 +130,7 @@ function cacheCaseColor(key: keyof CasePreferences, value: CaseColor) {
   }
 }
 export function hydrateCaseColors(prefs: CasePreferences) {
-  for (const key of ["crtCaseColor", "hitechCaseColor"] as const) {
+  for (const key of preferenceKeys) {
     const value = caseColorIds.find((id) => id === prefs[key]);
     if (!edited.has(key) && value) cacheCaseColor(key, value);
   }
@@ -118,7 +146,7 @@ export function setCaseColor(theme: Theme, value: CaseColor) {
 }
 export function subscribeCaseColor(listener: () => void) {
   const storage = (event: StorageEvent) => {
-    for (const key of ["crtCaseColor", "hitechCaseColor"] as const) {
+    for (const key of preferenceKeys) {
       if (event.key === `codex-${key}` || event.key === null) delete memory[key];
     }
     applyTheme(document.documentElement.dataset.theme as Theme);

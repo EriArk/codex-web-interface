@@ -16,4 +16,6 @@ export type CaseColor = (typeof caseColorIds)[number];
 export interface CasePreferences {
   crtCaseColor?: CaseColor;
   hitechCaseColor?: CaseColor;
+  organizerAccentColor?: CaseColor;
+  darkAccentColor?: CaseColor;
 }

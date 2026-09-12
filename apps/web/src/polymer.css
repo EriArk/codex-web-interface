@@ -1,74 +1,111 @@
 /* TrainerOS material reference: tinted polymer, contact edges and inset screens. */
 :root,
 [data-case-color="turquoise"] {
-  --polymer-tint: #73babc;
+  --polymer-tint: #286b70;
   --polymer-ink: #172125;
 }
 [data-case-color="graphite"] {
-  --polymer-tint: #292c33;
+  --polymer-tint: #262b32;
   --polymer-ink: #f0f4f7;
 }
 [data-case-color="white"] {
-  --polymer-tint: #e7e8e3;
+  --polymer-tint: #e2e2db;
 }
 [data-case-color="yellow"] {
-  --polymer-tint: #e6cd73;
+  --polymer-tint: #dbba5c;
 }
 [data-case-color="mint"] {
-  --polymer-tint: #a2d0b9;
+  --polymer-tint: #80baa5;
 }
 [data-case-color="purple"] {
-  --polymer-tint: #b295cf;
+  --polymer-tint: #74508f;
 }
 [data-case-color="pink"] {
-  --polymer-tint: #dba5c1;
+  --polymer-tint: #c07e9c;
 }
 [data-case-color="green"] {
-  --polymer-tint: #78b184;
+  --polymer-tint: #3d6d4f;
 }
 [data-case-color="blue"] {
-  --polymer-tint: #8aaedb;
+  --polymer-tint: #3c6292;
 }
 [data-case-color="red"] {
-  --polymer-tint: #d67c80;
+  --polymer-tint: #9f3f47;
 }
 [data-case-color="orange"] {
-  --polymer-tint: #dfa268;
+  --polymer-tint: #d08b50;
 }
 [data-case-color="silver"] {
-  --polymer-tint: #a0a9af;
+  --polymer-tint: #929da6;
 }
-/* Swatches resolve their own ink, even inside a black casing. */
-[data-case-color]:not([data-case-color="graphite"]) {
-  --polymer-ink: #172125;
+/* Every material owns its ink, including a swatch inside another color. */
+[data-case-color] {
+  --polymer-ink: #10191d;
+  --polymer-letter-shadow: 0 1px 0 #ffffffa6;
+}
+:is(
+  [data-case-color="graphite"],
+  [data-case-color="red"],
+  [data-case-color="green"],
+  [data-case-color="turquoise"],
+  [data-case-color="blue"],
+  [data-case-color="purple"]
+) {
+  --polymer-ink: #f7f5eb;
+  --polymer-letter-shadow: 0 1px 0 #06131ce6, 0 -1px 0 #ffffff1a;
 }
 
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) {
-  --case-top: color-mix(in srgb, var(--polymer-tint) 84%, #fff);
-  --case-mid: var(--polymer-tint);
-  --case-low: color-mix(in srgb, var(--polymer-tint) 90%, #172026);
-  --case-edge: color-mix(in srgb, var(--polymer-tint) 55%, #fff);
-  --case-seam: color-mix(in srgb, var(--polymer-tint) 30%, #020a0b);
+  --case-tint: var(--polymer-tint);
+  --case-top: color-mix(in srgb, var(--case-tint) 94%, #fff);
+  --case-mid: var(--case-tint);
+  --case-low: color-mix(in srgb, var(--case-tint) 90%, #131a22);
+  --case-edge: color-mix(in srgb, var(--case-tint) 55%, #fff);
+  --case-seam: color-mix(in srgb, var(--case-tint) 30%, #020a0b);
   --case-ink: var(--polymer-ink);
-  --case-muted: var(--polymer-ink);
-  --case-glint: #ffffff80;
+  --case-muted: var(--case-ink);
+  --case-glint: #ffffffb3;
+  --case-letter-shadow: var(--polymer-letter-shadow);
   --case-surface:
-    radial-gradient(#ffffff09 0.5px, transparent 0.8px) 0 0 / 3px 3px,
-    radial-gradient(ellipse at 28% -80%, #e0fff222, transparent 72%),
-    linear-gradient(165deg, var(--case-top), var(--case-mid) 42%, var(--case-low));
+    radial-gradient(#ffffff08 0.4px, transparent 0.7px) 0 0 / 3px 3px,
+    linear-gradient(180deg, #ffffff12, transparent 7px calc(100% - 5px), #00000024),
+    linear-gradient(140deg, var(--case-top), var(--case-mid) 38%, var(--case-low));
   --case-shadow:
-    inset 0 1px 0 var(--case-glint), inset 1px 0 0 #eaffed14, inset 0 -2px 1px var(--case-seam),
-    0 2px 2px #0005;
+    inset 0 1px 0 var(--case-glint), inset 1px 0 0 #ffffff40,
+    inset -1px 0 0 #00000030, inset 0 -2px 0 var(--case-seam),
+    0 2px 0 #0005, 0 4px 5px #0004;
   --screen-shadow: inset 0 2px 5px #051d292b, inset 0 0 0 1px #06192026, 0 1px 0 var(--case-glint);
   --screen-material: var(--paper);
-  --case-pressed: linear-gradient(180deg, var(--case-low), var(--case-mid));
-  --case-pressed-shadow: inset 0 2px 3px #0005, inset 0 0 0 1px #0002, 0 1px var(--case-glint);
+  --cap-top: color-mix(in srgb, var(--case-tint) 28%, #fff6e7);
+  --cap-mid: color-mix(in srgb, var(--case-tint) 44%, #f4ead8);
+  --cap-low: color-mix(in srgb, var(--case-tint) 54%, #f4ead8);
+  --cap-ink: #10191d;
+  --cap-letter-shadow: 0 1px 0 #ffffffb3;
+  --cap-surface: linear-gradient(180deg, var(--cap-top), var(--cap-mid) 42%, var(--cap-low));
+  --cap-shadow:
+    inset 0 1px 0 #fff9, inset 1px 0 0 #fff5, inset 0 -1px 0 #0004, 0 2px 0 var(--case-seam),
+    0 3px 3px #0005;
+  --case-pressed: linear-gradient(180deg, var(--cap-low), var(--cap-mid));
+  --case-pressed-shadow: inset 0 2px 3px #0007, inset 0 0 0 1px #0003, 0 1px var(--case-glint);
   --panel-heading: var(--case-surface);
   --panel-material: var(--surface);
   --field-shadow: inset 0 2px 3px #00161626, 0 1px #fff8;
   --status-surface: var(--case-low);
 }
 :root[data-theme="crt-green"] {
+  /* Evening casing: a neutral charcoal mix, never a green filter. */
+  --case-tint: color-mix(in srgb, var(--polymer-tint) 42%, #111319);
+  --case-top: color-mix(in srgb, var(--case-tint) 98%, #fff);
+  --case-ink: #f7f5eb;
+  --case-letter-shadow: 0 1px 0 #000c;
+  --cap-top: color-mix(in srgb, var(--case-tint) 90%, #89929a);
+  --cap-mid: color-mix(in srgb, var(--case-tint) 84%, #05070c);
+  --cap-low: color-mix(in srgb, var(--case-tint) 76%, #05070c);
+  --cap-ink: #f7f5eb;
+  --cap-letter-shadow: 0 1px 0 #000c;
+  --cap-shadow:
+    inset 0 1px 0 #ffffff50, inset 1px 0 0 #fff2, inset 0 -1px 0 #0009, 0 2px 0 var(--case-seam),
+    0 3px 3px #0007;
   --screen-shadow: inset 0 2px 6px #000b, inset 0 0 0 1px #000a, 0 1px #b8ebc426;
   --screen-material:
     var(--crt-raster), radial-gradient(ellipse at 35% 0, #58ff7610, transparent 70%), var(--paper);
@@ -119,7 +156,7 @@
   color: var(--case-ink);
   border-color: var(--case-seam);
   box-shadow: var(--case-shadow);
-  text-shadow: none;
+  text-shadow: var(--case-letter-shadow);
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   :where(
@@ -172,11 +209,11 @@
     .notebook-modules button[aria-pressed="true"],
     .inspector-tabs button.active
   ) {
-  color: var(--case-ink);
+  color: var(--cap-ink);
   background: var(--case-pressed);
   border: 1px solid color-mix(in srgb, var(--case-edge) 65%, var(--case-seam));
   box-shadow: var(--case-pressed-shadow);
-  text-shadow: none;
+  text-shadow: var(--cap-letter-shadow);
 }
 
 /* Inset mounting ring and an independent cap: the hit target never moves. */
@@ -202,9 +239,7 @@
   inset: 4px;
   border-radius: 50%;
   border: 1px solid var(--case-seam);
-  background:
-    radial-gradient(ellipse at 50% 0, #ffffff1c, transparent 65%),
-    linear-gradient(180deg, var(--case-top), var(--case-mid));
+  background: radial-gradient(ellipse at 50% 0, #ffffff1c, transparent 65%), var(--cap-surface);
   box-shadow:
     inset 0 1px 1px var(--case-glint),
     inset 0 -1px 1px #0004,
@@ -294,10 +329,12 @@
   color: inherit;
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .nav-mobile-switch button.selected {
-  --muted: var(--case-ink);
+  --muted: var(--cap-ink);
+  --accent: var(--cap-ink);
   background: var(--case-pressed);
-  color: var(--case-ink);
+  color: var(--cap-ink);
   box-shadow: var(--case-pressed-shadow);
+  text-shadow: var(--cap-letter-shadow);
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   .nav-mobile-switch
@@ -437,7 +474,8 @@
   :is(.notebook-modules button[aria-pressed="true"], .inspector-tabs button.active) {
   background: var(--case-pressed);
   box-shadow: var(--case-pressed-shadow);
-  border-bottom-color: var(--case-ink);
+  border-bottom-color: var(--cap-ink);
+  text-shadow: var(--cap-letter-shadow);
 }
 .theme-option.hitech-2000s .theme-swatch {
   background: linear-gradient(145deg, #398b7b, #154c4b);
@@ -459,8 +497,8 @@
   border: 1px solid var(--case-seam);
   border-top-color: var(--case-edge);
   border-radius: 8px;
-  background: linear-gradient(145deg, var(--case-top), var(--case-low));
-  color: var(--case-ink);
+  background: var(--cap-surface);
+  color: var(--cap-ink);
   box-shadow:
     inset 0 1px var(--case-glint),
     inset 0 -1px #0003,
@@ -485,24 +523,24 @@
   .workspace[data-view="chat"]
   .support-tabs
   button:first-child {
-  color: var(--case-ink);
+  color: var(--cap-ink);
   background: var(--case-pressed);
   box-shadow: var(--case-pressed-shadow);
   border-color: var(--case-edge);
-  text-shadow: none;
+  text-shadow: var(--cap-letter-shadow);
 }
 
 /* Each control owns its foreground when its surface differs from the casing. */
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   :is(.core-footer, .notebook-heading, .dialog-heading, .inspector-heading)
   :is(.primary, .secondary) {
-  color: var(--case-ink);
-  background: linear-gradient(145deg, var(--case-top), var(--case-low));
+  color: var(--cap-ink);
+  background: var(--cap-surface);
   border: 1px solid var(--case-seam);
   box-shadow:
     inset 0 1px var(--case-glint),
     0 1px 2px #0004;
-  text-shadow: none;
+  text-shadow: var(--cap-letter-shadow);
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   .workspace-shortcuts
@@ -538,7 +576,7 @@
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   :is(.header-project, .nav-bottom, .workspace-shortcuts, .navigation-top-row, .nav-mobile-switch) {
-  text-shadow: none;
+  text-shadow: var(--case-letter-shadow);
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   :is(
@@ -553,9 +591,9 @@
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   :is(.mobile-tabs, .support-tabs, .nav-mobile-switch)
   :is(.tab-count, .badge, .activity-badge) {
-  color: var(--case-ink);
+  color: var(--cap-ink);
   background: var(--case-pressed);
-  text-shadow: none;
+  text-shadow: var(--cap-letter-shadow);
 }
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   :is(.mobile-tabs, .support-tabs, .nav-mobile-switch)
@@ -594,7 +632,7 @@ button.case-swatch {
   border: 1px solid color-mix(in srgb, var(--polymer-tint) 40%, #172026);
   background: linear-gradient(
     150deg,
-    color-mix(in srgb, var(--polymer-tint) 84%, #fff),
+    color-mix(in srgb, var(--polymer-tint) 94%, #fff),
     var(--polymer-tint)
   );
   box-shadow:
@@ -660,4 +698,65 @@ button.case-swatch[aria-pressed="true"] {
   :root button.client-picker::before {
     border: 1px solid ButtonText;
   }
+}
+
+/* Independent keycaps: surfaces, ink and relief travel together. */
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+:is(
+  .workspace-header > .icon-button,
+  .navigation-system-row .icon-button,
+  .navigation-system-row .nav-remote,
+  .core-footer .primary,
+  .core-footer .secondary
+) {
+  background: var(--cap-surface);
+  color: var(--cap-ink);
+  box-shadow: var(--cap-shadow);
+  border: 1px solid var(--case-seam);
+  border-radius: 8px;
+  text-shadow: var(--cap-letter-shadow);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(
+    .workspace-header > .icon-button,
+    .navigation-system-row .icon-button,
+    .navigation-system-row .nav-remote,
+    .core-footer .primary,
+    .core-footer .secondary
+  ):active {
+  color: var(--cap-ink);
+  background: var(--case-pressed);
+  box-shadow: var(--case-pressed-shadow);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) button.client-picker {
+  color: var(--cap-ink);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) button.client-picker > svg {
+  filter: drop-shadow(0 1px 0 #0004);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(
+    .mobile-tabs > .active,
+    .support-tabs button.active,
+    .workspace[data-view="chat"] .support-tabs button:first-child,
+    .notebook-modules button[aria-pressed="true"],
+    .inspector-tabs button.active,
+    .nav-mobile-switch button.selected
+  ) {
+  color: var(--cap-ink);
+  text-shadow: var(--cap-letter-shadow);
+  font-weight: 600;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(.support-tabs button.active, .workspace[data-view="chat"] .support-tabs button:first-child)
+  svg {
+  color: var(--cap-ink);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(.header-project, .quick-capture-dialog > header) {
+  text-shadow: var(--case-letter-shadow);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  :is(.nav-mobile-switch, .nav-bottom, .workspace-shortcuts, .navigation-inner > .workspace-links) {
+  border-color: color-mix(in srgb, var(--case-edge) 45%, var(--case-mid));
 }
