@@ -30,7 +30,7 @@
 .navigation-system-row .nav-settings svg {
   flex-shrink: 0;
 }
-@container (max-width: 260px) {
+@container (max-width: 310px) {
   .navigation-system-row .nav-settings-label {
     display: none;
   }
@@ -46,6 +46,17 @@
   width: 44px;
   height: 44px;
   color: var(--muted);
+}
+@media (min-width: 1100px) {
+  :root .desktop-nav .nav-bottom {
+    padding-inline: 0;
+  }
+  :root .desktop-nav .navigation-inner .navigation-system-row {
+    padding-inline: 2px;
+  }
+  :root .desktop-nav .navigation-mode-controls {
+    gap: 0;
+  }
 }
 button.client-picker {
   display: grid;

@@ -12,6 +12,9 @@
 .quick-capture-dialog::backdrop {
   background: #0008;
 }
+.quick-capture-dialog:focus {
+  outline: none;
+}
 .quick-capture-dialog > header {
   background: var(--panel-heading, var(--paper));
   display: flex;
@@ -26,7 +29,7 @@
   font-size: 19px;
 }
 .quick-capture-dialog .icon-button {
-  color: var(--ink);
+  color: inherit;
 }
 .quick-capture-content {
   padding: 16px;
@@ -37,7 +40,7 @@
 .quick-capture-content select,
 .quick-capture-content textarea,
 .quick-capture-content input {
-  background: var(--canvas);
+  background: var(--paper);
   color: var(--ink);
   font: inherit;
   min-height: 44px;
@@ -51,6 +54,13 @@
   resize: vertical;
   min-height: 100px;
   max-height: 45dvh;
+}
+.quick-capture-content :is(input, textarea)::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .quick-capture-dialog > header {
+  color: var(--case-ink);
 }
 .quick-capture-kind {
   margin: 0;

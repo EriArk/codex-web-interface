@@ -136,11 +136,17 @@ for (const [engine, type] of [
       "capture kept GPT draft before layout changes",
     );
     for (const theme of ["classic-dark", "organizer", "crt-green", "hitech-2000s"]) {
-      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.evaluate((t) => {
+        document.documentElement.dataset.theme = t;
+        document.documentElement.dataset.caseColor = "red";
+      }, theme);
       for (const width of [390, 1366]) {
         await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
         assert(await panel.evaluate((e) => e.scrollWidth <= e.clientWidth));
-        await page.screenshot({ path: `${out}/${theme}-${width}.png` });
+        for (const kind of ["Заметка", "Задача"]) {
+          await panel.getByRole("button", { name: kind, exact: true }).click();
+          await page.screenshot({ path: `${out}/${theme}-${width}-${kind}.png` });
+        }
       }
     }
     await page.setViewportSize({ width: 390, height: 430 });

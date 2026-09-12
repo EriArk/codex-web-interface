@@ -41,7 +41,6 @@ import { Notifications, type NotificationTarget, useNotificationPresence } from 
 import { PinnedList } from "./PinnedList";
 import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
-import { QuickCaptureButton } from "./QuickCaptureHost";
 import { ResultFeed } from "./ResultFeed";
 import { StorageUsage } from "./StorageUsage";
 import type { Theme } from "./theme";
@@ -1093,14 +1092,6 @@ export function GptWorkspace({
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <QuickCaptureButton
-          scope={(() => {
-            const p = projects.find(
-              (p) => p.id === items.find((t) => t.id === selected)?.projectId,
-            );
-            return p ? { client: "gpt" as const, projectId: p.id, name: p.name } : null;
-          })()}
-        />
         <button
           type="button"
           className="icon-button mobile-only panel-close"
@@ -1251,6 +1242,10 @@ export function GptWorkspace({
 
       <NavigationFooter
         client="gpt"
+        captureScope={(() => {
+          const p = projects.find((p) => p.id === items.find((t) => t.id === selected)?.projectId);
+          return p ? { client: "gpt" as const, projectId: p.id, name: p.name } : null;
+        })()}
         onClient={() => {
           setDrawer(false);
           onCodex();

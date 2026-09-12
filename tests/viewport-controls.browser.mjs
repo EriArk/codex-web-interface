@@ -39,8 +39,8 @@ for (const [engine, type] of [
         visible: width >= 1100,
       });
     }
-    for (const width of [393, 1366]) {
-      await page.setViewportSize({ width, height: width === 393 ? 852 : 1024 });
+    for (const width of [320, 393, 1366]) {
+      await page.setViewportSize({ width, height: width < 1100 ? 852 : 1024 });
       for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
         await page.evaluate((theme) => {
           document.documentElement.dataset.theme = theme;
@@ -60,13 +60,31 @@ for (const [engine, type] of [
           );
         assert(buttons.length >= 2);
         for (const b of buttons) assert.equal(b.w, b.h, `${theme}: square header`);
-        if (width === 393) await page.getByRole("button", { name: "Открыть проекты" }).click();
-        const nav = page.locator(width === 393 ? ".project-sheet" : ".desktop-nav");
-        if (width === 393)
+        if (width < 1100) await page.getByRole("button", { name: "Открыть проекты" }).click();
+        const nav = page.locator(width < 1100 ? ".project-sheet" : ".desktop-nav");
+        if (width < 1100)
           await expect
             .poll(async () => Math.round((await nav.boundingBox()).x))
             .toBeGreaterThanOrEqual(0);
         const rail = nav.locator(".navigation-system-row");
+        await expect
+          .poll(
+            () =>
+              rail.evaluate((node) => {
+                const bounds = node.getBoundingClientRect();
+                return [...node.querySelectorAll("button,a")].every((button) => {
+                  const b = button.getBoundingClientRect();
+                  return (
+                    b.width >= 44 &&
+                    b.height >= 44 &&
+                    b.left >= bounds.left &&
+                    b.right <= bounds.right
+                  );
+                });
+              }),
+            { message: `${theme} ${width}: footer actions fit with 44px touch targets` },
+          )
+          .toBe(true);
         const centers = await rail.evaluate((node) =>
           [
             node.querySelector(".nav-settings"),
@@ -94,7 +112,7 @@ for (const [engine, type] of [
           path: `.local/qa-controls/${engine}/${theme}-${width}-navigation.png`,
           animations: "disabled",
         });
-        if (width === 393) await nav.getByRole("button", { name: "Закрыть проекты" }).click();
+        if (width < 1100) await nav.getByRole("button", { name: "Закрыть проекты" }).click();
       }
     }
     await page.setViewportSize({ width: 393, height: 852 });

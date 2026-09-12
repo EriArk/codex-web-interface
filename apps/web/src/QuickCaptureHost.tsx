@@ -12,7 +12,7 @@ export function QuickCaptureButton({ scope }: { scope: NotebookScope }) {
       title="Быстрая запись"
       onClick={() => window.dispatchEvent(new CustomEvent("open-quick-capture", { detail: scope }))}
     >
-      <Icon name="plus" size={19} />
+      <Icon name="note-edit" />
     </button>
   );
 }

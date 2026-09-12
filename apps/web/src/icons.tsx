@@ -15,6 +15,10 @@ const paths: Record<string, string[]> = {
   copy: ["M9 9h12v12H9zM15 9V3H3v12h6"],
   pin: ["m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v7"],
   edit: ["m4 16 12-12 4 4-12 12-5 1 1-5ZM14 6l4 4"],
+  "note-edit": [
+    "M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M7 8h3M7 17h8",
+    "m14 13 7-7-3-3-7 7-1 4 4-1ZM16 5l3 3",
+  ],
   archive: ["M3 3h18v5H3zM5 8v13h14V8M9 12h6"],
   trash: ["M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"],
   file: ["M6 2h8l4 4v16H6zM14 2v5h5M9 11h6M9 15h6"],
