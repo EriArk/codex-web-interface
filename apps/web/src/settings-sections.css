@@ -1,11 +1,17 @@
 :root dialog.settings-browser {
-  width: min(900px, calc(100% - 24px));
-  max-width: calc(100% - 24px);
-  height: min(760px, calc(var(--app-height) - 24px));
-  max-height: calc(var(--app-height) - 24px);
-  top: var(--app-top);
+  --settings-gap: 12px;
+  --settings-width: 900px;
+  --settings-top: max(var(--settings-gap), var(--safe-top, 0px));
+  --settings-bottom: max(var(--settings-gap), var(--safe-bottom, 0px));
+  --settings-side: max(var(--settings-gap), var(--safe-left, 0px), var(--safe-right, 0px));
+  --settings-height: calc(var(--app-height) - var(--settings-top) - var(--settings-bottom));
+  width: min(var(--settings-width), calc(100% - 2 * var(--settings-side)));
+  max-width: calc(100% - 2 * var(--settings-side));
+  height: min(760px, var(--settings-height));
+  max-height: var(--settings-height);
+  top: calc(var(--app-top) + var(--settings-top));
   bottom: auto;
-  margin-block: max(12px, calc((var(--app-height) - 760px) / 2));
+  margin-block: max(0px, calc((var(--settings-height) - 760px) / 2));
   padding: 0;
   overflow: hidden;
 }
@@ -168,8 +174,8 @@
 }
 @media (max-width: 759px) {
   :root dialog.settings-browser {
-    width: min(520px, calc(100% - 16px));
-    max-width: calc(100% - 16px);
+    --settings-gap: 8px;
+    --settings-width: 520px;
   }
   .settings-layout {
     display: block;
@@ -226,10 +232,14 @@
     display: none;
   }
 }
-:root[data-keyboard="true"] dialog.settings-browser {
-  margin-block: 4px;
-  height: calc(var(--app-height) - 8px);
-  max-height: calc(var(--app-height) - 8px);
+:root[data-keyboard="true"] dialog.settings-browser[open] {
+  --settings-gap: 4px;
+  --settings-top: max(4px, calc(var(--safe-top, 0px) - var(--app-top)));
+  --settings-bottom: 4px;
+  top: calc(var(--app-top) + var(--settings-top));
+  margin-block: 0;
+  height: var(--settings-height);
+  max-height: var(--settings-height);
 }
 :root[data-keyboard="true"] .settings-browser .settings-heading {
   min-height: 48px;

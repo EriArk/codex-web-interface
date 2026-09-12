@@ -79,22 +79,62 @@ for (const [engine, type] of [
     await expect(settings.getByLabel("Текущий пароль", { exact: true })).toHaveValue(
       "Unsaved example",
     );
-    // The software keyboard can pan the visual viewport independently of the layout viewport.
+    // Standalone phone safe areas differ in portrait and landscape.
+    for (const [width, height, top, side, bottom] of [
+      [393, 852, 59, 0, 34],
+      [844, 390, 0, 59, 21],
+    ]) {
+      await page.setViewportSize({ width, height });
+      await page.evaluate(
+        ({ top, side, bottom }) => {
+          for (const [key, value] of Object.entries({ top, left: side, right: side, bottom }))
+            document.documentElement.style.setProperty(`--safe-${key}`, `${value}px`);
+        },
+        { top, side, bottom },
+      );
+      await expect
+        .poll(async () => {
+          const r = await settings.boundingBox();
+          return (
+            r.y >= top &&
+            r.y + r.height <= height - bottom + 1 &&
+            r.x >= side &&
+            r.x + r.width <= width - side + 1
+          );
+        })
+        .toBe(true);
+    }
+    await page.setViewportSize({ width: 393, height: 852 });
     await page.evaluate(() => {
-      Object.defineProperty(visualViewport, "height", { configurable: true, get: () => 340 });
-      Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => 180 });
-      visualViewport.dispatchEvent(new Event("resize"));
+      for (const key of ["top", "bottom", "left", "right"])
+        document.documentElement.style.removeProperty(`--safe-${key}`);
     });
-    await expect
-      .poll(async () => {
-        const r = await settings.boundingBox(),
-          close = await button("Закрыть настройки").boundingBox();
-        return (
-          r.y >= 180 && r.y + r.height <= 521 && close.y >= 180 && close.y + close.height <= 520
-        );
-      })
-      .toBe(true);
+    // The software keyboard can pan the visual viewport independently of the layout viewport.
+    for (const offset of [0, 180]) {
+      await page.evaluate((offset) => {
+        document.documentElement.style.setProperty("--safe-top", "59px");
+        Object.defineProperty(visualViewport, "height", { configurable: true, get: () => 340 });
+        Object.defineProperty(visualViewport, "offsetTop", {
+          configurable: true,
+          get: () => offset,
+        });
+        visualViewport.dispatchEvent(new Event("resize"));
+      }, offset);
+      await expect
+        .poll(async () => {
+          const r = await settings.boundingBox(),
+            close = await button("Закрыть настройки").boundingBox();
+          return (
+            r.y >= Math.max(59, offset) &&
+            r.y + r.height <= offset + 341 &&
+            close.y >= Math.max(59, offset) &&
+            close.y + close.height <= offset + 340
+          );
+        })
+        .toBe(true);
+    }
     await page.evaluate(() => {
+      document.documentElement.style.removeProperty("--safe-top");
       delete visualViewport.height;
       delete visualViewport.offsetTop;
       visualViewport.dispatchEvent(new Event("resize"));

@@ -244,7 +244,8 @@ for (const [engine, type] of [
       if (theme === "crt-green")
         assert.equal(
           await page.locator(".workspace").evaluate((e) => getComputedStyle(e).borderLeftWidth),
-          "0px",
+          "1px",
+          "CRT retains the owner's continuous compact polymer seam",
         );
       await button("Заметки").click();
       const notes = page.locator(".notebook-dialog");
