@@ -21,13 +21,17 @@ test("private speech media requires a session, CSRF, same-owner access and suppo
   const root = await mkdtemp(join(tmpdir(), "codex-speech-")),
     socket = join(root, "voice.sock");
   let calls = 0;
+  let workerCapabilities;
+  const requestedVoices = [];
   const worker = createServer((req, res) => {
-    if (req.url === "/health") return res.end("ok");
+    if (req.url === "/health")
+      return res.end(workerCapabilities ? JSON.stringify(workerCapabilities) : "ok");
     calls++;
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
       assert.equal(JSON.parse(body).text, "Привет");
+      requestedVoices.push(JSON.parse(body).voice);
       res.end(wave);
     });
   });
@@ -142,6 +146,59 @@ test("private speech media requires a session, CSRF, same-owner access and suppo
   }
   await app.inject({ method: "DELETE", url, headers: other });
   assert.equal((await app.inject({ url: url + "/audio", headers })).statusCode, 200);
+  const unsupported = "/api/speech/" + randomUUID();
+  await app.inject({
+    method: "POST",
+    url: unsupported,
+    headers,
+    payload: { ...payload, voice: "kseniya" },
+  });
+  assert.equal((await app.inject({ url: unsupported + "/audio", headers })).statusCode, 503);
+  assert.equal(calls, 1, "old worker cannot silently substitute a requested voice");
+  workerCapabilities = {
+    voices: ["eugene", "kseniya", "ruslan", "untrusted"],
+    defaultVoice: "eugene",
+    mixedLanguage: true,
+  };
+  assert.deepEqual((await app.inject({ url: "/api/speech/status", headers })).json(), {
+    available: true,
+    voices: ["eugene", "kseniya", "ruslan"],
+    defaultVoice: "eugene",
+    mixedLanguage: true,
+  });
+  for (const voice of ["eugene", "kseniya", "ruslan"]) {
+    const voiceUrl = "/api/speech/" + randomUUID();
+    const voicePayload = { ...payload, voice };
+    assert.equal(
+      (await app.inject({ method: "POST", url: voiceUrl, headers, payload: voicePayload }))
+        .statusCode,
+      202,
+    );
+    assert.equal((await app.inject({ url: voiceUrl + "/audio", headers })).statusCode, 200);
+    assert.equal(requestedVoices.at(-1), voice);
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: voiceUrl,
+          headers,
+          payload: { ...payload, voice: voice === "eugene" ? "ruslan" : "eugene" },
+        })
+      ).statusCode,
+      409,
+    );
+  }
+  assert.equal(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/speech/" + randomUUID(),
+        headers,
+        payload: { ...payload, voice: "../../x" },
+      })
+    ).statusCode,
+    400,
+  );
   await app.inject({ method: "POST", url: "/api/auth/logout", headers });
   assert.equal((await app.inject({ url: url + "/audio", headers })).statusCode, 401);
 });

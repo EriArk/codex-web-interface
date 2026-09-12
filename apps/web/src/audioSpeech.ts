@@ -12,7 +12,7 @@ export class AudioMessageSpeech {
   private mediaActions: MediaSessionAction[] = [];
   private dependencies: {
     audio: () => HTMLAudioElement;
-    create: (id: string, text: string, language: string) => Promise<unknown>;
+    create: (id: string, text: string, language: string, voice?: string) => Promise<unknown>;
     remove: (id: string) => Promise<unknown>;
     media?: () => MediaSession | undefined;
     playback?: (active: boolean) => void;
@@ -86,7 +86,7 @@ export class AudioMessageSpeech {
       });
     } catch {}
   }
-  start = (id: string, text: string, language: string) => {
+  start = (id: string, text: string, language: string, voice?: string) => {
     this.stop();
     if (!text.trim()) return;
     const generation = this.generation;
@@ -98,6 +98,9 @@ export class AudioMessageSpeech {
       const audio = this.dependencies.audio();
       this.audio = audio;
       audio.preload = "auto";
+      audio.defaultPlaybackRate = 0.85;
+      audio.playbackRate = 0.85;
+      audio.preservesPitch = true;
       audio.onplaying = () => {
         if (valid()) {
           this.update({ id, phase: "speaking", error: "" });
@@ -161,7 +164,7 @@ export class AudioMessageSpeech {
       }
       // Issue the media request and play() inside the tap; synthesis POST runs concurrently.
       void this.dependencies
-        .create(clip, text, language)
+        .create(clip, text, language, voice)
         .then(() => {
           if (!valid()) void this.dependencies.remove(clip).catch(() => {});
         })

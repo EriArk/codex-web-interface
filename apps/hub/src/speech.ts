@@ -7,6 +7,23 @@ import type { Auth } from "./auth.js";
 
 const limit = 64 * 1024 * 1024;
 const ttl = 30 * 60 * 1000;
+const voiceIds = ["eugene", "kseniya", "ruslan"] as const;
+type VoiceId = (typeof voiceIds)[number];
+function capabilities(bytes: Buffer) {
+  try {
+    const data = JSON.parse(bytes.toString());
+    const voices = voiceIds.filter((id) => Array.isArray(data.voices) && data.voices.includes(id));
+    if (voices.length)
+      return {
+        voices,
+        defaultVoice: voices.includes(data.defaultVoice)
+          ? (data.defaultVoice as VoiceId)
+          : voices[0],
+        mixedLanguage: data.mixedLanguage === true,
+      };
+  } catch {}
+  return {};
+}
 const bad = () =>
   new HubError(
     503,
@@ -18,9 +35,10 @@ export function speechWorker(
   text: string | null,
   language: string,
   signal: AbortSignal,
+  voice?: VoiceId,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const body = text === null ? undefined : Buffer.from(JSON.stringify({ text, language }));
+    const body = text === null ? undefined : Buffer.from(JSON.stringify({ text, language, voice }));
     const req = request(
       {
         socketPath,
@@ -81,7 +99,12 @@ export class SpeechClips {
   private clips = new Map<string, Clip>();
   private timer: ReturnType<typeof setInterval>;
   constructor(
-    private render: (text: string, language: string, signal: AbortSignal) => Promise<Buffer>,
+    private render: (
+      text: string,
+      language: string,
+      signal: AbortSignal,
+      voice?: VoiceId,
+    ) => Promise<Buffer>,
   ) {
     this.timer = setInterval(() => this.prune(), 60000);
     this.timer.unref();
@@ -90,10 +113,10 @@ export class SpeechClips {
     for (const [id, clip] of this.clips)
       if (clip.expires <= Date.now()) this.remove(id, clip.owner);
   }
-  create(id: string, owner: string, text: string, language: string) {
+  create(id: string, owner: string, text: string, language: string, voice?: VoiceId) {
     this.prune();
     const fingerprint = createHash("sha256")
-      .update(language + "\0" + text)
+      .update(language + "\0" + (voice ?? "default") + "\0" + text)
       .digest("hex");
     const old = this.clips.get(id);
     if (old) {
@@ -125,6 +148,7 @@ export class SpeechClips {
       text,
       language,
       AbortSignal.any([controller.signal, AbortSignal.timeout(180000)]),
+      voice,
     )
       .then((bytes) => {
         if (bytes.length > limit) throw bad();
@@ -160,15 +184,21 @@ export class SpeechClips {
 }
 export function registerSpeech(app: FastifyInstance, config: HubConfig, auth: Auth) {
   const socket = config.hub.speechSocket;
-  const clips = new SpeechClips((text, language, signal) =>
-    socket ? speechWorker(socket, text, language, signal) : Promise.reject(bad()),
-  );
+  const clips = new SpeechClips(async (text, language, signal, voice) => {
+    if (!socket) throw bad();
+    if (voice) {
+      const supported = capabilities(await speechWorker(socket, null, "ru", signal));
+      // An old worker must not silently substitute Ruslan for an explicitly selected voice.
+      if (!supported.voices?.includes(voice)) throw bad();
+    }
+    return speechWorker(socket, text, language, signal, voice);
+  });
   app.addHook("onClose", async () => clips.close());
   app.get("/api/speech/status", async () => {
     if (!socket) return { available: false };
     try {
-      await speechWorker(socket, null, "ru", AbortSignal.timeout(2500));
-      return { available: true };
+      const bytes = await speechWorker(socket, null, "ru", AbortSignal.timeout(2500));
+      return { available: true, ...capabilities(bytes) };
     } catch {
       return { available: false };
     }
@@ -176,7 +206,7 @@ export function registerSpeech(app: FastifyInstance, config: HubConfig, auth: Au
   app.post("/api/speech/:id", async (req, reply) => {
     if (!socket) throw bad();
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const { text, language } = z
+    const { text, language, voice } = z
       .object({
         text: z
           .string()
@@ -184,10 +214,11 @@ export function registerSpeech(app: FastifyInstance, config: HubConfig, auth: Au
           .max(30000)
           .refine((value) => !!value.trim()),
         language: z.enum(["ru", "en"]),
+        voice: z.enum(voiceIds).optional(),
       })
       .strict()
       .parse(req.body);
-    clips.create(id, auth.session(req).tokenHash, text, language);
+    clips.create(id, auth.session(req).tokenHash, text, language, voice);
     reply.code(202);
     return { ok: true };
   });
