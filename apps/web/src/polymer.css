@@ -9,10 +9,10 @@
   --polymer-ink: #f0f4f7;
 }
 [data-case-color="white"] {
-  --polymer-tint: #e2e2db;
+  --polymer-tint: #f0eee8;
 }
 [data-case-color="yellow"] {
-  --polymer-tint: #dbba5c;
+  --polymer-tint: #f5df8f;
 }
 [data-case-color="mint"] {
   --polymer-tint: #80baa5;
@@ -36,7 +36,7 @@
   --polymer-tint: #d08b50;
 }
 [data-case-color="silver"] {
-  --polymer-tint: #929da6;
+  --polymer-tint: #cfd5dc;
 }
 /* Every material owns its ink, including a swatch inside another color. */
 [data-case-color] {
@@ -94,8 +94,10 @@
 }
 :root[data-theme="crt-green"] {
   /* Evening casing: a neutral charcoal mix, never a green filter. */
-  --case-tint: color-mix(in srgb, var(--polymer-tint) 42%, #111319);
+  --case-tint: color-mix(in srgb, var(--polymer-tint) 24%, #0a0c11);
   --case-top: color-mix(in srgb, var(--case-tint) 98%, #fff);
+  --case-edge: color-mix(in srgb, var(--case-tint) 72%, #fff);
+  --case-glint: #ffffff70;
   --case-ink: #f7f5eb;
   --case-letter-shadow: 0 1px 0 #000c;
   --cap-top: color-mix(in srgb, var(--case-tint) 90%, #89929a);
@@ -111,6 +113,31 @@
     var(--crt-raster), radial-gradient(ellipse at 35% 0, #58ff7610, transparent 70%), var(--paper);
   --panel-material: var(--crt-raster), #06140b;
   --field-shadow: inset 0 2px 4px #000a, 0 1px #9ce9ae18;
+}
+/* Deliberately bright, polished shells, even around the evening CRT screen. */
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]):is(
+    [data-case-color="white"],
+    [data-case-color="yellow"],
+    [data-case-color="silver"]
+  ) {
+  --case-tint: var(--polymer-tint);
+  --case-top: color-mix(in srgb, var(--case-tint) 70%, #fff);
+  --case-edge: color-mix(in srgb, var(--case-tint) 32%, #fff);
+  --case-glint: #ffffffeb;
+  --case-ink: #172125;
+  --case-letter-shadow: 0 1px 0 #ffffffc9;
+  --case-surface:
+    linear-gradient(115deg, #ffffff65, transparent 28% 64%, #ffffff1c),
+    linear-gradient(180deg, #ffffffa6, transparent 10px calc(100% - 5px), #00000018),
+    linear-gradient(160deg, var(--case-top), var(--case-mid) 50%, var(--case-low));
+  --cap-top: color-mix(in srgb, var(--case-tint) 30%, #fff);
+  --cap-mid: color-mix(in srgb, var(--case-tint) 92%, #edf1f7);
+  --cap-low: color-mix(in srgb, var(--case-tint) 86%, #8f98a0);
+  --cap-ink: #172125;
+  --cap-letter-shadow: 0 1px 0 #ffffffc9;
+  --cap-shadow:
+    inset 0 1px 0 #fff, inset 1px 0 0 #fff9, inset 0 -1px 0 #0004,
+    0 2px 0 var(--case-seam), 0 3px 3px #0005;
 }
 :root[data-theme="hitech-2000s"] {
   --paper: #fcfcf5;

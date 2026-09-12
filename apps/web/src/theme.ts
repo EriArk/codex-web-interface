@@ -56,11 +56,11 @@ const memory: CasePreferences = {};
 const edited = new Set<keyof CasePreferences>();
 const caseTints: Record<CaseColor, string> = {
   graphite: "#262b32",
-  white: "#e2e2db",
-  silver: "#929da6",
+  white: "#f0eee8",
+  silver: "#cfd5dc",
   red: "#9f3f47",
   orange: "#d08b50",
-  yellow: "#dbba5c",
+  yellow: "#f5df8f",
   green: "#3d6d4f",
   mint: "#80baa5",
   turquoise: "#286b70",
@@ -70,10 +70,11 @@ const caseTints: Record<CaseColor, string> = {
 };
 // Match the opaque low casing stop before the first React render (including iOS chrome).
 function caseChrome(color: CaseColor, evening: boolean) {
+  const darkCase = evening && !["white", "yellow", "silver"].includes(color);
   return `#${([0, 1, 2] as const)
     .map((i) => {
       const tint = parseInt(caseTints[color].slice(1 + i * 2, 3 + i * 2), 16);
-      const base = evening ? tint * 0.42 + ([17, 19, 25] as const)[i] * 0.58 : tint;
+      const base = darkCase ? tint * 0.24 + ([10, 12, 17] as const)[i] * 0.76 : tint;
       return Math.round(base * 0.9 + ([19, 26, 34] as const)[i] * 0.1)
         .toString(16)
         .padStart(2, "0");
