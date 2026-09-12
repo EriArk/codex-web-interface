@@ -134,9 +134,13 @@ for (const [engine, type] of [
     await page.route("**/api/speech/**", async (route) => {
       const url = new URL(route.request().url());
       speechRequests.push({ path: url.pathname, method: route.request().method() });
-      if (url.pathname.endsWith("/status")) return route.fulfill({ json: { available: true } });
+      if (url.pathname.endsWith("/status"))
+        return route.fulfill({
+          json: { available: true, voices: ["eugene", "kseniya", "ruslan"], mixedLanguage: true },
+        });
       if (route.request().method() === "POST") {
         registrations++;
+        assert.equal(route.request().postDataJSON().voice, "kseniya");
         assert.equal(
           route.request().postDataJSON().text,
           "Привет. Это проверка озвучивания ответа.",
@@ -190,11 +194,16 @@ for (const [engine, type] of [
       .getByRole("button", { name: "Настройки", exact: true })
       .filter({ visible: true });
     await settings.click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     const mode = page
       .getByRole("combobox", { name: "Режим озвучивания" })
       .filter({ visible: true });
     await expect(mode).toHaveValue("system");
     await mode.selectOption("background");
+    const voice = page.getByRole("combobox", { name: "Серверный голос" }).filter({ visible: true });
+    await expect(voice).toHaveValue("eugene");
+    await expect(voice.locator("option")).toHaveCount(3);
+    await voice.selectOption("kseniya");
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
     await expect(reply.getByRole("button", { name: "Озвучить ответ" })).toBeEnabled();
     const cancelled = await page.evaluate(
@@ -204,6 +213,13 @@ for (const [engine, type] of [
     await reply.getByRole("button", { name: "Озвучить ответ" }).tap();
     await expect(reply.getByRole("button", { name: "Приостановить озвучивание" })).toBeVisible();
     await expect.poll(() => page.evaluate(() => audioTracks.at(-1).currentTime)).toBeGreaterThan(0);
+    assert.deepEqual(
+      await page.evaluate(() => [
+        audioTracks.at(-1).playbackRate,
+        audioTracks.at(-1).preservesPitch,
+      ]),
+      [0.85, true],
+    );
     await page.evaluate(() => {
       Object.defineProperty(document, "hidden", { configurable: true, value: true });
       document.dispatchEvent(new Event("visibilitychange"));
@@ -221,6 +237,7 @@ for (const [engine, type] of [
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await settings.click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     await mode.selectOption("system");
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
     const beforeSystem = speechRequests.length;
@@ -240,8 +257,12 @@ for (const [engine, type] of [
     await page.reload();
     await expect(editor).toHaveValue("Сохранённый черновик");
     await settings.click();
+    await page.locator('.settings-browser[open] [data-category="sound"]').click();
     await expect(mode).toHaveValue("system");
+    await mode.selectOption("background");
+    await expect(voice).toHaveValue("kseniya");
     await page.screenshot({ path: `.local/qa-background-media/${engine}-speech-mode.png` });
+    await mode.selectOption("system");
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
     await expect(page.locator(".mobile-tabs > button")).toHaveCount(2);
     assert.equal(await page.evaluate(() => remoteConnections), 0);

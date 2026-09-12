@@ -61,3 +61,9 @@
   border-radius: var(--radius, 8px);
   padding: 8px;
 }
+.speech-settings-hint {
+  color: var(--muted);
+  font-size: 0.9em;
+  line-height: 1.4;
+  margin-block: 8px 16px;
+}
