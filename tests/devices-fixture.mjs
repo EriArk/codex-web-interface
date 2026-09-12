@@ -65,7 +65,10 @@ export async function devicesFixture(origin = "http://127.0.0.1:18873", appOptio
       };
     },
   };
-  const f = await handoffFixture(origin, undefined, { ...appOptions, devices: dependencies });
+  const f = await handoffFixture(origin, undefined, {
+    ...appOptions,
+    devices: { ...dependencies, ...appOptions.devices },
+  });
   f.sessions.config.devices.push(
     ...["linux", "windows"].map((platform, i) => ({
       id: i ? "pc" : "server",

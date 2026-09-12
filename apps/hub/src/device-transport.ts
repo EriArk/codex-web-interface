@@ -7,6 +7,7 @@ import {
   type DeviceSnapshot,
   HubError,
 } from "@codex-web/shared";
+import { shellTracking } from "./terminal-activity.js";
 
 export const sshOptions = (device: DeviceConfig, terminal = false) => [
   "-F",
@@ -39,12 +40,29 @@ const powershell = (device: DeviceConfig, script: string, interactive = false) =
   Buffer.from(interactive ? `${utf8Console};${script}` : script, "utf16le").toString("base64"),
 ];
 
-export function terminalCommand(device: DeviceConfig, action: DeviceAction): string[] {
+export function terminalCommand(
+  device: DeviceConfig,
+  action: DeviceAction,
+  activityToken?: string,
+): string[] {
   const args = sshOptions(device, true);
   if (action.kind === "shell")
     return device.platform === "windows"
-      ? [...args, ...powershell(device, "", true), "-NoExit"]
-      : args;
+      ? [
+          ...args,
+          ...powershell(device, activityToken ? shellTracking(activityToken, "windows") : "", true),
+          "-NoExit",
+        ]
+      : activityToken && device.platform === "linux"
+        ? [
+            ...args,
+            "bash",
+            "-c",
+            shQuote(
+              `exec bash --rcfile <(printf %s ${shQuote(Buffer.from(shellTracking(activityToken, "linux")).toString("base64"))} | base64 -d) -i`,
+            ),
+          ]
+        : args;
   if (action.confirmation !== device.name)
     throw new HubError(
       409,
