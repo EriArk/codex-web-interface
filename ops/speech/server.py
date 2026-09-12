@@ -141,5 +141,6 @@ if __name__ == '__main__':
     # flock in the entrypoint proves the old socket has no other worker owner.
     if socket_path.exists(): socket_path.unlink()
     with Server(str(socket_path), Handler) as server:
+        socket_path.chmod(0o600)
         print('Local speech worker ready', flush=True)
         server.serve_forever()
