@@ -603,3 +603,7 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Prioritize #168 and the reported reader-case ZIP download. An assistant file/image link opens its exact object in Results/Preview, preserving mounted chat, draft, staged attachments and live output. Do not infer identity from a filename or navigate the browser to a local/native file URL.
 - Saved Codex exports support up to 512 MiB through a bounded, checksum-verified machine-to-Hub stream and authenticated streaming HTTP downloads. Keep the aggregate storage quota and exact source snapshot semantics. Large downloads use browser downloads instead of a file-sized JavaScript Blob; small file previews/sharing retain their existing limits. Do not relax ordinary file-browser, upload, GPT or shared-publication limits as a side effect.
+
+## Owner-requested everyday usage summary (#171, 2026-09-14)
+
+- Show Codex usage and earned reset availability below the main Settings category list as well as in Connections. Reuse one settings-scoped canonical snapshot/poller per authorized machine and the existing confirmed, durable reset operation; category changes never spend a second reset or run hidden connection checks. Keep machine labels and zero/count-only/unsupported/unknown states distinct.

@@ -57,13 +57,31 @@
   display: grid;
   grid-template-columns: 244px minmax(0, 1fr);
 }
-.settings-categories {
+.settings-overview {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px 8px;
   border-right: 1px solid var(--line);
   background: var(--nav);
+}
+.settings-categories {
+  padding: 12px 8px;
+}
+.settings-usage-summary {
+  padding: 0 16px 12px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.settings-usage-summary[hidden] {
+  display: none;
+}
+.settings-usage-summary .usage-heading {
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.settings-usage-summary .usage-window > div {
+  flex-wrap: wrap;
+  gap: 4px;
 }
 .settings-categories button {
   display: flex;
@@ -184,11 +202,13 @@
     display: block;
     position: relative;
   }
-  .settings-categories {
+  .settings-overview {
     height: 100%;
     border: 0;
-    padding: 8px 12px;
     background: var(--paper);
+  }
+  .settings-categories {
+    padding: 8px 12px;
   }
   .settings-categories button {
     min-height: 78px;
@@ -221,7 +241,7 @@
     display: none;
   }
   .settings-sections[data-detail="false"] .settings-content,
-  .settings-sections[data-detail="true"] .settings-categories,
+  .settings-sections[data-detail="true"] .settings-overview,
   .settings-sections[data-detail="true"] .settings-index-title {
     display: none;
   }

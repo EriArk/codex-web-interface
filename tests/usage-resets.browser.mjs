@@ -40,15 +40,15 @@ for (const [engine, browserType] of [
   });
   const reopen = async () => {
     replacingDocument = true;
-    await page.reload();
-    await button("Настройки").click();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await openSettings();
     await page.locator('.settings-browser[open] [data-category="connections"]').click();
     await expect(panel.getByText("Лимиты Codex", { exact: true })).toBeVisible();
     replacingDocument = false;
   };
   const button = (name) =>
     page.getByRole("button", { name, exact: true }).filter({ visible: true }).first();
-  const panel = page.getByRole("region", { name: "Лимиты Codex: PC" });
+  const panel = page.getByRole("region", { name: "Лимиты Codex: PC" }).filter({ visible: true });
   const reset = panel.locator(".usage-resets");
   const refresh = async () => {
     await page.evaluate(() => window.dispatchEvent(new Event("codex-usage-changed")));
@@ -61,6 +61,10 @@ for (const [engine, browserType] of [
     f.state.raw.accountId = "browser-" + Math.random();
     f.state.mode = "normal";
   };
+  const openSettings = async () => {
+    if (!(await button("Настройки").isVisible())) await button("Открыть проекты").click();
+    await button("Настройки").click();
+  };
   const out = `.local/qa-usage-resets/${engine}`;
   await mkdir(out, { recursive: true });
   try {
@@ -68,10 +72,18 @@ for (const [engine, browserType] of [
     await page.goto(origin);
     const draft = page.getByRole("textbox", { name: "Сообщение Codex" });
     await draft.fill("Черновик должен сохраниться после сброса лимитов");
-    await button("Настройки").click();
+    await openSettings();
+    await expect(panel.getByText("37% осталось", { exact: true })).toBeVisible();
+    await expect(panel.locator(".usage-reset-count")).toHaveText("2");
+    // The overview and Connections reuse a single poller, and the same canonical snapshot.
+    let usageReads = 0;
+    page.on("request", (r) => {
+      if (new URL(r.url()).pathname === "/api/machines/pc/limits") usageReads++;
+    });
     await page.locator('.settings-browser[open] [data-category="connections"]').click();
     await expect(panel.getByText("37% осталось", { exact: true })).toBeVisible();
     await expect(reset.locator(".usage-reset-count")).toHaveText("2");
+    assert.equal(usageReads, 0, "Entering Connections does not refetch the same snapshot");
     await reset.getByRole("button", { name: "Активировать", exact: true }).first().click();
     const confirm = reset.getByRole("group", { name: "Подтверждение сброса" });
     await expect(confirm).toBeVisible();
@@ -103,8 +115,25 @@ for (const [engine, browserType] of [
     assert.equal(f.state.consumes.length, 1);
     await button("Закрыть настройки").click();
     await expect(draft).toHaveValue("Черновик должен сохраниться после сброса лимитов");
-    await button("Настройки").click();
+    await openSettings();
+    await expect(panel.getByText("100% осталось", { exact: true })).toHaveCount(2);
+    await expect(reset.locator(".usage-reset-count")).toHaveText("1");
+    // Start from the main view, navigate while native redemption is pending, never spend twice.
+    let release;
+    f.state.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    await reset.getByRole("button", { name: "Активировать", exact: true }).first().click();
+    await confirm.getByRole("button", { name: "Использовать сброс", exact: true }).click();
+    await expect.poll(() => f.state.consumes.length).toBe(2);
     await page.locator('.settings-browser[open] [data-category="connections"]').click();
+    await expect(
+      reset.getByRole("button", { name: "Активировать", exact: true }).first(),
+    ).toBeDisabled();
+    release();
+    f.state.hold = null;
+    await expect(reset.getByText("Доступных сбросов нет.", { exact: true })).toBeVisible();
+    assert.equal(f.state.consumes.length, 2);
 
     // Failed HTTP acknowledgement: Hub/native succeeded; reopen only reads receipt.
     nextAccount();
@@ -190,6 +219,45 @@ for (const [engine, browserType] of [
     await page.evaluate(() => window.dispatchEvent(new Event("codex-usage-changed")));
     await expect(reset).toHaveCount(0);
     await expect(panel.getByText("37% осталось", { exact: true })).toBeVisible();
+    await button("Все категории настроек").click();
+    await expect(reset).toHaveCount(0);
+    await expect(panel.getByText("37% осталось", { exact: true })).toBeVisible();
+    for (const variant of ["zero", "count", "detailed"]) {
+      nextAccount();
+      if (variant === "zero") {
+        f.state.raw.rateLimitResetCredits.availableCount = 0;
+        f.state.raw.rateLimitResetCredits.credits = [];
+      }
+      if (variant === "count") f.state.raw.rateLimitResetCredits.credits = null;
+      await page.evaluate(() => window.dispatchEvent(new Event("codex-usage-changed")));
+      if (variant === "zero")
+        await expect(reset.getByText("Доступных сбросов нет.", { exact: true })).toBeVisible();
+      else if (variant === "count")
+        await expect(
+          reset.getByRole("button", { name: "Использовать один", exact: true }),
+        ).toBeEnabled();
+      else
+        await expect(
+          reset.getByRole("button", { name: "Активировать", exact: true }).first(),
+        ).toBeEnabled();
+    }
+    for (const width of [320, 768, 1366, 1920]) {
+      await page.setViewportSize({ width, height: width < 760 ? 852 : 1024 });
+      for (const theme of ["hitech-2000s", "crt-green", "organizer", "classic-dark"]) {
+        await page.evaluate((theme) => {
+          document.documentElement.dataset.theme = theme;
+        }, theme);
+        await panel.scrollIntoViewIfNeeded();
+        assert(
+          await panel.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+          `${theme}/${width} summary overflow`,
+        );
+        await panel.screenshot({
+          path: `${out}/summary-${theme}-${width}.png`,
+          animations: "disabled",
+        });
+      }
+    }
     assert.deepEqual(errors, []);
     assert(f.desktopCalls.every((action) => action === "Status"));
     assert(!f.calls.some((c) => ["turn/start", "turn/steer", "turn/interrupt"].includes(c.method)));

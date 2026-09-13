@@ -1,7 +1,6 @@
-import type { UsageGroup as Group, UsageLimitsData } from "@codex-web/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, messageOf } from "./api";
+import type { UsageGroup as Group } from "@codex-web/shared";
 import type { Machine } from "./types";
+import { useUsageLimits } from "./UsageLimitsState";
 import { UsageResetCredits } from "./UsageResetCredits";
 import "./usageLimits.css";
 
@@ -48,52 +47,7 @@ function Windows({ group }: { group: Group }) {
   );
 }
 function Usage({ machine, open }: { machine: Machine; open: boolean }) {
-  const [data, setData] = useState<UsageLimitsData>({
-      available: false,
-      groups: [],
-      resetCredits: null,
-      checkedAt: "",
-    }),
-    [message, setMessage] = useState("Загружаю лимиты…");
-  const active = useRef(false),
-    sequence = useRef(0);
-  const readController = useRef<AbortController | null>(null);
-  const refresh = useCallback(async () => {
-    if (!active.current || document.visibilityState === "hidden") return;
-    const request = ++sequence.current;
-    readController.current?.abort();
-    const controller = new AbortController();
-    readController.current = controller;
-    try {
-      const value = await api<UsageLimitsData>(
-        `/machines/${encodeURIComponent(machine.id)}/limits`,
-        { signal: controller.signal },
-      );
-      if (active.current && request === sequence.current) {
-        setData(value);
-        setMessage(value.available ? "" : "Данные пока недоступны.");
-      }
-    } catch (e) {
-      if (active.current && request === sequence.current) setMessage(messageOf(e));
-    }
-  }, [machine.id]);
-  useEffect(() => {
-    active.current = open;
-    if (!open) return;
-    void refresh();
-    const timer = setInterval(() => void refresh(), 60000);
-    const changed = () => void refresh();
-    document.addEventListener("visibilitychange", changed);
-    window.addEventListener("codex-usage-changed", changed);
-    return () => {
-      active.current = false;
-      sequence.current++;
-      readController.current?.abort();
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", changed);
-      window.removeEventListener("codex-usage-changed", changed);
-    };
-  }, [refresh, open]);
+  const { data, message, refresh } = useUsageLimits(machine.id);
   return (
     <section className="usage-limits" aria-label={"Лимиты Codex: " + machine.name}>
       <div className="usage-heading">

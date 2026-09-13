@@ -32,11 +32,13 @@ export function SettingsSections({
   client,
   onClose,
   sections,
+  overview,
 }: {
   open: boolean;
   client: "Codex" | "GPT";
   onClose: () => void;
   sections: Record<SettingsCategory, (visible: boolean) => ReactNode>;
+  overview?: (visible: boolean) => ReactNode;
 }) {
   const [selected, setSelected] = useState<SettingsCategory | null>(null);
   const active = selected ?? "appearance",
@@ -44,6 +46,14 @@ export function SettingsSections({
   const content = useRef<HTMLDivElement>(null),
     nav = useRef<HTMLElement>(null);
   const previous = useRef<SettingsCategory | null>(null);
+  const [compact, setCompact] = useState(() => matchMedia("(max-width: 759px)").matches);
+  useEffect(() => {
+    const media = matchMedia("(max-width: 759px)");
+    const changed = () => setCompact(media.matches);
+    media.addEventListener("change", changed);
+    return () => media.removeEventListener("change", changed);
+  }, []);
+  const overviewVisible = open && (compact ? selected === null : active !== "connections");
   useEffect(() => {
     if (!open) setSelected(null);
   }, [open]);
@@ -83,33 +93,40 @@ export function SettingsSections({
         </button>
       </div>
       <div className="settings-layout">
-        <nav ref={nav} className="settings-categories" aria-label="Категории настроек">
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              data-category={category.id}
-              aria-current={active === category.id ? "page" : undefined}
-              aria-controls={prefix + category.id}
-              onClick={() => setSelected(category.id)}
-            >
-              <span className="settings-category-icon">
-                <Icon name={category.icon} />
-              </span>
-              <span>
-                <strong>{category.title}</strong>
-                <small>
-                  {category.id === "connections"
-                    ? client === "Codex"
-                      ? "Лимиты, инструменты и компьютеры"
-                      : "ChatGPT и компьютеры"
-                    : category.hint}
-                </small>
-              </span>
-              <Icon name="chevron" size={16} />
-            </button>
-          ))}
-        </nav>
+        <div className="settings-overview">
+          <nav ref={nav} className="settings-categories" aria-label="Категории настроек">
+            {categories.map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                data-category={category.id}
+                aria-current={active === category.id ? "page" : undefined}
+                aria-controls={prefix + category.id}
+                onClick={() => setSelected(category.id)}
+              >
+                <span className="settings-category-icon">
+                  <Icon name={category.icon} />
+                </span>
+                <span>
+                  <strong>{category.title}</strong>
+                  <small>
+                    {category.id === "connections"
+                      ? client === "Codex"
+                        ? "Лимиты, инструменты и компьютеры"
+                        : "ChatGPT и компьютеры"
+                      : category.hint}
+                  </small>
+                </span>
+                <Icon name="chevron" size={16} />
+              </button>
+            ))}
+          </nav>
+          {overview && (
+            <div className="settings-usage-summary" hidden={!overviewVisible}>
+              {overviewVisible && overview(true)}
+            </div>
+          )}
+        </div>
         <div ref={content} className="settings-content" tabIndex={-1}>
           {categories.map((category) => (
             <section
@@ -122,7 +139,9 @@ export function SettingsSections({
               <h3 id={prefix + category.id + "-title"} className="settings-section-title">
                 {category.title}
               </h3>
-              {sections[category.id](open && active === category.id)}
+              {sections[category.id](
+                open && active === category.id && (!compact || selected !== null),
+              )}
               {pageWorkspace && category.id === "connections" && (
                 <>
                   <TeamGpt visible={open && active === category.id} />

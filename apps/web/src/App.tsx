@@ -56,6 +56,7 @@ import type {
   View,
 } from "./types";
 import { UsageLimits } from "./UsageLimits";
+import { UsageLimitsProvider } from "./UsageLimitsState";
 import { useNavigation } from "./useNavigation";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
@@ -1550,91 +1551,94 @@ function Workspace({
         ref={settingsDialog}
         onCancel={() => setSettings(false)}
       >
-        <SettingsSections
-          open={settings}
-          client="Codex"
-          onClose={() => setSettings(false)}
-          sections={{
-            appearance: () => <AppearanceSettings theme={theme} onTheme={setTheme} />,
-            sound: (visible) => (
-              <>
-                <SpeechSettings />
-                <Notifications visible={visible} />
-              </>
-            ),
-            connections: (visible) => (
-              <>
-                <UsageLimits machines={machines} open={visible} />
-                <NativeInventory projectId={projectId} visible={visible} />
-                <DesktopControl
-                  machines={machines}
-                  open={visible}
-                  threadId={threadId}
-                  machineId={project?.machineId}
-                />
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setSettings(false);
-                    setMachinePanel(true);
-                  }}
-                >
-                  <Icon name="remote" />
-                  Компьютеры
-                </button>
-              </>
-            ),
-            library: () => (
-              <>
-                <section className="settings-navigation-actions" aria-label="Навигация">
+        <UsageLimitsProvider machines={machines} open={settings}>
+          <SettingsSections
+            open={settings}
+            client="Codex"
+            overview={(visible) => <UsageLimits machines={machines} open={visible} />}
+            onClose={() => setSettings(false)}
+            sections={{
+              appearance: () => <AppearanceSettings theme={theme} onTheme={setTheme} />,
+              sound: (visible) => (
+                <>
+                  <SpeechSettings />
+                  <Notifications visible={visible} />
+                </>
+              ),
+              connections: (visible) => (
+                <>
+                  <UsageLimits machines={machines} open={visible} />
+                  <NativeInventory projectId={projectId} visible={visible} />
+                  <DesktopControl
+                    machines={machines}
+                    open={visible}
+                    threadId={threadId}
+                    machineId={project?.machineId}
+                  />
                   <button
                     type="button"
-                    onClick={() => void refreshCatalog(true)}
-                    disabled={syncing}
+                    className="secondary"
+                    onClick={() => {
+                      setSettings(false);
+                      setMachinePanel(true);
+                    }}
                   >
-                    <Icon name="refresh" />
-                    Обновить проекты
+                    <Icon name="remote" />
+                    Компьютеры
                   </button>
-                  <EntityArchive client="codex" />
-                </section>
-                <button
-                  type="button"
-                  className="secondary settings-activity"
-                  onClick={() => {
-                    setRightHidden(false);
-                    setView("activity");
-                    setSettings(false);
-                  }}
-                >
-                  <Icon name="activity" />
-                  Активность диалога
-                </button>
-              </>
-            ),
-            maintenance: (visible) => (
-              <>
-                <DeploymentStatus open={visible} />
-                <BridgeDoctorPanel
-                  open={visible}
-                  onTarget={(target) => {
-                    setSettings(false);
-                    openNotebookTarget(target);
-                  }}
-                />
-                <StorageUsage visible={visible} />
-              </>
-            ),
-            access: () => (
-              <>
-                <AccountControls onSession={onSession} onLogout={onLogout} />
-                <p className="small muted">
-                  Для установки на iPhone: Поделиться → На экран «Домой».
-                </p>
-              </>
-            ),
-          }}
-        />
+                </>
+              ),
+              library: () => (
+                <>
+                  <section className="settings-navigation-actions" aria-label="Навигация">
+                    <button
+                      type="button"
+                      onClick={() => void refreshCatalog(true)}
+                      disabled={syncing}
+                    >
+                      <Icon name="refresh" />
+                      Обновить проекты
+                    </button>
+                    <EntityArchive client="codex" />
+                  </section>
+                  <button
+                    type="button"
+                    className="secondary settings-activity"
+                    onClick={() => {
+                      setRightHidden(false);
+                      setView("activity");
+                      setSettings(false);
+                    }}
+                  >
+                    <Icon name="activity" />
+                    Активность диалога
+                  </button>
+                </>
+              ),
+              maintenance: (visible) => (
+                <>
+                  <DeploymentStatus open={visible} />
+                  <BridgeDoctorPanel
+                    open={visible}
+                    onTarget={(target) => {
+                      setSettings(false);
+                      openNotebookTarget(target);
+                    }}
+                  />
+                  <StorageUsage visible={visible} />
+                </>
+              ),
+              access: () => (
+                <>
+                  <AccountControls onSession={onSession} onLogout={onLogout} />
+                  <p className="small muted">
+                    Для установки на iPhone: Поделиться → На экран «Домой».
+                  </p>
+                </>
+              ),
+            }}
+          />
+        </UsageLimitsProvider>
       </dialog>
       {notebookPanel}
       {contentSearch && (

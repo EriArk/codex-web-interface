@@ -55,6 +55,10 @@ for (const [engine, type] of [
     await page.goto(origin);
     const button = (name) =>
       page.getByRole("button", { name, exact: true }).filter({ visible: true }).first();
+    const openSettings = async () => {
+      if (!(await button("Настройки").isVisible())) await button("Открыть проекты").click();
+      await button("Настройки").click();
+    };
     const settings = page.getByRole("dialog", { name: "Настройки", exact: true });
     const choose = async (id) => {
       if (!(await settings.locator(".settings-categories").isVisible()))
@@ -64,12 +68,13 @@ for (const [engine, type] of [
     const codex = page.getByRole("textbox", { name: "Сообщение Codex" });
     await codex.fill("Не терять мой черновик");
     await codex.blur();
-    await button("Настройки").click();
+    await openSettings();
     await expect(settings.locator(".settings-categories button")).toHaveCount(6);
     assert(
-      !reads.some((path) => /\/limits$|\/storage\/?$|\/bridge-doctor$/.test(path)),
+      !reads.some((path) => /\/storage\/?$|\/bridge-doctor$/.test(path)),
       "Opening the index must not start hidden settings probes",
     );
+    await expect(settings.locator(".settings-usage-summary .usage-limits")).toBeVisible();
     await choose("access");
     await button("Сменить пароль").click();
     await settings.getByLabel("Текущий пароль", { exact: true }).fill("Unsaved example");
@@ -149,7 +154,7 @@ for (const [engine, type] of [
         await button("Переключиться на GPT").click();
         await page.getByRole("textbox", { name: "Сообщение GPT" }).fill("Черновик GPT");
       }
-      await button("Настройки").click();
+      await openSettings();
       for (const width of [320, 1366]) {
         await page.setViewportSize({ width, height: width === 320 ? 852 : 1024 });
         for (const theme of ["organizer", "classic-dark", "crt-green", "hitech-2000s"]) {
