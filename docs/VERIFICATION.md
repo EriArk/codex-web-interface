@@ -8,6 +8,8 @@ Linux web typecheck/build and repository guard pass. Chromium and WebKit pass `n
 
 These are isolated fixtures and browser simulations, not new physical-device or friend-PC acceptance. No native owner turn or desktop process was exercised. This is a compatible web-only package; Files/Git separation, writable file management and project-only Results are subsequent work. Full backend-suite counts elsewhere belong to their dated releases and were not repeated for this frontend-only change.
 
+Publication confirmed: web `ac39079` / asset `78e4a0d081a08b28c041fac3096e01c21cdd14c25f76bb4355a55dbcbd44d2c4` is served by the public version endpoint and HTML. Previous assets were checksum-verified and retained; engine/gateway/GPT container identities and start times were unchanged. The production read-only Doctor passed Codex/Companion/login/capability and GPT checks. See the [checkpoint](TEAM_CHECKPOINT.md) for release/rollback evidence.
+
 ## First-owner activation preparation — 2026-09-13
 
 The complete isolated Linux suite passed **525 tests**, build, typecheck and lint (existing non-fatal warnings remain). New cases verify backend registration pause while owner login/shared work remains available, and first-owner activation guards with exact-config rollback and preservation of a failed registry. Chromium and WebKit passed login as `eriark`, preserved original-owner drafts, paused-registration controls, account switching and the existing 24 theme/viewport combinations per engine. Changing categories does not remount saved forms; the fixture reloads after changing its server configuration.

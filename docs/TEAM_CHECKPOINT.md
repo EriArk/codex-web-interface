@@ -2,6 +2,16 @@
 
 The owner asked to finish this pass and continue in short sessions. Code is on `feat/team-workspaces`; checked stages are committed and pushed. This document is the restart point, not a claim that every team acceptance gate is complete.
 
+## First window pass installed — 2026-09-13
+
+Web-only revision `ac39079` is installed at the standard public address. `/version.json` and the HTML release stamp both confirm `78e4a0d081a08b28c041fac3096e01c21cdd14c25f76bb4355a55dbcbd44d2c4`. Engine/gateway remain `60b326892`, GPT remains `7f25d37`; container IDs and start times were unchanged across publication. Live read-only Doctor confirmed SSH, Companion, Codex login/capabilities and GPT health before publication, without acquiring a conversation writer.
+
+Installed: a single material/window lifecycle, «Общие» in the same five-button row, independent Tasks/Notes/Plans/Reports windows, direct shared-material windows and matching fields/controls. Tablet/desktop list-and-editor layouts and compact keyboard behavior are verified. Existing drafts, revision/receipt checks and explicit execution remain intact. Eight browser suites passed in Chromium/WebKit; see [verification](VERIFICATION.md).
+
+The previous web release `8791306c355b71179b2014798a9321d66974560201bc1bd8d43b4d43d2121972` is retained, and all 49 manifest files were checksum-verified before publication. Its pointer/manifest and container continuity receipt are stored privately as `backups/web-before-ac39079.json`; the earlier full stable checkpoint is untouched. The `ac39079` image is labelled `web-only` and was used solely as the asset publisher, not installed as an engine.
+
+Next: separate purpose-sized Files/Git windows and project-only Results. The owner additionally wants real file-manager operations behind an explicit read-only lock; this is recorded with #169 and requires #158's already-enabled-Team upgrade/restore path before its engine changes. No cosmetic unlock or writable file API was shipped in this UI pass. Remaining forms outside these modules still need the same material review.
+
 ## Installation confirmed at the subsequent audit
 
 Read-only inspection on 2026-09-13 confirmed engine/gateway `60b326892` healthy and Maintenance `installed`; GPT remains `7f25d37` with its original profile. The owner's Team workspace is enabled and new-member registration stays closed. The previous queue observation below is historical, not the current release state. No separate friend-PC/account acceptance is implied.
