@@ -5,6 +5,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, expect, webkit } from "@playwright/test";
+import { Artifacts } from "../apps/hub/dist/artifacts.js";
 import { Notebook } from "../apps/hub/dist/notebook.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { teamPasswordHash } from "../apps/hub/dist/team-auth.js";
@@ -120,12 +121,88 @@ try {
         .list(ownerId)
         .items.find((p) => p.title === "Общая игра " + engine);
       await page.getByRole("button", { name: "Участники", exact: true }).click();
-      await page.getByLabel("Логин в CodexWeb").fill("friend");
+      await page
+        .getByRole("group", { name: "Пользователи Hub", exact: true })
+        .getByRole("button", { name: /Друг/ })
+        .click();
       await page.getByRole("button", { name: "Отправить приглашение", exact: true }).click();
-      await expect(page.getByRole("status")).toContainText("Приглашение появится");
+      await expect(page.locator(".shared-projects-dialog").getByRole("status")).toContainText(
+        "Приглашение появится",
+      );
       assert.throws(() => hub.teamProjects.detail(friendId, project.id));
       await open(friend);
       await friend.getByRole("button", { name: "Принять приглашение", exact: true }).click();
+      await expect(friend.locator(".shared-project-identity")).toContainText(
+        "Общая игра " + engine,
+      );
+      const linkedProjectId = randomUUID();
+      hub.teamProjects.create(friendId, linkedProjectId, {
+        title: "Личный связанный " + engine,
+        visibility: "private",
+        repository: null,
+      });
+      await page.getByRole("button", { name: "Связи проектов", exact: true }).click();
+      await page.getByRole("button", { name: "Предложить связь", exact: true }).click();
+      await page
+        .getByRole("group", { name: "Пользователи Hub", exact: true })
+        .getByRole("button", { name: /Друг/ })
+        .click();
+      await page.getByLabel("Для чего связываем проекты").fill("Согласовать общий API");
+      await page.getByRole("button", { name: "Отправить предложение", exact: true }).click();
+      await expect(page.getByText("Ждёт выбора проекта", { exact: true })).toBeVisible();
+      await friend.evaluate(() =>
+        window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: {} })),
+      );
+      await friend
+        .getByLabel("Мой проект для связи", { exact: true })
+        .selectOption(linkedProjectId);
+      await friend.getByRole("button", { name: "Принять связь", exact: true }).click();
+      await expect(friend.getByRole("button", { name: "Принять связь", exact: true })).toHaveCount(
+        0,
+      );
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await expect(
+        page.getByRole("heading", {
+          name: "Общая игра " + engine + " ↔ Личный связанный " + engine,
+          exact: true,
+        }),
+      ).toBeVisible();
+      assert.throws(() => hub.teamProjects.detail(ownerId, linkedProjectId));
+      const link = hub.teamLinks.page(ownerId, project.id).items[0];
+      await page.getByRole("button", { name: "Консультации", exact: true }).click();
+      await page.getByRole("button", { name: "Новый запрос", exact: true }).click();
+      await page.getByLabel("Связь для запроса", { exact: true }).selectOption(link.id);
+      await page.getByLabel("Тема", { exact: true }).fill("Уточнить API " + engine);
+      await page
+        .getByLabel("Вопрос и общий контекст", { exact: true })
+        .fill("Какие поля у публичного интерфейса?");
+      await page.getByRole("button", { name: "Передать запрос", exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Уточнить API " + engine, exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".shared-projects-dialog").getByRole("status")).toContainText(
+        "Ждёт согласия владельцев",
+      );
+      await friend.evaluate(
+        (projectId) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: { projectId } })),
+        linkedProjectId,
+      );
+      await friend.getByRole("button", { name: "Консультации", exact: true }).click();
+      await friend.getByRole("button", { name: /Уточнить API/ }).click();
+      await expect(
+        friend.getByRole("button", { name: "Разрешить консультацию моему проекту", exact: true }),
+      ).toBeVisible();
+      await friend.getByRole("button", { name: "Остановить обмен", exact: true }).click();
+      await expect(friend.locator(".shared-projects-dialog").getByRole("status")).toContainText(
+        "Остановлено",
+      );
+      assert.equal(hub.teamConsultations.page(ownerId, project.id).items[0].state, "stopped");
+      await friend.evaluate(
+        (projectId) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: { projectId } })),
+        project.id,
+      );
       await expect(friend.locator(".shared-project-identity")).toContainText(
         "Общая игра " + engine,
       );
@@ -179,7 +256,7 @@ try {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByRole("button", { name: "Сохранить для участников", exact: true }).click();
       await expect(page.getByRole("button", { name: /Заметка для участников/ })).toBeVisible();
-      await friend.getByRole("button", { name: "Обновить", exact: true }).click();
+      await friend.evaluate(() => window.dispatchEvent(new Event("focus")));
       await friend.getByRole("button", { name: /Заметка для участников/ }).click();
       await friend.getByRole("button", { name: "Редактор", exact: true }).click();
       await friend.getByLabel("Текст", { exact: true }).fill("Черновик друга при конфликте");
@@ -241,6 +318,77 @@ try {
         randomUUID(),
         { revision: 0, personalProjectId: scope.projectId },
         { machineId: "FIXTURE_MACHINE", repository: null },
+      );
+      // Real local root verification + held-queue UI. The fixture thread is marked busy;
+      // no native process is acquired, and explicit cancellation removes its pending dispatch.
+      const folder = join(root, "checkout-" + engine);
+      await mkdir(folder);
+      personal.sessions.config.machines.push({
+        id: "FIXTURE_MACHINE",
+        name: "Fixture",
+        type: "local-linux",
+        allowedProjectRoots: [folder],
+        codex: {},
+      });
+      personal.sessions.config.projects.push({
+        id: scope.projectId,
+        name: scope.name,
+        machineId: "FIXTURE_MACHINE",
+        workingDirectory: folder,
+        enabled: true,
+      });
+      const nativeThread = personal.store.createThread(
+        scope.projectId,
+        randomUUID(),
+        "My execution chat",
+      );
+      personal.store.setThreadSettings(nativeThread.id, {
+        model: "fixture-model",
+        effort: "high",
+        mode: "default",
+        access: "workspace",
+      });
+      personal.store.setStatus(nativeThread.id, "running");
+      const sharedPlan = hub.teamProjects.items(ownerId, project.id, "plan", "", 0).items[0];
+      const beforeRun = hub.teamProjects.get(ownerId, project.id, sharedPlan.id);
+      hub.teamProjects.put(ownerId, project.id, sharedPlan.id, randomUUID(), {
+        content: beforeRun.content,
+        revision: beforeRun.revision,
+        assigneeId: ownerId,
+      });
+      await page.evaluate(
+        (target) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: target })),
+        { projectId: project.id, kind: "plan", itemId: sharedPlan.id },
+      );
+      await expect(
+        page.getByRole("button", { name: "Подготовить выполнение", exact: true }),
+      ).toBeEnabled();
+      await page.getByRole("button", { name: "Подготовить выполнение", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Подтвердить и выполнить", exact: true }),
+      ).toBeVisible();
+      await page.getByText("Текст задания и согласованная основа", { exact: true }).click();
+      await expect(page.locator(".shared-run-prompt")).toContainText("Проверить интерфейс");
+      await page.getByRole("button", { name: "Подтвердить и выполнить", exact: true }).click();
+      await expect(page.locator('.shared-execution [data-state="queued"]')).toBeVisible();
+      const receipt = hub.teamExecutions.list(ownerId, project.id, sharedPlan.id).items[0];
+      const privateView = await hub.teamExecutions.detail(friendId, project.id, receipt.id);
+      assert.equal(privateView.preview, undefined);
+      await page.getByRole("button", { name: "Отменить запуск", exact: true }).click();
+      await expect(page.locator('.shared-execution [data-state="cancelled"]')).toBeVisible();
+      assert.equal(
+        personal.store.db
+          .prepare("SELECT count(*) n FROM messages WHERE threadId=?")
+          .get(nativeThread.id).n,
+        0,
+      );
+      personal.store.setStatus(nativeThread.id, "idle");
+      personal.sessions.config.machines = personal.sessions.config.machines.filter(
+        (m) => m.id !== "FIXTURE_MACHINE",
+      );
+      personal.sessions.config.projects = personal.sessions.config.projects.filter(
+        (p) => p.id !== scope.projectId,
       );
       await page.getByRole("button", { name: "Закрыть совместные проекты", exact: true }).click();
       await page.evaluate(
@@ -319,6 +467,44 @@ try {
       await page.getByRole("button", { name: "Новая заметка", exact: true }).click();
       await expect(page.getByLabel("Доступ к записи")).toHaveValue("personal");
       await page.getByRole("button", { name: "Закрыть заметки", exact: true }).click();
+      new Artifacts(personal.sessions.config.hub.resultsPath, personal.store).putFile(
+        nativeThread.id,
+        null,
+        "Общий файл.txt",
+        "/private/fixture.txt",
+        "text/plain",
+        Buffer.from("EXPLICIT_PUBLISHED_FILE"),
+      );
+      await page.evaluate(
+        (target) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: target })),
+        { projectId: project.id, scope },
+      );
+      await page.getByRole("button", { name: "Опубликовать из личного", exact: true }).click();
+      await page.getByLabel("Раздел", { exact: true }).selectOption("file");
+      await page.getByRole("checkbox", { name: "Общий файл.txt", exact: true }).check();
+      await page
+        .getByRole("button", { name: "Просмотреть перед публикацией", exact: true })
+        .click();
+      await expect(page.locator(".shared-file")).toContainText("Общий файл.txt");
+      await page.getByRole("button", { name: "Опубликовать для участников", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Опубликовать для участников", exact: true }),
+      ).toHaveCount(0);
+      const publishedFile = hub.teamProjects.items(friendId, project.id, "result", "Общий файл", 0)
+        .items[0];
+      assert(publishedFile);
+      await friend.evaluate(
+        (target) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: target })),
+        { projectId: project.id, itemId: publishedFile.id, kind: "result" },
+      );
+      await expect(friend.locator(".shared-file")).toContainText("Общий файл.txt");
+      const downloaded = await friend.request.get(
+        base + (await friend.locator(".shared-file").getAttribute("href")),
+      );
+      assert.equal(await downloaded.text(), "EXPLICIT_PUBLISHED_FILE");
+      await page.getByRole("button", { name: "Закрыть совместные проекты", exact: true }).click();
       await open(page);
       await page
         .getByRole("article")
@@ -328,7 +514,7 @@ try {
       await page.getByRole("button", { name: "Участники", exact: true }).click();
       await page.getByRole("button", { name: "Отозвать доступ", exact: true }).click();
       await page.getByRole("button", { name: "Подтвердить", exact: true }).click();
-      await friend.getByRole("button", { name: "Обновить", exact: true }).click();
+      await friend.evaluate(() => window.dispatchEvent(new Event("focus")));
       await expect(
         friend.getByText("Проект или материал недоступен.", { exact: true }),
       ).toBeVisible();

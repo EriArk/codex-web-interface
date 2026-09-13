@@ -1,4 +1,9 @@
-import type { ProjectScope, SharedMaterial, TaskProjectsPage } from "@codex-web/shared";
+import type {
+  ProjectScope,
+  SharedAsset,
+  SharedMaterial,
+  TaskProjectsPage,
+} from "@codex-web/shared";
 import { useState } from "react";
 import { api } from "./api";
 import { MaterialContent, materialLabels } from "./SharedMaterialEditor";
@@ -83,11 +88,19 @@ export function PersonalProjectPicker({
     </div>
   );
 }
-type Kind = "note" | "task" | "core" | "plan" | "report";
+type Kind = "note" | "task" | "core" | "plan" | "report" | "review" | "file";
+const sourceLabel = (kind: Kind) =>
+  kind === "file" ? "Файлы и изображения" : materialLabels[kind];
 type Source = { id: string; kind: Kind; title: string; revision?: number };
 type Preview = {
   fingerprint: string;
-  items: { content: SharedMaterial; revision: number; source: { id: string; kind: Kind } }[];
+  items: {
+    content: SharedMaterial;
+    revision: number;
+    source: { id: string; kind: Kind };
+    files?: SharedAsset[];
+  }[];
+  files?: { sourceId: string; assetId: string }[];
 };
 
 export function SharedPublication({
@@ -141,6 +154,7 @@ export function SharedPublication({
             <article className="shared-card" key={entry.source.kind + ":" + entry.source.id}>
               <h3>{entry.content.title}</h3>
               <MaterialContent content={entry.content} />
+              <SharedFiles projectId={projectId} files={entry.files} />
             </article>
           ))}
           <div className="shared-actions">
@@ -161,6 +175,7 @@ export function SharedPublication({
                   sharedMutation(base + "/publications", "POST", {
                     ...payload,
                     fingerprint: preview.fingerprint,
+                    files: preview.files ?? [],
                   }),
                 ).then((result) => {
                   if (result) onDone();
@@ -185,6 +200,7 @@ export function SharedPublication({
           <label>
             Раздел
             <select
+              aria-label="Раздел"
               value={kind}
               disabled={busy}
               onChange={(e) => {
@@ -192,13 +208,21 @@ export function SharedPublication({
                 setOffset(0);
               }}
             >
-              {(["note", "task", "plan", "report", ...(owner ? ["core"] : [])] as Kind[]).map(
-                (k) => (
-                  <option value={k} key={k}>
-                    {materialLabels[k]}
-                  </option>
-                ),
-              )}
+              {(
+                [
+                  "note",
+                  "task",
+                  "plan",
+                  "report",
+                  "review",
+                  "file",
+                  ...(owner ? ["core"] : []),
+                ] as Kind[]
+              ).map((k) => (
+                <option value={k} key={k}>
+                  {sourceLabel(k)}
+                </option>
+              ))}
             </select>
           </label>
           {sources.error && <p role="alert">{sources.error}</p>}
@@ -254,7 +278,7 @@ export function SharedPublication({
               {selected.map((item) => (
                 <div className="shared-row" key={item.kind + item.id}>
                   <span>
-                    {materialLabels[item.kind]} · {item.title}
+                    {sourceLabel(item.kind)} · {item.title}
                   </span>
                   <button
                     type="button"
@@ -285,4 +309,31 @@ export function SharedPublication({
       )}
     </section>
   );
+}
+export function SharedFiles({ projectId, files }: { projectId: string; files?: SharedAsset[] }) {
+  return files?.length ? (
+    <div className="shared-form">
+      {files.map((file) => (
+        <a
+          className="secondary shared-file"
+          key={file.id}
+          href={`/api/team/projects/${projectId}/assets/${file.id}`}
+          download={file.name}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {/^image\/(png|jpeg|webp|gif|avif)$/.test(file.mime) && (
+            <img
+              src={`/api/team/projects/${projectId}/assets/${file.id}`}
+              alt={file.name}
+              loading="lazy"
+            />
+          )}
+          <span>
+            {file.name} · {Math.ceil(file.bytes / 1024)} КБ
+          </span>
+        </a>
+      ))}
+    </div>
+  ) : null;
 }

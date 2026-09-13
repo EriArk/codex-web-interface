@@ -45,6 +45,7 @@ import { registerNavigation } from "./navigation.js";
 import { registerNotebook } from "./notebook.js";
 import { registerProjectOverview } from "./overview.js";
 import { assertPreviewFrame, previewCsp } from "./previews.js";
+import type { ProjectActionPolicy } from "./project-actions.js";
 import { registerProjectCores } from "./project-core.js";
 import { registerProjectDelivery } from "./project-delivery.js";
 import { registerProjectSetup } from "./project-setup.js";
@@ -92,6 +93,7 @@ export async function createApp(
     transcribe?: Transcribe;
     auth?: Auth;
     authorizeExecution?: () => void;
+    projectActionPolicy?: ProjectActionPolicy;
     keepStoreOpen?: boolean;
   } = {},
 ) {
@@ -691,7 +693,7 @@ export async function createApp(
   registerStagingStorage(app, config, options.stagingProbe);
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
-  const projectWork = registerProjectWork(app, sessions, gpt, queue);
+  const projectWork = registerProjectWork(app, sessions, gpt, queue, options.projectActionPolicy);
   registerNativePlans(app, new NativePlans(sessions, projectWork.context));
   registerRelays(app, sessions, projectWork, queue);
   registerGuiPreviews(app, sessions, artifacts, projectWork.context, options.guiPreviewProbe);

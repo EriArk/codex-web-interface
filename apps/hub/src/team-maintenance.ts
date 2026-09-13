@@ -12,10 +12,11 @@ import {
 import { copyFile, readdir, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
-import type { HubConfig } from "@codex-web/shared";
+import type { HubConfig, SharedAsset } from "@codex-web/shared";
 import { z } from "zod";
 import { createSnapshot, restoreSnapshot, verifySnapshot } from "./maintenance.js";
 import { Store } from "./store.js";
+import { readSharedFile, sharedAssetPath } from "./team-assets.js";
 
 const manifestSchema = z
   .object({
@@ -71,7 +72,7 @@ function ownership(db: DatabaseSync) {
   )
     throw new Error("TEAM_REGISTRY_INVALID");
   if (
-    !["1", "2", "3", "4"].includes(
+    !["1", "2", "3", "4", "5", "6"].includes(
       String(db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value),
     )
   )
@@ -116,6 +117,7 @@ function ownership(db: DatabaseSync) {
 function mapping(db: DatabaseSync) {
   return JSON.stringify({
     ...ownership(db),
+    sharedFiles: assetRows(db),
     projects: db.prepare("SELECT name FROM sqlite_master WHERE name='team_projects'").get()
       ? {
           owners: db
@@ -143,6 +145,35 @@ function mapping(db: DatabaseSync) {
           .all()
       : [],
   });
+}
+function assetRows(db: DatabaseSync): Pick<SharedAsset, "id" | "bytes" | "sha256">[] {
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE name='team_assets'").get()) return [];
+  return db
+    .prepare("SELECT id,bytes,sha256 FROM team_assets ORDER BY id")
+    .all()
+    .map((row) => ({
+      id: z.string().uuid().parse(row.id),
+      bytes: z
+        .number()
+        .int()
+        .min(0)
+        .max(32 * 1024 * 1024)
+        .parse(row.bytes),
+      sha256: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .parse(row.sha256),
+    }));
+}
+function copySharedFiles(db: DatabaseSync, source: string, destination: string) {
+  const files = assetRows(db);
+  if (!files.length) return;
+  directory(destination);
+  for (const file of files)
+    writeFileSync(sharedAssetPath(destination, file.id), readSharedFile(source, file), {
+      flag: "wx",
+      mode: 0o600,
+    });
 }
 function personalPaths(config: HubConfig, user: { id: string; legacy: boolean }): HubConfig {
   if (user.legacy) return { ...config, team: undefined };
@@ -180,6 +211,11 @@ export async function createTeamSnapshot(
     try {
       registry.exec("PRAGMA journal_mode=DELETE");
       identity = ownership(registry);
+      copySharedFiles(
+        registry,
+        join(config.team.root, "shared-results"),
+        join(staging, "shared-results"),
+      );
     } finally {
       registry.close();
     }
@@ -256,6 +292,7 @@ export async function verifyTeamSnapshot(path: string) {
   const db = new DatabaseSync(join(path, "team.db"), { readOnly: true });
   try {
     const actual = ownership(db);
+    for (const file of assetRows(db)) readSharedFile(join(path, "shared-results"), file);
     if (
       actual.ownerId !== manifest.ownerId ||
       JSON.stringify(actual.users) !==
@@ -343,6 +380,16 @@ export async function restoreTeamSnapshot(snapshot: string, target: string) {
     if (digest(join(staging, "team", "team.db")) !== manifest.registryHash)
       throw new Error("TEAM_REGISTRY_CHECKSUM");
     chmodSync(join(staging, "team", "team.db"), 0o600);
+    const filesRegistry = new DatabaseSync(join(staging, "team", "team.db"), { readOnly: true });
+    try {
+      copySharedFiles(
+        filesRegistry,
+        join(snapshot, "shared-results"),
+        join(staging, "team", "shared-results"),
+      );
+    } finally {
+      filesRegistry.close();
+    }
     for (const user of manifest.users) {
       const dest = user.legacy ? join(staging, "owner") : join(staging, "team", "users", user.id);
       if (user.snapshot) await restoreSnapshot(join(snapshot, user.snapshot), dest);

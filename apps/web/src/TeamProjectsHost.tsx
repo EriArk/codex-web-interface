@@ -27,16 +27,22 @@ export function SharedProjectsButton({ scope }: { scope?: NotebookScope }) {
 }
 export function TeamProjectsHost() {
   const [target, setTarget] = useState<SharedWorkspaceTarget>();
+  const [requestId, setRequestId] = useState(0);
   useEffect(() => {
     const open = (event: Event) => {
-      if (pageWorkspace) setTarget((event as CustomEvent<SharedWorkspaceTarget>).detail ?? {});
+      if (pageWorkspace) {
+        setTarget((event as CustomEvent<SharedWorkspaceTarget>).detail ?? {});
+        setRequestId((id) => id + 1);
+      }
     };
     const close = () => setTarget(undefined);
     window.addEventListener("open-shared-projects", open);
     window.addEventListener("private-session-ended", close);
+    window.addEventListener("open-delivery-target", close);
     return () => {
       window.removeEventListener("open-shared-projects", open);
       window.removeEventListener("private-session-ended", close);
+      window.removeEventListener("open-delivery-target", close);
     };
   }, []);
   return target ? (
@@ -48,7 +54,7 @@ export function TeamProjectsHost() {
       }
     >
       <Panel
-        key={JSON.stringify(target)}
+        key={`${requestId}:${JSON.stringify(target)}`}
         target={target}
         onClose={() => setTarget(undefined)}
         onPersonal={

@@ -24,9 +24,16 @@ import { MachineEnrollmentStore } from "./machine-enrollment-store.js";
 import { proxyPrivateHttp, proxyPrivateSocket } from "./private-proxy.js";
 import { Store } from "./store.js";
 import { sessionCookie, TeamAuth } from "./team-auth.js";
+import { registerTeamConsultations } from "./team-consultation-routes.js";
+import { TeamConsultations } from "./team-consultations.js";
+import { registerTeamExecutions } from "./team-execution-routes.js";
+import { TeamExecutions } from "./team-executions.js";
 import { TeamGpt } from "./team-gpt.js";
+import { registerTeamLinks } from "./team-link-routes.js";
+import { TeamLinks } from "./team-links.js";
 import { registerTeamProjects } from "./team-project-routes.js";
 import { TeamProjects } from "./team-projects.js";
+import { attachTeamRelayTools } from "./team-relay-tools.js";
 import { publicUser, TeamStore } from "./team-store.js";
 import { webSecurity } from "./web-security.js";
 
@@ -104,6 +111,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const enrollments = new MachineEnrollmentStore(registry);
   const teamGpt = new TeamGpt(config, registry);
   const teamProjects = new TeamProjects(registry);
+  const teamLinks = new TeamLinks(teamProjects);
   const auth = new TeamAuth(config, ownerStore, registry);
   const app = Fastify({
     logger: options.logger
@@ -132,6 +140,8 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const maintenanceActive = () => Date.now() < maintenanceUntil;
   const maintenanceError = () =>
     new HubError(503, "ENGINE_MAINTENANCE", "Обновление сервиса. Черновик сохранён.");
+  let teamExecutions: TeamExecutions;
+  let teamConsultations: TeamConsultations;
   const personal = (userId: string) => {
     registry.active(userId);
     if (closing) throw new HubError(503, "WORKSPACE_CLOSING", "Сервис переподключается.");
@@ -174,6 +184,15 @@ export async function createTeamHub(config: HubConfig, options: Options) {
             auth: scoped,
             keepStoreOpen: userId === registry.ownerId,
             executionService: true,
+            projectActionPolicy: {
+              prepare: (action) => teamExecutions.policy(userId, () => runtime).prepare(action),
+              dispatch: (action, queued) =>
+                teamExecutions.policy(userId, () => runtime).dispatch(action, queued),
+              beforeSubmit: (action) =>
+                teamExecutions.policy(userId, () => runtime).beforeSubmit(action),
+              beforeCommit: (action) =>
+                teamExecutions.policy(userId, () => runtime).beforeCommit(action),
+            },
             authorizeExecution: () => {
               registry.active(userId);
               if (maintenanceActive()) throw maintenanceError();
@@ -190,6 +209,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
                 );
             },
           });
+          attachTeamRelayTools(userId, runtime, teamLinks, teamConsultations);
           await runtime.app.listen({ path: socket });
           chmodSync(socket, 0o600);
           return { runtime, socket };
@@ -207,6 +227,20 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     }
     return pending;
   };
+  const authorizeSharedExecution = () => {
+    if (closing || maintenanceActive()) throw maintenanceError();
+    if (
+      registry.db.prepare("SELECT value FROM team_meta WHERE key='nativeAdmission'").get()
+        ?.value === "blocked"
+    )
+      throw new HubError(
+        503,
+        "RESTORE_ADMISSION_REQUIRED",
+        "После восстановления подключения проверяет администратор сервера.",
+      );
+  };
+  teamExecutions = new TeamExecutions(teamProjects, personal, authorizeSharedExecution);
+  teamConsultations = new TeamConsultations(teamLinks, personal, authorizeSharedExecution);
   const track = (
     userId: string,
     hash: string,
@@ -412,6 +446,9 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
   registerTeamProjects(app, teamProjects, actor, personal);
+  registerTeamLinks(app, teamLinks, actor);
+  registerTeamConsultations(app, teamConsultations, actor);
+  registerTeamExecutions(app, teamExecutions, actor);
   const restartPersonal = async (userId: string, change: () => void = () => {}) => {
     registry.active(userId);
     if (reconfiguring.has(userId))
@@ -663,6 +700,13 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       work += Number(
         registry.db
           .prepare(
+            "SELECT COUNT(*) n FROM team_consultations WHERE state IN ('waiting','running','unknown') OR (state='stopped' AND json_extract(value,'$.steps[#-1].state') IN ('dispatching','running','unknown'))",
+          )
+          .get()?.n ?? 0,
+      );
+      work += Number(
+        registry.db
+          .prepare(
             "SELECT COUNT(*) n FROM team_executions WHERE state IN ('dispatching','queued','running','unknown')",
           )
           .get()?.n ?? 0,
@@ -830,6 +874,8 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   }
   app.addHook("onClose", async () => {
     closing = true;
+    await teamExecutions.close();
+    await teamConsultations.close();
     registry.events.off("revoked", revoked);
     for (const id of connections.keys()) revoked(id);
     await Promise.allSettled(
@@ -850,5 +896,17 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       );
     }
   }
-  return { app, registry, auth, personal, enrollments, teamProjects };
+  teamExecutions.start();
+  teamConsultations.start();
+  return {
+    app,
+    registry,
+    auth,
+    personal,
+    enrollments,
+    teamProjects,
+    teamLinks,
+    teamExecutions,
+    teamConsultations,
+  };
 }

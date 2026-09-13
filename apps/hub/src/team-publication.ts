@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   HubError,
   type ProjectScope,
+  type SharedAsset,
   type SharedItemKind,
   type SharedMaterial,
   sharedMaterialSchema,
@@ -10,9 +11,11 @@ import type { createApp } from "./app.js";
 import { Notebook } from "./notebook.js";
 import { ProjectCores } from "./project-core.js";
 import { WorkspaceTasks } from "./tasks.js";
+import type { TeamAssets } from "./team-assets.js";
+import { fileSourceKey, fileSources } from "./team-file-sources.js";
 
 type Runtime = Awaited<ReturnType<typeof createApp>>;
-export type PublicationKind = "core" | "note" | "task" | "plan" | "report";
+export type PublicationKind = "core" | "note" | "task" | "plan" | "report" | "review" | "file";
 export function publicationSources(
   runtime: Runtime,
   scope: ProjectScope,
@@ -21,6 +24,7 @@ export function publicationSources(
 ) {
   const key = scope.client + ":" + scope.projectId,
     work = runtime.projectWork;
+  if (kind === "file") return fileSources(runtime, scope, offset);
   if (kind === "core") {
     const core = new ProjectCores(runtime.sessions).get(scope);
     return {
@@ -43,7 +47,9 @@ export function publicationSources(
           )
         : kind === "plan"
           ? work.plans.list(key, "", offset)
-          : work.context.reports(key, offset);
+          : kind === "review"
+            ? work.reviews.list(key, offset)
+            : work.context.reports(key, offset);
   return {
     items: page.items.map((item) => ({
       id: item.id,
@@ -60,11 +66,19 @@ export function publicationPreview(
   actor: string,
   scope: ProjectScope,
   selected: { id: string; kind: PublicationKind }[],
+  attachments?: {
+    assets: TeamAssets;
+    projectId: string;
+    files: { sourceId: string; assetId: string }[];
+  },
 ) {
   if (new Set(selected.map((item) => item.kind + ":" + item.id)).size !== selected.length)
     throw new HubError(400, "PUBLICATION_DUPLICATE", "Материал выбран дважды.");
   const items = selected.map((item) => {
-    let sourceScope: ProjectScope | null, content: SharedMaterial, revision: number;
+    let sourceScope: ProjectScope | null,
+      content: SharedMaterial,
+      revision: number,
+      files: SharedAsset[] | undefined;
     if (item.kind === "core") {
       if (item.id !== scope.projectId)
         throw new HubError(404, "SOURCE_UNAVAILABLE", "Личный материал недоступен.");
@@ -102,6 +116,37 @@ export function publicationPreview(
         sections: value.sections,
         status: value.status,
       };
+    } else if (item.kind === "file") {
+      const selected = attachments?.files.find((f) => f.sourceId === item.id);
+      if (!selected || !attachments)
+        throw new HubError(409, "FILE_PREVIEW_REQUIRED", "Сначала просмотри выбранные файлы.");
+      const file = attachments.assets.selected(
+        actor,
+        attachments.projectId,
+        selected.assetId,
+        fileSourceKey(scope, item.id),
+      );
+      files = [file];
+      sourceScope = scope;
+      revision = 1;
+      content = {
+        kind: "result",
+        title: file.name.slice(0, 120),
+        body: `Файл: ${file.name}\nРазмер: ${file.bytes} байт.`,
+        outcome: "info",
+      };
+    } else if (item.kind === "review") {
+      const value = runtime.projectWork.reviews.get(item.id);
+      sourceScope = value.scope;
+      revision = value.revision;
+      content = {
+        kind: "review",
+        title: value.title.slice(0, 120),
+        body: value.answer,
+        feedback: value.note,
+        outcome:
+          value.state === "accepted" || value.state === "needs_fixes" ? value.state : "pending",
+      };
     } else {
       const value = runtime.projectWork.context.report(item.id);
       sourceScope = value.scope;
@@ -122,10 +167,11 @@ export function publicationPreview(
       );
     return {
       content: sharedMaterialSchema.parse(content),
+      ...(files ? { files } : {}),
       source: {
         ownerId: actor,
         client: scope.client,
-        kind: item.kind as SharedItemKind,
+        kind: (item.kind === "file" ? "result" : item.kind) as SharedItemKind,
         id: item.id,
         projectId: scope.projectId,
       },

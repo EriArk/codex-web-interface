@@ -11,7 +11,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { GptService } from "./gpt.js";
 import { Notebook } from "./notebook.js";
-import { ProjectActions } from "./project-actions.js";
+import { type ProjectActionPolicy, ProjectActions } from "./project-actions.js";
 import type { QueueService } from "./queue.js";
 import type { Sessions } from "./sessions.js";
 export function registerProjectWork(
@@ -19,8 +19,9 @@ export function registerProjectWork(
   sessions: Sessions,
   gpt: GptService,
   queue: QueueService,
+  policy?: ProjectActionPolicy,
 ) {
-  const actions = new ProjectActions(sessions, gpt, queue),
+  const actions = new ProjectActions(sessions, gpt, queue, policy),
     id = z.object({ id: z.string().uuid() }),
     confirm = z.object({ confirm: z.literal(true) }).strict();
   const page = z

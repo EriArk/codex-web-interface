@@ -70,7 +70,7 @@ Private native GPT projects/chats remain personal. A GPT finding may be delibera
 
 ## Links, Bridges and GitHub
 
-A cross-user Link identifies two logical projects and requires both owners' acceptance. A proposer cannot enumerate the target person's private projects; the recipient selects/offers their target during acceptance. Purpose, direction and consultation/Bridge/automatic-forward permissions are explicit. Revocation prevents new dispatches and rechecks return delivery from already-running work.
+A cross-user Link identifies two logical projects and requires both owners' acceptance. The proposer selects a person from the authenticated Hub contact list (display name and stable user identity; no manually entered login). A proposer cannot enumerate the target person's private projects; the recipient selects/offers their target during acceptance. Purpose, direction and consultation/Bridge/automatic-forward permissions are explicit. Revocation prevents new dispatches and rechecks return delivery from already-running work.
 
 Relay is bounded transport: it sends one authorized consultation to the designated target owner's checkout/Current Chat and returns a bounded answer. It does not grant source-chat access. Keep 1–10 rounds, early resolution, stop, per-link pending limits and no blind replay. A stopped/unknown exchange cannot restart itself under a new root to bypass its allowance. Work proposals prepare normal Plans and require the target participant's explicit execution.
 

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   HubError,
   type ProjectMemberRole,
+  type SharedAsset,
   type SharedInvitation,
   type SharedItem,
   type SharedMaterialWrite,
@@ -10,6 +11,7 @@ import {
   sharedMaterialWriteSchema,
   type TeamCheckout,
 } from "@codex-web/shared";
+import { TeamAssets } from "./team-assets.js";
 import type { TeamStore } from "./team-store.js";
 
 type Row = Record<string, any>;
@@ -26,14 +28,17 @@ const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(va
 
 /** Explicitly published collaboration state. Never reads another user's personal runtime. */
 export class TeamProjects {
-  constructor(readonly registry: TeamStore) {}
+  readonly assets: TeamAssets;
+  constructor(readonly registry: TeamStore) {
+    this.assets = new TeamAssets(registry, (actor, id) => this.access(actor, id));
+  }
   get db() {
     return this.registry.db;
   }
   access(actor: string, id: string, role: "read" | "write" | "owner" = "read") {
     this.registry.active(actor);
     const row = this.db
-      .prepare(`SELECT p.*,m.role FROM team_projects p JOIN team_project_members m
+      .prepare(`SELECT p.*,m.role,m.revision memberRevision FROM team_projects p JOIN team_project_members m
       ON m.projectId=p.id AND m.userId=? AND m.state='active' WHERE p.id=?`)
       .get(actor, id) as Row | undefined;
     if (!row) throw missing();
@@ -61,7 +66,7 @@ export class TeamProjects {
       ...(row.repository ? { repository: row.repository } : {}),
     };
   }
-  private changed(actor: string, projectId: string, action: string, itemId: string | null = null) {
+  changed(actor: string, projectId: string, action: string, itemId: string | null = null) {
     this.db
       .prepare(
         "INSERT INTO team_project_activity(projectId,actorId,actorName,action,itemId,createdAt) VALUES(?,?,?,?,?,?)",
@@ -74,7 +79,7 @@ export class TeamProjects {
       .run(projectId, projectId);
     this.registry.audit(actor, action, projectId);
   }
-  private once<T>(actor: string, scope: string, key: string, input: unknown, work: () => T): T {
+  once<T>(actor: string, scope: string, key: string, input: unknown, work: () => T): T {
     return this.registry.transaction(() => {
       this.registry.active(actor);
       const fingerprint = digest(input);
@@ -297,6 +302,11 @@ export class TeamProjects {
             .run(actor, Date.now(), project.id);
           this.db
             .prepare(
+              "UPDATE team_links SET state='revoked',value=json_set(value,'$.state','revoked','$.revision',json_extract(value,'$.revision')+1) WHERE state IN ('pending','accepted') AND (sourceId=? OR targetId=?)",
+            )
+            .run(project.id, project.id);
+          this.db
+            .prepare(
               "UPDATE team_project_invites SET state='revoked' WHERE projectId=? AND state='pending' AND id!=?",
             )
             .run(project.id, id);
@@ -441,6 +451,18 @@ export class TeamProjects {
     if (
       this.db
         .prepare(
+          "SELECT 1 FROM team_consultations WHERE (sourceId=? OR targetId=?) AND (state IN ('waiting','running','unknown') OR (state='stopped' AND json_extract(value,'$.steps[#-1].state') IN ('dispatching','running','unknown'))) LIMIT 1",
+        )
+        .get(projectId, projectId)
+    )
+      throw new HubError(
+        409,
+        "SHARED_WORK_ACTIVE",
+        "Сначала заверши или проверь консультации проекта.",
+      );
+    if (
+      this.db
+        .prepare(
           "SELECT 1 FROM team_executions WHERE projectId=? AND (? IS NULL OR userId=?) AND state IN ('prepared','dispatching','queued','running','unknown') LIMIT 1",
         )
         .get(projectId, userId ?? null, userId ?? null)
@@ -469,6 +491,7 @@ export class TeamProjects {
       updatedAt: row.updatedAt,
       assigneeId: row.assigneeId,
       hasPrivateSource: !!source,
+      files: this.assets.list(row.id),
       ...(source?.ownerId === actor
         ? {
             source: {
@@ -553,7 +576,7 @@ export class TeamProjects {
     input: { fingerprint: string },
     read: () => {
       fingerprint: string;
-      items: { content: SharedMaterialWrite["content"]; source: Source }[];
+      items: { content: SharedMaterialWrite["content"]; source: Source; files?: SharedAsset[] }[];
     },
   ) {
     this.access(actor, projectId, "write");
@@ -576,8 +599,8 @@ export class TeamProjects {
           "Выбери до 20 материалов общим размером до 180 КБ.",
         );
       return {
-        items: observed.items.map((item) =>
-          this.save(
+        items: observed.items.map((item) => {
+          const saved = this.save(
             actor,
             projectId,
             randomUUID(),
@@ -588,8 +611,10 @@ export class TeamProjects {
               assigneeId: null,
             },
             item.source,
-          ),
-        ),
+          );
+          if (item.files?.length) this.assets.attach(actor, projectId, saved.id, item.files);
+          return this.get(actor, projectId, saved.id);
+        }),
       };
     });
   }

@@ -21,6 +21,13 @@ import { WorkReviews } from "./work-reviews.js";
 
 const live = ["dispatching", "queued", "running", "unknown"];
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
+/** Server-bound policy; never supplied by a browser or serialized native prompt. */
+export interface ProjectActionPolicy {
+  prepare(action: ProjectAction): void;
+  dispatch(action: ProjectAction, nativeQueue: boolean): void;
+  beforeSubmit(action: ProjectAction): Promise<void>;
+  beforeCommit(action: ProjectAction): void;
+}
 export class ProjectActions {
   readonly plans: ProjectPlans;
   readonly rotations: ProjectRotations;
@@ -52,6 +59,7 @@ export class ProjectActions {
     readonly sessions: Sessions,
     readonly gpt: GptService,
     readonly queue: QueueService,
+    readonly policy?: ProjectActionPolicy,
   ) {
     this.plans = new ProjectPlans(sessions);
     this.context = new ProjectContext(sessions, gpt);
@@ -318,6 +326,13 @@ export class ProjectActions {
       throw new HubError(409, "PROJECT_CHAT_CHANGED", "Рабочий чат изменился. Повтори подготовку.");
     if (input.reviewId && this.reviews.get(input.reviewId).revision !== input.reviewRevision)
       throw new HubError(409, "REVIEW_CONFLICT", "Замечания изменились. Повтори подготовку.");
+    this.policy?.prepare(value);
+    if (value.text.length > 32000)
+      throw new HubError(
+        409,
+        "PROJECT_CONTEXT_TOO_LARGE",
+        "Контекст слишком большой. Сократи описание или раздели план.",
+      );
     if (Number(this.db.prepare("SELECT count(*) n FROM project_work_actions").get()?.n) >= 10000)
       throw new HubError(409, "PROJECT_ACTION_LIMIT", "Хранилище заданий заполнено.");
     this.db
@@ -374,6 +389,8 @@ export class ProjectActions {
     let committed = false;
     try {
       this.context.assertProject(value.scope);
+      // Guard all delivery kinds, including direct calls to the personal action endpoint.
+      this.policy?.dispatch(value, false);
       if (value.kind === "rotate") return await this.rotations.submit(value);
       const rotation = this.db
         .prepare(
@@ -423,6 +440,7 @@ export class ProjectActions {
         if (thread.status === "unknown")
           throw new HubError(409, "THREAD_STATE_UNKNOWN", "Сначала восстанови рабочий диалог.");
         const queued = ["starting", "running", "waiting_approval"].includes(thread.status);
+        this.policy?.dispatch(value, queued);
         if (queued && this.sessions.store.threadSettings(value.threadId)?.mode === "plan")
           throw new HubError(
             409,
@@ -451,7 +469,20 @@ export class ProjectActions {
             value.id,
             body,
             () =>
-              this.sessions.startTurn(value.threadId!, value.text, value.settings, [], value.id),
+              this.sessions.startTurn(
+                value.threadId!,
+                value.text,
+                value.settings,
+                [],
+                value.id,
+                false,
+                this.policy
+                  ? {
+                      beforeSubmit: () => this.policy!.beforeSubmit(value),
+                      beforeCommit: () => this.policy!.beforeCommit(value),
+                    }
+                  : undefined,
+              ),
           )) as { turnId: string };
           value = this.write({ ...value, state: "running", turnId: result.turnId });
         }

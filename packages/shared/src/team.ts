@@ -130,8 +130,16 @@ export interface SharedItem {
   authorName: string;
   editorName: string;
   hasPrivateSource: boolean;
+  files?: SharedAsset[];
   // Only returned to its original publisher, never a capability for another member.
   source?: { client: "codex" | "gpt"; kind: SharedItemKind; id: string; projectId: string };
+}
+export interface SharedAsset {
+  id: string;
+  name: string;
+  mime: string;
+  bytes: number;
+  sha256: string;
 }
 export type SharedMember = {
   userId: string;
@@ -174,3 +182,35 @@ export type SharedItemSummary = Pick<
   | "assigneeId"
   | "hasPrivateSource"
 > & { excerpt: string };
+
+export type SharedExecutionState =
+  | "prepared"
+  | "queued"
+  | "dispatching"
+  | "running"
+  | "unknown"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "cancelled";
+export interface SharedExecution {
+  id: string;
+  projectId: string;
+  itemId: string;
+  itemRevision: number;
+  title: string;
+  userId: string;
+  userName: string;
+  state: SharedExecutionState;
+  ready: boolean;
+  createdAt: number;
+  updatedAt: number;
+  own: boolean;
+}
+export interface SharedExecutionDetail {
+  execution: SharedExecution;
+  // Only the acting user's response includes their private execution preview.
+  preview?: import("./project-work.js").ProjectAction;
+  checkout?: TeamCheckout;
+  problem?: string;
+}

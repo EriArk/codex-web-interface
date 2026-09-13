@@ -9,6 +9,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { createApp } from "./app.js";
+import { stageFile } from "./team-file-sources.js";
 import type { TeamProjects } from "./team-projects.js";
 import { publicationPreview, publicationSources } from "./team-publication.js";
 import { workspaceProjects } from "./workspace-projects.js";
@@ -69,11 +70,18 @@ export function registerTeamProjects(
       key(req),
       z
         .object({
-          login: teamLoginSchema,
+          login: teamLoginSchema.optional(),
+          userId: uuid.optional(),
           role: z.enum(["owner", "collaborator", "viewer"]),
           revision: z.number().int().positive(),
         })
         .strict()
+        .refine((v) => !!v.login !== !!v.userId)
+        .transform((v) => ({
+          login: v.userId ? projects.registry.active(v.userId).login : v.login!,
+          role: v.role,
+          revision: v.revision,
+        }))
         .parse(req.body),
     ),
   );
@@ -201,7 +209,28 @@ export function registerTeamProjects(
   app.get("/api/team/projects/:id/activity", (req) =>
     projects.activity(actor(req), id(req), before.parse(req.query).before),
   );
-  const publicationKind = z.enum(["core", "note", "task", "plan", "report"]);
+  app.get("/api/team/projects/:id/assets/:assetId", (req, reply) => {
+    const assetId = z.object({ assetId: uuid }).parse(req.params).assetId,
+      { file, data } = projects.assets.read(actor(req), id(req), assetId);
+    return reply
+      .header("Cache-Control", "private, no-store")
+      .header(
+        "Content-Disposition",
+        "attachment; filename*=UTF-8''" + encodeURIComponent(file.name),
+      )
+      .header("X-Content-Type-Options", "nosniff")
+      .type(
+        /^image\/(png|jpeg|webp|gif|avif)$/.test(file.mime)
+          ? file.mime
+          : "application/octet-stream",
+      )
+      .send(data);
+  });
+  const publicationKind = z.enum(["core", "note", "task", "plan", "report", "review", "file"]);
+  const selectedFiles = z
+    .array(z.object({ sourceId: z.string().min(1).max(100), assetId: uuid }).strict())
+    .max(4)
+    .default([]);
   const publication = z
     .object({
       scope: projectScopeSchema,
@@ -231,6 +260,7 @@ export function registerTeamProjects(
       q.offset,
     );
   });
+  const filePreparations = new Set<string>();
   app.post("/api/team/projects/:id/publication-preview", async (req) => {
     const userId = actor(req),
       projectId = id(req),
@@ -239,20 +269,67 @@ export function registerTeamProjects(
     const { runtime } = await personal(userId);
     actor(req);
     projects.access(userId, projectId, "write");
-    return publicationPreview(runtime, userId, input.scope, input.items);
+    const selected = input.items.filter((item) => item.kind === "file");
+    if (selected.length > 4)
+      throw new HubError(
+        400,
+        "FILE_SELECTION_LIMIT",
+        "Выбери до четырёх файлов за одну публикацию.",
+      );
+    if (filePreparations.has(userId))
+      throw new HubError(409, "FILES_PREPARING", "Подготовка выбранных файлов уже идёт.");
+    filePreparations.add(userId);
+    try {
+      const files: { sourceId: string; assetId: string }[] = [];
+      let bytes = 0;
+      for (const item of selected) {
+        projects.access(actor(req), projectId, "write");
+        const file = await stageFile(
+          runtime,
+          projects.assets,
+          userId,
+          projectId,
+          input.scope,
+          item.id,
+        );
+        bytes += file.bytes;
+        if (bytes > 64 * 1024 * 1024)
+          throw new HubError(
+            413,
+            "FILE_SELECTION_LIMIT",
+            "Общий размер выбранных файлов больше 64 МБ.",
+          );
+        files.push({ sourceId: item.id, assetId: file.id });
+      }
+      projects.access(actor(req), projectId, "write");
+      return {
+        ...publicationPreview(runtime, userId, input.scope, input.items, {
+          assets: projects.assets,
+          projectId,
+          files,
+        }),
+        files,
+      };
+    } finally {
+      filePreparations.delete(userId);
+    }
   });
   app.post("/api/team/projects/:id/publications", async (req) => {
     const userId = actor(req),
       projectId = id(req),
       receipt = key(req),
       input = publication
-        .extend({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })
+        .extend({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/), files: selectedFiles })
         .parse(req.body);
     projects.access(userId, projectId, "write");
     const { runtime } = await personal(userId);
     actor(req);
     return projects.publish(userId, projectId, receipt, input, () =>
-      publicationPreview(runtime, userId, input.scope, input.items),
+      publicationPreview(runtime, userId, input.scope, input.items, {
+        assets: projects.assets,
+        projectId,
+        files: input.files,
+      }),
     );
   });
 }

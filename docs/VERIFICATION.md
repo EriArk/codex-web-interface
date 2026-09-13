@@ -1,5 +1,19 @@
 # Verification record
 
+## Shared execution, files and project consultations candidate — 2026-09-13
+
+Stable production remains unchanged. The isolated candidate passed the complete Linux suite: **486 tests**, plus TypeScript build/typecheck. The earlier 471-test run preceded contact/Link/consultation additions; the latest count includes them and the rapid revoke/re-add guards.
+
+Shared execution fixtures use two genuine independent local Git folders and simulated native RPCs. They verify assignee-only Work, exact frozen Core/Plan/settings/current/checkout review, Hub-held busy queues, no native queue fallback, permission checks inside native commit, unknown acknowledgement persistence, direct private-action bypass denial, maintenance and cancellation. Private completion is not automatically published. Membership revision and account execution epoch prevent revival after a quick revoke/re-add between polls.
+
+Explicit publication fixtures cover own Codex files and independently bound GPT assets with colliding IDs, immutable reviewed bytes even after source changes, private source omission, attachment-only download of active content, revoked URL denial and exact shared-file backup/restore/corruption checks. No real GPT asset or private owner file was fetched in these tests.
+
+Link/consultation fixtures cover display-only contact discovery, Unicode name search, recipient-selected private targets, exact mutual consent, direction/depth/automatic permissions, account disable/ownership boundaries, separate native accounts, read-only/no-approval native policy, early resolution without an extra message, target-only work-Plan proposals, root-budget enforcement, native tool scope, busy queues, stop/revocation during submission or before return, unknown outcomes and maintenance. A test found an ambiguous correlated SQLite JSON reference in the root guard; qualifying it fixed recursive-budget bypass. Late private answers remain in their original chat when sharing permission has been revoked.
+
+`tests/team-projects.browser.mjs` passed Chromium and WebKit with real authenticated two-user HTTP state. It covers contact selection, invitation and private-target consent, consultation request/stop, own native Plan preview/Hub queue/cancel, explicit file preview/publication/download, material conflicts, shared versus personal capture, lost acknowledgements and scoped navigation. Both engines check four themes at 390×844, 768×1024, 1024×768, 1280×800, 1376×1032 and 1920×1080. The test also exposed repeated explicit shared-workspace navigation retaining an old subpage; each new navigation now has a distinct request identity. Browser checks are not physical iPhone/iPad or friend-PC acceptance.
+
+Bridge coordination, GitHub collaboration, the remaining common Report/notification workflow and release/offboarding acceptance are not complete. No candidate code/state was installed into production.
+
 ## Shared project materials candidate — 2026-09-13
 
 Isolated `feat/team-workspaces` checkpoint; stable production remains unchanged. Full Linux suite: **457 passed**, then **22 focused team tests** after the final invitation-revocation check. TypeScript and changed-file lint passed on Linux.

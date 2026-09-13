@@ -14,6 +14,7 @@ import { tokenHash } from "./auth.js";
 import type { Store } from "./store.js";
 
 type UserRow = TeamUser & {
+  executionEpoch: number;
   passwordHash: string;
   revision: number;
   legacy: number;
@@ -56,7 +57,7 @@ export class TeamStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
     if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='team_meta'").get()) {
       const version = this.db.prepare("SELECT value FROM team_meta WHERE key='schema'").get();
-      if (version && !["1", "2", "3", "4"].includes(String(version.value))) {
+      if (version && !["1", "2", "3", "4", "5", "6"].includes(String(version.value))) {
         this.db.close();
         throw new Error("TEAM_SCHEMA_UNSUPPORTED");
       }
@@ -156,7 +157,31 @@ export class TeamStore {
         value TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
       );
       CREATE UNIQUE INDEX IF NOT EXISTS team_execution_exclusive ON team_executions(itemId) WHERE state IN ('prepared','dispatching','queued','running','unknown');
+      CREATE TABLE IF NOT EXISTS team_assets(
+        id TEXT PRIMARY KEY,projectId TEXT NOT NULL REFERENCES team_projects(id),ownerId TEXT NOT NULL REFERENCES team_users(id),
+        name TEXT NOT NULL,mime TEXT NOT NULL,bytes INTEGER NOT NULL,sha256 TEXT NOT NULL,source TEXT NOT NULL,createdAt INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS team_material_assets(
+        itemId TEXT NOT NULL REFERENCES team_materials(id),assetId TEXT NOT NULL REFERENCES team_assets(id),PRIMARY KEY(itemId,assetId)
+      );
+      CREATE TABLE IF NOT EXISTS team_links(
+        id TEXT PRIMARY KEY,sourceId TEXT NOT NULL REFERENCES team_projects(id),targetId TEXT REFERENCES team_projects(id),
+        recipientId TEXT NOT NULL REFERENCES team_users(id),state TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL,expires INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS team_links_recipient ON team_links(recipientId,state,expires);
+      CREATE TABLE IF NOT EXISTS team_consultations(
+        id TEXT PRIMARY KEY,linkId TEXT NOT NULL REFERENCES team_links(id),sourceId TEXT NOT NULL REFERENCES team_projects(id),
+        targetId TEXT NOT NULL REFERENCES team_projects(id),rootKey TEXT UNIQUE,state TEXT NOT NULL,value TEXT NOT NULL,updatedAt INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS team_consultations_queue ON team_consultations(state,updatedAt);
     `);
+    if (
+      !this.db
+        .prepare("PRAGMA table_info(team_users)")
+        .all()
+        .some((c) => c.name === "executionEpoch")
+    )
+      this.db.exec("ALTER TABLE team_users ADD COLUMN executionEpoch INTEGER NOT NULL DEFAULT 0");
     const recorded = this.db.prepare("SELECT value FROM team_meta WHERE key='originalOwner'").get();
     if (recorded) {
       this.ownerId = String(recorded.value);
@@ -211,7 +236,7 @@ export class TeamStore {
             );
       });
     }
-    this.db.prepare("UPDATE team_meta SET value='4' WHERE key='schema'").run();
+    this.db.prepare("UPDATE team_meta SET value='6' WHERE key='schema'").run();
     if (
       this.db
         .prepare(`SELECT p.id FROM team_projects p WHERE
@@ -420,8 +445,16 @@ export class TeamStore {
       );
     this.transaction(() => {
       this.db
-        .prepare("UPDATE team_users SET state=?,revision=revision+1 WHERE id=?")
+        .prepare(
+          "UPDATE team_users SET state=?,revision=revision+1,executionEpoch=executionEpoch+1 WHERE id=?",
+        )
         .run(disabled ? "disabled" : "active", userId);
+      if (disabled)
+        this.db
+          .prepare(
+            "UPDATE team_links SET state='revoked',value=json_set(value,'$.state','revoked','$.revision',json_extract(value,'$.revision')+1) WHERE state IN ('pending','accepted') AND (recipientId=? OR json_extract(value,'$.source.ownerId')=? OR json_extract(value,'$.target.ownerId')=?)",
+          )
+          .run(userId, userId, userId);
       this.db.prepare("DELETE FROM team_sessions WHERE userId=?").run(userId);
       this.db
         .prepare(

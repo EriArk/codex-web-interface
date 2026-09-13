@@ -18,6 +18,8 @@ import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
+import { SharedExecutionPanel } from "./SharedExecution";
+import { SharedFiles } from "./SharedPublication";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 
 export const materialLabels: Record<SharedItemKind, string> = {
@@ -66,6 +68,9 @@ const markdown = (text: string) => (
     {text}
   </Markdown>
 );
+export function SharedMarkdown({ text }: { text: string }) {
+  return <div className="shared-body notebook-markdown">{markdown(text)}</div>;
+}
 export function MaterialContent({ content }: { content: SharedMaterial }) {
   return (
     <div className="shared-body notebook-markdown">
@@ -302,6 +307,7 @@ export function SharedMaterialEditor({
           <>
             <h2>{c.title}</h2>
             <MaterialContent content={c} />
+            {item && <SharedFiles projectId={projectId} files={item.files} />}
           </>
         ) : (
           <fieldset disabled={busy || readonly}>
@@ -676,6 +682,18 @@ export function SharedMaterialEditor({
                 ) && <option value={draft.assigneeId}>Исполнитель недоступен</option>}
             </select>
           </label>
+        )}
+        {item?.kind === "plan" && (
+          <SharedExecutionPanel
+            key={item.id}
+            item={item}
+            detail={detail}
+            dirty={
+              JSON.stringify(draft.content) !== JSON.stringify(item.content) ||
+              draft.assigneeId !== item.assigneeId ||
+              draft.revision !== item.revision
+            }
+          />
         )}
         <CopyButton
           text={

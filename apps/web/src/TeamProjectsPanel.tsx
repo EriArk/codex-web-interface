@@ -7,6 +7,7 @@ import type {
   SharedMember,
   SharedProject,
   SharedProjectDetail,
+  TeamContact,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { accountLocalStorage as storage } from "./accountStorage";
@@ -16,6 +17,9 @@ import { materialLabels, SharedMaterialEditor } from "./SharedMaterialEditor";
 import { PersonalProjectPicker, SharedPublication } from "./SharedPublication";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { useSharedResource } from "./sharedResources";
+import { TeamConsultationsPanel } from "./TeamConsultationsPanel";
+import { TeamContactPicker } from "./TeamContactPicker";
+import { TeamLinkInvitations, TeamLinksPanel } from "./TeamLinksPanel";
 import type { SharedWorkspaceTarget } from "./TeamProjectsHost";
 import "./notebook.css";
 
@@ -148,6 +152,7 @@ export default function TeamProjectsPanel({
               {error}
             </p>
           )}
+          <TeamLinkInvitations revision={revision} refresh={update} />
           {invites.value?.items.map((invite) => (
             <article key={invite.id} className="shared-card shared-invitation">
               <h3>{invite.projectTitle}</h3>
@@ -408,9 +413,9 @@ function SharedProjectWorkspace({
   refresh: () => void;
 }) {
   const detail = useSharedResource<SharedProjectDetail>(`/team/projects/${id}`, refreshToken);
-  const [tab, setTab] = useState<"materials" | "members" | "checkout" | "activity" | "publication">(
-    "materials",
-  );
+  const [tab, setTab] = useState<
+    "materials" | "members" | "checkout" | "activity" | "publication" | "links" | "consultations"
+  >("materials");
   const [kind, setKind] = useState<SharedItemKind | "all">(initialKind ?? "all");
   const d = detail.value;
   if (!d)
@@ -437,6 +442,8 @@ function SharedProjectWorkspace({
             ["materials", "Материалы"],
             ["members", "Участники"],
             ["checkout", "Моя рабочая папка"],
+            ["links", "Связи проектов"],
+            ["consultations", "Консультации"],
             ["activity", "История"],
           ] as const
         ).map(([value, label]) => (
@@ -463,6 +470,12 @@ function SharedProjectWorkspace({
           />
         )}
         {tab === "members" && <SharedMembers detail={d} refresh={refresh} />}
+        {tab === "links" && (
+          <TeamLinksPanel project={d.project} revision={refreshToken} refresh={refresh} />
+        )}
+        {tab === "consultations" && (
+          <TeamConsultationsPanel project={d.project} revision={refreshToken} refresh={refresh} />
+        )}
         {tab === "checkout" && (
           <SharedCheckout detail={d} initialScope={initialScope} refresh={refresh} />
         )}
@@ -681,7 +694,7 @@ function SharedMaterials({
 function SharedMembers({ detail, refresh }: { detail: SharedProjectDetail; refresh: () => void }) {
   const { project, members } = detail,
     base = `/team/projects/${project.id}`;
-  const [login, setLogin] = useState(""),
+  const [contact, setContact] = useState<TeamContact | null>(null),
     [role, setRole] = useState<"collaborator" | "viewer">("collaborator"),
     [confirmation, setConfirmation] = useState<{
       member: SharedMember;
@@ -821,13 +834,13 @@ function SharedMembers({ detail, refresh }: { detail: SharedProjectDetail; refre
                 e.preventDefault();
                 void run(() =>
                   sharedMutation(base + "/invitations", "POST", {
-                    login: login.trim().toLowerCase(),
+                    userId: contact!.id,
                     role,
                     revision: project.revision,
                   }),
                 ).then((value) => {
                   if (value) {
-                    setLogin("");
+                    setContact(null);
                     setMessage("Приглашение появится у участника в совместных проектах.");
                     refresh();
                   }
@@ -835,16 +848,12 @@ function SharedMembers({ detail, refresh }: { detail: SharedProjectDetail; refre
               }}
             >
               <h3>Пригласить участника</h3>
-              <label>
-                Логин в CodexWeb
-                <input
-                  required
-                  value={login}
-                  maxLength={40}
-                  disabled={busy}
-                  onChange={(e) => setLogin(e.target.value)}
-                />
-              </label>
+              <TeamContactPicker
+                value={contact}
+                onChange={setContact}
+                disabled={busy}
+                exclude={members.map((m) => m.userId)}
+              />
               <label>
                 Роль
                 <select
@@ -856,7 +865,7 @@ function SharedMembers({ detail, refresh }: { detail: SharedProjectDetail; refre
                   <option value="viewer">Читатель — только просмотр</option>
                 </select>
               </label>
-              <button type="submit" disabled={busy || !login.trim()} className="primary">
+              <button type="submit" disabled={busy || !contact} className="primary">
                 Отправить приглашение
               </button>
             </form>

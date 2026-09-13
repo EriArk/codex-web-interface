@@ -78,7 +78,7 @@ export async function handoffFixture(
   const setupToken = randomBytes(32).toString("base64url");
   let running = true,
     operation = null;
-  const { app, push } = await createApp(config, {
+  const { app, push, projectWork } = await createApp(config, {
     store,
     sessions,
     setupToken,
@@ -114,6 +114,7 @@ export async function handoffFixture(
     app,
     rpc,
     push,
+    projectWork,
     store,
     sessions,
     thread,
