@@ -87,7 +87,9 @@ def main():
     image = inspect('codex-web-hub:' + a.revision)
     assert image and image['Config']['Labels']['org.opencontainers.image.revision'] == a.revision
     assert image['Config']['Labels'].get('io.codex-web.release-kind') != 'web-only', 'Asset publisher is not an engine release'
-    assert subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=release, text=True).strip() == a.revision
+    # Git's default abbreviation length differs as object databases grow. Match
+    # the explicit image revision against HEAD rather than that local default.
+    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=release, text=True).strip().startswith(a.revision)
     assert not subprocess.check_output(['git', 'status', '--porcelain'], cwd=release, text=True).strip()
     old_engine = inspect('codex-web-engine')
     container = 'codex-web-engine' if old_engine else 'codex-web-hub'

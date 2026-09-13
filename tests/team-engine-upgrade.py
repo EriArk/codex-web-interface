@@ -224,7 +224,7 @@ class UpgraderTest(unittest.TestCase):
                 labels['io.codex-web.release-kind'] = 'web-only'
             return {'Config': {'Labels': labels}}
         def output(args, **kwargs):
-            return 'ccccccc' if 'rev-parse' in args else ''
+            return 'c' * 40 if 'rev-parse' in args else ''
         argv = ['upgrade-engine.py', 'ccccccc', '--expected', 'aaaaaaa', '--state', str(self.state), '--release', str(release), '--verification', str(proof)]
         if check:
             argv.append('--check')
