@@ -43,6 +43,7 @@ export function ProjectOverviewModal({
         }}
         onNew={action(props.onNew)}
         onFiles={action(props.onFiles)}
+        onGit={action(props.onGit)}
         onMachines={action(props.onMachines)}
         onResults={action(props.onResults)}
         onRemote={action(props.onRemote)}

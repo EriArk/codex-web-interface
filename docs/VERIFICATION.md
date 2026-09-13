@@ -1,5 +1,15 @@
 # Verification record
 
+## Direct Files/Git windows and project Results — 2026-09-13
+
+Compatible frontend pass: separate header buttons/windows, Settings in the sidebar only in both clients, broad Files preview and Git overview, Codex project-only Results with exact source links. No Hub contract/schema, native writer, Git mutation policy or credential migration is changed.
+
+Linux web typecheck/build, repository guard and 18 existing inspector/artifact/category tests passed. Focused browser verification covers `project-inspector`, `project-results`, `project-delivery`, `gui-preview` and `polymer-themes` in Chromium/WebKit: inline phone actions, bounded wide file preview, Git README/diff/releases, late responses after project change, precise cross-chat Results navigation, nested preview/delivery windows, uncertain-operation handling and preserved drafts. The inspector includes 320/390/768/1024/1280/1376/1920 widths, square 44px header targets, folder restoration, focus return and simulated keyboard viewport. Palette/settings verification covers all twelve material colors, both clients, failed-save recovery and a fresh browser device. Mock GPT Results now supplies its real empty-count contract; absent count metadata also cannot crash the shared feed.
+
+Screenshots inspected: phone Results and Git, wide Files and Git in CRT/Hi-Tech. These are browser simulations, not separate iPhone/iPad hardware acceptance. Read-only production Doctor confirmed SSH/Companion/Codex identity and capabilities, GPT and the recovery connection without acquiring a conversation writer. Installation/rollback receipt is recorded in `TEAM_CHECKPOINT.md` after publication.
+
+Still pending: writable Files (#169 after #158) and GPT project-wide aggregation. The installed GPT server currently exposes conversation Results only; this pass does not fan out native history reads to emulate a project index.
+
 ## Window controls and faithful palette follow-up — 2026-09-13
 
 Restores the unframed sidebar shortcuts, moves tool-window headings/controls onto their casing and replaces the four modules' project-chip strips with one shared native dropdown. All/unassigned project filters, paged catalog reads and draft project assignments remain distinct. Swatches reuse the existing casing material definitions, including matte CRT and glossy light exceptions; no panel color formula or brightness was changed. Organizer/Classic Dark swatches preview the actual accent instead.

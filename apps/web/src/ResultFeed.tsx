@@ -22,6 +22,7 @@ export function ResultFeed({
   onFile,
   onSaveLink,
   onOverlayChange,
+  onCount,
 }: {
   endpoint: string;
   revision: string | number;
@@ -35,6 +36,7 @@ export function ResultFeed({
   onSaveLink?: (result: ResultItem) => void;
   onTurn?: (id: string, threadId?: string) => void;
   onOverlayChange: (open: boolean) => void;
+  onCount?: (count: number) => void;
 }) {
   const [focused, setFocused] = useState<ResultItem | null>(null);
   const [sourceRevision, setSourceRevision] = useState<number | undefined>(undefined);
@@ -49,6 +51,9 @@ export function ResultFeed({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const generation = useRef(0);
+  useEffect(() => {
+    onCount?.(counts.all);
+  }, [counts.all, onCount]);
   // Each response belongs to the exact conversation and category that requested it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: The retry button deliberately repeats the same read.
   useEffect(() => {
@@ -71,7 +76,7 @@ export function ResultFeed({
         fullyLoaded.current = data.nextBefore === null;
         sourceRef.current = data.sourceRevision;
         setSourceRevision(data.sourceRevision);
-        setCounts(data.counts);
+        setCounts(data.counts ?? emptyResultCounts());
         setCursor(data.nextBefore);
       })
       .catch((e) => {
@@ -94,7 +99,7 @@ export function ResultFeed({
       void api<ResultPage>(endpoint + "?category=" + category)
         .then((data) => {
           if (current !== generation.current) return;
-          setCounts(data.counts);
+          setCounts(data.counts ?? emptyResultCounts());
           const replaced =
             data.sourceRevision !== undefined && data.sourceRevision !== sourceRef.current;
           const overlap = data.items.some((item) => loadedIds.current.includes(item.id));
@@ -163,7 +168,7 @@ export function ResultFeed({
         return;
       }
       setItems((old) => [...new Map([...old, ...data.items].map((row) => [row.id, row])).values()]);
-      setCounts(data.counts);
+      setCounts(data.counts ?? emptyResultCounts());
       loadedIds.current = [
         ...new Set([...loadedIds.current, ...data.items.map((item) => item.id)]),
       ];

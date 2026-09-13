@@ -6,8 +6,12 @@ import { DownloadLink } from "./DownloadLink";
 import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
 import { DeliveryButton } from "./ProjectDeliveryHost";
+import { ProjectFilePreview } from "./ProjectFilePreview";
 import { ProjectRepositoryView } from "./ProjectRepositoryView";
+import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./project-files.css";
+import "./workspace-window.css";
+import "./project-tools.css";
 
 const fileSize = (size: number) =>
   size < 1024
@@ -23,18 +27,23 @@ export function ProjectFiles({
   projectName,
   threadId,
   visible,
+  mode,
   focus,
   onBack,
+  onOpenFiles,
 }: {
   projectId: string;
   projectName: string;
   threadId?: string;
   visible: boolean;
+  mode: "files" | "git";
   focus: { path: string; version: number; projectId: string };
   onBack: () => void;
+  onOpenFiles: (path: string) => void;
 }) {
-  const [mode, setMode] = useState<"files" | "git">("files"),
-    [section, setSection] = useState<"overview" | "changes" | "releases">("overview");
+  const dialog = useRef<HTMLDialogElement>(null);
+  useWorkspaceDialog(dialog, visible);
+  const [section, setSection] = useState<"overview" | "changes" | "releases">("overview");
   const [path, setPath] = useState(""),
     [input, setInput] = useState(""),
     [editingPath, setEditingPath] = useState(false),
@@ -54,6 +63,7 @@ export function ProjectFiles({
     [error, setError] = useState(""),
     [fileError, setFileError] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
+  const readScope = useRef("");
   const base = `/projects/${encodeURIComponent(projectId)}`;
   const open = (next: string) => {
     setEditingPath(false);
@@ -66,25 +76,22 @@ export function ProjectFiles({
     setReveal("");
   };
   useEffect(() => {
-    if (!focus.version || focus.projectId !== projectId) return;
+    if (mode !== "files" || !focus.version || focus.projectId !== projectId) return;
     const parent = focus.path.split("/").slice(0, -1).join("/");
-    setMode("files");
     setPath(parent);
     setInput(parent);
     setOffset(0);
     setFilter("");
     setSearch("");
     setReveal(focus.path.split("/").at(-1) ?? "");
-    setSelected(focus.path);
-  }, [focus, projectId]);
+    setSelected(focus.path.endsWith("/") ? "" : focus.path);
+  }, [focus, projectId, mode]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh repeats this scoped read.
   useEffect(() => {
     if (!visible || !projectId) return;
     const controller = new AbortController();
     setBusy(true);
     setError("");
-    if (mode === "files") setDirectory(null);
-    else setGit(null);
     const query = new URLSearchParams({
       path,
       offset: String(offset),
@@ -92,6 +99,12 @@ export function ProjectFiles({
       sort,
       ...(reveal ? { reveal } : {}),
     });
+    const scope = `${base}/${mode}?${query}`;
+    if (scope !== readScope.current) {
+      if (mode === "files") setDirectory(null);
+      else setGit(null);
+      readScope.current = scope;
+    }
     void api<ProjectDirectory | ProjectGit>(
       mode === "files" ? `${base}/files?${query}` : `${base}/git`,
       { signal: controller.signal },
@@ -235,8 +248,7 @@ export function ProjectFiles({
               aria-expanded={selected === change.path}
               onClick={() => {
                 if (change.path.endsWith("/")) {
-                  setMode("files");
-                  open(change.path.slice(0, -1));
+                  onOpenFiles(change.path);
                   return;
                 }
                 select(change.path);
@@ -260,286 +272,293 @@ export function ProjectFiles({
     </ul>
   );
   return (
-    <section className="project-files pane" data-visible={visible} aria-label="Файлы и Git">
-      <header className="inspector-heading">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Вернуться к чату"
-          onClick={onBack}
-        >
-          <Icon name="back" />
-        </button>
+    <dialog
+      ref={dialog}
+      tabIndex={-1}
+      className="project-files notebook-dialog workspace-window project-tool-window"
+      data-tool={mode}
+      aria-label={mode === "files" ? "Файлы проекта" : "Git проекта"}
+      onCancel={onBack}
+    >
+      <header className="inspector-heading notebook-heading">
+        <Icon name={mode === "files" ? "folder" : "branch"} />
         <div>
-          <strong>Файлы и Git</strong>
+          <strong>{mode === "files" ? "Файлы" : "Git"}</strong>
           <small>{projectName}</small>
         </div>
         <button
           type="button"
           className="icon-button"
           disabled={busy}
-          aria-label="Обновить файлы и Git"
+          aria-label={mode === "files" ? "Обновить файлы" : "Обновить Git"}
           onClick={() => setRevision((value) => value + 1)}
         >
           <Icon name="refresh" />
         </button>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={mode === "files" ? "Закрыть файлы" : "Закрыть Git"}
+          onClick={onBack}
+        >
+          <Icon name="close" />
+        </button>
       </header>
-      <div className="inspector-tabs inspector-mode">
-        {(
-          [
-            ["files", "Файлы"],
-            ["git", "Git"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            type="button"
-            key={id}
-            aria-pressed={mode === id}
-            className={mode === id ? "active" : ""}
-            onClick={() => {
-              setMode(id);
-              setSelected("");
-              setError("");
-            }}
-          >
-            <Icon name={id === "files" ? "folder" : "branch"} size={16} />
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="inspector-scroll" ref={scroller}>
-        <GuiPreviewButton projectId={projectId} projectName={projectName} threadId={threadId} />
+      <div className="project-tool-actions">
         {mode === "files" && (
-          <>
-            {editingPath ? (
-              <form
-                className="inspector-path"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  open(input);
-                }}
-              >
-                <button
-                  type="button"
-                  className="icon-button"
-                  disabled={!path}
-                  aria-label="Папка выше"
-                  onClick={() => open(path.split("/").slice(0, -1).join("/"))}
-                >
-                  <Icon name="arrow-up" />
-                </button>
-                <input
-                  aria-label="Путь в проекте"
-                  value={input}
-                  placeholder="Корень проекта"
-                  onChange={(e) => setInput(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Отменить ввод пути"
-                  onClick={() => setEditingPath(false)}
-                >
-                  <Icon name="close" />
-                </button>
-                <button type="submit" className="icon-button" aria-label="Открыть папку">
-                  <Icon name="chevron" />
-                </button>
-              </form>
-            ) : (
-              <div className="inspector-location">
-                <button
-                  type="button"
-                  className="icon-button"
-                  disabled={!path}
-                  aria-label="Папка выше"
-                  onClick={() => open(path.split("/").slice(0, -1).join("/"))}
-                >
-                  <Icon name="arrow-up" />
-                </button>
-                <nav className="inspector-breadcrumbs" aria-label="Папки проекта">
-                  <button type="button" onClick={() => open("")} aria-label="Корень проекта">
-                    <Icon name="folder" size={16} />
-                    Корень
-                  </button>
-                  {path
-                    .split("/")
-                    .filter(Boolean)
-                    .map((part, index) => (
-                      <span
-                        key={path
-                          .split("/")
-                          .slice(0, index + 1)
-                          .join("/")}
-                      >
-                        <Icon name="chevron" size={13} />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            open(
-                              path
-                                .split("/")
-                                .slice(0, index + 1)
-                                .join("/"),
-                            )
-                          }
-                        >
-                          {part}
-                        </button>
-                      </span>
-                    ))}
-                </nav>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Ввести путь"
-                  onClick={() => {
-                    setInput(path);
-                    setEditingPath(true);
+          <span className="inspector-readonly">
+            <Icon name="lock" size={16} />
+            Только чтение
+          </span>
+        )}
+        {visible && (
+          <GuiPreviewButton projectId={projectId} projectName={projectName} threadId={threadId} />
+        )}
+        {mode === "git" && visible && (
+          <DeliveryButton projectId={projectId} projectName={projectName} />
+        )}
+      </div>
+      <div className="inspector-workspace">
+        <div className="inspector-scroll" ref={scroller}>
+          {mode === "files" && (
+            <>
+              {editingPath ? (
+                <form
+                  className="inspector-path"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    open(input);
                   }}
                 >
-                  <Icon name="edit" size={17} />
-                </button>
-              </div>
-            )}
-            <form
-              className="inspector-search"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setFilter(search);
-                setOffset(0);
-                setReveal("");
-                setSelected("");
-              }}
-            >
-              <input
-                aria-label="Найти в папке"
-                placeholder="Найти в папке…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <button type="submit" className="icon-button" aria-label="Найти файл">
-                <Icon name="search" />
-              </button>
-            </form>
-            <div className="inspector-list-tools">
-              <small>
-                {directory
-                  ? `${directory.total ?? directory.entries.length} элементов`
-                  : "Файлы проекта"}
-              </small>
-              <select
-                aria-label="Порядок файлов"
-                value={sort}
-                onChange={(e) => {
-                  setSort(e.target.value as typeof sort);
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={!path}
+                    aria-label="Папка выше"
+                    onClick={() => open(path.split("/").slice(0, -1).join("/"))}
+                  >
+                    <Icon name="arrow-up" />
+                  </button>
+                  <input
+                    aria-label="Путь в проекте"
+                    value={input}
+                    placeholder="Корень проекта"
+                    onChange={(e) => setInput(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Отменить ввод пути"
+                    onClick={() => setEditingPath(false)}
+                  >
+                    <Icon name="close" />
+                  </button>
+                  <button type="submit" className="icon-button" aria-label="Открыть папку">
+                    <Icon name="chevron" />
+                  </button>
+                </form>
+              ) : (
+                <div className="inspector-location">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={!path}
+                    aria-label="Папка выше"
+                    onClick={() => open(path.split("/").slice(0, -1).join("/"))}
+                  >
+                    <Icon name="arrow-up" />
+                  </button>
+                  <nav className="inspector-breadcrumbs" aria-label="Папки проекта">
+                    <button type="button" onClick={() => open("")} aria-label="Корень проекта">
+                      <Icon name="folder" size={16} />
+                      Корень
+                    </button>
+                    {path
+                      .split("/")
+                      .filter(Boolean)
+                      .map((part, index) => (
+                        <span
+                          key={path
+                            .split("/")
+                            .slice(0, index + 1)
+                            .join("/")}
+                        >
+                          <Icon name="chevron" size={13} />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              open(
+                                path
+                                  .split("/")
+                                  .slice(0, index + 1)
+                                  .join("/"),
+                              )
+                            }
+                          >
+                            {part}
+                          </button>
+                        </span>
+                      ))}
+                  </nav>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Ввести путь"
+                    onClick={() => {
+                      setInput(path);
+                      setEditingPath(true);
+                    }}
+                  >
+                    <Icon name="edit" size={17} />
+                  </button>
+                </div>
+              )}
+              <form
+                className="inspector-search"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setFilter(search);
                   setOffset(0);
                   setReveal("");
                   setSelected("");
                 }}
               >
-                <option value="name">По имени</option>
-                <option value="modified">По дате</option>
-                <option value="size">По размеру</option>
-              </select>
-            </div>
-          </>
-        )}
-        {busy && (
-          <p role="status">
-            <span className="spinner" /> Загружаю…
-          </p>
-        )}
-        {error && (
-          <p className="notice" role="alert">
-            {error}
-          </p>
-        )}
-        {mode === "files" && directory && (
-          <>
-            <ul className="inspector-list">
-              {directory.entries.map((entry) => (
-                <li
-                  key={entry.path}
-                  data-file-path={entry.path}
-                  className={selected === entry.path ? "selected" : ""}
-                >
-                  <div className="inspector-row">
-                    <button
-                      type="button"
-                      className="inspector-entry"
-                      aria-expanded={entry.kind === "file" ? selected === entry.path : undefined}
-                      onClick={() =>
-                        entry.kind === "directory" ? open(entry.path) : select(entry.path)
-                      }
-                    >
-                      <span className={`inspector-file-icon ${entry.kind}`}>
-                        <Icon name={entry.kind === "directory" ? "folder" : "file"} />
-                      </span>
-                      <span>
-                        {entry.name}
-                        <small>
-                          {entry.kind === "file" ? fileSize(entry.size) + " · " : ""}
-                          {fileDate(entry.modifiedAt)}
-                        </small>
-                      </span>
-                      {entry.kind === "directory" && <Icon name="chevron" size={15} />}
-                    </button>
-                    <CopyButton text={entry.path} label={`Копировать путь ${entry.name}`} />
-                  </div>
-                  {selected === entry.path && selectedPanel()}
-                </li>
-              ))}
-            </ul>
-            {!directory.entries.length && <p className="inspector-empty">Файлов не найдено</p>}
-            <div className="inspector-actions">
-              {(directory.offset ?? offset) > 0 && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setOffset(Math.max(0, (directory.offset ?? offset) - 100));
+                <input
+                  aria-label="Найти в папке"
+                  placeholder="Найти в папке…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <button type="submit" className="icon-button" aria-label="Найти файл">
+                  <Icon name="search" />
+                </button>
+              </form>
+              <div className="inspector-list-tools">
+                <small>
+                  {directory
+                    ? `${directory.total ?? directory.entries.length} элементов`
+                    : "Файлы проекта"}
+                </small>
+                <select
+                  aria-label="Порядок файлов"
+                  value={sort}
+                  onChange={(e) => {
+                    setSort(e.target.value as typeof sort);
+                    setOffset(0);
                     setReveal("");
                     setSelected("");
                   }}
                 >
-                  Назад
-                </button>
+                  <option value="name">По имени</option>
+                  <option value="modified">По дате</option>
+                  <option value="size">По размеру</option>
+                </select>
+              </div>
+            </>
+          )}
+          {busy && (
+            <p role="status">
+              <span className="spinner" /> Загружаю…
+            </p>
+          )}
+          {error && (
+            <p className="notice" role="alert">
+              {error}
+            </p>
+          )}
+          {mode === "files" && directory && (
+            <>
+              <ul className="inspector-list">
+                {directory.entries.map((entry) => (
+                  <li
+                    key={entry.path}
+                    data-file-path={entry.path}
+                    className={selected === entry.path ? "selected" : ""}
+                  >
+                    <div className="inspector-row">
+                      <button
+                        type="button"
+                        className="inspector-entry"
+                        aria-expanded={entry.kind === "file" ? selected === entry.path : undefined}
+                        onClick={() =>
+                          entry.kind === "directory" ? open(entry.path) : select(entry.path)
+                        }
+                      >
+                        <span className={`inspector-file-icon ${entry.kind}`}>
+                          <Icon name={entry.kind === "directory" ? "folder" : "file"} />
+                        </span>
+                        <span>
+                          {entry.name}
+                          <small>
+                            {entry.kind === "file" ? fileSize(entry.size) + " · " : ""}
+                            {fileDate(entry.modifiedAt)}
+                          </small>
+                        </span>
+                        {entry.kind === "directory" && <Icon name="chevron" size={15} />}
+                      </button>
+                      <CopyButton text={entry.path} label={`Копировать путь ${entry.name}`} />
+                    </div>
+                    {selected === entry.path && selectedPanel()}
+                  </li>
+                ))}
+              </ul>
+              {!directory.entries.length && <p className="inspector-empty">Файлов не найдено</p>}
+              <div className="inspector-actions">
+                {(directory.offset ?? offset) > 0 && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setOffset(Math.max(0, (directory.offset ?? offset) - 100));
+                      setReveal("");
+                      setSelected("");
+                    }}
+                  >
+                    Назад
+                  </button>
+                )}
+                {directory.nextOffset !== null && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setOffset(directory.nextOffset ?? 0);
+                      setReveal("");
+                      setSelected("");
+                    }}
+                  >
+                    Ещё файлы
+                  </button>
+                )}
+              </div>
+              {directory.truncated && (
+                <small>Проверены первые 5000 записей. Открой нужную папку по пути.</small>
               )}
-              {directory.nextOffset !== null && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setOffset(directory.nextOffset ?? 0);
-                    setReveal("");
-                    setSelected("");
-                  }}
-                >
-                  Ещё файлы
-                </button>
-              )}
-            </div>
-            {directory.truncated && (
-              <small>Проверены первые 5000 записей. Открой нужную папку по пути.</small>
-            )}
-          </>
-        )}
-        {mode === "git" && visible && (
-          <DeliveryButton projectId={projectId} projectName={projectName} />
-        )}
-        {mode === "git" && visible && (
-          <ProjectRepositoryView
+            </>
+          )}
+          {mode === "git" && (
+            <ProjectRepositoryView
+              visible={visible}
+              projectId={projectId}
+              projectName={projectName}
+              git={git}
+              revision={revision}
+              section={section}
+              onSection={setSection}
+              changes={changeList}
+            />
+          )}
+        </div>
+        {mode === "files" && (
+          <ProjectFilePreview
+            key={`${selected}:${revision}`}
             projectId={projectId}
-            projectName={projectName}
-            git={git}
-            revision={revision}
-            section={section}
-            onSection={setSection}
-            changes={changeList}
+            path={selected}
+            size={directory?.entries.find((entry) => entry.path === selected)?.size}
+            visible={visible}
           />
         )}
       </div>
-    </section>
+    </dialog>
   );
 }

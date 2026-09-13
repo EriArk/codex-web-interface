@@ -1,0 +1,206 @@
+:root[data-theme] dialog.project-tool-window {
+  width: min(1200px, calc(100vw - 32px));
+}
+:root .project-tool-window > .inspector-heading small {
+  color: inherit;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.project-tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px 10px;
+  color: var(--window-ink);
+}
+.inspector-readonly {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  margin-right: auto;
+}
+.project-tool-actions > button {
+  margin: 0;
+}
+.inspector-workspace {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background: var(--window-screen);
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  box-shadow: var(--window-screen-shadow);
+}
+.project-tool-window .inspector-scroll {
+  flex: 1;
+  min-width: 0;
+  padding: 12px;
+}
+.project-tool-window .inspector-preview {
+  display: none;
+}
+.project-tool-window .inspector-selected {
+  padding-top: 6px;
+}
+.project-tool-window .inspector-list {
+  margin-top: 8px;
+}
+.project-tool-window .inspector-path input,
+.project-tool-window .inspector-search input {
+  background: var(--paper);
+  color: var(--ink);
+}
+.project-tool-window .inspector-list-tools select {
+  max-width: 60%;
+}
+.inspector-preview > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.inspector-preview strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.inspector-preview .file-preview {
+  margin-top: 12px;
+}
+.inspector-preview pre {
+  white-space: pre;
+  overflow: auto;
+  font-size: 13px;
+}
+.inspector-preview img {
+  max-width: 100%;
+  max-height: 65dvh;
+  object-fit: contain;
+}
+.project-tool-window .repository-view {
+  max-width: none;
+}
+.project-tool-window .repository-tabs {
+  position: sticky;
+  top: -12px;
+  z-index: 1;
+  background: var(--paper);
+  padding-block: 4px;
+}
+.project-tool-window .repository-card {
+  margin-block: 0 12px;
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .project-tool-window[data-tool="files"] .inspector-scroll {
+    flex: 0 0 42%;
+    border-right: 1px solid var(--line);
+  }
+  .project-tool-window .inspector-preview {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    padding: 16px;
+    overscroll-behavior: contain;
+  }
+  .project-tool-window .repository-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 32%);
+    gap: 0 16px;
+    align-items: start;
+  }
+  .project-tool-window .repository-readme {
+    grid-column: 1;
+    grid-row: 1 / span 5;
+  }
+  .project-tool-window .repository-overview > :is(details, .notice, [role="status"]) {
+    grid-column: 2;
+  }
+  .project-tool-window .repository-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+  }
+  .project-tool-window .repository-identity {
+    flex: 1 1 45%;
+  }
+  .project-tool-window .repository-counts {
+    margin: 0;
+  }
+}
+@media (max-width: 700px) {
+  :root[data-theme] dialog.project-tool-window {
+    width: calc(100vw - 8px);
+  }
+  .project-tool-window .inspector-scroll {
+    padding: 8px;
+  }
+  .project-tool-actions {
+    padding: 2px 6px 6px;
+  }
+}
+/* Results share the casing and recessed reading well in both client modes. */
+.result-project-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+.result-project-label span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .workspace .results-pane {
+  padding: 4px;
+  gap: 0;
+  background: var(--case-surface);
+  color: var(--ink);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .results-pane
+  > :is(.pane-heading, .result-project-label, .result-filters) {
+  background: transparent;
+  color: var(--case-ink);
+  text-shadow: var(--case-letter-shadow);
+  border: 0;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .results-pane
+  > .pane-heading
+  .muted {
+  color: inherit;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .results-pane > .pane-scroll {
+  background: var(--screen-material);
+  box-shadow: var(--screen-shadow);
+  border: 1px solid var(--case-seam);
+  border-radius: 7px;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .results-pane
+  > .result-filters
+  button {
+  color: var(--case-ink);
+  text-shadow: var(--case-letter-shadow);
+  border-color: transparent;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .results-pane
+  > .result-filters
+  button[aria-pressed="true"] {
+  background: var(--case-pressed);
+  box-shadow: var(--case-pressed-shadow);
+  border-color: var(--case-seam);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .results-pane .result-filter-count {
+  color: inherit;
+}

@@ -72,18 +72,13 @@ for (const [engine, type] of [
       animations: "disabled",
     });
     await page
-      .getByRole("button", { name: "Результаты", exact: true })
+      .getByRole("button", { name: /^Результаты/ })
       .filter({ visible: true })
       .last()
       .tap();
     const pane = page.getByRole("region", { name: "Результаты", exact: true });
-    for (let pass = 0; pass < 3; pass++) {
-      await pane.getByRole("button", { name: "Весь проект", exact: true }).tap();
-      await expect(page.locator(".result-scope")).toHaveCount(1);
-      await pane.getByRole("button", { name: "Диалог", exact: true }).tap();
-      await expect(page.locator(".result-scope")).toHaveCount(1);
-    }
-    await pane.getByRole("button", { name: "Весь проект", exact: true }).tap();
+    await expect(page.locator(".result-scope")).toHaveCount(0);
+    await expect(pane.locator(".result-project-label")).toContainText("Project");
     await expect(pane.getByRole("heading", { name: "Проверка 21", exact: true })).toBeVisible();
     await pane.getByRole("button", { name: /^Файлы/ }).tap();
     await expect(pane.getByRole("heading", { name: "report.md", exact: true })).toBeVisible();
@@ -98,7 +93,6 @@ for (const [engine, type] of [
     await page.reload();
     await expect(editor).toHaveValue("Мой черновик");
     await page.setViewportSize({ width: 1366, height: 1024 });
-    await pane.getByRole("button", { name: "Весь проект", exact: true }).click();
     await pane.getByRole("button", { name: /^Файлы/ }).click();
     for (const theme of ["crt-green", "organizer", "hitech-2000s", "classic-dark"]) {
       await page

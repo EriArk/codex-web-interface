@@ -589,3 +589,8 @@ Before mobile support is considered complete, the same core workflow must also w
 - Restore the earlier unframed icon/label appearance of the sidebar Tasks/Notes/Plans/Reports/Shared shortcuts. Keep their common row, placement and touch targets; do not turn them into individual raised keycaps.
 - In CRT and Hi-Tech, tool-window headings and project/tool controls belong to the physical casing above the inset reading area. Project filters use a dropdown, replacing horizontal project-chip strips; retain All/unassigned scopes and bounded catalog pagination.
 - Settings color swatches must preview the actual current-theme material using the same color/shading definitions as the installed casing (or actual accent in Organizer/Classic Dark). Preserve existing panel brightness, matte CRT darkness and glossy white/yellow/silver exceptions; change the swatches, not the panels.
+
+## Owner-requested direct project tools (2026-09-13)
+
+- Files and Git have separate icon-only buttons in the Codex header, each opening its own window directly for the selected project. This supersedes the combined header shortcut/menu. Keep equal square touch targets and preserve chat state.
+- Remove the Settings button from the top bar in both Codex and GPT; Settings remains in the sidebar footer.

@@ -1,5 +1,15 @@
 # UX Specification
 
+## Direct Files/Git windows and Results — 2026-09-13
+
+The Codex header has separate folder and branch buttons for Files and Git. Each opens a native modal bound to the selected private project/checkout. The former combined support-pane tab is removed. Settings remains in the sidebar footer in both Codex and GPT; it no longer occupies the top bar.
+
+On wide screens Files uses a folder/file list beside a content preview. Automatic previews are limited to 2 MiB and use authenticated project-root reads with cancellation; larger files retain the explicit Open action. Phones keep file actions at the selected row and open content in the existing preview window. Files still explicitly reports read-only; the writable lock is deferred until typed server operations and the #158 upgrade prerequisite are ready.
+
+Git has its own broad window, with repository identity/status, README beside commits/branches/tags, changes/diff and releases. Close preserves the underlying chat draft and view; project changes discard old window context. Late responses cannot populate a different project's window.
+
+Codex Results uses the whole project's authorized library without a Dialog/Project switch. Category pagination, exact artifacts and their source chat/turn remain intact. GPT shares the material redesign, but project aggregation is pending the server contract; its current conversation feed is not advertised as project-wide.
+
 ## Current team milestone
 
 The approved [Team Workspace](TEAM_WORKSPACE.md) adds user identity and explicit collaboration to the same functional themed UI. Desktop and mobile are both required for the second user. Owner-enabled functionality is installed; admission of a real second user is still pending. Subsequent changes are tested separately before installation.

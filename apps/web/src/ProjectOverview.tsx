@@ -27,6 +27,7 @@ export function ProjectOverview({
   onNotebook,
   onNew,
   onFiles,
+  onGit,
   onMachines,
   onResults,
   onRemote,
@@ -38,6 +39,7 @@ export function ProjectOverview({
   onNotebook: (r: NotebookRequest) => void;
   onNew?: () => void;
   onFiles?: () => void;
+  onGit?: () => void;
   onMachines?: () => void;
   onResults?: () => void;
   onRemote?: () => void;
@@ -628,12 +630,19 @@ export function ProjectOverview({
                   {onFiles && (
                     <button type="button" className="overview-row" onClick={onFiles}>
                       <Icon name="folder" />
+                      <span>Файлы проекта</span>
+                      <Icon name="chevron" size={15} />
+                    </button>
+                  )}
+                  {onGit && (
+                    <button type="button" className="overview-row" onClick={onGit}>
+                      <Icon name="branch" />
                       <span>
                         {data.git
                           ? data.git.repository
                             ? `${data.git.branch ?? (data.git.detached ? "Detached HEAD" : "Git")} · ${data.git.dirty ? `Изменено: ${data.git.changed}` : "Без изменений"}`
                             : "Папка без Git"
-                          : "Файлы и Git проекта"}
+                          : "Git проекта"}
                         {data.git && (
                           <small>
                             {data.git.stale ? "Прошлая проверка" : "Проверено"}:{" "}

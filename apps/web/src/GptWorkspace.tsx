@@ -1377,14 +1377,6 @@ export function GptWorkspace({
         >
           <Icon name="file" />
         </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Настройки"
-          onClick={() => setSettings(true)}
-        >
-          <Icon name="settings" />
-        </button>
       </header>
       {(notice || loadNotice) && (
         <div className="global-notice" role="status">

@@ -52,6 +52,16 @@ for (const [engine, type] of [
   page.on("pageerror", (e) => errors.push(e.message));
   const button = (name) =>
     page.getByRole("button", { name, exact: true }).filter({ visible: true }).first();
+  const openSettings = async (target = page) => {
+    await expect(target.locator('.workspace-header [aria-label="Настройки"]')).toHaveCount(0);
+    const settings = target
+      .getByRole("button", { name: "Настройки", exact: true })
+      .filter({ visible: true })
+      .first();
+    if (!(await settings.isVisible()))
+      await target.getByRole("button", { name: "Открыть проекты", exact: true }).click();
+    await settings.click();
+  };
   const resize = async (width, height) => {
     await page.setViewportSize({ width, height });
     await page.evaluate(() => window.dispatchEvent(new Event("resize")));
@@ -82,7 +92,7 @@ for (const [engine, type] of [
     await composer.fill("Черновик остаётся при смене оформления");
     await composer.blur();
     for (const theme of ["organizer", "classic-dark", "hitech-2000s", "crt-green"]) {
-      await button("Настройки").click();
+      await openSettings();
       await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await page.locator(`.settings-dialog .theme-option.${theme} input`).check();
       for (const [label, id] of [
@@ -184,7 +194,7 @@ for (const [engine, type] of [
       await resize(393, 852);
     }
     // A failed preference write rolls back the preview and stays explicitly retryable.
-    await button("Настройки").click();
+    await openSettings();
     await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     await page.route("**/api/preferences", (route) =>
       route.request().method() === "PATCH"
@@ -212,11 +222,7 @@ for (const [engine, type] of [
       const other = await second.newPage();
       await other.goto(origin);
       await expect(other.locator("html")).toHaveAttribute("data-case-color", "red");
-      await other
-        .getByRole("button", { name: "Настройки", exact: true })
-        .filter({ visible: true })
-        .first()
-        .click();
+      await openSettings(other);
       await other.locator('.settings-browser[open] [data-category="appearance"]').click();
       await other.locator(".settings-dialog .theme-option.hitech-2000s input").check();
       await expect(other.locator("html")).toHaveAttribute("data-case-color", "turquoise");
@@ -249,6 +255,12 @@ for (const [engine, type] of [
         };
       else if (path.endsWith("/projects")) data = { items: [], conversations: [] };
       else if (path.endsWith("/jobs")) data = { items: [], stamp: 1 };
+      else if (path.endsWith("/results"))
+        data = {
+          items: [],
+          nextBefore: null,
+          counts: { all: 0, images: 0, demos: 0, files: 0, work: 0 },
+        };
       else if (path.endsWith("/conversations"))
         data = {
           items: [{ id: "polymer-gpt", title: "Дизайн и материалы", updatedAt: 100 }],
@@ -283,7 +295,7 @@ for (const [engine, type] of [
     await gpt.fill("Черновик GPT тоже остаётся");
     await gpt.blur();
     await expect(gpt).toHaveValue("Черновик GPT тоже остаётся");
-    await button("Настройки").click();
+    await openSettings();
     await page.locator('.settings-browser[open] [data-category="appearance"]').click();
     assert.equal(
       await page.evaluate(

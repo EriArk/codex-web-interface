@@ -46,7 +46,7 @@ for (const [engine, type] of [
     await page.goto(origin);
     const chat = page.getByRole("textbox", { name: "Сообщение Codex" });
     await chat.fill("Черновик без изменений");
-    await page.getByRole("button", { name: "Файлы и Git проекта", exact: true }).click();
+    await page.getByRole("button", { name: "Файлы проекта", exact: true }).click();
     await page.getByRole("button", { name: "Предпросмотр приложения", exact: true }).click();
     await expect(
       panel.getByRole("button", { name: "Открыть приложение", exact: true }),

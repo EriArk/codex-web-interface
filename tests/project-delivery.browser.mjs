@@ -75,9 +75,8 @@ for (const [engine, type] of [
     await page.goto(origin);
     const chat = page.getByRole("textbox", { name: "Сообщение Codex" });
     await chat.fill("Основной черновик остаётся");
-    await page.getByRole("button", { name: "Файлы и Git проекта", exact: true }).click();
-    const files = page.getByRole("region", { name: "Файлы и Git", exact: true });
-    await files.getByRole("button", { name: "Git", exact: true }).click();
+    await page.getByRole("button", { name: "Git проекта", exact: true }).click();
+    const files = page.getByRole("dialog", { name: "Git проекта", exact: true });
     await files.getByRole("button", { name: "Доставка", exact: true }).click();
     const panel = page.getByRole("dialog", { name: "Доставка проекта", exact: true });
     await expect(panel.getByRole("checkbox").first()).toBeVisible();
@@ -86,7 +85,7 @@ for (const [engine, type] of [
       .getByRole("textbox", { name: "Сообщение коммита", exact: true })
       .fill("Мобильная навигация");
     await panel.getByRole("button", { name: "Закрыть доставку" }).click();
-    await files.getByRole("button", { name: "Вернуться к чату" }).click();
+    await files.getByRole("button", { name: "Закрыть Git" }).click();
     await expect(chat).toHaveValue("Основной черновик остаётся");
     await open();
     await expect(
@@ -163,6 +162,13 @@ for (const [engine, type] of [
     await page.unroute("**/api/projects/project/delivery");
     // Change theme through the real Settings control; render the same modal on phone and tablet.
     for (const theme of ["classic-dark", "organizer", "hitech-2000s", "crt-green"]) {
+      if (
+        !(await page
+          .getByRole("button", { name: "Настройки", exact: true })
+          .filter({ visible: true })
+          .isVisible())
+      )
+        await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
       await page
         .getByRole("button", { name: "Настройки", exact: true })
         .filter({ visible: true })

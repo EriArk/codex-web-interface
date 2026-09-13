@@ -104,6 +104,7 @@ export function ProjectRepositoryView({
   changes,
   section,
   onSection,
+  visible,
 }: {
   projectId: string;
   projectName: string;
@@ -112,6 +113,7 @@ export function ProjectRepositoryView({
   changes: ReactNode;
   section: "overview" | "changes" | "releases";
   onSection: (value: "overview" | "changes" | "releases") => void;
+  visible: boolean;
 }) {
   const [repository, setRepository] = useState<ProjectRepository | null>(null),
     [error, setError] = useState("");
@@ -119,10 +121,9 @@ export function ProjectRepositoryView({
     [releaseError, setReleaseError] = useState("");
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh repeats this scoped read.
   useEffect(() => {
+    if (!visible) return;
     const controller = new AbortController();
     setError("");
-    setRepository(null);
-    setReleases(null);
     setReleaseError("");
     void api<ProjectRepository>(`/projects/${encodeURIComponent(projectId)}/git/repository`, {
       signal: controller.signal,
@@ -134,10 +135,10 @@ export function ProjectRepositoryView({
         if (!controller.signal.aborted) setError(messageOf(e));
       });
     return () => controller.abort();
-  }, [projectId, revision]);
+  }, [projectId, revision, visible]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh repeats this scoped read.
   useEffect(() => {
-    if (section !== "releases") return;
+    if (!visible || section !== "releases") return;
     const controller = new AbortController();
     setReleaseError("");
     void api<ProjectReleases>(`/projects/${encodeURIComponent(projectId)}/git/releases`, {
@@ -150,7 +151,7 @@ export function ProjectRepositoryView({
         if (!controller.signal.aborted) setReleaseError(messageOf(e));
       });
     return () => controller.abort();
-  }, [projectId, section, revision]);
+  }, [projectId, section, revision, visible]);
   const remote = repository?.remote;
   return (
     <div className="repository-view">
@@ -255,7 +256,7 @@ export function ProjectRepositoryView({
         </>
       )}
       {section === "overview" && (
-        <>
+        <div className="repository-overview">
           {error && (
             <p className="notice" role="alert">
               {error}
@@ -369,7 +370,7 @@ export function ProjectRepositoryView({
               </ul>
             </details>
           )}
-        </>
+        </div>
       )}
       {section === "releases" && (
         <div className="repository-releases">

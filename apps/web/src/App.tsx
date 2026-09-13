@@ -328,7 +328,16 @@ function Workspace({
   }>();
   const [machinePanel, setMachinePanel] = useState(false);
   const [fileFocus, setFileFocus] = useState({ path: "", version: 0, projectId: "" });
-  const [resultScope, setResultScope] = useState<"thread" | "project">("thread");
+  const [toolWindow, setToolWindow] = useState<{
+    projectId: string;
+    mode: "files" | "git";
+  } | null>(null);
+  const projectTool = toolWindow?.projectId === projectId ? toolWindow.mode : null;
+  const setProjectTool = (mode: "files" | "git" | null, target = projectId) =>
+    setToolWindow(mode ? { projectId: target, mode } : null);
+  useEffect(() => {
+    setToolWindow((old) => (old && old.projectId !== projectId ? null : old));
+  }, [projectId]);
   const [libraryRevision, setLibraryRevision] = useState(0);
   const [pendingResultTurn, setPendingResultTurn] = useState<{
     threadId: string;
@@ -336,12 +345,12 @@ function Workspace({
     messageId?: string;
   }>();
   useEffect(() => {
-    if (resultScope !== "project" || !["results", "chat"].includes(view)) return;
+    if (!["results", "chat"].includes(view)) return;
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") setLibraryRevision((v) => v + 1);
     }, 5000);
     return () => clearInterval(timer);
-  }, [resultScope, view]);
+  }, [view]);
   const [resultCount, setResultCount] = useState(0);
   const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
@@ -494,7 +503,8 @@ function Workspace({
         setProjects(list);
         if (prefs.theme) setTheme(prefs.theme);
         hydrateCaseColors(prefs);
-        if (prefs.view) setView(["remote", "overview"].includes(prefs.view) ? "chat" : prefs.view);
+        if (prefs.view)
+          setView(["remote", "overview", "files"].includes(prefs.view) ? "chat" : prefs.view);
         const visible = list.filter((p) => !p.archived && !p.deleted);
         const id = visible.some((p) => p.id === prefs.projectId)
           ? (prefs.projectId ?? "")
@@ -588,7 +598,6 @@ function Workspace({
     const request = ++resultRequest.current;
     if (!threadId) {
       setResults([]);
-      setResultCount(0);
       return;
     }
     const data = await api<{ items: Result[]; nextBefore: number | null; counts: { all: number } }>(
@@ -596,7 +605,6 @@ function Workspace({
     );
     if (request !== resultRequest.current || selectionRef.current.threadId !== threadId) return;
     setResults(data.items);
-    setResultCount(data.counts.all);
   }, [threadId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Result events invalidate the current page.
   useEffect(() => {
@@ -770,7 +778,7 @@ function Workspace({
     }
   };
   const showResult = (id: string, category: ResultCategory = "all") => {
-    setResultScope("thread");
+    setProjectTool(null);
     setResultCategory(category);
     setResultFocusVersion((v) => v + 1);
     setRightHidden(false);
@@ -818,6 +826,7 @@ function Workspace({
       return;
     }
     setNotebook(undefined);
+    setProjectTool(null);
     if (target.client === "gpt") {
       setWorkspaceDestination({ target, version: Date.now() });
       setClient("gpt");
@@ -831,8 +840,7 @@ function Workspace({
     if (target.kind === "file" && target.projectId) {
       openMachineProject(target.projectId, false);
       setFileFocus({ path: target.id, projectId: target.projectId, version: Date.now() });
-      setRightHidden(false);
-      setView("files");
+      setProjectTool("files", target.projectId);
       return;
     }
     if (target.threadId) {
@@ -866,6 +874,7 @@ function Workspace({
     setView("remote");
   });
   previewRemote.current = (id: string) => {
+    setProjectTool(null);
     openMachineProject(id, false);
     setRightHidden(false);
     setView("remote");
@@ -1206,24 +1215,28 @@ function Workspace({
         <button
           type="button"
           className="icon-button header-files"
-          aria-label="Файлы и Git проекта"
-          title={project ? `Файлы и Git: ${project.name}` : "Выбери проект"}
-          aria-pressed={view === "files"}
+          aria-label="Файлы проекта"
+          title={project ? `Файлы: ${project.name}` : "Выбери проект"}
+          aria-expanded={projectTool === "files"}
+          aria-haspopup="dialog"
           disabled={!project || project.unassigned}
           onClick={() => {
-            setView("files");
-            setRightHidden(false);
+            setProjectTool("files");
           }}
         >
-          <Icon name="repository" />
+          <Icon name="folder" />
         </button>
         <button
           type="button"
-          className="icon-button"
-          onClick={() => setSettings(true)}
-          aria-label="Настройки"
+          className="icon-button header-git"
+          aria-label="Git проекта"
+          title={project ? `Git: ${project.name}` : "Выбери проект"}
+          aria-expanded={projectTool === "git"}
+          aria-haspopup="dialog"
+          disabled={!project || project.unassigned}
+          onClick={() => setProjectTool("git")}
         >
-          <Icon name="settings" />
+          <Icon name="branch" />
         </button>
       </header>
       {notice && (
@@ -1250,12 +1263,14 @@ function Workspace({
             onNew={() => newThread(overviewId)}
             onFiles={() => {
               selectOverviewProject();
-              setView("files");
-              setRightHidden(false);
+              setProjectTool("files", overviewId);
+            }}
+            onGit={() => {
+              selectOverviewProject();
+              setProjectTool("git", overviewId);
             }}
             onResults={() => {
               selectOverviewProject();
-              setResultScope("project");
               setFocusResult("");
               setView("results");
               setRightHidden(false);
@@ -1374,10 +1389,10 @@ function Workspace({
         <div className="support-pane" id="support-panel">
           <div className="support-tabs">
             {tab("results", "Результаты", "results")}
-            {tab("files", "Файлы", "folder")}
             {tab("activity", "Активность", "activity")}
           </div>
           <ResultFeed
+            onCount={setResultCount}
             onSaveLink={(r) =>
               setNotebook({
                 scope: project
@@ -1408,21 +1423,10 @@ function Workspace({
                 return;
               }
               setFileFocus((v) => ({ path, version: v.version + 1, projectId }));
-              setRightHidden(false);
-              setView("files");
+              setProjectTool("files");
             }}
-            key={
-              resultScope === "project"
-                ? `project-results:${projectId}`
-                : `thread-results:${threadId}`
-            }
-            endpoint={
-              resultScope === "project"
-                ? "/projects/" + projectId + "/results"
-                : threadId
-                  ? "/threads/" + threadId + "/results"
-                  : ""
-            }
+            key={`project-results:${projectId}`}
+            endpoint={projectId ? "/projects/" + encodeURIComponent(projectId) + "/results" : ""}
             revision={
               String(state.revision) +
               ":" +
@@ -1431,28 +1435,12 @@ function Workspace({
               results.map((r) => r.id).join(",")
             }
             toolbar={
-              <fieldset className="result-scope" aria-label="Область результатов">
-                <button
-                  type="button"
-                  aria-pressed={resultScope === "thread"}
-                  onClick={() => {
-                    setFocusResult("");
-                    setResultScope("thread");
-                  }}
-                >
-                  Диалог
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={resultScope === "project"}
-                  onClick={() => {
-                    setFocusResult("");
-                    setResultScope("project");
-                  }}
-                >
-                  Весь проект
-                </button>
-              </fieldset>
+              project && (
+                <div className="result-project-label">
+                  <Icon name="folder" size={15} />
+                  <span>{project.name}</span>
+                </div>
+              )
             }
             onOverlayChange={setResultOverlay}
             visible={view === "results" || view === "chat"}
@@ -1467,15 +1455,6 @@ function Workspace({
                 setPendingResultTurn({ threadId: source, turnId: id });
               } else void showTurn(id).catch((e) => setNotice(messageOf(e)));
             }}
-          />
-          <ProjectFiles
-            key={`project-files:${projectId}`}
-            projectId={projectId}
-            threadId={threadId || undefined}
-            projectName={project?.name ?? "Проект"}
-            visible={view === "files"}
-            focus={fileFocus}
-            onBack={() => setView("chat")}
           />
           <ActivityPane
             threadId={threadId}
@@ -1506,6 +1485,26 @@ function Workspace({
           />
         </div>
       </main>
+      {project && !project.unassigned && (
+        <>
+          {(["files", "git"] as const).map((mode) => (
+            <ProjectFiles
+              key={`${mode}:${projectId}`}
+              projectId={projectId}
+              threadId={threadId || undefined}
+              projectName={project.name}
+              mode={mode}
+              visible={projectTool === mode}
+              focus={fileFocus}
+              onBack={() => setProjectTool(null)}
+              onOpenFiles={(path) => {
+                setFileFocus((v) => ({ path, projectId, version: v.version + 1 }));
+                setProjectTool("files");
+              }}
+            />
+          ))}
+        </>
+      )}
       <nav className="mobile-tabs" aria-label="Разделы рабочего пространства">
         {tab("chat", "Чат", "chat")}
         {tab("results", "Результаты", "results")}

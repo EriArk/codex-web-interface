@@ -43,6 +43,15 @@ for (const [engine, type] of [
   f.store.result(f.thread.id, "change", "turn", "fileChange", "Изменён readme", {
     changes: [{ path: join(root, "readme.md"), kind: "update", diff: "Сохранённый diff" }],
   });
+  const sibling = f.store.createThread("project", "native-sibling", "Previous chat");
+  f.store.result(
+    sibling.id,
+    "sibling-result",
+    "sibling-turn",
+    "build",
+    "Проверка из предыдущего чата",
+    { status: "success" },
+  );
   const otherRoot = await mkdtemp(join(tmpdir(), "inspector-other-"));
   await writeFile(join(otherRoot, "README.md"), "# Второй проект\n\nТолько второй проект\n");
   await writeFile(join(otherRoot, "second-only.txt"), "Other file");
@@ -94,8 +103,20 @@ for (const [engine, type] of [
     const editor = page.getByRole("textbox", { name: "Сообщение Codex" });
     await expect(editor).toBeVisible();
     await editor.fill("Не терять черновик");
-    await page.getByRole("button", { name: "Файлы и Git проекта", exact: true }).tap();
-    const pane = page.getByRole("region", { name: "Файлы и Git", exact: true });
+    const pane = page.locator(".project-tool-window[open]");
+    const closeTool = async () => {
+      if (await pane.count())
+        await pane
+          .locator(".inspector-heading")
+          .getByRole("button", { name: /^Закрыть/ })
+          .click();
+    };
+    const openTool = async (name) => {
+      await closeTool();
+      await page.getByRole("button", { name: name + " проекта", exact: true }).click();
+      await expect(pane).toBeVisible();
+    };
+    await openTool("Файлы");
     await expect(pane).toBeVisible();
     await pane.getByRole("button", { name: /^readme.md/ }).tap();
     const selectedRow = pane.locator("li[data-file-path='readme.md']");
@@ -106,11 +127,11 @@ for (const [engine, type] of [
       path: `.local/qa-project-inspector/${engine}-inline-file.png`,
     });
     await pane.getByRole("button", { name: "Открыть файл", exact: true }).tap();
-    const dialog = page.getByRole("dialog");
+    const dialog = page.locator(".download-dialog[open]");
     await expect(dialog.locator("pre")).toContainText("Новый текст");
     await dialog.getByRole("button", { name: /Закрыть/ }).tap();
     await expect(pane).toBeVisible();
-    await pane.getByRole("button", { name: "Git", exact: true }).tap();
+    await openTool("Git");
     await expect(
       pane.getByRole("region", { name: "Репозиторий проекта" }).getByText("main", { exact: true }),
     ).toBeVisible();
@@ -136,7 +157,7 @@ for (const [engine, type] of [
       animations: "disabled",
       path: `.local/qa-project-inspector/${engine}-phone-diff.png`,
     });
-    await pane.getByRole("button", { name: "Вернуться к чату" }).tap();
+    await closeTool();
     await expect(editor).toHaveValue("Не терять черновик");
     await page
       .getByRole("button", { name: /^Результаты/ })
@@ -144,6 +165,19 @@ for (const [engine, type] of [
       .last()
       .tap();
     const result = page.getByRole("region", { name: /^Результаты/ });
+    await expect(result.getByText("Проверка из предыдущего чата", { exact: true })).toBeVisible();
+    await expect(result.getByRole("button", { name: "Диалог", exact: true })).toHaveCount(0);
+    const siblingCard = result
+      .locator(".result-card")
+      .filter({ hasText: "Проверка из предыдущего чата" });
+    // The project library retains the source chat identity for precise backlinks.
+    const library = await page.request.get(origin + "/api/projects/project/results");
+    assert.equal(
+      (await library.json()).items.find((item) => item.title === "Проверка из предыдущего чата")
+        .threadId,
+      sibling.id,
+    );
+    await expect(siblingCard).toBeVisible();
     await result.locator(".file-change summary").tap();
     await result.getByRole("button", { name: "Посмотреть файл", exact: true }).tap();
     await expect(pane.locator('li[data-file-path="readme.md"]')).toContainText("Открыть файл");
@@ -158,13 +192,31 @@ for (const [engine, type] of [
     });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.setViewportSize({ width: 1366, height: 1024 });
-    await pane.getByRole("button", { name: "Git", exact: true }).click();
+    await expect(
+      pane.getByRole("complementary", { name: "Содержимое файла" }).locator("pre"),
+    ).toContainText("Новый текст");
+    const columns = await pane.evaluate((node) => {
+      const list = node.querySelector(".inspector-scroll").getBoundingClientRect();
+      const preview = node.querySelector(".inspector-preview").getBoundingClientRect();
+      return {
+        list: list.width,
+        preview: preview.width,
+        sideBySide: preview.left >= list.right - 1,
+      };
+    });
+    assert(columns.list > 300 && columns.preview > 400 && columns.sideBySide);
+    await page.screenshot({
+      animations: "disabled",
+      path: `.local/qa-project-inspector/${engine}-tablet-files.png`,
+    });
+    await openTool("Git");
     await expect(
       pane.getByRole("region", { name: "Репозиторий проекта" }).getByText("main", { exact: true }),
     ).toBeVisible();
     await pane.getByRole("button", { name: "Обзор", exact: true }).click();
     await pane.locator(".inspector-commits summary").click();
     for (const theme of ["crt-green", "organizer", "hitech-2000s", "classic-dark"]) {
+      await closeTool();
       await page
         .getByRole("button", { name: "Настройки", exact: true })
         .filter({ visible: true })
@@ -172,12 +224,11 @@ for (const [engine, type] of [
         .click();
       await page.locator('.settings-browser[open] [data-category="appearance"]').click();
       await expect(
-        page
-          .locator(".settings-dialog")
-          .getByRole("button", { name: "Файлы и Git проекта", exact: true }),
+        page.locator(".settings-dialog").getByRole("button", { name: /^(Файлы|Git) проекта$/ }),
       ).toHaveCount(0);
       await page.locator(`.theme-option.${theme} input`).check();
       await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
+      await openTool("Git");
       await page.screenshot({
         animations: "disabled",
         path: `.local/qa-project-inspector/${engine}-tablet-${theme}.png`,
@@ -186,8 +237,68 @@ for (const [engine, type] of [
     const controls = await page
       .locator(".workspace-header > button")
       .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-label")));
-    assert.equal(controls.indexOf("Файлы и Git проекта"), controls.indexOf("Создать диалог") + 1);
-    assert.equal(controls.indexOf("Настройки"), controls.indexOf("Файлы и Git проекта") + 1);
+    assert.equal(controls.indexOf("Файлы проекта"), controls.indexOf("Создать диалог") + 1);
+    assert.equal(controls.indexOf("Git проекта"), controls.indexOf("Файлы проекта") + 1);
+    assert(!controls.includes("Настройки"));
+    for (const width of [320, 390, 768, 1024, 1280, 1376, 1920]) {
+      const height = width < 900 ? 844 : 1032;
+      await page.setViewportSize({ width, height });
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            parseFloat(document.documentElement.style.getPropertyValue("--app-height")),
+          ),
+        )
+        .toBe(height);
+      const bounds = await pane.boundingBox();
+      assert(
+        bounds.x >= 0 &&
+          bounds.y >= 0 &&
+          bounds.x + bounds.width <= width + 1 &&
+          bounds.y + bounds.height <= height + 1,
+        `Git window fits ${width}`,
+      );
+      assert(
+        await pane.evaluate((node) => node.scrollWidth <= node.clientWidth),
+        `Git content fits ${width}`,
+      );
+      const buttons = await page
+        .locator(".workspace-header > .icon-button:visible")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const r = node.getBoundingClientRect();
+            return { width: r.width, height: r.height, right: r.right };
+          }),
+        );
+      assert(
+        buttons.every((b) => b.width === b.height && b.width >= 44 && b.right <= width),
+        `square header controls ${width}`,
+      );
+    }
+    await page.setViewportSize({ width: 1366, height: 1024 });
+    await openTool("Файлы");
+    await pane.getByRole("button", { name: /^src/ }).click();
+    await expect(pane.getByRole("button", { name: /^пример.ts/ })).toBeVisible();
+    await closeTool();
+    await expect(page.getByRole("button", { name: "Файлы проекта", exact: true })).toBeFocused();
+    await openTool("Файлы");
+    await expect(pane.getByRole("button", { name: /^пример.ts/ })).toBeVisible();
+    await pane.getByRole("button", { name: "Ввести путь", exact: true }).click();
+    await pane.getByRole("textbox", { name: "Путь в проекте" }).fill("src");
+    await page.evaluate(() => {
+      Object.defineProperty(visualViewport, "height", { configurable: true, value: 450 });
+      Object.defineProperty(visualViewport, "offsetTop", { configurable: true, value: 80 });
+      visualViewport.dispatchEvent(new Event("resize"));
+    });
+    await expect(page.locator("html")).toHaveAttribute("data-keyboard", "true");
+    const keyboardBounds = await pane.boundingBox();
+    assert(keyboardBounds.y >= 80 && keyboardBounds.y + keyboardBounds.height <= 530);
+    await page.evaluate(() => {
+      delete visualViewport.height;
+      delete visualViewport.offsetTop;
+      visualViewport.dispatchEvent(new Event("resize"));
+    });
+    await openTool("Git");
     let releaseOld,
       began = false;
     const gate = new Promise((resolve) => (releaseOld = resolve));
@@ -206,13 +317,14 @@ for (const [engine, type] of [
         })
         .catch(() => {});
     });
-    await pane.getByRole("button", { name: "Обновить файлы и Git" }).click();
+    await pane.getByRole("button", { name: "Обновить Git" }).click();
     await expect.poll(() => began).toBe(true);
+    await closeTool();
     await page.locator('.nav-project[data-project-id="other"]').filter({ visible: true }).click();
-    await page.getByRole("button", { name: "Файлы и Git проекта", exact: true }).click();
+    await openTool("Файлы");
     await expect(pane.locator(".inspector-heading")).toContainText("Other project");
     await expect(pane.getByRole("button", { name: /^second-only.txt/ })).toBeVisible();
-    await pane.getByRole("button", { name: "Git", exact: true }).click();
+    await openTool("Git");
     await expect(pane.getByRole("region", { name: "README проекта" })).toContainText(
       "Только второй проект",
     );
