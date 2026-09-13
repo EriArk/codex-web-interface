@@ -1,5 +1,11 @@
 # Verification record
 
+## Stopped GPT profile recovery — 2026-09-13
+
+- Full Linux suite: **442 passed**; typecheck passed. Twenty focused profile/isolation checks cover two preserved identities, exact files, connector mismatch, changed mappings, corruption, symbolic links, live mounts, OS-lock contention and restoration with admission blocked.
+- The real disposable Docker browser rejected a live backup, stopped cleanly, and produced a verified checkpoint containing its actual Chromium profile. The backup did not restart it. Existing private ingress, dedicated Guacamole and public-only network checks also passed; all fixture containers/networks were removed.
+- Shared OS locking now prevents concurrent host provisioners and profile backup from racing. Original live GPT profile and production services were not stopped, copied, moved or replaced. Friend sign-in and coordinated release readmission remain separate acceptance work.
+
 Compact tablet addition (2026-09-13): Chromium and WebKit passed native Plan controls at 390×844, 768×1024, 1024×768, 1280×800 and 1376×1032 in four themes. Below 1100px, navigation and the wide-pane control remain hidden, Chat/Results switch one primary pane and preserve the typed draft. Team enrollment/settings/account switching passed the same widths plus 1920×1080 (48 theme/viewport combinations across both engines). Inspected WebKit compact landscape Hi-Tech and portrait CRT screenshots; no horizontal overflow, controls remain reachable. Exact friend tablet model is unknown; this is browser verification, not hardware acceptance.
 
 ## Native Plan candidate and Computer Use diagnosis — 2026-09-13

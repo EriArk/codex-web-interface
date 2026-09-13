@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import type { HubConfig } from "@codex-web/shared";
+import { hostLock } from "./host-lock.js";
 import { teamGptName, teamGptRowSchema } from "./team-gpt.js";
 
 const exec = promisify(execFile);
@@ -51,6 +52,23 @@ function keyFile(path: string, value: string) {
 
 /** Host-only reconciler. The engine/browser receives no Docker socket or caller command API. */
 export async function reconcileGptProfiles(
+  config: HubConfig,
+  db: DatabaseSync,
+  options: {
+    image: string;
+    run?: Docker;
+    health?: (endpoint: string, token: string) => Promise<boolean>;
+  },
+) {
+  if (!config.team?.enabled || !config.team.gptProfiles?.enabled) return { prepared: 0, failed: 0 };
+  const lock = await hostLock(join(config.team.root, "gpt-host.lock"));
+  try {
+    return await reconcileLocked(config, db, options);
+  } finally {
+    await lock.close();
+  }
+}
+async function reconcileLocked(
   config: HubConfig,
   db: DatabaseSync,
   options: {

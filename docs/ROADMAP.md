@@ -45,6 +45,8 @@ The member downloads one ZIP and opens `Connect.cmd`: a Windows wizard installs 
 
 Additional Gate B candidate progress: independent GPT profiles, account-bound login/Remote routing and a host provisioning service are implemented. Real disposable Docker checks passed private ingress, public-only egress, no direct LAN/Tailnet route and a dedicated Guacamole handshake. The original owner's profile remains untouched. See [GPT setup and remaining profile recovery work](TEAM_GPT.md). No friend native login has been tested.
 
+Stopped GPT profile backup and isolated restore are now implemented and verified with two-user fixtures and a real disposable Chromium profile. The archive preserves owner mappings and connector identities; live mounts and concurrent provisioning are rejected using OS locks. Restored profiles remain staged with execution blocked. Full suite: 442 passed. Final readmission/activation of restored data remains part of Gate E.
+
 ### Gate C — shared project and independent workstations
 
 Issues: #153, #154, #157. Depends on Gate B; shared-state schema/permission design starts in Gate A.

@@ -1,12 +1,16 @@
 // Explicit opt-in: disposable Docker/profile verification. Never reads live configuration.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Store } from "../apps/hub/dist/store.js";
 import { TeamGpt, teamGptName } from "../apps/hub/dist/team-gpt.js";
 import { reconcileGptProfiles } from "../apps/hub/dist/team-gpt-host.js";
+import {
+  createProfileSnapshot,
+  verifyProfileSnapshot,
+} from "../apps/hub/dist/team-profile-backup.js";
 import { TeamStore } from "../apps/hub/dist/team-store.js";
 import { configSchema } from "../packages/shared/dist/index.js";
 
@@ -102,8 +106,30 @@ try {
   assert.equal(containers[2].Mounts.length, 0);
   assert.equal(Object.keys(containers[0].NetworkSettings.Networks).length, 1);
   assert.equal(Object.keys(containers[2].NetworkSettings.Networks).length, 1);
+  await assert.rejects(
+    createProfileSnapshot(config, join(root, "backups")),
+    /PROFILE_BROWSER_MUST_BE_STOPPED/,
+  );
+  assert.equal(containers[0].Config.Labels["io.codex-web.workspace"], id);
+  await docker(
+    "exec",
+    name,
+    "node",
+    "-e",
+    "require('node:fs').writeFileSync('/data/backup-fixture','retained anonymous profile',{mode:0o600})",
+  );
+  await docker("stop", "--time", "30", name);
+  const checkpoint = await createProfileSnapshot(config, join(root, "backups"));
+  const verified = await verifyProfileSnapshot(checkpoint);
+  assert.equal(verified.profiles[0].userId, id);
+  assert(verified.profiles[0].files.some((file) => file.path.startsWith("profile/Default/")));
+  assert.equal(
+    await readFile(join(checkpoint, id, "backup-fixture"), "utf8"),
+    "retained anonymous profile",
+  );
+  assert.equal(JSON.parse(await docker("inspect", name))[0].State.Running, false);
   console.log(
-    "Disposable GPT profile, private ingress, dedicated Remote and network isolation passed.",
+    "Disposable GPT profile, network isolation, live-backup denial and stopped-profile backup passed.",
   );
 } finally {
   for (const idName of [name, name + "-remote", name + "-edge"]) {

@@ -34,6 +34,18 @@ Network behavior follows [Docker's isolated gateway mode](https://docs.docker.co
 
 ## Backup and remaining acceptance
 
-Registry snapshots preserve profile ownership, slot and generated connector keys. Browser files require a **separate consistent stopped-profile backup** before relocation or restore; the profile lifecycle and release-readmission procedure is still an outstanding gate. A restored team registry blocks native admission and host provisioning, so a copied snapshot cannot start a second native writer.
+Registry snapshots preserve profile ownership, slot and generated connector keys. A separate host command now copies **stopped browser profiles**, verifies the exact owner mapping and checks every file. It refuses any running/restarting container with an overlapping profile mount and holds the browser's OS lock throughout copying. The host reconciler uses a second common OS lock so profile preparation cannot race a backup. Neither command prints native credentials.
 
-Linux fixture tests cover exact retry, wrong-user access, tampered container identity, private ingress, account switching and revocation of the real login gateway process. `tests/team-gpt-host.linux.mjs` additionally starts a disposable empty profile and verifies real Docker routing, authenticated service health, public HTTP and the dedicated Guacamole handshake. It uses no native login, message send, original profile or production config. Real friend-account login/dictation/streaming and stopped-profile recovery remain explicit acceptance items.
+After verified all-user idle maintenance and stopping the relevant browsers, run from the candidate source as the deployment UID. These commands do not stop services or start any native writer:
+
+```sh
+node apps/hub/dist/team-profile-cli.js --config /private/team-config.json --destination /private/backups/gpt --legacy-profile /private/original-gpt-data
+node apps/hub/dist/team-profile-cli.js --verify /private/backups/gpt/codex-gpt-backup-UUID
+node apps/hub/dist/team-profile-cli.js --restore /private/backups/gpt/codex-gpt-backup-UUID --team-root /private/isolated-restore/team
+```
+
+Omit `--legacy-profile` only when this installation has no legacy GPT connector. The option identifies the existing browser's complete `/data` mount, not just its `profile` subdirectory. Preserve the matching normal team snapshot as well. Preparation must finish before taking a whole-profile checkpoint; a missing configured profile/container fails visibly instead of being silently omitted. Private files use 0600 and directories 0700; original files and profiles are not changed. Only Chromium's three transient Singleton entries and the advisory lock are omitted. There is no automatic profile-backup retention deletion.
+
+Restore requires a matching, already restored team registry with `nativeAdmission=blocked`. It verifies checksums and connector ownership and atomically stages the profiles in `restored-gpt-profiles`; it refuses an existing destination. It does not install them into live browser mounts, overwrite newer state, revoke native accounts or enable execution. Coordinated release readmission (reviewing native receipts, pinned machines and the staged profile paths before enabling the engine) remains an outstanding gate. A copied snapshot cannot start a second native writer by itself.
+
+Linux fixture tests cover exact retry, wrong-user access, tampered container identity, private ingress, account switching and revocation of the real login gateway process. `tests/team-gpt-host.linux.mjs` additionally starts a disposable empty profile and verifies real Docker routing, authenticated service health, public HTTP, the dedicated Guacamole handshake and stopped-profile backup. It uses no native login, message send, original profile or production config. Profile recovery tests cover two accounts, wrong mappings, held OS locks, corrupted files and blocked readmission. Real friend-account login/dictation/streaming remain explicit acceptance items.
