@@ -16,7 +16,7 @@ The owner asked to finish this pass and continue in short sessions. Code is on `
 
 Stable owner installation at the start of this checkpoint: engine/gateway `379fa17`, GPT `7f25d37`. A protected, checksum-verified stable backup and isolated restore exist; the running original GPT profile is preserved in place.
 
-The next checked engine/web image can be staged with **team mode disabled**, retaining the current owner's ordinary client and credentials. Its guarded installer waits for Codex/GPT work and uncertain submissions; verified idle terminals alone do not block it. The deployed revision is reported by authenticated Maintenance, `web-releases/maintenance.json` and the deployment receipt, not inferred from Git HEAD. No live second-user admission, original-profile replacement or forced interruption belongs to this stage.
+Image `codex-web-hub:99953827f` passed isolated engine/gateway checks and is queued with **team mode disabled**, retaining the current owner's ordinary client and credentials. The installer service `codex-web-personal-stage-99953827f` was observed waiting for two Codex work/unknown states; stable `379fa17` was still healthy. The installer waits for Codex/GPT work and uncertain submissions; verified idle terminals alone do not block it. The deployed revision is reported by authenticated Maintenance, `web-releases/maintenance.json` and the deployment receipt, not inferred from Git HEAD. No live second-user admission, original-profile replacement or forced interruption belongs to this stage.
 
 ## Next short passes, in order
 
