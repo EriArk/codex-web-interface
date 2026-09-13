@@ -1,5 +1,15 @@
 # Verification record
 
+## Shared project materials candidate — 2026-09-13
+
+Isolated `feat/team-workspaces` checkpoint; stable production remains unchanged. Full Linux suite: **457 passed**, then **22 focused team tests** after the final invitation-revocation check. TypeScript and changed-file lint passed on Linux.
+
+The backend fixtures cover a single project owner, consent and transfer, admin exclusion from another person's project, Viewer/Collaborator writes, assignments and structured Plan validation, revision conflicts and exact retries, removal, selected private publication with colliding per-user source IDs, private-link exclusion, and shared-state backup/restore. They do not submit native work or claim that execution is complete.
+
+`tests/team-projects.browser.mjs` runs two real logged-in users against the candidate Hub in Chromium/WebKit. It verifies project creation/invitation, editing conflicts, incomplete structured drafts after reopening, access revocation, shared capture versus explicit personal capture, lost acknowledgement/reload without duplication or destination changes, and project-scoped common/private navigation. Each engine checks four themes at 390×844, 768×1024, 1024×768, 1280×800, 1376×1032 and 1920×1080; screenshots are under `.local/qa-shared` on the verification host. Phone CRT and compact-tablet Hi-Tech screenshots were inspected. These are browser checks, not physical Apple/friend-PC acceptance.
+
+The existing `quick-capture.browser.mjs` and `notebook.browser.mjs` passed in both engines after integration, retaining private drafts, retries, pins, and Codex/GPT continuity. UI fixtures bind synthetic own-checkout metadata without native connections; real repository validation, assignment-bound execution, shared binary evidence and Gate D/E remain required before release.
+
 ## Private Windows Remote enrollment — 2026-09-13
 
 - Linux typecheck and full build/test suite: **452 passed**. Protocol fixtures cover fragmented/coalesced RFB, an independent DES challenge vector, failed/no authentication, invalid/private destinations and early closure. The successful administrator probe disconnects before ClientInit; it does not access desktop pixels or input.

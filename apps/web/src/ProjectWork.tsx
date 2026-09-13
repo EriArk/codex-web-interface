@@ -9,6 +9,7 @@ import {
   type ProjectScope,
   planWriteSchema,
   type ReportPage,
+  type SharedItem,
   type TaskProjectsPage,
 } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,6 +27,9 @@ import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import type { NotebookRequest } from "./Notebook";
 import { actionLabels, ProjectActionPanel } from "./ProjectAction";
+import { sharedMutation } from "./sharedRequests";
+import { openSharedProjects } from "./TeamProjectsHost";
+import { useWorkspaceAudience, WorkspaceAudience } from "./WorkspaceAudience";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import "./notebook.css";
 import "./project-work.css";
@@ -115,6 +119,11 @@ export function ProjectWorkPanel({
   const selectedScope =
     projects.items.find((p) => sk(p.scope) === scope)?.scope ??
     (sk(request.scope) === scope ? request.scope : null);
+  const audience = useWorkspaceAudience(
+    draft?.scope ?? null,
+    draft?.id ?? "plan-none",
+    !!draft?.revision || !!request.personal,
+  );
   const refreshDrafts = useCallback(() => {
     try {
       setDrafts(localDrafts());
@@ -293,8 +302,9 @@ export function ProjectWorkPanel({
     };
     keep(value);
   };
-  const save = async (overwrite?: number, asNew = false): Promise<ProjectPlan> => {
+  const save = async (overwrite?: number, asNew = false): Promise<ProjectPlan | null> => {
     if (!draft) throw Error("Открой план.");
+    const sharedProjectId = audience.freeze();
     const sent = planWriteSchema.parse({
       scope: draft.scope,
       title: draft.title,
@@ -310,6 +320,30 @@ export function ProjectWorkPanel({
     const version = generation.current;
     keep(submittedDraft);
     try {
+      if (sharedProjectId && !sent.revision) {
+        const value = await sharedMutation<SharedItem>(
+          `/team/projects/${sharedProjectId}/materials/${id}`,
+          "PUT",
+          {
+            revision: 0,
+            assigneeId: null,
+            content: {
+              kind: "plan",
+              title: sent.title,
+              description: sent.description,
+              sections: sent.sections,
+              status: sent.status,
+            },
+          },
+        );
+        if (localStorage.getItem(draftKey(id)) === JSON.stringify(submittedDraft))
+          localStorage.removeItem(draftKey(id));
+        if (mounted.current && generation.current === version) {
+          onClose();
+          openSharedProjects({ projectId: sharedProjectId, itemId: value.id, kind: "plan" });
+        }
+        return null;
+      }
       const value = await api<ProjectPlan>("/workspace/plans/" + id, { method: "PUT", body: sent });
       try {
         if (localStorage.getItem(draftKey(id)) === JSON.stringify(submittedDraft))
@@ -714,6 +748,7 @@ export function ProjectWorkPanel({
                     </option>
                   ))}
                 </select>
+                {!draft.revision && <WorkspaceAudience value={audience} disabled={busy} />}
                 <CopyButton
                   text={[
                     draft.title,
@@ -1185,12 +1220,12 @@ export function ProjectWorkPanel({
                           dirty || !draft.revision
                             ? await save()
                             : await api<ProjectPlan>("/workspace/plans/" + draft.id);
-                        await prepare("plan", p);
+                        if (p) await prepare("plan", p);
                       })
                     }
                   >
                     <Icon name="play" size={16} />
-                    Реализовать
+                    {audience.projectId && !draft.revision ? "Сохранить общий план" : "Реализовать"}
                   </button>
                 </footer>
               )}

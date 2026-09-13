@@ -117,6 +117,593 @@ async function fixture(t, options = {}) {
   };
 }
 
+async function sharedFixture(t, role = "collaborator") {
+  const f = await fixture(t),
+    projectId = randomUUID(),
+    path = "/api/team/projects/" + projectId;
+  const created = await f.request(path, f.owner, "PUT", {
+    title: "Общий проект",
+    visibility: "shared",
+    repository: null,
+  });
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const headers = () => ({ "idempotency-key": randomUUID() });
+  const invitation = await f.request(
+    path + "/invitations",
+    f.owner,
+    "POST",
+    { login: "friend", role, revision: 1 },
+    headers(),
+  );
+  assert.equal(invitation.status, 200, JSON.stringify(invitation.body));
+  assert.equal((await f.request(path, f.friend)).status, 404, "invitation does not grant access");
+  assert.equal(
+    (
+      await f.request(
+        "/api/team/project-invitations/" + invitation.body.id,
+        f.friend,
+        "POST",
+        { accept: true },
+        headers(),
+      )
+    ).status,
+    200,
+  );
+  return { ...f, projectId, path, headers };
+}
+
+test("project invitation can be revoked before acceptance and archived Core cannot be changed", async (t) => {
+  const f = await fixture(t),
+    id = randomUUID(),
+    path = "/api/team/projects/" + id,
+    headers = () => ({ "idempotency-key": randomUUID() });
+  assert.equal(
+    (
+      await f.request(path, f.owner, "PUT", {
+        title: "Согласие",
+        visibility: "shared",
+        repository: null,
+      })
+    ).status,
+    200,
+  );
+  const invite = await f.request(
+    path + "/invitations",
+    f.owner,
+    "POST",
+    { login: "friend", role: "collaborator", revision: 1 },
+    headers(),
+  );
+  assert.equal((await f.request(path, f.owner)).body.invitations[0].id, invite.body.id);
+  assert.equal(
+    (
+      await f.request(
+        path + "/invitations/" + invite.body.id,
+        f.friend,
+        "DELETE",
+        undefined,
+        headers(),
+      )
+    ).status,
+    404,
+  );
+  const receipt = headers();
+  assert.equal(
+    (
+      await f.request(
+        path + "/invitations/" + invite.body.id,
+        f.owner,
+        "DELETE",
+        undefined,
+        receipt,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await f.request(
+        path + "/invitations/" + invite.body.id,
+        f.owner,
+        "DELETE",
+        undefined,
+        receipt,
+      )
+    ).status,
+    200,
+  );
+  assert.equal((await f.request("/api/team/project-invitations", f.friend)).body.items.length, 0);
+  assert.equal(
+    (
+      await f.request(
+        "/api/team/project-invitations/" + invite.body.id,
+        f.friend,
+        "POST",
+        { accept: true },
+        headers(),
+      )
+    ).status,
+    404,
+  );
+  assert.equal((await f.request(path, f.friend)).status, 404);
+  assert.equal(
+    (
+      await f.request(
+        path,
+        f.owner,
+        "PATCH",
+        { title: "Согласие", visibility: "shared", revision: 1, archived: true },
+        headers(),
+      )
+    ).status,
+    200,
+  );
+  const core = {
+    kind: "core",
+    title: "Основа",
+    value: {
+      purpose: "test",
+      behavior: "",
+      rules: "",
+      constraints: "",
+      architecture: "",
+      preferences: "",
+    },
+  };
+  const denied = await f.request(
+    path + "/materials/" + randomUUID(),
+    f.owner,
+    "PUT",
+    { revision: 0, content: core },
+    headers(),
+  );
+  assert.equal(denied.status, 409, JSON.stringify(denied.body));
+  assert.equal(denied.body.error.code, "SHARED_ARCHIVED");
+});
+
+test("shared project keeps one owner and installation admin cannot read a member's private project", async (t) => {
+  const f = await fixture(t),
+    id = randomUUID(),
+    path = "/api/team/projects/" + id;
+  const input = { title: "FRIEND_PROJECT", visibility: "shared", repository: null };
+  const first = await f.request(path, f.friend, "PUT", input);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.deepEqual((await f.request(path, f.friend, "PUT", input)).body, first.body);
+  for (const suffix of ["", "/materials", "/activity"])
+    assert.equal((await f.request(path + suffix, f.owner)).status, 404);
+  assert(
+    !JSON.stringify((await f.request("/api/team/projects", f.owner)).body).includes(
+      "FRIEND_PROJECT",
+    ),
+  );
+  assert.equal(
+    (
+      await f.request(
+        path,
+        { cookie: f.friend.cookie },
+        "PATCH",
+        { revision: 1, title: "Changed", visibility: "shared", archived: false },
+        { "idempotency-key": randomUUID() },
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await f.request(
+        path + "/members/" + f.friendId,
+        f.friend,
+        "PATCH",
+        { revision: 1, role: "viewer", remove: true },
+        { "idempotency-key": randomUUID() },
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await f.request("/api/team/users/" + f.friendId + "/state", f.owner, "POST", {
+        disabled: true,
+      })
+    ).status,
+    409,
+    "owner must transfer or archive before offboarding",
+  );
+});
+
+test("shared viewer permissions, attributed revisions, exact retries and revocation apply to every material route", async (t) => {
+  const f = await sharedFixture(t, "viewer"),
+    itemId = randomUUID(),
+    path = f.path + "/materials/" + itemId;
+  const note = {
+    revision: 0,
+    content: { kind: "note", title: "Одна заметка", body: "Общие сведения" },
+    assigneeId: null,
+  };
+  assert.equal((await f.request(path, f.friend, "PUT", note, f.headers())).status, 403);
+  const receipt = f.headers(),
+    created = await f.request(path, f.owner, "PUT", note, receipt);
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  assert.equal(created.body.createdBy, f.registry.ownerId);
+  assert.deepEqual((await f.request(path, f.owner, "PUT", note, receipt)).body, created.body);
+  assert.equal(
+    (
+      await f.request(
+        path,
+        f.owner,
+        "PUT",
+        { ...note, content: { ...note.content, body: "different" } },
+        receipt,
+      )
+    ).status,
+    409,
+  );
+  assert.equal((await f.request(path, f.friend)).body.content.body, "Общие сведения");
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/members/" + f.friendId,
+        f.owner,
+        "PATCH",
+        { revision: 1, role: "collaborator", remove: false },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  const updated = await f.request(
+    path,
+    f.friend,
+    "PUT",
+    { ...note, revision: 1, content: { ...note.content, body: "Правка друга" } },
+    f.headers(),
+  );
+  assert.equal(updated.status, 200, JSON.stringify(updated.body));
+  assert.equal(updated.body.createdBy, f.registry.ownerId);
+  assert.equal(updated.body.updatedBy, f.friendId);
+  assert.equal(
+    (await f.request(path, f.owner, "PUT", { ...note, revision: 1 }, f.headers())).status,
+    409,
+  );
+  const history = await f.request(path + "/history", f.friend);
+  assert.deepEqual(
+    history.body.items.map((v) => v.content.body),
+    ["Правка друга", "Общие сведения"],
+  );
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/members/" + f.friendId,
+        f.owner,
+        "PATCH",
+        { revision: 2, role: "collaborator", remove: true },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  for (const suffix of ["", "/history"])
+    assert.equal((await f.request(path + suffix, f.friend)).status, 404);
+  assert.equal(
+    (await f.request(path, f.friend, "PUT", { ...note, revision: 2 }, f.headers())).status,
+    404,
+  );
+  assert.equal((await f.request(f.path + "/activity", f.friend)).status, 404);
+  assert.equal((await f.request(path, f.owner)).body.editorName, "Друг");
+  const deletion = f.headers();
+  assert.equal(
+    (await f.request(path, f.owner, "DELETE", { revision: 2, confirm: true }, deletion)).status,
+    200,
+  );
+  assert.equal(
+    (await f.request(path, f.owner, "DELETE", { revision: 2, confirm: true }, deletion)).status,
+    200,
+    "lost deletion acknowledgement remains recoverable",
+  );
+});
+
+test("shared typed plans, assignments and independent checkouts preserve private Current Chats", async (t) => {
+  const f = await sharedFixture(t),
+    shared = f.teamProjects;
+  const a = shared.bind(
+    f.registry.ownerId,
+    f.projectId,
+    randomUUID(),
+    { revision: 0, personalProjectId: "identical" },
+    { machineId: "OWNER_MACHINE", repository: null },
+  );
+  const b = shared.bind(
+    f.friendId,
+    f.projectId,
+    randomUUID(),
+    { revision: 0, personalProjectId: "identical" },
+    { machineId: "FRIEND_MACHINE", repository: null },
+  );
+  assert.notEqual(a.id, b.id);
+  const friend = await f.request(f.path, f.friend),
+    owner = await f.request(f.path, f.owner);
+  assert.equal(friend.body.checkout.machineId, "FRIEND_MACHINE");
+  assert(!JSON.stringify(friend.body).includes("OWNER_MACHINE"));
+  assert(!JSON.stringify(owner.body).includes("FRIEND_MACHINE"));
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/checkout",
+        f.friend,
+        "PUT",
+        { revision: 1, personalProjectId: "owner-only" },
+        f.headers(),
+      )
+    ).status,
+    404,
+    "binding reads only the acting user's personal catalog",
+  );
+  const itemId = randomUUID(),
+    subId = randomUUID(),
+    point = randomUUID();
+  const plan = {
+    revision: 0,
+    assigneeId: f.friendId,
+    content: {
+      kind: "plan",
+      title: "Проверить",
+      description: "Шаги",
+      status: "draft",
+      sections: [
+        {
+          id: subId,
+          title: "Первый этап",
+          items: [{ id: point, text: "Сделать работу", checked: false }],
+        },
+      ],
+    },
+  };
+  const result = await f.request(
+    f.path + "/materials/" + itemId,
+    f.owner,
+    "PUT",
+    plan,
+    f.headers(),
+  );
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.deepEqual(result.body.content, plan.content);
+  assert.equal(result.body.assigneeId, f.friendId);
+  const duplicate = structuredClone(plan);
+  duplicate.content.sections[0].items.push({ ...duplicate.content.sections[0].items[0] });
+  assert.equal(
+    (await f.request(f.path + "/materials/" + randomUUID(), f.owner, "PUT", duplicate, f.headers()))
+      .status,
+    400,
+  );
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/materials/" + randomUUID(),
+        f.owner,
+        "PUT",
+        { ...plan, assigneeId: randomUUID() },
+        f.headers(),
+      )
+    ).status,
+    409,
+  );
+  for (const userId of [f.registry.ownerId, f.friendId]) {
+    const { runtime } = await f.personal(userId);
+    assert.equal(
+      runtime.store.db.prepare("SELECT COUNT(*) n FROM project_current_chats").get().n,
+      0,
+    );
+    assert.equal(
+      runtime.store.db.prepare("SELECT COUNT(*) n FROM project_work_actions").get().n,
+      0,
+    );
+  }
+});
+
+test("publication reviews exact selected personal contents without leaking links or another colliding source", async (t) => {
+  const f = await sharedFixture(t),
+    noteId = randomUUID(),
+    omittedId = randomUUID();
+  const scope = { client: "codex", projectId: "personal-source", name: "Личный проект" };
+  const note = {
+    scope,
+    revision: 0,
+    title: "Публикация",
+    body: "FRIEND_SELECTED_TEXT",
+    links: [{ client: "codex", kind: "thread", id: "private-thread", title: "PRIVATE_LINK_TITLE" }],
+  };
+  assert.equal(
+    (await f.request("/api/workspace/notes/" + noteId, f.friend, "PUT", note)).status,
+    200,
+  );
+  assert.equal(
+    (
+      await f.request("/api/workspace/notes/" + omittedId, f.friend, "PUT", {
+        ...note,
+        body: "UNSELECTED_PRIVATE_TEXT",
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await f.request("/api/workspace/notes/" + noteId, f.owner, "PUT", {
+        ...note,
+        body: "OTHER_ACCOUNT_TEXT",
+      })
+    ).status,
+    200,
+  );
+  const selected = { scope, items: [{ kind: "note", id: noteId }] };
+  const preview = await f.request(f.path + "/publication-preview", f.friend, "POST", selected);
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  assert(!JSON.stringify(preview.body).includes("PRIVATE_LINK_TITLE"));
+  assert(!JSON.stringify(preview.body).includes("OTHER_ACCOUNT_TEXT"));
+  assert.equal(
+    (
+      await f.request("/api/workspace/notes/" + noteId, f.friend, "PUT", {
+        ...note,
+        revision: 1,
+        body: "Changed before publish",
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/publications",
+        f.friend,
+        "POST",
+        { ...selected, fingerprint: preview.body.fingerprint },
+        f.headers(),
+      )
+    ).status,
+    409,
+  );
+  const refreshed = await f.request(f.path + "/publication-preview", f.friend, "POST", selected),
+    receipt = f.headers();
+  const input = { ...selected, fingerprint: refreshed.body.fingerprint };
+  const published = await f.request(f.path + "/publications", f.friend, "POST", input, receipt);
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  assert.equal(published.body.items.length, 1);
+  assert.equal(published.body.items[0].source.id, noteId);
+  assert.equal(
+    (
+      await f.request("/api/workspace/notes/" + noteId, f.friend, "PUT", {
+        ...note,
+        revision: 2,
+        body: "Unpublished later edit",
+      })
+    ).status,
+    200,
+  );
+  assert.deepEqual(
+    (await f.request(f.path + "/publications", f.friend, "POST", input, receipt)).body,
+    published.body,
+    "recover receipt without republishing changed source",
+  );
+  const shared = await f.request(f.path + "/materials", f.owner);
+  assert.equal(
+    (await f.request(f.path + "/materials/" + shared.body.items[0].id, f.owner)).body.content.body,
+    "Changed before publish",
+  );
+  assert.equal(shared.body.items[0].hasPrivateSource, true);
+  assert.equal(shared.body.items[0].source, undefined);
+  assert(!JSON.stringify(shared.body).includes(noteId));
+  assert(!JSON.stringify(shared.body).includes("UNSELECTED_PRIVATE_TEXT"));
+  const privateOriginal = await f.request("/api/workspace/notes/" + noteId, f.owner);
+  assert.equal(privateOriginal.body.body, "OTHER_ACCOUNT_TEXT");
+});
+
+test("ownership transfer requires the receiving participant and shared backup preserves attribution and membership", async (t) => {
+  const f = await sharedFixture(t);
+  const offer = await f.request(
+    f.path + "/invitations",
+    f.owner,
+    "POST",
+    { login: "friend", role: "owner", revision: 1 },
+    f.headers(),
+  );
+  assert.equal(offer.status, 200, JSON.stringify(offer.body));
+  assert.equal((await f.request(f.path, f.owner)).body.project.ownerId, f.registry.ownerId);
+  assert.equal(
+    (
+      await f.request(
+        "/api/team/project-invitations/" + offer.body.id,
+        f.owner,
+        "POST",
+        { accept: true },
+        f.headers(),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await f.request(
+        "/api/team/project-invitations/" + offer.body.id,
+        f.friend,
+        "POST",
+        { accept: true },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  const detail = await f.request(f.path, f.friend);
+  assert.equal(detail.body.project.ownerId, f.friendId);
+  assert.equal(detail.body.members.filter((m) => m.role === "owner").length, 1);
+  const itemId = randomUUID();
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/materials/" + itemId,
+        f.friend,
+        "PUT",
+        { revision: 0, content: { kind: "note", title: "Сохранить", body: "shared snapshot" } },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  const snapshot = await createSnapshot(f.config, join(f.root, "shared-backups"), { keep: 2 });
+  await verifyTeamSnapshot(snapshot);
+  const target = join(f.root, "shared-restored");
+  await restoreTeamSnapshot(snapshot, target);
+  const db = new DatabaseSync(join(target, "team", "team.db"));
+  try {
+    assert.equal(
+      db.prepare("SELECT ownerId FROM team_projects WHERE id=?").get(f.projectId).ownerId,
+      f.friendId,
+    );
+    assert.equal(
+      db.prepare("SELECT createdBy FROM team_materials WHERE id=?").get(itemId).createdBy,
+      f.friendId,
+    );
+    assert.equal(
+      db
+        .prepare("SELECT COUNT(*) n FROM team_project_members WHERE projectId=? AND role='owner'")
+        .get(f.projectId).n,
+      1,
+    );
+    assert.equal(
+      db.prepare("SELECT value FROM team_meta WHERE key='nativeAdmission'").get().value,
+      "blocked",
+    );
+  } finally {
+    db.close();
+  }
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/members/" + f.registry.ownerId,
+        f.friend,
+        "PATCH",
+        { revision: 2, role: "collaborator", remove: true },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await f.request(f.path, f.owner)).status,
+    404,
+    "being installation admin and original creator does not bypass removal",
+  );
+  assert.equal(
+    (
+      await f.request(f.path, f.owner, "PUT", {
+        title: "Общий проект",
+        visibility: "shared",
+        repository: null,
+      })
+    ).status,
+    404,
+    "old creation receipt cannot recover removed content",
+  );
+});
+
 test("team dispatch preserves owner state and isolates real personal routes even when IDs collide", async (t) => {
   const f = await fixture(t);
   const ownerSession = await f.request("/api/auth/session");

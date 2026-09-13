@@ -56,7 +56,7 @@ export class TeamStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
     if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='team_meta'").get()) {
       const version = this.db.prepare("SELECT value FROM team_meta WHERE key='schema'").get();
-      if (version && !["1", "2", "3"].includes(String(version.value))) {
+      if (version && !["1", "2", "3", "4"].includes(String(version.value))) {
         this.db.close();
         throw new Error("TEAM_SCHEMA_UNSUPPORTED");
       }
@@ -103,6 +103,59 @@ export class TeamStore {
         serviceToken TEXT NOT NULL, bridgeToken TEXT NOT NULL, vncPassword TEXT NOT NULL,
         revision INTEGER NOT NULL, code TEXT, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS team_projects(
+        id TEXT PRIMARY KEY, ownerId TEXT NOT NULL REFERENCES team_users(id), title TEXT NOT NULL,
+        visibility TEXT NOT NULL CHECK(visibility IN ('private','shared')), repository TEXT,
+        revision INTEGER NOT NULL, archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),
+        createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS team_project_members(
+        projectId TEXT NOT NULL REFERENCES team_projects(id), userId TEXT NOT NULL REFERENCES team_users(id),
+        role TEXT NOT NULL CHECK(role IN ('owner','collaborator','viewer')),
+        state TEXT NOT NULL CHECK(state IN ('active','removed')), revision INTEGER NOT NULL,
+        PRIMARY KEY(projectId,userId)
+      );
+      CREATE TABLE IF NOT EXISTS team_project_invites(
+        id TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES team_projects(id),
+        createdBy TEXT NOT NULL REFERENCES team_users(id), userId TEXT NOT NULL REFERENCES team_users(id),
+        role TEXT NOT NULL CHECK(role IN ('owner','collaborator','viewer')),
+        state TEXT NOT NULL CHECK(state IN ('pending','accepted','declined','revoked')),
+        projectRevision INTEGER NOT NULL, createdAt INTEGER NOT NULL, expires INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS team_project_invites_user ON team_project_invites(userId,state,expires);
+      CREATE TABLE IF NOT EXISTS team_checkouts(
+        id TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES team_projects(id),
+        userId TEXT NOT NULL REFERENCES team_users(id), personalProjectId TEXT NOT NULL,
+        machineId TEXT NOT NULL, repository TEXT, revision INTEGER NOT NULL, updatedAt INTEGER NOT NULL,
+        UNIQUE(projectId,userId), UNIQUE(userId,personalProjectId)
+      );
+      CREATE TABLE IF NOT EXISTS team_materials(
+        id TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES team_projects(id), kind TEXT NOT NULL,
+        content TEXT NOT NULL, search TEXT NOT NULL, revision INTEGER NOT NULL,
+        createdBy TEXT NOT NULL REFERENCES team_users(id), updatedBy TEXT NOT NULL REFERENCES team_users(id),
+        authorName TEXT NOT NULL, editorName TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL,
+        assigneeId TEXT REFERENCES team_users(id), source TEXT, deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1))
+      );
+      CREATE INDEX IF NOT EXISTS team_materials_project ON team_materials(projectId,kind,deleted,updatedAt);
+      CREATE UNIQUE INDEX IF NOT EXISTS team_materials_core ON team_materials(projectId) WHERE kind='core' AND deleted=0;
+      CREATE TABLE IF NOT EXISTS team_material_history(
+        itemId TEXT NOT NULL REFERENCES team_materials(id), revision INTEGER NOT NULL, content TEXT NOT NULL,
+        actorId TEXT NOT NULL REFERENCES team_users(id), actorName TEXT NOT NULL, createdAt INTEGER NOT NULL,
+        PRIMARY KEY(itemId,revision)
+      );
+      CREATE TABLE IF NOT EXISTS team_project_activity(
+        seq INTEGER PRIMARY KEY AUTOINCREMENT, projectId TEXT NOT NULL REFERENCES team_projects(id),
+        actorId TEXT NOT NULL REFERENCES team_users(id), actorName TEXT NOT NULL, action TEXT NOT NULL,
+        itemId TEXT, createdAt INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS team_project_activity_scope ON team_project_activity(projectId,seq);
+      CREATE TABLE IF NOT EXISTS team_executions(
+        id TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES team_projects(id), itemId TEXT NOT NULL REFERENCES team_materials(id),
+        itemRevision INTEGER NOT NULL, userId TEXT NOT NULL REFERENCES team_users(id), checkoutId TEXT NOT NULL REFERENCES team_checkouts(id),
+        checkoutRevision INTEGER NOT NULL, state TEXT NOT NULL, privateActionId TEXT NOT NULL,
+        value TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS team_execution_exclusive ON team_executions(itemId) WHERE state IN ('prepared','dispatching','queued','running','unknown');
     `);
     const recorded = this.db.prepare("SELECT value FROM team_meta WHERE key='originalOwner'").get();
     if (recorded) {
@@ -158,7 +211,17 @@ export class TeamStore {
             );
       });
     }
-    this.db.prepare("UPDATE team_meta SET value='3' WHERE key='schema'").run();
+    this.db.prepare("UPDATE team_meta SET value='4' WHERE key='schema'").run();
+    if (
+      this.db
+        .prepare(`SELECT p.id FROM team_projects p WHERE
+      (SELECT COUNT(*) FROM team_project_members m WHERE m.projectId=p.id AND m.role='owner' AND m.state='active')!=1
+      OR NOT EXISTS(SELECT 1 FROM team_project_members m WHERE m.projectId=p.id AND m.userId=p.ownerId AND m.role='owner' AND m.state='active') LIMIT 1`)
+        .get()
+    ) {
+      this.db.close();
+      throw new Error("TEAM_PROJECT_OWNER_INVALID");
+    }
     if (!recorded) this.db.prepare("INSERT INTO team_namespaces VALUES(?,1)").run(this.ownerId);
     if (
       this.db

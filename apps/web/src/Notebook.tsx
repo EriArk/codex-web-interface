@@ -9,6 +9,9 @@ import type {
   NoteSummary,
   NotesPage,
   NoteWrite,
+  SharedItem,
+  SharedItemKind,
+  SharedProject,
   TaskFields,
   TaskProjectsPage,
 } from "@codex-web/shared";
@@ -16,7 +19,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { accountLocalStorage as localStorage } from "./accountStorage.ts";
+import { accountLocalStorage as localStorage, pageWorkspace } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { CaptureNote } from "./CaptureNote";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -26,6 +29,10 @@ import { MarkdownTable } from "./MarkdownTable";
 import { PinnedList } from "./PinnedList";
 import { ProjectCorePanel } from "./ProjectCore";
 import { ProjectWorkPanel } from "./ProjectWork";
+import { sharedMutation } from "./sharedRequests";
+import { useSharedResource } from "./sharedResources";
+import { openSharedProjects } from "./TeamProjectsHost";
+import { useWorkspaceAudience, WorkspaceAudience } from "./WorkspaceAudience";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import "./notebook.css";
 export type NotebookRequest = {
@@ -35,6 +42,7 @@ export type NotebookRequest = {
   itemId?: string;
   allProjects?: boolean;
   capture?: NoteCapture;
+  personal?: boolean;
 };
 export type WorkspaceDestination = { target: NotebookLink; version: number };
 export const notebookKey = (scope: NotebookScope) =>
@@ -72,12 +80,117 @@ const drafts = (prefix: string): Draft[] => {
 };
 const ScheduledPanel = lazy(() => import("./ScheduledPanel"));
 const WorkReviewPanel = lazy(() => import("./WorkReview"));
-export function NotebookPanel(props: {
+const SharedPanel = lazy(() => import("./TeamProjectsPanel"));
+type NotebookProps = {
   request: NotebookRequest | undefined;
   onClose: () => void;
   onOpen: (target: NotebookLink) => void;
   onRequest: (request: NotebookRequest) => void;
+};
+export function NotebookPanel(props: NotebookProps) {
+  const r = props.request;
+  const eligible =
+    !!pageWorkspace &&
+    r?.scope?.client === "codex" &&
+    !r.personal &&
+    !r.allProjects &&
+    !r.itemId &&
+    !r.capture &&
+    !r.target &&
+    r.mode !== "scheduled";
+  return eligible ? (
+    <SharedNotebookEntry key={r!.scope!.projectId + ":" + r!.mode} {...props} />
+  ) : (
+    <PersonalNotebookPanel {...props} />
+  );
+}
+function SharedNotebookEntry(props: NotebookProps) {
+  const scope = props.request!.scope!,
+    [revision, setRevision] = useState(0);
+  const association = useSharedResource<{ project: SharedProject | null }>(
+    "/team/project-association?personalProjectId=" + encodeURIComponent(scope.projectId),
+    revision,
+  );
+  if (association.value?.project?.visibility === "shared") {
+    const mode = props.request!.mode ?? "notes",
+      kind: SharedItemKind =
+        mode === "notes"
+          ? "note"
+          : mode === "tasks"
+            ? "task"
+            : mode === "plans"
+              ? "plan"
+              : mode === "reports"
+                ? "report"
+                : mode === "reviews"
+                  ? "review"
+                  : "core";
+    return (
+      <Suspense fallback={<p role="status">Открываем общие материалы…</p>}>
+        <SharedPanel
+          target={{ projectId: association.value.project.id, scope, kind }}
+          onClose={props.onClose}
+          onPersonal={() => props.onRequest({ ...props.request!, personal: true })}
+        />
+      </Suspense>
+    );
+  }
+  if (association.value) return <PersonalNotebookPanel {...props} />;
+  return (
+    <SharedNotebookLoading
+      error={association.error}
+      onClose={props.onClose}
+      onRetry={() => setRevision((v) => v + 1)}
+    />
+  );
+}
+function SharedNotebookLoading({
+  error,
+  onClose,
+  onRetry,
+}: {
+  error?: string;
+  onClose: () => void;
+  onRetry: () => void;
 }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    element?.focus();
+    return () => element?.close();
+  }, []);
+  return (
+    <dialog
+      className="notebook-dialog"
+      ref={dialog}
+      tabIndex={-1}
+      aria-label="Материалы проекта"
+      onCancel={onClose}
+    >
+      <header className="notebook-heading">
+        <strong>Материалы проекта</strong>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Закрыть материалы"
+          onClick={onClose}
+        >
+          <Icon name="close" />
+        </button>
+      </header>
+      <div className="shared-scroll">
+        <p role={error ? "alert" : "status"}>{error ?? "Проверяем доступ к материалам проекта…"}</p>
+        {error && (
+          <button type="button" className="secondary" onClick={onRetry}>
+            Повторить
+          </button>
+        )}
+      </div>
+    </dialog>
+  );
+}
+function PersonalNotebookPanel(props: NotebookProps) {
   if (props.request?.mode === "scheduled")
     return (
       <Suspense fallback={<p role="status">Открываем расписания…</p>}>
@@ -179,6 +292,11 @@ function NotebookEditor({
     [confirmDelete, setConfirmDelete] = useState(false),
     [status, setStatus] = useState("");
   const editRef = useRef(edit);
+  const audience = useWorkspaceAudience(
+    edit?.scope ?? null,
+    edit?.id ?? "notebook-none",
+    !!edit?.revision || !!edit?.source || !!request?.personal,
+  );
   editRef.current = edit;
   const generation = useRef(0),
     active = useRef(false);
@@ -398,6 +516,13 @@ function NotebookEditor({
   };
   const save = async (overwrite?: number, asNew = false) => {
     if (!edit) return;
+    let sharedProjectId: string | null;
+    try {
+      sharedProjectId = audience.freeze();
+    } catch (error) {
+      setError(messageOf(error));
+      return;
+    }
     const d = {
       ...edit,
       id: asNew ? crypto.randomUUID() : edit.id,
@@ -412,6 +537,42 @@ function NotebookEditor({
     }
     await operation(async () => {
       try {
+        if (sharedProjectId && !d.revision) {
+          const common = {
+            title:
+              d.title.trim() ||
+              d.body
+                .split(/\r?\n/)
+                .find((s) => s.trim())
+                ?.trim()
+                .slice(0, 120) ||
+              "Запись",
+            body: d.body,
+          };
+          const value = await sharedMutation<SharedItem>(
+            `/team/projects/${sharedProjectId}/materials/${d.id}`,
+            "PUT",
+            {
+              revision: 0,
+              assigneeId: null,
+              content: isTask
+                ? {
+                    ...common,
+                    kind: "task",
+                    status: d.status ?? "todo",
+                    priority: d.priority ?? 1,
+                    dueAt: d.dueAt ?? null,
+                  }
+                : { ...common, kind: "note" },
+            },
+          );
+          forget(d.id, d);
+          if (active.current && g === generation.current) {
+            onClose();
+            openSharedProjects({ projectId: sharedProjectId, itemId: value.id, kind: value.kind });
+          }
+          return;
+        }
         const value = await api<NoteRecord>(`${base}/${d.id}`, {
           method: "PUT",
           body: payload(d),
@@ -850,6 +1011,7 @@ function NotebookEditor({
                     </option>
                   ))}
                 </select>
+                {!edit.revision && <WorkspaceAudience value={audience} disabled={busy} />}
                 <CopyButton
                   text={edit.body}
                   label={isTask ? "Копировать задачу" : "Копировать заметку"}

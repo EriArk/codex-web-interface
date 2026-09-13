@@ -25,6 +25,8 @@ import { proxyPrivateHttp, proxyPrivateSocket } from "./private-proxy.js";
 import { Store } from "./store.js";
 import { sessionCookie, TeamAuth } from "./team-auth.js";
 import { TeamGpt } from "./team-gpt.js";
+import { registerTeamProjects } from "./team-project-routes.js";
+import { TeamProjects } from "./team-projects.js";
 import { publicUser, TeamStore } from "./team-store.js";
 import { webSecurity } from "./web-security.js";
 
@@ -101,6 +103,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const registry = new TeamStore(join(config.team.root, "team.db"), config, ownerStore);
   const enrollments = new MachineEnrollmentStore(registry);
   const teamGpt = new TeamGpt(config, registry);
+  const teamProjects = new TeamProjects(registry);
   const auth = new TeamAuth(config, ownerStore, registry);
   const app = Fastify({
     logger: options.logger
@@ -408,6 +411,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     return { ok: true };
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
+  registerTeamProjects(app, teamProjects, actor, personal);
   const restartPersonal = async (userId: string, change: () => void = () => {}) => {
     registry.active(userId);
     if (reconfiguring.has(userId))
@@ -656,6 +660,13 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     }));
     const storedWork = () => {
       let work = activeMutations;
+      work += Number(
+        registry.db
+          .prepare(
+            "SELECT COUNT(*) n FROM team_executions WHERE state IN ('dispatching','queued','running','unknown')",
+          )
+          .get()?.n ?? 0,
+      );
       // Include disabled/offline accounts and unknown receipts, not just today's open browsers.
       for (const user of registry.db
         .prepare(
@@ -839,5 +850,5 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       );
     }
   }
-  return { app, registry, auth, personal, enrollments };
+  return { app, registry, auth, personal, enrollments, teamProjects };
 }

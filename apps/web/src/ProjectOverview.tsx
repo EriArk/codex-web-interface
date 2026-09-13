@@ -18,6 +18,7 @@ import { PinnedList } from "./PinnedList";
 import { DeliveryButton } from "./ProjectDeliveryHost";
 import { ProjectRelays } from "./ProjectRelays";
 import { ProjectRotation } from "./ProjectRotation";
+import { SharedProjectsButton } from "./TeamProjectsHost";
 import { reviewLabels } from "./WorkReviewLink";
 import "./project-overview.css";
 export function ProjectOverview({
@@ -188,6 +189,7 @@ export function ProjectOverview({
         )}
       </header>
       <div className="project-overview-scroll">
+        <SharedProjectsButton scope={scope} />
         {error && (
           <p className="notice" role="alert">
             {error}

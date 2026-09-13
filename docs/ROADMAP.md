@@ -59,6 +59,10 @@ Issues: #153, #154, #157. Depends on Gate B; shared-state schema/permission desi
 - [ ] Authorship, assignments, revision conflicts, duplicate-work detection, relevant activity/notifications and shared evidence.
 - [ ] Two independent checkouts can work simultaneously; private sources remain private after publication.
 
+Gate C candidate checkpoint (2026-09-13): logical projects have one owner, consent-based membership, owner transfer, revocable invitations and independent checkout bindings. Typed common Notes/Tasks/Core/Plans/Reports/Reviews/Results retain authorship and forty content revisions. Selected personal publication has a complete preview and exact receipt; source links remain private. Navigation, scoped workspace modules and Quick Capture expose common-by-default versus personal access. No production change has been made. Assignment-bound native execution, real independent checkout acceptance, shared binary evidence and coordination remain unfinished; the gate is not complete.
+
+Verification: 457 full Linux tests passed, followed by 22 focused isolation/publication/ownership tests after the final invitation guard. Chromium and WebKit exercised real two-user HTTP state, conflict drafts, incomplete Plan drafts, revocation, capture destination persistence after lost acknowledgement/reload, and scoped common/personal navigation across 48 theme/viewport combinations. Existing private Notebook and Quick Capture browser suites also passed. Checkout associations in those UI fixtures use synthetic metadata and are not machine/Git acceptance.
+
 ### Gate D — related projects, Bridges and GitHub
 
 Issues: #160, #156, #155. Depends on private boundaries and the required shared-state subset of Gate C.

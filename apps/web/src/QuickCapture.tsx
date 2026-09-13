@@ -6,6 +6,7 @@ import {
   type QuickCaptureReceipt,
   quickCaptureDraftSchema,
   quickCaptureSchema,
+  type SharedItem,
   type TaskProjectsPage,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
@@ -13,6 +14,9 @@ import { createPortal } from "react-dom";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
+import { sharedMutation } from "./sharedRequests";
+import { openSharedProjects } from "./TeamProjectsHost";
+import { useWorkspaceAudience, WorkspaceAudience } from "./WorkspaceAudience";
 import "./quick-capture.css";
 
 const draftSchema = quickCaptureDraftSchema;
@@ -48,7 +52,8 @@ export default function QuickCapture({
     [projects, setProjects] = useState<TaskProjectsPage>({ items: [], nextOffset: null }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [saved, setSaved] = useState<QuickCaptureReceipt | null>(null);
+    [saved, setSaved] = useState<(QuickCaptureReceipt & { sharedProjectId?: string }) | null>(null);
+  const audience = useWorkspaceAudience(draft.input.scope, draft.id, draft.submitted);
   const dialog = useRef<HTMLDialogElement>(null),
     alive = useRef(true),
     saving = useRef(false);
@@ -96,6 +101,13 @@ export default function QuickCapture({
       setError(parsed.error.issues[0]?.message ?? "Проверь запись");
       return;
     }
+    let sharedProjectId: string | null;
+    try {
+      sharedProjectId = audience.freeze();
+    } catch (e) {
+      setError(messageOf(e));
+      return;
+    }
     const pending = { ...draft, input: parsed.data, submitted: true };
     if (!persist(pending)) return;
     setDraft(pending);
@@ -103,10 +115,50 @@ export default function QuickCapture({
     setBusy(true);
     saving.current = true;
     try {
-      const result = await api<QuickCaptureReceipt>(`/workspace/captures/${draft.id}`, {
-        method: "PUT",
-        body: pending.input,
-      });
+      const common = {
+        kind: pending.input.kind,
+        title:
+          pending.input.title ||
+          pending.input.text
+            .split(/\r?\n/)
+            .find((s) => s.trim())!
+            .trim()
+            .slice(0, 120),
+        body: pending.input.text,
+      };
+      const shared = sharedProjectId
+        ? await sharedMutation<SharedItem>(
+            `/team/projects/${sharedProjectId}/materials/${draft.id}`,
+            "PUT",
+            {
+              revision: 0,
+              assigneeId: null,
+              content:
+                pending.input.kind === "task"
+                  ? {
+                      ...common,
+                      status: "todo",
+                      priority: pending.input.priority,
+                      dueAt: pending.input.dueAt,
+                    }
+                  : common,
+            },
+          )
+        : null;
+      const result: QuickCaptureReceipt & { sharedProjectId?: string } = shared
+        ? {
+            id: shared.id,
+            kind: pending.input.kind,
+            title: shared.title,
+            scope: pending.input.scope,
+            revision: shared.revision,
+            availability: "available",
+            sharedProjectId: sharedProjectId!,
+          }
+        : await api<QuickCaptureReceipt>(`/workspace/captures/${draft.id}`, {
+            method: "PUT",
+            body: pending.input,
+          });
       // A closed/logout dialog leaves the durable pending identity for an explicit retry.
       if (!alive.current) return;
       try {
@@ -136,6 +188,10 @@ export default function QuickCapture({
   const openSaved = () => {
     if (!saved) return;
     onClose();
+    if (saved.sharedProjectId) {
+      openSharedProjects({ projectId: saved.sharedProjectId, itemId: saved.id, kind: saved.kind });
+      return;
+    }
     window.dispatchEvent(
       new CustomEvent("open-captured-record", {
         detail: {
@@ -216,6 +272,7 @@ export default function QuickCapture({
                 </option>
               ))}
             </select>
+            <WorkspaceAudience value={audience} disabled={draft.submitted || busy} />
             {projects.nextOffset !== null && (
               <button
                 type="button"
@@ -290,7 +347,7 @@ export default function QuickCapture({
               <button
                 type="button"
                 className="primary"
-                disabled={busy || !draft.input.text.trim()}
+                disabled={busy || !audience.ready || !draft.input.text.trim()}
                 onClick={() => void save()}
               >
                 {busy ? <span className="spinner" /> : <Icon name="check" size={18} />}

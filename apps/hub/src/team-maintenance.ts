@@ -71,7 +71,7 @@ function ownership(db: DatabaseSync) {
   )
     throw new Error("TEAM_REGISTRY_INVALID");
   if (
-    !["1", "2", "3"].includes(
+    !["1", "2", "3", "4"].includes(
       String(db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value),
     )
   )
@@ -80,6 +80,16 @@ function ownership(db: DatabaseSync) {
     .string()
     .uuid()
     .parse(db.prepare("SELECT value FROM team_meta WHERE key='originalOwner'").get()?.value);
+  if (
+    db.prepare("SELECT name FROM sqlite_master WHERE name='team_projects'").get() &&
+    db
+      .prepare(`
+    SELECT p.id FROM team_projects p WHERE
+      (SELECT COUNT(*) FROM team_project_members m WHERE m.projectId=p.id AND m.role='owner' AND m.state='active')!=1
+      OR NOT EXISTS(SELECT 1 FROM team_project_members m WHERE m.projectId=p.id AND m.userId=p.ownerId AND m.role='owner' AND m.state='active') LIMIT 1`)
+      .get()
+  )
+    throw new Error("TEAM_PROJECT_OWNER_INVALID");
   const users = db
     .prepare(
       "SELECT u.id,u.legacy,n.initialized FROM team_users u LEFT JOIN team_namespaces n ON u.id=n.userId ORDER BY u.id",
@@ -106,6 +116,19 @@ function ownership(db: DatabaseSync) {
 function mapping(db: DatabaseSync) {
   return JSON.stringify({
     ...ownership(db),
+    projects: db.prepare("SELECT name FROM sqlite_master WHERE name='team_projects'").get()
+      ? {
+          owners: db
+            .prepare("SELECT id,ownerId,revision,archived FROM team_projects ORDER BY id")
+            .all(),
+          members: db.prepare("SELECT * FROM team_project_members ORDER BY projectId,userId").all(),
+          checkouts: db.prepare("SELECT * FROM team_checkouts ORDER BY id").all(),
+          executions: db
+            .prepare("SELECT id,state,updatedAt FROM team_executions ORDER BY id")
+            .all(),
+          activity: db.prepare("SELECT COALESCE(MAX(seq),0) seq FROM team_project_activity").get(),
+        }
+      : null,
     runtimes: db.prepare("SELECT * FROM team_runtime_config ORDER BY userId").all(),
     gptProfiles: db.prepare("SELECT name FROM sqlite_master WHERE name='team_gpt_profiles'").get()
       ? db.prepare("SELECT userId,slot,state,revision FROM team_gpt_profiles ORDER BY userId").all()

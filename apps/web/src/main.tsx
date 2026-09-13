@@ -5,6 +5,7 @@ import { DeviceWorkspaceHost } from "./DeviceWorkspaceHost";
 import { GuiPreviewHost } from "./GuiPreviewHost";
 import { ProjectDeliveryHost } from "./ProjectDeliveryHost";
 import { QuickCaptureHost } from "./QuickCaptureHost";
+import { TeamProjectsHost } from "./TeamProjectsHost";
 import { applyTheme, cachedTheme } from "./theme";
 import "./fonts.css";
 import "./styles.css";
@@ -31,6 +32,7 @@ createRoot(root).render(
     <QuickCaptureHost />
     <ProjectDeliveryHost />
     <GuiPreviewHost />
+    <TeamProjectsHost />
   </>,
 );
 if ("serviceWorker" in navigator)

@@ -1,0 +1,280 @@
+.shared-project-shortcut {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notebook-dialog.shared-projects-dialog {
+  width: min(1180px, calc(100vw - 24px));
+}
+.shared-scroll {
+  overflow: auto;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+}
+.shared-projects-dialog p {
+  overflow-wrap: anywhere;
+}
+.shared-projects-dialog > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: none;
+}
+.shared-projects-dialog > header h2 {
+  font-size: 1.15em;
+}
+.shared-project-identity {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.shared-project-identity small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.shared-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 12px;
+}
+.shared-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+.shared-card > h2,
+.shared-card > h3 {
+  margin: 0 0 12px;
+  font-size: 1.1em;
+}
+.shared-row,
+.shared-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shared-row {
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.shared-row > div:first-child {
+  flex: 1;
+  min-width: 120px;
+}
+.shared-row small,
+.shared-card small {
+  display: block;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.shared-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  flex: none;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.shared-tabs button {
+  white-space: nowrap;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+.shared-tabs button[aria-pressed="true"] {
+  background: var(--soft);
+  box-shadow: inset 0 -2px var(--accent);
+  border-radius: var(--radius);
+}
+.shared-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.shared-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.shared-form input,
+.shared-form textarea,
+.shared-form select {
+  width: 100%;
+  min-width: 0;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  min-height: 44px;
+  font: inherit;
+}
+.shared-form textarea {
+  resize: vertical;
+  min-height: 130px;
+  line-height: 1.5;
+}
+.shared-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.shared-form fieldset > * + * {
+  margin-top: 12px;
+}
+.shared-form .shared-check {
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+}
+.shared-form .shared-toolbar > input {
+  flex: 1;
+  width: auto;
+  min-width: 120px;
+}
+.shared-check input {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  flex: none;
+}
+.shared-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.shared-actions button,
+.shared-row button {
+  min-height: 44px;
+}
+.shared-material-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shared-material-list > button {
+  min-height: 72px;
+  text-align: left;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.shared-material-list small {
+  display: block;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.shared-body {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.shared-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.shared-plan-section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+}
+.shared-plan-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 5px;
+  margin-top: 8px;
+}
+.shared-plan-item .shared-check {
+  justify-content: center;
+}
+.shared-plan-item textarea {
+  min-height: 64px;
+}
+.shared-owner-label {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.shared-form .shared-warning {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+.shared-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.shared-invitation {
+  border-inline-start: 3px solid var(--accent);
+}
+.shared-audience-bar {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.workspace-audience {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+.workspace-audience label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.workspace-audience select {
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+  background: var(--paper);
+  color: var(--ink);
+}
+.workspace-audience small {
+  color: var(--muted);
+}
+@media (min-width: 1100px) {
+  .shared-editor-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    align-items: start;
+  }
+  .shared-editor-layout > aside {
+    position: sticky;
+    top: 0;
+  }
+}
+@media (max-width: 600px) {
+  .shared-scroll {
+    padding: 12px;
+  }
+  .shared-card {
+    padding: 12px;
+  }
+  .shared-plan-item {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+  .shared-plan-item .shared-actions {
+    grid-column: 2;
+  }
+  .shared-tabs {
+    padding: 4px 8px;
+  }
+}

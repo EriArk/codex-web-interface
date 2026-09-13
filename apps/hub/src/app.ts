@@ -925,5 +925,5 @@ export async function createApp(
     await sessions.close();
     if (!options.keepStoreOpen) store.close();
   });
-  return { app, store, sessions, auth, push, gpt };
+  return { app, store, sessions, auth, push, gpt, projectWork };
 }

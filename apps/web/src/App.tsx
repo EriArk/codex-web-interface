@@ -304,9 +304,22 @@ function Workspace({
         setNotebook(request);
     };
     window.addEventListener("open-captured-record", captured);
+    const materials = (event: Event) => {
+      const request = (event as CustomEvent<NotebookRequest>).detail;
+      if (
+        request?.scope &&
+        ["codex", "gpt"].includes(request.scope.client) &&
+        ["notes", "tasks", "plans", "reports", "core", "reviews"].includes(request.mode ?? "")
+      ) {
+        setNotebook(request);
+        setDrawer(false);
+      }
+    };
+    window.addEventListener("open-workspace-materials", materials);
     return () => {
       window.removeEventListener("open-work-review", open);
       window.removeEventListener("open-captured-record", captured);
+      window.removeEventListener("open-workspace-materials", materials);
     };
   }, []);
   const [pendingNotebookResult, setPendingNotebookResult] = useState<{

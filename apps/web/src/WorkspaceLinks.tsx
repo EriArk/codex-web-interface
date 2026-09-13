@@ -1,4 +1,5 @@
 import { Icon } from "./icons";
+import { SharedProjectsButton } from "./TeamProjectsHost";
 import "./workspace-links.css";
 export function WorkspaceLinks({
   onTasks,
@@ -18,15 +19,18 @@ export function WorkspaceLinks({
     ["Отчёты", "report", onReports],
   ] as const;
   return (
-    <nav className="workspace-shortcuts" aria-label="Рабочие разделы">
-      {links
-        .filter(([, , open]) => open)
-        .map(([label, icon, open]) => (
-          <button type="button" key={label} onClick={open}>
-            <Icon name={icon} size={17} />
-            <span>{label}</span>
-          </button>
-        ))}
-    </nav>
+    <>
+      <SharedProjectsButton />
+      <nav className="workspace-shortcuts" aria-label="Рабочие разделы">
+        {links
+          .filter(([, , open]) => open)
+          .map(([label, icon, open]) => (
+            <button type="button" key={label} onClick={open}>
+              <Icon name={icon} size={17} />
+              <span>{label}</span>
+            </button>
+          ))}
+      </nav>
+    </>
   );
 }
