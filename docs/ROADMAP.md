@@ -47,6 +47,8 @@ Additional Gate B candidate progress: independent GPT profiles, account-bound lo
 
 Stopped GPT profile backup and isolated restore are now implemented and verified with two-user fixtures and a real disposable Chromium profile. The archive preserves owner mappings and connector identities; live mounts and concurrent provisioning are rejected using OS locks. Restored profiles remain staged with execution blocked. Full suite: 442 passed. Final readmission/activation of restored data remains part of Gate E.
 
+Windows Remote has also been added to the candidate enrollment wizard: optional private VNC installation, pinned/signed MSI, Hub-only firewall scope, separate generated connection credential and admin verification without screen access. Existing desktop providers/settings are preserved. See [connection details](WINDOWS_ENROLLMENT.md); real friend installation remains outstanding.
+
 ### Gate C — shared project and independent workstations
 
 Issues: #153, #154, #157. Depends on Gate B; shared-state schema/permission design starts in Gate A.

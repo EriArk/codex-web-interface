@@ -1,5 +1,12 @@
 # Verification record
 
+## Private Windows Remote enrollment — 2026-09-13
+
+- Linux typecheck and full build/test suite: **452 passed**. Protocol fixtures cover fragmented/coalesced RFB, an independent DES challenge vector, failed/no authentication, invalid/private destinations and early closure. The successful administrator probe disconnects before ClientInit; it does not access desktop pixels or input.
+- Enrollment tests verify owner-only Remote configuration, no connection secret in member/admin metadata, exact report retries, approved identity and preserved private credentials in a blocked restore. Effective firewall classification and all packaged PowerShell scripts passed the native PS5/offscreen check (16 firewall cases). TightVNC installer hash/signature and registry names were checked against the official package/source.
+- Chromium/WebKit account and enrollment flows passed all 48 theme/viewport combinations, including compact tablet portrait/landscape. No browser errors or horizontal overflow.
+- No TightVNC installation, service/firewall change or live desktop access was exercised on the owner's PC. Friend hardware/account acceptance and production admission remain outstanding.
+
 ## Stopped GPT profile recovery — 2026-09-13
 
 - Full Linux suite: **442 passed**; typecheck passed. Twenty focused profile/isolation checks cover two preserved identities, exact files, connector mismatch, changed mappings, corruption, symbolic links, live mounts, OS-lock contention and restoration with admission blocked.

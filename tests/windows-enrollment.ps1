@@ -6,7 +6,7 @@ $repository = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $repository 'ops\windows'
 $artifacts = Join-Path $repository '.local\qa-enrollment'
 New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
-$names = @('Start-Enrollment.ps1', 'EnrollmentUi.ps1', 'Enroll-Computer.ps1', 'Pair-ComputerSsh.ps1')
+$names = @('Start-Enrollment.ps1', 'EnrollmentUi.ps1', 'Enroll-Computer.ps1', 'Pair-ComputerSsh.ps1', 'Install-EnrolledRemote.ps1', 'Install-RemoteDesktop.ps1')
 foreach ($name in $names) {
     $text = [IO.File]::ReadAllText((Join-Path $source $name), [Text.Encoding]::UTF8)
     # Exercise the actual Windows PS5 file decoding used by the downloaded package.
@@ -31,6 +31,31 @@ foreach ($example in @(
 )) {
     if ((Test-CwSshPort ([pscustomobject]$example)) -ne $example.Expected) { throw 'SSH firewall classification failed.' }
 }
+$remote = [Management.Automation.Language.Parser]::ParseFile((Join-Path $artifacts 'Install-EnrolledRemote.ps1'), [ref]$tokens, [ref]$errors)
+foreach ($name in @('Test-CwRemotePort', 'Test-CwRemoteRule')) {
+    $function = $remote.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
+    . ([scriptblock]::Create($function.Extent.Text))
+}
+foreach ($example in @(
+    @{ Protocol = 'TCP'; LocalPort = '5900'; Expected = $true },
+    @{ Protocol = '6'; LocalPort = @('443', '5890-5999'); Expected = $true },
+    @{ Protocol = 'Any'; LocalPort = 'Any'; Expected = $true },
+    @{ Protocol = 'UDP'; LocalPort = '5900'; Expected = $false },
+    @{ Protocol = 'TCP'; LocalPort = '5901-65535'; Expected = $false },
+    @{ Protocol = 'TCP'; LocalPort = '443'; Expected = $false }
+)) {
+    if ((Test-CwRemotePort ([pscustomobject]$example)) -ne $example.Expected) { throw 'Remote firewall classification failed.' }
+}
+$rule = [pscustomobject]@{ Enabled='True'; Direction='Inbound'; Action='Allow'; Profile='Any' }
+$ports = [pscustomobject]@{ Protocol='TCP'; LocalPort='5900' }
+$addresses = [pscustomobject]@{ RemoteAddress='100.64.0.1' }
+if (-not (Test-CwRemoteRule $rule $ports $addresses '100.64.0.1')) { throw 'Private Remote rule rejected.' }
+$rule.Enabled = 'False'
+if (Test-CwRemoteRule $rule $ports $addresses '100.64.0.1') { throw 'Disabled Remote rule accepted.' }
+$rule.Enabled = 'True'; $addresses.RemoteAddress = 'Any'
+if (Test-CwRemoteRule $rule $ports $addresses '100.64.0.1') { throw 'Public Remote rule accepted.' }
+$addresses.RemoteAddress = '100.64.0.2'
+if (Test-CwRemoteRule $rule $ports $addresses '100.64.0.1') { throw 'Another Hub Remote rule accepted.' }
 $cmd = Join-Path $env:WINDIR 'System32\cmd.exe'
 if (-not (Test-CwNativeLogin $cmd @('/c', 'exit', '0') 'fixture-login-ok.log')) { throw 'Native signed-in status failed.' }
 if (Test-CwNativeLogin $cmd @('/c', 'exit', '1') 'fixture-login-out.log') { throw 'Native signed-out status failed.' }
@@ -57,4 +82,4 @@ try {
         $bitmap.Save((Join-Path $artifacts 'wizard.png'), [Drawing.Imaging.ImageFormat]::Png)
     } finally { $bitmap.Dispose() }
 } finally { $script:CwWindow.Dispose() }
-Write-Host 'PASS: Windows PS5 package parsing, 6 firewall cases, native login statuses, fingerprint and offscreen wizard rendering. No machine settings changed.'
+Write-Host 'PASS: Windows PS5 package parsing, 16 firewall cases, native login statuses, fingerprint and offscreen wizard rendering. No machine settings changed.'

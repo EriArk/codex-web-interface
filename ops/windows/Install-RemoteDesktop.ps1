@@ -18,7 +18,7 @@ foreach ($line in [IO.File]::ReadAllLines($SecretFile)) {
 }
 $password = $secrets['REMOTE_MAIN_WINDOWS_PASSWORD']
 $controlPassword = $secrets['REMOTE_MAIN_WINDOWS_CONTROL_PASSWORD']
-if ($password -notmatch '^[A-Za-z0-9]{8}$' -or $controlPassword -notmatch '^[a-f0-9]{32}$') { throw 'Invalid private VNC configuration.' }
+if ($password -notmatch '^[A-Za-z0-9_-]{8}$' -or $controlPassword -notmatch '^[a-f0-9]{32}$') { throw 'Invalid private VNC configuration.' }
 $ruleName = 'CodexWeb-Hub-VNC'
 if (-not (Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -Name $ruleName -DisplayName 'Codex Web: VNC from Linux Hub only' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5900 -RemoteAddress $HubAddress -Profile Any | Out-Null
@@ -37,8 +37,12 @@ $arguments = @(
     'SET_USECONTROLAUTHENTICATION=1', 'VALUE_OF_USECONTROLAUTHENTICATION=1',
     'SET_CONTROLPASSWORD=1', ('VALUE_OF_CONTROLPASSWORD=' + $controlPassword)
 )
-$installation = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
-if ($installation.ExitCode -notin @(0,3010)) { throw ('TightVNC installation failed: ' + $installation.ExitCode) }
+if (Get-Command Invoke-CwInstaller -ErrorAction SilentlyContinue) {
+    Invoke-CwInstaller 'msiexec.exe' $arguments
+} else {
+    $installation = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
+    if ($installation.ExitCode -notin @(0,3010)) { throw ('TightVNC installation failed: ' + $installation.ExitCode) }
+}
 Set-Service -Name tvnserver -StartupType Automatic
 Start-Service -Name tvnserver
 $password = $null; $controlPassword = $null; $secrets.Clear(); $arguments = $null

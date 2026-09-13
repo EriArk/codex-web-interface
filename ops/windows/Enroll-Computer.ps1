@@ -114,12 +114,15 @@ Write-CwStep 4 '4 из 5 · Ключи компьютера и приватны�
 & (Join-Path $PSScriptRoot 'Pair-ComputerSsh.ps1') -Connection $connection
 $hostKey = ((Get-Content -LiteralPath (Join-Path $env:ProgramData 'ssh\ssh_host_ed25519_key.pub') -Raw).Trim() -split ' ')[0..1] -join ' '
 Show-CwFingerprint $hostKey
+$remote = & (Join-Path $PSScriptRoot 'Install-EnrolledRemote.ps1') -Connection $connection -Window $script:CwWindow
 $report = @{
     version = 1; address = $address.Trim(); hostKey = $hostKey
     machineGuid = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid.ToLowerInvariant()
     sid = $identity.User.Value; username = $identity.Name.Split('\')[-1]; profile = $env:USERPROFILE; roots = @($roots)
-    readiness = @{ companion = $true; codex = $true; node = $true; git = [bool](Get-Command git.exe -ErrorAction SilentlyContinue); github = [bool]$gh; desktop = $desktop }
-} | ConvertTo-Json -Depth 6 -Compress
+    readiness = @{ companion = $true; codex = $true; node = $true; git = [bool](Get-Command git.exe -ErrorAction SilentlyContinue); github = [bool]$gh; desktop = $desktop; remote = [bool]$remote }
+}
+if ($remote) { $report.remote = $remote }
+$report = $report | ConvertTo-Json -Depth 6 -Compress
 # Keep the exact report before the network request to support safe acknowledgement recovery.
 [IO.File]::WriteAllText($savedReport, $report, [Text.UTF8Encoding]::new($false))
 Write-CwStep 5 '5 из 5 · Подтверждение подключения на сервере'

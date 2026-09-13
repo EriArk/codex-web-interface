@@ -5,7 +5,12 @@ export const tailnetAddressSchema = z.string().refine((value) => {
   if (!/^100\.(?:0|[1-9]\d{0,2})\.(?:0|[1-9]\d{0,2})\.(?:0|[1-9]\d{0,2})$/.test(value))
     return false;
   const parts = value.split(".").map(Number);
-  return parts[1]! >= 64 && parts[1]! <= 127 && parts.slice(2).every((n) => n <= 255);
+  return (
+    parts.join(".") === value &&
+    parts[1]! >= 64 &&
+    parts[1]! <= 127 &&
+    parts.slice(2).every((n) => n <= 255)
+  );
 });
 export const machineEnrollmentReportSchema = z
   .object({
@@ -20,6 +25,18 @@ export const machineEnrollmentReportSchema = z
       .refine((value) => value === value.trim() && !value.endsWith(".")),
     profile: z.string().min(4).max(240),
     roots: z.array(z.string().min(3).max(500)).min(1).max(20),
+    // Generated only for this private desktop connection; never projected into admin/browser lists.
+    remote: z
+      .object({
+        provider: z.literal("vnc"),
+        port: z.literal(5900),
+        password: z
+          .string()
+          .length(8)
+          .regex(/^[A-Za-z0-9_-]{8}$/),
+      })
+      .strict()
+      .optional(),
     readiness: z
       .object({
         companion: z.boolean(),
@@ -28,6 +45,7 @@ export const machineEnrollmentReportSchema = z
         git: z.boolean(),
         github: z.boolean(),
         desktop: z.boolean(),
+        remote: z.boolean().optional(),
       })
       .strict(),
   })

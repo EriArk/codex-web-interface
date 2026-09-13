@@ -43,6 +43,8 @@ export function hostFingerprint(key: string) {
 }
 export function enrollmentReport(input: unknown): MachineEnrollmentReport {
   const report = machineEnrollmentReportSchema.parse(input);
+  if (!!report.readiness.remote !== !!report.remote)
+    throw new HubError(400, "REMOTE_REPORT_INVALID", "Настройка Remote не завершена.");
   report.machineGuid = report.machineGuid.toLowerCase();
   report.profile = normalizedProjectPath({ type: "ssh-windows" }, report.profile);
   if (!/^[A-Z]:\\/i.test(report.profile))

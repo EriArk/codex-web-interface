@@ -204,7 +204,8 @@ export function TeamMachines({ visible }: { visible: boolean }) {
               {item.readiness && (
                 <small>
                   Codex {item.readiness.codex ? "✓" : "—"} · Git {item.readiness.git ? "✓" : "—"} ·
-                  GitHub CLI {item.readiness.github ? "✓" : "—"}
+                  GitHub CLI {item.readiness.github ? "✓" : "—"} · Remote{" "}
+                  {item.readiness.remote ? "✓" : "не настроен"}
                 </small>
               )}
             </div>
@@ -278,7 +279,7 @@ export function TeamMachines({ visible }: { visible: boolean }) {
             <>
               <p>
                 Сверь отпечаток с владельцем ПК. Сервер затем проверит приватное соединение, профиль
-                Windows и разрешённые папки.
+                Windows, разрешённые папки и выбранный Remote. Экран ПК при проверке не открывается.
               </p>
               <code className="team-fingerprint">{confirmation.item.fingerprint}</code>
             </>

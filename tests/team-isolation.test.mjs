@@ -559,6 +559,7 @@ test("computer enrollment uses a distinct token, reviewed identity and owner-onl
     username: "friend",
     profile: "C:\\Users\\Friend",
     roots: ["D:\\Projects"],
+    remote: { provider: "vnc", port: 5900, password: "Own_1234" },
     readiness: {
       companion: true,
       codex: true,
@@ -566,9 +567,26 @@ test("computer enrollment uses a distinct token, reviewed identity and owner-onl
       git: true,
       github: true,
       desktop: false,
+      remote: true,
     },
   };
   const reportHeaders = { authorization: `Bearer ${token}` };
+  assert.equal(
+    (
+      await f.request(
+        "/api/machine-enrollment/report",
+        {},
+        "POST",
+        {
+          ...report,
+          readiness: { ...report.readiness, remote: false },
+        },
+        reportHeaders,
+      )
+    ).status,
+    400,
+    "Remote readiness must match the credential report",
+  );
   assert.equal(
     (await f.request("/api/machine-enrollment/report", f.friend, "POST", report, reportHeaders))
       .status,
@@ -641,6 +659,19 @@ test("computer enrollment uses a distinct token, reviewed identity and owner-onl
     fingerprint,
   });
   assert.equal(approved.status, 200, JSON.stringify(approved.body));
+  for (const endpoint of ["/api/team/machines", "/api/team/machine-reviews"]) {
+    const response = await f.request(endpoint, f.owner);
+    assert(
+      !JSON.stringify(response.body).includes(report.remote.password),
+      "admin metadata omits Remote credentials",
+    );
+  }
+  assert(!JSON.stringify(approved.body).includes(report.remote.password));
+  assert(
+    !JSON.stringify((await f.request("/api/team/machines", f.friend)).body).includes(
+      report.remote.password,
+    ),
+  );
   assert.equal(verified, 1);
   assert.equal(
     (await f.request(`/api/team/machines/${enrollment.id}/bundle`, f.friend, "POST", { token }))
@@ -657,6 +688,12 @@ test("computer enrollment uses a distinct token, reviewed identity and owner-onl
   assert.equal(selected.machines.length, 1);
   assert.equal(enrolledRuntime(f.config, f.registry, f.registry.ownerId).machines.length, 0);
   assert.deepEqual(selected.machines[0].allowedProjectRoots, report.roots);
+  assert.equal(selected.machines[0].remote.host, report.address);
+  assert.equal(selected.machines[0].remote.provider, "vnc");
+  assert.equal(process.env[selected.machines[0].remote.passwordSecret], report.remote.password);
+  t.after(() => {
+    delete process.env[selected.machines[0].remote.passwordSecret];
+  });
   const ssh = await readFile(selected.machines[0].ssh.configFile, "utf8");
   assert.match(ssh, /StrictHostKeyChecking yes/);
   assert.match(ssh, /IdentitiesOnly yes/);

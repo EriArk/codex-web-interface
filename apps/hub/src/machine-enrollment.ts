@@ -24,6 +24,7 @@ import {
   enrollmentReport,
   type MachineEnrollmentStore,
 } from "./machine-enrollment-store.js";
+import { verifyPrivateVnc } from "./remote-probe.js";
 import type { TeamStore } from "./team-store.js";
 
 const execute = promisify(execFile);
@@ -139,6 +140,11 @@ export function enrolledTransport(config: HubConfig, row: EnrollmentRow) {
         : {}),
     },
   };
+  if (report.readiness.remote && report.remote) {
+    const secret = "REMOTE_TEAM_" + row.id.replaceAll("-", "_").toUpperCase();
+    process.env[secret] = report.remote.password;
+    machine.remote = { provider: "vnc", host: report.address, port: 5900, passwordSecret: secret };
+  }
   const device: DeviceConfig = {
     id: alias,
     name: row.name,
@@ -220,11 +226,13 @@ export async function verifyEnrollment(config: HubConfig, row: EnrollmentRow) {
     )
       throw new Error("TERMINAL_IDENTITY");
     for (const root of report.roots) await verifyProjectRoot(machine, root);
+    if (report.readiness.remote && report.remote)
+      await verifyPrivateVnc(report.address, report.remote.password);
   } catch {
     throw new HubError(
       409,
       "MACHINE_VERIFICATION_FAILED",
-      "Приватное SSH-подключение, отпечаток, профиль или папки не прошли проверку. Проверь мастер на ПК и доступ Tailscale; подключение не активировано.",
+      "Приватное SSH-подключение, отпечаток, профиль, папки или выбранный Remote не прошли проверку. Проверь мастер на ПК и доступ Tailscale; подключение не активировано.",
     );
   }
 }
@@ -234,6 +242,8 @@ export const ENROLLMENT_FILES = [
   "EnrollmentUi.ps1",
   "Enroll-Computer.ps1",
   "Pair-ComputerSsh.ps1",
+  "Install-EnrolledRemote.ps1",
+  "Install-RemoteDesktop.ps1",
   "Install-Companion.ps1",
   "Copy-CompanionRuntime.ps1",
   "companion/CodexWebBridge.cs",
