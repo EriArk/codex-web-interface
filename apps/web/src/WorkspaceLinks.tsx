@@ -19,18 +19,16 @@ export function WorkspaceLinks({
     ["Отчёты", "report", onReports],
   ] as const;
   return (
-    <>
-      <SharedProjectsButton />
-      <nav className="workspace-shortcuts" aria-label="Рабочие разделы">
-        {links
-          .filter(([, , open]) => open)
-          .map(([label, icon, open]) => (
-            <button type="button" key={label} onClick={open}>
-              <Icon name={icon} size={17} />
-              <span>{label}</span>
-            </button>
-          ))}
-      </nav>
-    </>
+    <nav className="workspace-shortcuts" aria-label="Рабочие разделы">
+      {links
+        .filter(([, , open]) => open)
+        .map(([label, icon, open]) => (
+          <button type="button" key={label} onClick={open}>
+            <Icon name={icon} size={17} />
+            <span>{label}</span>
+          </button>
+        ))}
+      <SharedProjectsButton compact />
+    </nav>
   );
 }

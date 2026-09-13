@@ -25,6 +25,7 @@ import { TeamContactPicker } from "./TeamContactPicker";
 import { TeamGitHubPanel } from "./TeamGitHubPanel";
 import { TeamLinkInvitations, TeamLinksPanel } from "./TeamLinksPanel";
 import type { SharedWorkspaceTarget } from "./TeamProjectsHost";
+import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./notebook.css";
 
 const roleLabels = { owner: "Владелец", collaborator: "Участник", viewer: "Читатель" };
@@ -65,6 +66,8 @@ export default function TeamProjectsPanel({
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     [id, setId] = useState(target.projectId ?? "");
+  const [materialWindow, setMaterialWindow] = useState(!!target.kind && !target.github);
+  useWorkspaceDialog(dialog);
   const [revision, refresh] = useState(0),
     [offset, setOffset] = useState(0),
     [create, setCreate] = useState(false);
@@ -83,16 +86,6 @@ export default function TeamProjectsPanel({
     if (association.value?.project) setId(association.value.project.id);
   }, [association.value]);
   useEffect(() => {
-    const element = dialog.current,
-      focus = document.activeElement as HTMLElement | null;
-    element?.showModal();
-    element?.focus();
-    return () => {
-      element?.close();
-      if (focus?.isConnected) focus.focus({ preventScroll: true });
-    };
-  }, []);
-  useEffect(() => {
     const update = () => {
       if (document.visibilityState === "visible") refresh((n) => n + 1);
     };
@@ -107,7 +100,8 @@ export default function TeamProjectsPanel({
   return (
     <dialog
       ref={dialog}
-      className="notebook-dialog shared-projects-dialog"
+      className="notebook-dialog workspace-window shared-projects-dialog"
+      data-material-window={materialWindow}
       aria-labelledby="shared-project-heading"
       tabIndex={-1}
       onCancel={onClose}
@@ -120,6 +114,7 @@ export default function TeamProjectsPanel({
               className="icon-button"
               aria-label="К совместным проектам"
               onClick={() => {
+                setMaterialWindow(false);
                 setId("");
                 setCreate(false);
               }}
@@ -127,7 +122,9 @@ export default function TeamProjectsPanel({
               <Icon name="back" />
             </button>
           )}
-          <h2 id="shared-project-heading">Совместные проекты</h2>
+          <h2 id="shared-project-heading">
+            {materialWindow && target.kind ? materialLabels[target.kind] : "Общие проекты"}
+          </h2>
         </div>
         <button
           type="button"
@@ -154,6 +151,7 @@ export default function TeamProjectsPanel({
           initialScope={target.scope ?? undefined}
           itemId={target.itemId}
           github={target.github}
+          materialOnly={materialWindow}
           refreshToken={revision}
           refresh={update}
         />
@@ -418,6 +416,7 @@ function SharedProjectWorkspace({
   github,
   refreshToken,
   refresh,
+  materialOnly,
 }: {
   id: string;
   initialKind?: SharedItemKind;
@@ -426,6 +425,7 @@ function SharedProjectWorkspace({
   github?: SharedWorkspaceTarget["github"];
   refreshToken: number;
   refresh: () => void;
+  materialOnly: boolean;
 }) {
   const detail = useSharedResource<SharedProjectDetail>(`/team/projects/${id}`, refreshToken);
   const [tab, setTab] = useState<
@@ -469,30 +469,32 @@ function SharedProjectWorkspace({
           {d.project.archived ? " · Архив" : ""}
         </small>
       </div>
-      <nav ref={tabStrip} className="shared-tabs" aria-label="Совместный проект">
-        {(
-          [
-            ["materials", "Материалы"],
-            ["members", "Участники"],
-            ["checkout", "Моя рабочая папка"],
-            ["links", "Связи проектов"],
-            ["consultations", "Консультации"],
-            ["bridges", "Bridges"],
-            ["github", "GitHub"],
-            ["activity", "История"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            type="button"
-            key={value}
-            data-project-tab={value}
-            aria-pressed={tab === value}
-            onClick={() => setTab(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      {!materialOnly && (
+        <nav ref={tabStrip} className="shared-tabs" aria-label="Совместный проект">
+          {(
+            [
+              ["materials", "Материалы"],
+              ["members", "Участники"],
+              ["checkout", "Моя рабочая папка"],
+              ["links", "Связи проектов"],
+              ["consultations", "Консультации"],
+              ["bridges", "Bridges"],
+              ["github", "GitHub"],
+              ["activity", "История"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              data-project-tab={value}
+              aria-pressed={tab === value}
+              onClick={() => setTab(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
       <div className="shared-scroll">
         {tab === "materials" && (
           <SharedMaterials
@@ -503,6 +505,7 @@ function SharedProjectWorkspace({
             refreshToken={refreshToken}
             refresh={refresh}
             onPublish={() => setTab("publication")}
+            materialOnly={materialOnly}
           />
         )}
         {tab === "members" && <SharedMembers detail={d} refresh={refresh} />}
@@ -550,6 +553,7 @@ function SharedMaterials({
   refreshToken,
   refresh,
   onPublish,
+  materialOnly,
 }: {
   detail: SharedProjectDetail;
   kind: SharedItemKind | "all";
@@ -558,6 +562,7 @@ function SharedMaterials({
   refreshToken: number;
   refresh: () => void;
   onPublish: () => void;
+  materialOnly: boolean;
 }) {
   const [q, setQ] = useState(""),
     [query, setQuery] = useState(""),
@@ -641,31 +646,33 @@ function SharedMaterials({
     );
   return (
     <div className="shared-form">
-      <nav className="shared-tabs" aria-label="Общие материалы">
-        <button
-          type="button"
-          aria-pressed={kind === "all"}
-          onClick={() => {
-            setKind("all");
-            setOffset(0);
-          }}
-        >
-          Все
-        </button>
-        {Object.entries(materialLabels).map(([value, label]) => (
+      {!materialOnly && (
+        <nav className="shared-tabs" aria-label="Общие материалы">
           <button
             type="button"
-            key={value}
-            aria-pressed={kind === value}
+            aria-pressed={kind === "all"}
             onClick={() => {
-              setKind(value as SharedItemKind);
+              setKind("all");
               setOffset(0);
             }}
           >
-            {label}
+            Все
           </button>
-        ))}
-      </nav>
+          {Object.entries(materialLabels).map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={kind === value}
+              onClick={() => {
+                setKind(value as SharedItemKind);
+                setOffset(0);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
       {error && <p role="alert">{error}</p>}
       <form
         className="shared-toolbar"
@@ -759,25 +766,48 @@ function SharedMaterials({
               Собрать общий отчёт
             </button>
           )}
-          <label>
-            Создать
-            <select
-              value=""
-              aria-label="Создать общий материал"
-              onChange={(e) => setEdit({ item: null, kind: e.target.value as SharedItemKind })}
-            >
-              <option value="" disabled>
-                Выбери тип
-              </option>
-              {Object.entries(materialLabels)
-                .filter(([k]) => k !== "core" || detail.project.role === "owner")
-                .map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-            </select>
-          </label>
+          {materialOnly && kind !== "all" ? (
+            (kind !== "core" || detail.project.role === "owner") && (
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setEdit({ item: null, kind })}
+              >
+                <Icon name="plus" />
+                {
+                  {
+                    note: "Новая заметка",
+                    task: "Новая задача",
+                    plan: "Новый план",
+                    report: "Новый отчёт",
+                    core: "Основа проекта",
+                    review: "Новая приёмка",
+                    result: "Новый результат",
+                  }[kind]
+                }
+              </button>
+            )
+          ) : (
+            <label>
+              Создать
+              <select
+                value=""
+                aria-label="Создать общий материал"
+                onChange={(e) => setEdit({ item: null, kind: e.target.value as SharedItemKind })}
+              >
+                <option value="" disabled>
+                  Выбери тип
+                </option>
+                {Object.entries(materialLabels)
+                  .filter(([k]) => k !== "core" || detail.project.role === "owner")
+                  .map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
           <button type="button" className="secondary" onClick={onPublish}>
             Опубликовать из личного
           </button>

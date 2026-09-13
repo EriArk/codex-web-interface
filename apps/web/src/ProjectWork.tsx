@@ -29,8 +29,8 @@ import type { NotebookRequest } from "./Notebook";
 import { actionLabels, ProjectActionPanel } from "./ProjectAction";
 import { sharedMutation } from "./sharedRequests";
 import { openSharedProjects } from "./TeamProjectsHost";
+import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import { useWorkspaceAudience, WorkspaceAudience } from "./WorkspaceAudience";
-import { WorkspaceTabs } from "./WorkspaceTabs";
 import "./notebook.css";
 import "./project-work.css";
 
@@ -77,7 +77,6 @@ export function ProjectWorkPanel({
   request,
   onClose,
   onOpen,
-  onRequest,
 }: {
   request: NotebookRequest;
   onClose: () => void;
@@ -119,6 +118,7 @@ export function ProjectWorkPanel({
   const selectedScope =
     projects.items.find((p) => sk(p.scope) === scope)?.scope ??
     (sk(request.scope) === scope ? request.scope : null);
+  useWorkspaceDialog(dialog);
   const audience = useWorkspaceAudience(
     draft?.scope ?? null,
     draft?.id ?? "plan-none",
@@ -133,13 +133,10 @@ export function ProjectWorkPanel({
   }, []);
   useEffect(() => {
     mounted.current = true;
-    dialog.current?.showModal();
-    dialog.current?.focus({ preventScroll: true });
     refreshDrafts();
     return () => {
       mounted.current = false;
       generation.current++;
-      dialog.current?.close();
     };
   }, [refreshDrafts]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Page refresh reads bounded Hub metadata; it never touches a native writer.
@@ -459,7 +456,8 @@ export function ProjectWorkPanel({
   return createPortal(
     <dialog
       ref={dialog}
-      className="notebook-dialog project-work-dialog"
+      className="notebook-dialog workspace-window project-work-dialog"
+      data-workspace-module={mode}
       aria-label={mode === "plans" ? "Планы" : "Отчёты"}
       tabIndex={-1}
       onCancel={(e) => {
@@ -480,19 +478,6 @@ export function ProjectWorkPanel({
           <Icon name="close" />
         </button>
       </header>
-      <WorkspaceTabs
-        mode={mode}
-        disabled={busy}
-        onChange={(next) =>
-          onRequest({
-            ...request,
-            mode: next,
-            itemId: undefined,
-            scope: selectedScope ?? request.scope,
-            allProjects: scope === "all",
-          })
-        }
-      />
       <div className="notebook-task-controls" data-editing={editing}>
         <fieldset className="task-project-filters" aria-label="Проекты рабочего раздела">
           {[

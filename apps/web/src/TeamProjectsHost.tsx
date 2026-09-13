@@ -14,15 +14,23 @@ export type SharedWorkspaceTarget = {
 };
 export const openSharedProjects = (target: SharedWorkspaceTarget = {}) =>
   window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: target }));
-export function SharedProjectsButton({ scope }: { scope?: NotebookScope }) {
+export function SharedProjectsButton({
+  scope,
+  compact = false,
+}: {
+  scope?: NotebookScope;
+  compact?: boolean;
+}) {
   return pageWorkspace ? (
     <button
       type="button"
-      className="secondary shared-project-shortcut"
+      className={compact ? undefined : "secondary shared-project-shortcut"}
+      aria-label="Общие проекты"
+      title="Общие проекты"
       onClick={() => openSharedProjects({ scope })}
     >
-      <Icon name="folder" size={18} />
-      Совместные проекты
+      <Icon name="people" size={17} />
+      <span>{compact ? "Общие" : "Общие проекты"}</span>
     </button>
   ) : null;
 }
@@ -50,7 +58,7 @@ export function TeamProjectsHost() {
     <Suspense
       fallback={
         <div className="device-loading" role="status">
-          Открываем совместные проекты…
+          Открываем общие проекты…
         </div>
       }
     >

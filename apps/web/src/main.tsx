@@ -20,6 +20,7 @@ import "./tablet.css";
 import "./polymer.css";
 import "./accent-colors.css";
 import "./viewport-controls.css";
+import "./workspace-window.css";
 
 applyTheme(cachedTheme());
 applyLayoutPreference();

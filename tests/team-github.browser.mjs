@@ -76,11 +76,11 @@ async function signIn(page, login) {
     .toBe(login === "owner" ? ownerId : friendId);
 }
 async function open(page) {
-  const button = page.getByRole("button", { name: "Совместные проекты", exact: true });
+  const button = page.getByRole("button", { name: "Общие проекты", exact: true });
   if (!(await button.isVisible()))
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
   await button.click();
-  await expect(page.getByRole("dialog", { name: "Совместные проекты", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Общие проекты", exact: true })).toBeVisible();
 }
 async function githubProbe(machine, root, req) {
   const login = root.endsWith("owner") ? "Owner" : "Friend";

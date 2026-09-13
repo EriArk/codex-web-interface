@@ -149,7 +149,7 @@ for (const [engine, type] of [
       .getByRole("button", { name: "Сохранить ссылку: Проверка каталога", exact: true })
       .click();
     const notes = page.getByRole("dialog", { name: "Заметки и ссылки", exact: true });
-    await notes.getByRole("button", { name: "Задачи", exact: true }).click();
+    await notes.getByRole("button", { name: "Создать задачу по ссылке", exact: true }).click();
     await panel.getByRole("button", { name: "Новая задача", exact: true }).click();
     await title.fill("Проверить результат");
     await expect(body).toHaveValue("");

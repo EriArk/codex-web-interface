@@ -1,5 +1,13 @@
 # Verification record
 
+## Independent workspace windows — 2026-09-13
+
+The first UI pass adds shared window materials/lifecycle, the five-button Tasks/Notes/Plans/Reports/Shared row and direct personal/shared module windows. Existing stores, revision checks and execution contracts remain unchanged. The result-link → Task workflow survives removal of the universal module tabs through an explicit action.
+
+Linux web typecheck/build and repository guard pass. Chromium and WebKit pass `notebook`, `tasks`, `project-work`, `project-core`, `team-projects`, `team-github`, `viewport-controls` and new `workspace-windows` browser suites. Coverage includes draft preservation, lost acknowledgement, edit conflicts, exact source links, explicit execution, two identities, shared-access revocation and direct shared Task windows. The new suite checks four independent windows, four themes, all 12 casing colors, text/key contrast and 390×844, 768×1024, 1024×768, 1280×800, 1376×1032 and 1920×1080 viewports. A simulated iOS visual-viewport pan keeps close/save reachable. Screenshots exposed and corrected an old theme rule overriding the new window casing.
+
+These are isolated fixtures and browser simulations, not new physical-device or friend-PC acceptance. No native owner turn or desktop process was exercised. This is a compatible web-only package; Files/Git separation, writable file management and project-only Results are subsequent work. Full backend-suite counts elsewhere belong to their dated releases and were not repeated for this frontend-only change.
+
 ## First-owner activation preparation — 2026-09-13
 
 The complete isolated Linux suite passed **525 tests**, build, typecheck and lint (existing non-fatal warnings remain). New cases verify backend registration pause while owner login/shared work remains available, and first-owner activation guards with exact-config rollback and preservation of a failed registry. Chromium and WebKit passed login as `eriark`, preserved original-owner drafts, paused-registration controls, account switching and the existing 24 theme/viewport combinations per engine. Changing categories does not remount saved forms; the fixture reloads after changing its server configuration.

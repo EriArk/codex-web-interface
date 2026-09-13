@@ -75,11 +75,20 @@ async function signIn(page, login) {
     .toBe(login === "owner" ? ownerId : friendId);
 }
 async function open(page) {
-  const button = page.getByRole("button", { name: "Совместные проекты", exact: true });
+  const button = page.getByRole("button", { name: "Общие проекты", exact: true });
   if (!(await button.isVisible()))
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
+  const row = page.locator(".workspace-shortcuts:visible");
+  await expect(row.getByRole("button")).toHaveCount(5);
+  const boxes = await row.getByRole("button").evaluateAll((buttons) =>
+    buttons.map((b) => {
+      const r = b.getBoundingClientRect();
+      return { top: r.top, width: r.width, height: r.height };
+    }),
+  );
+  assert(boxes.every((b) => Math.abs(b.top - boxes[0].top) < 1 && b.width >= 44 && b.height >= 44));
   await button.click();
-  await expect(page.getByRole("dialog", { name: "Совместные проекты", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Общие проекты", exact: true })).toBeVisible();
 }
 try {
   for (const [engine, type] of [
@@ -588,6 +597,16 @@ try {
         page.getByRole("button", { name: "Планы · " + workTask.title, exact: true }),
       ).toBeVisible();
       assert.equal(hub.teamExecutions.list(ownerId, project.id, workTask.id).items.length, 0);
+      await expect(page.getByRole("dialog", { name: "Задачи", exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("navigation", { name: "Совместный проект", exact: true }),
+      ).toHaveCount(0);
+      await page.getByRole("button", { name: "К совместным проектам", exact: true }).click();
+      await page
+        .locator(".shared-card")
+        .filter({ has: page.getByRole("heading", { name: project.title, exact: true }) })
+        .getByRole("button", { name: "Открыть проект", exact: true })
+        .click();
       await page.getByRole("button", { name: "Bridges", exact: true }).click();
       await page.getByRole("button", { name: /Bridge API/ }).click();
       await page.getByRole("button", { name: "Выбрать личный материал", exact: true }).click();

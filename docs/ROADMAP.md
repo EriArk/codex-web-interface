@@ -2,11 +2,13 @@
 
 ## Next short passes — audit of 2026-09-13
 
-The current [issue and interface audit](ISSUE_AUDIT_2026-09-13.md) accounts for all 30 open and 50 closed issues, including new #176/#177. It distinguishes missing functionality from implemented work awaiting acceptance. The owner requests a plan before further development; the window/material redesign below is **planned, not installed**.
+The current [issue and interface audit](ISSUE_AUDIT_2026-09-13.md) accounts for all 30 open and 50 closed issues, including new #176/#177. It distinguishes missing functionality from implemented work awaiting acceptance. The first UI pass now implements the shared material/window lifecycle, five-item shortcut row and independent Tasks/Notes/Plans/Reports windows. Installation evidence is recorded separately in the checkpoint; the remaining window redesign below is still planned.
 
 Execution order: (1) shared window/material primitives and the five-item workspace shortcut row; (2) independent Tasks/Notes and Plans/Reports windows plus consistent forms; (3) separate Files/Git windows, project-only Results and exact artifact navigation #168; (4) everyday settings #171/#175/#177 and focused native #165/#166 checks; (5) finish team admission/bindings/onboarding/shared follow-through; (6) separate editor #169 and Technical Viewer #167; (7) protected server sandboxes #170; (8) final Help #174 and acceptance. Keep each step a short independently verified pass. Top-level documentation #176 is an immediate separate cleanup and stays current throughout.
 
 **Release dependency:** finish the coordinated already-enabled-team backup/upgrade/restore path in #158 before the next engine/schema update, even if an earlier UX step needs that update. Compatible web-only releases can use the existing independent gateway/assets path. Friend-PC admission does not gate owner-only UI polish; real independent accounts/hardware do gate team acceptance. Full acceptance details and remaining work per issue are in the audit; Gates A–E below retain their original scope.
+
+**Files/Git clarification (2026-09-13):** compose broad independent tool windows, not a narrow inspector inside a larger empty dialog. Git uses repository overview and detail areas; Files uses folder navigation, a file list and selected-file content/actions. The owner also approved a read-only lock with real writable file management: create files/folders, rename, copy, move and confirmed deletion within the acting user's selected project. Relock on close/project change; preserve conflict checks and exact operation receipts. Deliver this functional extension with #169 after the #158 engine-update prerequisite; do not ship a fake unlock button ahead of backend capability.
 
 ## Current milestone — private team workspaces (approved 2026-09-13)
 

@@ -693,7 +693,7 @@ export function SharedMaterialEditor({
           </fieldset>
         )}
         {!readonly && (
-          <div className="shared-actions">
+          <div className="shared-actions workspace-window-actions">
             <button
               type="button"
               className="primary"

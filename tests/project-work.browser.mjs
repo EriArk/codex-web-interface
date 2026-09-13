@@ -120,7 +120,13 @@ for (const [engine, type] of [
       }
     }
     await page.setViewportSize({ width: 390, height: 844 });
-    await panel.getByRole("button", { name: "Отчёты", exact: true }).click();
+    await expect(panel.getByRole("navigation", { name: "Разделы проекта" })).toHaveCount(0);
+    await panel.getByRole("button", { name: "Закрыть рабочий раздел" }).click();
+    await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
+    await page
+      .locator(".workspace-shortcuts:visible")
+      .getByRole("button", { name: "Отчёты", exact: true })
+      .click();
     panel = page.getByRole("dialog", { name: "Отчёты", exact: true });
     await panel.getByRole("button", { name: "Подготовить отчёт", exact: true }).click();
     const reportAction = panel.getByRole("region", { name: "Задание проекта" });

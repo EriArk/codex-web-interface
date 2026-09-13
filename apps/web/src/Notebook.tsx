@@ -32,8 +32,8 @@ import { ProjectWorkPanel } from "./ProjectWork";
 import { sharedMutation } from "./sharedRequests";
 import { useSharedResource } from "./sharedResources";
 import { openSharedProjects } from "./TeamProjectsHost";
+import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import { useWorkspaceAudience, WorkspaceAudience } from "./WorkspaceAudience";
-import { WorkspaceTabs } from "./WorkspaceTabs";
 import "./notebook.css";
 export type NotebookRequest = {
   scope: NotebookScope;
@@ -154,15 +154,10 @@ function SharedNotebookLoading({
   onRetry: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const element = dialog.current;
-    element?.showModal();
-    element?.focus();
-    return () => element?.close();
-  }, []);
+  useWorkspaceDialog(dialog);
   return (
     <dialog
-      className="notebook-dialog"
+      className="notebook-dialog workspace-window"
       ref={dialog}
       tabIndex={-1}
       aria-label="Материалы проекта"
@@ -292,6 +287,7 @@ function NotebookEditor({
     [confirmDelete, setConfirmDelete] = useState(false),
     [status, setStatus] = useState("");
   const editRef = useRef(edit);
+  useWorkspaceDialog(dialog, !!request);
   const audience = useWorkspaceAudience(
     edit?.scope ?? null,
     edit?.id ?? "notebook-none",
@@ -377,11 +373,8 @@ function NotebookEditor({
     setError("");
     setStatus("");
     refreshDrafts();
-    dialog.current?.showModal();
-    dialog.current?.focus({ preventScroll: true });
     return () => {
       generation.current++;
-      dialog.current?.close();
     };
   }, [request, refreshDrafts]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh polls only small Hub metadata.
@@ -694,7 +687,8 @@ function NotebookEditor({
   return createPortal(
     <dialog
       ref={dialog}
-      className="notebook-dialog"
+      className="notebook-dialog workspace-window"
+      data-workspace-module={isTask ? "tasks" : "notes"}
       aria-label={labels.title}
       tabIndex={-1}
       onCancel={(e) => {
@@ -703,7 +697,7 @@ function NotebookEditor({
       }}
     >
       <header className="notebook-heading">
-        <Icon name="file" />
+        <Icon name={isTask ? "check" : "file"} />
         <strong>{labels.title}</strong>
         <button
           type="button"
@@ -715,11 +709,6 @@ function NotebookEditor({
           <Icon name="close" />
         </button>
       </header>
-      <WorkspaceTabs
-        mode={isTask ? "tasks" : "notes"}
-        disabled={busy}
-        onChange={(mode) => onRequest({ ...request, mode, itemId: undefined })}
-      />
       {(error || storageError) && (
         <div className="notice" role="alert">
           {error}
@@ -827,17 +816,30 @@ function NotebookEditor({
             </select>
           )}
           {request.target && (
-            <button
-              type="button"
-              className="secondary notebook-context"
-              disabled={busy}
-              onClick={() => void pin(request.target!, request.scope)}
-            >
-              <Icon name="results" />
-              <span>
-                Сохранить ссылку<small>{request.target.title}</small>
-              </span>
-            </button>
+            <div className="notebook-context-actions">
+              <button
+                type="button"
+                className="secondary notebook-context"
+                disabled={busy}
+                onClick={() => void pin(request.target!, request.scope)}
+              >
+                <Icon name="results" />
+                <span>
+                  Сохранить ссылку<small>{request.target.title}</small>
+                </span>
+              </button>
+              {!isTask && (
+                <button
+                  type="button"
+                  className="secondary notebook-context"
+                  disabled={busy}
+                  onClick={() => onRequest({ ...request, mode: "tasks", itemId: undefined })}
+                >
+                  <Icon name="check" />
+                  Создать задачу по ссылке
+                </button>
+              )}
+            </div>
           )}
           <PinnedList
             items={pins.items}

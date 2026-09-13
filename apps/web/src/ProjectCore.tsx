@@ -15,6 +15,7 @@ import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { NotebookRequest } from "./Notebook";
+import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./notebook.css";
 import "./project-core.css";
 export function ProjectCorePanel({
@@ -42,11 +43,10 @@ export function ProjectCorePanel({
     [history, setHistory] = useState<CoreHistoryPage | null>(null),
     [version, setVersion] = useState<Core | null>(null),
     [confirm, setConfirm] = useState(false);
+  useWorkspaceDialog(dialog);
   useEffect(() => {
     mounted.current = true;
     const abort = new AbortController();
-    dialog.current?.showModal();
-    dialog.current?.focus({ preventScroll: true });
     const local = () => {
       try {
         const raw = localStorage.getItem(key);
@@ -80,7 +80,6 @@ export function ProjectCorePanel({
     return () => {
       mounted.current = false;
       abort.abort();
-      dialog.current?.close();
     };
   }, [key, query, scope]);
   const keep = (next: CoreWrite) => {
@@ -145,7 +144,7 @@ export function ProjectCorePanel({
   return createPortal(
     <dialog
       ref={dialog}
-      className="notebook-dialog core-dialog"
+      className="notebook-dialog workspace-window core-dialog"
       aria-label="Основа проекта"
       tabIndex={-1}
       onCancel={(e) => {

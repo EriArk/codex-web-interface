@@ -1,6 +1,8 @@
 .workspace-shortcuts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-columns: minmax(58px, 1fr);
+  grid-auto-flow: column;
+  overflow-x: auto;
   gap: 3px;
   padding: 6px 0;
   border-top: 1px solid var(--line);
@@ -12,7 +14,7 @@
   justify-content: center;
   gap: 4px;
   min-height: 44px;
-  min-width: 0;
+  min-width: 44px;
   padding: 6px 2px;
   border: 0;
   border-radius: var(--radius, 8px);
