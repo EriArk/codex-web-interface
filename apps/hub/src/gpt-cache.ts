@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { GptHistoryPage, GptMessage } from "@codex-web/shared";
 import { HubError } from "@codex-web/shared";
+import type { GptHistoryDisk } from "./gpt-history-disk.js";
 
 const hash = (items: GptMessage[]) =>
   createHash("sha256").update(JSON.stringify(items)).digest("hex");
@@ -10,16 +11,20 @@ type Entry = {
   checkedAt: number;
   bytes: number;
   lineage: number;
+  stale?: boolean;
+  refreshMessage?: string;
 };
 export class GptHistoryCache {
   private entries = new Map<string, Entry>();
   private nextLineage = 0;
   private pending = new Map<string, Promise<Entry>>();
+  private removed = new Map<string, number>();
   constructor(
     private load: (id: string) => Promise<GptMessage[]>,
     private now = Date.now,
+    private disk?: GptHistoryDisk,
   ) {}
-  seed(id: string, items: GptMessage[]) {
+  seed(id: string, items: GptMessage[], checkedAt = this.now(), persist = true) {
     const previous = this.entries.get(id);
     const sameBranch =
       previous && previous.items.every((message, index) => items[index]?.id === message.id);
@@ -27,11 +32,12 @@ export class GptHistoryCache {
       lineage: sameBranch ? previous.lineage : ++this.nextLineage,
       items,
       revision: hash(items),
-      checkedAt: this.now(),
+      checkedAt,
       bytes: JSON.stringify(items).length * 2,
     };
     this.entries.delete(id);
     this.entries.set(id, value);
+    if (persist) this.disk?.write(id, items, checkedAt);
     while (
       this.entries.size > 12 ||
       [...this.entries.values()].reduce((n, v) => n + v.bytes, 0) > 16 * 1024 ** 2
@@ -43,12 +49,26 @@ export class GptHistoryCache {
     const entry = this.entries.get(id);
     if (entry) entry.checkedAt = Number.NEGATIVE_INFINITY;
   }
+  remove(id: string) {
+    this.removed.set(id, (this.removed.get(id) ?? 0) + 1);
+    this.entries.delete(id);
+    this.disk?.remove(id);
+  }
   private async get(id: string, ttl: number) {
     const pending = this.pending.get(id);
     if (pending) return pending;
-    const cached = this.entries.get(id);
+    let cached = this.entries.get(id);
+    if (!cached) {
+      const saved = this.disk?.read(id);
+      if (saved) cached = this.seed(id, saved.items, saved.checkedAt, false);
+    }
     if (cached && this.now() - cached.checkedAt < ttl) return cached;
-    const task = this.load(id).then((items) => this.seed(id, items));
+    const generation = this.removed.get(id);
+    const task = this.load(id).then((items) => {
+      if (generation !== this.removed.get(id))
+        throw new HubError(404, "GPT_HISTORY_UNAVAILABLE", "Чат удалён.");
+      return this.seed(id, items);
+    });
     this.pending.set(id, task);
     try {
       return await task;
@@ -56,11 +76,34 @@ export class GptHistoryCache {
       this.pending.delete(id);
     }
   }
+  private async readable(id: string, ttl: number): Promise<Entry> {
+    try {
+      return await this.get(id, ttl);
+    } catch (error) {
+      const cached = this.entries.get(id);
+      // Authorization/deletion/invalid-branch errors must never fall back to an old branch.
+      if (
+        !cached ||
+        !(error instanceof HubError) ||
+        !["GPT_HISTORY_RATE_LIMITED", "GPT_HISTORY_UNAVAILABLE", "GPT_CONNECTION_LOST"].includes(
+          error.code,
+        ) ||
+        error.statusCode === 404
+      )
+        throw error;
+      return {
+        ...cached,
+        stale: true,
+        refreshMessage:
+          "Показана сохранённая история. Обновление временно недоступно; повторим автоматически.",
+      };
+    }
+  }
   peek(id: string): GptMessage[] {
     return this.entries.get(id)?.items ?? [];
   }
   async snapshot(id: string, ttl = 60000) {
-    return this.get(id, ttl);
+    return this.readable(id, ttl);
   }
   async messages(id: string, ttl = 60000): Promise<GptMessage[]> {
     return (await this.get(id, ttl)).items;
@@ -76,7 +119,7 @@ export class GptHistoryCache {
     },
     ttl = 60000,
   ): Promise<GptHistoryPage> {
-    const entry = await this.get(id, ttl),
+    const entry = await this.readable(id, ttl),
       list = entry.items;
     if (!query.messageId && !query.before && query.known === entry.revision)
       return {
@@ -86,6 +129,8 @@ export class GptHistoryCache {
         prefix: "",
         notModified: true,
         retainOlder: true,
+        stale: entry.stale,
+        refreshMessage: entry.refreshMessage,
       };
     const focus = query.messageId ? list.findIndex((m) => m.id === query.messageId) : -1;
     if (query.messageId && focus < 0)
@@ -111,6 +156,8 @@ export class GptHistoryCache {
       prefix: hash(list.slice(0, start)),
       notModified: false,
       retainOlder: anchor >= 0 && query.prefix === hash(list.slice(0, anchor)),
+      stale: entry.stale,
+      refreshMessage: entry.refreshMessage,
     };
   }
 }

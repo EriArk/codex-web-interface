@@ -12,6 +12,8 @@ export interface GptMessage {
   text: string;
   createdAt: number;
   files: GptFile[];
+  phase?: "commentary" | "final";
+  complete?: boolean;
   /** Visible native content that the web renderer cannot yet display. Never raw payloads. */
   unsupported?: ("audio" | "video" | "interactive" | "other")[];
 }
@@ -61,6 +63,9 @@ export interface GptProgress {
   state: "active" | "completed";
 }
 export interface GptHistoryPage {
+  /** A previously observed public branch, retained while the native read is unavailable. */
+  stale?: boolean;
+  refreshMessage?: string;
   contextMessage?: string;
   hasNewer?: boolean;
   items: GptMessage[];

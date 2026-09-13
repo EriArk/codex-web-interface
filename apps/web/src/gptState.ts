@@ -24,22 +24,48 @@ export function showGptJob(
   messages: GptMessage[],
   now = Date.now(),
   jobs: GptJob[] = [],
+  historyUnavailable = false,
 ): boolean {
   // Catalog summaries carry status only: their empty strings are not message content.
   if (job.summaryOnly || job.dismissed || completedGptRetry(job, jobs)) return false;
   if (["queued", "preparing", "running", "failed", "unknown"].includes(job.status)) return true;
   if (job.status === "cancelled" && !job.answer && !job.assets.length) return false;
   // Completed outbox entries must never append old messages below a paged native history.
-  if (job.updatedAt < now - 120000) return false;
+  if (!historyUnavailable && job.updatedAt < now - 120000) return false;
+  if (
+    historyUnavailable &&
+    job.updatedAt < now - 120000 &&
+    jobs.some(
+      (next) =>
+        next.nativeId === job.nativeId &&
+        !next.summaryOnly &&
+        !next.dismissed &&
+        next.status === "completed" &&
+        next.createdAt > job.createdAt,
+    )
+  )
+    return false;
   const user = messages.findIndex(
     (message) =>
       message.role === "user" &&
       message.text === job.text &&
-      message.createdAt * 1000 >= job.createdAt - 30000,
+      message.createdAt * 1000 >= job.createdAt - 30000 &&
+      message.createdAt * 1000 <= job.updatedAt,
   );
   if (user >= 0) {
     const later = messages.slice(user + 1);
-    if (later.some((message) => message.role === "assistant")) return false;
+    const nextUser = later.findIndex((message) => message.role === "user");
+    const turn = nextUser < 0 ? later : later.slice(0, nextUser);
+    if (
+      turn.some(
+        (message) =>
+          message.role === "assistant" &&
+          message.phase !== "commentary" &&
+          message.complete !== false,
+      )
+    )
+      return false;
+    if (nextUser >= 0) return false;
   } else if (messages.some((message) => message.createdAt * 1000 > job.createdAt + 1000))
     return false;
   return true;
@@ -70,7 +96,13 @@ export function mergeGptHistory(
   page: GptHistoryPage,
   older = false,
 ): GptCachedChat {
-  if (page.notModified && previous) return { ...previous, checkedAt: Date.now() };
+  if (page.notModified && previous)
+    return {
+      ...previous,
+      checkedAt: Date.now(),
+      stale: page.stale,
+      refreshMessage: page.refreshMessage,
+    };
   const keep = !!previous && (older || page.retainOlder);
   let messages = page.items;
   if (keep && previous) {
@@ -83,6 +115,8 @@ export function mergeGptHistory(
   }
   const retained = keep && messages.length > page.items.length;
   return {
+    stale: page.stale,
+    refreshMessage: page.refreshMessage,
     messages,
     contextMessage: older ? previous?.contextMessage : page.contextMessage,
     hasNewer: older ? previous?.hasNewer : page.hasNewer,

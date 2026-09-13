@@ -260,6 +260,7 @@ export function GptWorkspace({
     before,
     loading,
     ready: historyReady,
+    stale: historyStale,
     revalidating,
     scroll,
     sticky,
@@ -274,7 +275,7 @@ export function GptWorkspace({
     selected,
     { model, effort },
     (id) => {
-      if (selectedRef.current === id) void history(id, undefined, true);
+      if (selectedRef.current === id) void history(id, undefined, true).catch(() => {});
     },
     (id) => {
       choose(id);
@@ -616,10 +617,7 @@ export function GptWorkspace({
     const id = t.threadId ?? (t.kind === "thread" ? t.id : "");
     if (id) {
       choose(id);
-      if (t.messageId)
-        void history(id, undefined, true, t.messageId).catch((e) => {
-          if (selectedRef.current === id) setNotice(messageOf(e));
-        });
+      if (t.messageId) void history(id, undefined, true, t.messageId).catch(() => {});
       if (t.kind === "result") {
         setWorkspaceResult(t.id);
         setView("results");
@@ -900,7 +898,15 @@ export function GptWorkspace({
     }),
   });
   const jobElements = currentJobs
-    .filter((job) => showGptJob(job, messages, Date.now(), currentJobs))
+    .filter((job) =>
+      showGptJob(
+        job,
+        messages,
+        Date.now(),
+        currentJobs,
+        !historyReady || historyStale || !!historyNotice,
+      ),
+    )
     .map((job) => {
       const nativeUser = messages.some(
         (m) =>
@@ -1287,7 +1293,15 @@ export function GptWorkspace({
   const selectedProject = projects.find((project) => project.id === selectedItem?.projectId);
   const selectedTitle = selectedItem?.title || (selected ? "Разговор GPT" : "Новый чат");
   const resultExtras: ResultItem[] = currentJobs
-    .filter((job) => showGptJob(job, messages, Date.now(), currentJobs))
+    .filter((job) =>
+      showGptJob(
+        job,
+        messages,
+        Date.now(),
+        currentJobs,
+        !historyReady || historyStale || !!historyNotice,
+      ),
+    )
     .flatMap((job) =>
       job.assets.map((file) => ({
         id: file.id,
@@ -1488,7 +1502,7 @@ export function GptWorkspace({
                   <span>Фрагмент диалога</span>
                   <button
                     type="button"
-                    onClick={() => void action(() => history(selected, undefined, true))}
+                    onClick={() => void history(selected, undefined, true).catch(() => {})}
                   >
                     К последним сообщениям
                   </button>
@@ -1501,7 +1515,7 @@ export function GptWorkspace({
                   disabled={loading}
                   onClick={() => {
                     sticky.current = false;
-                    void action(() => history(selected, before));
+                    void history(selected, before).catch(() => {});
                   }}
                 >
                   Загрузить ещё 20
@@ -1521,7 +1535,7 @@ export function GptWorkspace({
                       <button
                         type="button"
                         className="secondary"
-                        onClick={() => void action(() => history(selected, undefined, true))}
+                        onClick={() => void history(selected, undefined, true).catch(() => {})}
                       >
                         <Icon name="refresh" />
                         Повторить загрузку

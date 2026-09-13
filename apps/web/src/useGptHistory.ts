@@ -112,7 +112,7 @@ export function useGptHistory(selected: string) {
           gptCache.chats[id] = next;
           saveGptCache();
           if (!mounted.current || selectedRef.current !== id) return;
-          setError("");
+          setError(data.refreshMessage ?? "");
           const oldHeight = scroll.current?.scrollHeight ?? 0;
           setPage(next);
           if (older)
@@ -174,6 +174,7 @@ export function useGptHistory(selected: string) {
     gptCache.chats[selected] ?? (pageScope.current === selected ? page : undefined);
   return {
     ready: !!currentPage,
+    stale: !!currentPage?.stale,
     revalidating,
     error,
     clearError: () => setError(""),
