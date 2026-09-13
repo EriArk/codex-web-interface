@@ -24,6 +24,10 @@ import { MachineEnrollmentStore } from "./machine-enrollment-store.js";
 import { proxyPrivateHttp, proxyPrivateSocket } from "./private-proxy.js";
 import { Store } from "./store.js";
 import { sessionCookie, TeamAuth } from "./team-auth.js";
+import { registerTeamBridges } from "./team-bridge-routes.js";
+import { TeamBridgeRuns } from "./team-bridge-runs.js";
+import { TeamBridgeSources } from "./team-bridge-sources.js";
+import { TeamBridges } from "./team-bridges.js";
 import { registerTeamConsultations } from "./team-consultation-routes.js";
 import { TeamConsultations } from "./team-consultations.js";
 import { registerTeamExecutions } from "./team-execution-routes.js";
@@ -142,6 +146,8 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     new HubError(503, "ENGINE_MAINTENANCE", "Обновление сервиса. Черновик сохранён.");
   let teamExecutions: TeamExecutions;
   let teamConsultations: TeamConsultations;
+  let teamBridgeRuns: TeamBridgeRuns;
+  const teamBridges = new TeamBridges(teamLinks);
   const personal = (userId: string) => {
     registry.active(userId);
     if (closing) throw new HubError(503, "WORKSPACE_CLOSING", "Сервис переподключается.");
@@ -209,7 +215,13 @@ export async function createTeamHub(config: HubConfig, options: Options) {
                 );
             },
           });
-          attachTeamRelayTools(userId, runtime, teamLinks, teamConsultations);
+          attachTeamRelayTools(
+            userId,
+            runtime,
+            teamLinks,
+            teamConsultations,
+            (actor, threadId, turnId) => teamBridgeRuns.participating(actor, threadId, turnId),
+          );
           await runtime.app.listen({ path: socket });
           chmodSync(socket, 0o600);
           return { runtime, socket };
@@ -241,6 +253,12 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   };
   teamExecutions = new TeamExecutions(teamProjects, personal, authorizeSharedExecution);
   teamConsultations = new TeamConsultations(teamLinks, personal, authorizeSharedExecution);
+  teamBridgeRuns = new TeamBridgeRuns(
+    teamBridges,
+    teamConsultations,
+    personal,
+    authorizeSharedExecution,
+  );
   const track = (
     userId: string,
     hash: string,
@@ -448,6 +466,13 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   registerTeamProjects(app, teamProjects, actor, personal);
   registerTeamLinks(app, teamLinks, actor);
   registerTeamConsultations(app, teamConsultations, actor);
+  registerTeamBridges(
+    app,
+    teamBridges,
+    teamBridgeRuns,
+    actor,
+    new TeamBridgeSources(teamBridges, personal),
+  );
   registerTeamExecutions(app, teamExecutions, actor);
   const restartPersonal = async (userId: string, change: () => void = () => {}) => {
     registry.active(userId);
@@ -700,6 +725,13 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       work += Number(
         registry.db
           .prepare(
+            "SELECT COUNT(*) n FROM team_bridge_runs WHERE state IN ('waiting','running','consulting','unknown') OR json_extract(value,'$.step.state') IN ('dispatching','running','unknown')",
+          )
+          .get()?.n ?? 0,
+      );
+      work += Number(
+        registry.db
+          .prepare(
             "SELECT COUNT(*) n FROM team_consultations WHERE state IN ('waiting','running','unknown') OR (state='stopped' AND json_extract(value,'$.steps[#-1].state') IN ('dispatching','running','unknown'))",
           )
           .get()?.n ?? 0,
@@ -874,6 +906,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   }
   app.addHook("onClose", async () => {
     closing = true;
+    await teamBridgeRuns.close();
     await teamExecutions.close();
     await teamConsultations.close();
     registry.events.off("revoked", revoked);
@@ -898,6 +931,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   }
   teamExecutions.start();
   teamConsultations.start();
+  teamBridgeRuns.start();
   return {
     app,
     registry,
@@ -908,5 +942,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     teamLinks,
     teamExecutions,
     teamConsultations,
+    teamBridges,
+    teamBridgeRuns,
   };
 }

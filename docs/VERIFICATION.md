@@ -1,5 +1,15 @@
 # Verification record
 
+## Shared Bridge candidate — 2026-09-13
+
+The isolated candidate passed **495 tests** in the full Linux run, followed by **19 focused Bridge/consultation tests** after owner-only goal/budget editing and history filters were added. Build, TypeScript and changed-file lint passed. Production has not changed.
+
+Ten Bridge fixtures cover owner-only coordinator execution, independent linked accounts, native read-only/no-escalation policy, one shared request budget, one-hop consultations, early resolution, stop, unknown acknowledgements across restart, permission changes before native commit and before return, owner transfer/adoption, and immutable personal source snapshots inaccessible to other participants. Filters apply before pagination; only the idle coordinator owner can revise the goal and budget.
+
+Chromium and WebKit passed the complete two-user shared-workspace scenario, now including Bridge creation, budget editing, invitation/acceptance, attributed posts, stop, selected personal source preview and a lost publication acknowledgement followed by close/reopen/exact retry. There is one shared entry and one owner-only source snapshot. The browser test caught duplicate sibling React keys leaving a stale editor after successful save; editing and posting now have separate identities. It also verifies header-control contrast after theme transitions, four themes at four Bridge viewport sizes, and the existing six-viewport shared-material matrix. Phone CRT and compact-tablet Hi-Tech screenshots were inspected. These are browser/native-fixture checks, not friend-PC or physical Apple acceptance.
+
+GitHub collaboration, remaining common Report/notification workflow and Gate E release/offboarding checks remain in progress. The owner's later permission allows verified staged updates only while ordinary Codex work and recovery remain available; it does not turn unfinished candidate state into an installed release.
+
 ## Shared execution, files and project consultations candidate — 2026-09-13
 
 Stable production remains unchanged. The isolated candidate passed the complete Linux suite: **486 tests**, plus TypeScript build/typecheck. The earlier 471-test run preceded contact/Link/consultation additions; the latest count includes them and the rapid revoke/re-add guards.

@@ -25,6 +25,7 @@ type PrivateStep = TeamConsultStep & {
   };
 };
 type RecordValue = Omit<TeamConsultation, "steps"> & {
+  bridge?: { id: string; runId: string };
   accessRevisions: number[];
   linkRevision: number;
   automatic: boolean;
@@ -49,6 +50,7 @@ const decisionSchema = {
 
 /** One durable bounded exchange across two independently owned runtimes. No native queue replay. */
 export class TeamConsultations {
+  bridgeGuard?: (id: string, runId: string) => void;
   private pending = new Map<string, Promise<void>>();
   private timer?: ReturnType<typeof setInterval>;
   private stopped = false;
@@ -91,6 +93,7 @@ export class TeamConsultations {
       automatic: _automatic,
       origin: _origin,
       accessRevisions: _access,
+      bridge: _bridge,
       ...publicValue
     } = v;
     return { ...publicValue, steps: v.steps.map(({ native: _native, ...step }) => step) };
@@ -134,6 +137,11 @@ export class TeamConsultations {
   private permitted(v: RecordValue) {
     if (this.stopped) throw changed();
     this.authorize();
+    if (v.bridge) {
+      if (!this.bridgeGuard) throw changed();
+      this.bridgeGuard(v.bridge.id, v.bridge.runId);
+      this.links.permitted(v.initiatorId, v.sourceId, v.linkId, "bridge", false, v.linkRevision);
+    }
     const granted = this.links.permitted(
       v.initiatorId,
       v.sourceId,
@@ -168,12 +176,23 @@ export class TeamConsultations {
       ),
     ];
   }
-  create(actor: string, id: string, raw: unknown, origin?: { threadId: string; turnId: string }) {
+  create(
+    actor: string,
+    id: string,
+    raw: unknown,
+    origin?: { threadId: string; turnId: string },
+    bridge?: { id: string; runId: string },
+  ) {
     const input = teamConsultRequestSchema.parse(raw),
       permitted = this.links.permitted(actor, input.projectId, input.linkId, "consult");
+    if (bridge) {
+      if (!this.bridgeGuard) throw changed();
+      this.bridgeGuard(bridge.id, bridge.runId);
+      this.links.permitted(actor, input.projectId, input.linkId, "bridge");
+    }
     if (this.db.prepare("SELECT 1 FROM team_consultations WHERE id=?").get(id))
       this.get(actor, input.projectId, id);
-    this.links.projects.once(actor, "consult.create", id, { input, origin }, () => {
+    this.links.projects.once(actor, "consult.create", id, { input, origin, bridge }, () => {
       if (this.db.prepare("SELECT 1 FROM team_consultations WHERE id=?").get(id)) throw changed();
       const rootKey = origin ? JSON.stringify([actor, origin.threadId, origin.turnId]) : null;
       if (
@@ -224,13 +243,14 @@ export class TeamConsultations {
         targetOwnerId: permitted.target.ownerId,
         approvals: actor === permitted.source.ownerId ? [actor] : [],
         automatic,
-        limit: permitted.link.policy.depth,
+        limit: bridge ? 1 : permitted.link.policy.depth,
         consumed: 0,
         steps: [],
         linkRevision: permitted.link.revision,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         ...(origin ? { origin } : {}),
+        ...(bridge ? { bridge } : {}),
       };
       if (v.state === "waiting") this.reserve(v, "question", v.question);
       if (input.kind === "work")
@@ -459,6 +479,9 @@ export class TeamConsultations {
     } else if (decision.decision === "needs_owner" || !decision.question.trim()) {
       v.state = "needs_owner";
       v.reason = "Нужно решение участника.";
+    } else if (v.bridge) {
+      v.state = "needs_owner";
+      v.reason = "Ответ передан координатору Bridge. Отдельный обмен не продолжается.";
     } else if (step.phase === "question") {
       this.reserve(v, "evaluation", decision.summary + "\n\nУточнение: " + decision.question);
       v.state = "waiting";
@@ -629,6 +652,18 @@ export class TeamConsultations {
         await work;
       }),
     );
+  }
+  stopBridge(id: string) {
+    for (const row of this.db
+      .prepare(
+        "SELECT value FROM team_consultations WHERE json_extract(value,'$.bridge.id')=? AND state IN ('proposed','waiting','running','unknown')",
+      )
+      .all(id)) {
+      const v = JSON.parse(String(row.value)) as RecordValue;
+      v.state = "stopped";
+      v.reason = "Bridge остановлен; новая передача не разрешена.";
+      this.save(v);
+    }
   }
   start() {
     this.timer = setInterval(() => void this.tick(), 3000);

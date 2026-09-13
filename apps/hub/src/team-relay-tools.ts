@@ -10,6 +10,7 @@ export function attachTeamRelayTools(
   runtime: Awaited<ReturnType<typeof createApp>>,
   links: TeamLinks,
   consultations: TeamConsultations,
+  bridgeParticipating: (actor: string, threadId: string, turnId: string) => boolean = () => false,
 ) {
   const original = runtime.sessions.relayTool;
   const output = (v: unknown, success = true) => ({
@@ -45,7 +46,13 @@ export function attachTeamRelayTools(
         .parse(request.params.arguments);
       if (
         input.action === "request" &&
-        consultations.participating(actor, thread.id, latest.activeTurnId)
+        (consultations.participating(actor, thread.id, latest.activeTurnId) ||
+          bridgeParticipating(actor, thread.id, latest.activeTurnId) ||
+          runtime.store.db
+            .prepare(
+              "SELECT 1 FROM project_relays WHERE EXISTS(SELECT 1 FROM json_each(project_relays.value,'$.steps') s WHERE json_extract(s.value,'$.threadId')=? AND (json_extract(s.value,'$.turnId')=? OR json_extract(s.value,'$.state')='dispatching')) LIMIT 1",
+            )
+            .get(thread.id, latest.activeTurnId))
       )
         throw new HubError(
           409,

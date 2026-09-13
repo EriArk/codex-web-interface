@@ -26,6 +26,12 @@
 .shared-projects-dialog > header h2 {
   font-size: 1.15em;
 }
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .shared-projects-dialog
+  > .notebook-heading
+  .icon-button {
+  color: var(--case-ink);
+}
 .shared-project-identity {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
@@ -343,4 +349,79 @@
   border: 1px solid currentColor;
   border-radius: 50%;
   font-weight: 700;
+}
+.bridge-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem 1rem;
+  text-align: left;
+  width: 100%;
+  color: var(--text);
+}
+.bridge-card > span:first-child {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bridge-card small {
+  color: var(--muted);
+}
+.bridge-state {
+  font-size: 0.9rem;
+  align-self: start;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 0.25rem 0.65rem;
+}
+.bridge-heading {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.bridge-heading h2 {
+  margin: 0;
+}
+.bridge-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 0.75rem;
+}
+.bridge-summary h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+.bridge-entry {
+  display: grid;
+  gap: 0.65rem;
+}
+.bridge-room pre {
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bridge-room fieldset {
+  min-width: 0;
+}
+.bridge-room .notebook-markdown {
+  min-height: 0;
+  flex: none;
+}
+.bridge-room .notebook-markdown > :first-child {
+  margin-top: 0;
+}
+.bridge-room .notebook-markdown > :last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 520px) {
+  .bridge-card {
+    grid-template-columns: 1fr;
+  }
+  .bridge-entry .shared-row {
+    align-items: flex-start;
+  }
 }

@@ -17,6 +17,7 @@ import { materialLabels, SharedMaterialEditor } from "./SharedMaterialEditor";
 import { PersonalProjectPicker, SharedPublication } from "./SharedPublication";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { useSharedResource } from "./sharedResources";
+import { TeamBridgeInvitations, TeamBridgesPanel } from "./TeamBridgesPanel";
 import { TeamConsultationsPanel } from "./TeamConsultationsPanel";
 import { TeamContactPicker } from "./TeamContactPicker";
 import { TeamLinkInvitations, TeamLinksPanel } from "./TeamLinksPanel";
@@ -153,6 +154,7 @@ export default function TeamProjectsPanel({
             </p>
           )}
           <TeamLinkInvitations revision={revision} refresh={update} />
+          <TeamBridgeInvitations revision={revision} refresh={update} />
           {invites.value?.items.map((invite) => (
             <article key={invite.id} className="shared-card shared-invitation">
               <h3>{invite.projectTitle}</h3>
@@ -414,7 +416,14 @@ function SharedProjectWorkspace({
 }) {
   const detail = useSharedResource<SharedProjectDetail>(`/team/projects/${id}`, refreshToken);
   const [tab, setTab] = useState<
-    "materials" | "members" | "checkout" | "activity" | "publication" | "links" | "consultations"
+    | "materials"
+    | "members"
+    | "checkout"
+    | "activity"
+    | "publication"
+    | "links"
+    | "consultations"
+    | "bridges"
   >("materials");
   const [kind, setKind] = useState<SharedItemKind | "all">(initialKind ?? "all");
   const d = detail.value;
@@ -444,6 +453,7 @@ function SharedProjectWorkspace({
             ["checkout", "Моя рабочая папка"],
             ["links", "Связи проектов"],
             ["consultations", "Консультации"],
+            ["bridges", "Bridges"],
             ["activity", "История"],
           ] as const
         ).map(([value, label]) => (
@@ -475,6 +485,9 @@ function SharedProjectWorkspace({
         )}
         {tab === "consultations" && (
           <TeamConsultationsPanel project={d.project} revision={refreshToken} refresh={refresh} />
+        )}
+        {tab === "bridges" && (
+          <TeamBridgesPanel project={d.project} revision={refreshToken} refresh={refresh} />
         )}
         {tab === "checkout" && (
           <SharedCheckout detail={d} initialScope={initialScope} refresh={refresh} />

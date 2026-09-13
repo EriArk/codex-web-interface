@@ -44,7 +44,11 @@ export const teamConsultRequestSchema = z
     question: z.string().trim().min(1).max(12000),
     kind: z.enum(["consult", "work"]).default("consult"),
   })
-  .strict();
+  .strict()
+  .refine(
+    (v) => v.kind !== "work" || (v.question.length <= 6000 && v.title.length <= 120),
+    "Предложение работы: заголовок до 120 символов, текст до 6000. Раздели длинное предложение.",
+  );
 export type TeamConsultState =
   | "proposed"
   | "waiting"

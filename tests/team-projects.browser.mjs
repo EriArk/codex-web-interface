@@ -198,6 +198,110 @@ try {
         "Остановлено",
       );
       assert.equal(hub.teamConsultations.page(ownerId, project.id).items[0].state, "stopped");
+      await page.getByRole("button", { name: "Bridges", exact: true }).click();
+      await page.getByRole("button", { name: "Новое обсуждение", exact: true }).click();
+      await page.getByLabel("Название", { exact: true }).fill("Bridge API " + engine);
+      await page
+        .getByLabel("Что нужно согласовать", { exact: true })
+        .fill("Согласовать состояние игры между независимыми проектами.");
+      await page
+        .getByLabel("Как поймём, что готово", { exact: true })
+        .fill("Одинаковая схема и единицы измерения.");
+      await page.getByRole("button", { name: "Создать обсуждение", exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Bridge API " + engine, exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Цель и бюджет", exact: true }).click();
+      await page.locator('.bridge-room input[type="range"]').fill("4");
+      const [editedBridge] = await Promise.all([
+        page.waitForResponse(
+          (r) => r.url().includes("/api/team/bridges/") && r.request().method() === "PATCH",
+        ),
+        page.getByRole("button", { name: "Сохранить цель", exact: true }).click(),
+      ]);
+      assert.equal(editedBridge.status(), 200, await editedBridge.text());
+      await expect(page.getByRole("heading", { name: "Цель и бюджет", exact: true })).toHaveCount(
+        0,
+      );
+      await expect(page.getByText(/до 4 запросов за запуск/)).toBeVisible();
+      await page.getByRole("button", { name: "Пригласить связанный проект", exact: true }).click();
+      await page.getByLabel("Принятая связь", { exact: true }).selectOption(link.id);
+      await page.getByRole("button", { name: "Предложить участие", exact: true }).click();
+      await expect(page.getByText("Приглашён", { exact: true })).toBeVisible();
+      await friend.evaluate(() =>
+        window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: {} })),
+      );
+      await friend.getByRole("button", { name: "Принять участие", exact: true }).click();
+      await expect(
+        friend.getByRole("button", { name: "Принять участие", exact: true }),
+      ).toHaveCount(0);
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await expect(page.getByText("Участвует", { exact: true })).toBeVisible();
+      await page.getByLabel("Тип записи", { exact: true }).selectOption("question");
+      await page.getByLabel("Текст", { exact: true }).fill("Как храним единицы времени?");
+      await page.getByRole("button", { name: "Опубликовать запись", exact: true }).click();
+      await expect(page.locator(".bridge-entry")).toContainText("Как храним единицы времени?");
+      for (const [width, height] of [
+        [390, 844],
+        [768, 1024],
+        [1024, 768],
+        [1376, 1032],
+      ]) {
+        await page.setViewportSize({ width, height });
+        for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+          await page.evaluate((theme) => {
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.dataset.caseColor = "purple";
+          }, theme);
+          await expect(
+            page.getByRole("button", { name: "Закрыть совместные проекты", exact: true }),
+          ).toBeVisible();
+          assert.equal(
+            await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
+            false,
+          );
+          await page.locator(".shared-scroll").evaluate((el) => {
+            el.scrollTop = 0;
+          });
+          await page.screenshot({
+            path: `.local/qa-shared/${engine}-bridge-${theme}-${width}.png`,
+            animations: "disabled",
+          });
+          if (["crt-green", "hitech-2000s"].includes(theme)) {
+            const contrast = await page
+              .locator(".shared-projects-dialog > header")
+              .evaluate((el) => ({
+                header: getComputedStyle(el).color,
+                buttons: Array.from(el.querySelectorAll("button")).map(
+                  (b) => getComputedStyle(b).color,
+                ),
+              }));
+            assert(
+              contrast.buttons.every((c) => c === contrast.header),
+              JSON.stringify(contrast),
+            );
+          }
+        }
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      await friend.evaluate(
+        (projectId) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: { projectId } })),
+        linkedProjectId,
+      );
+      await friend.getByRole("button", { name: "Bridges", exact: true }).click();
+      await friend.getByRole("button", { name: /Bridge API/ }).click();
+      await expect(friend.locator(".bridge-entry")).toContainText("Как храним единицы времени?");
+      await expect(
+        friend.getByRole("button", { name: "Подготовить координацию", exact: true }),
+      ).toHaveCount(0);
+      await friend
+        .getByLabel("Текст", { exact: true })
+        .fill("Только секунды; личная история не публикуется.");
+      await friend.getByRole("button", { name: "Опубликовать запись", exact: true }).click();
+      await expect(friend.locator(".bridge-entry").last()).toContainText("Только секунды");
+      await friend.getByRole("button", { name: "Остановить", exact: true }).click();
+      await expect(friend.locator(".bridge-heading")).toContainText("Остановлено");
       await friend.evaluate(
         (projectId) =>
           window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: { projectId } })),
@@ -377,6 +481,57 @@ try {
       assert.equal(privateView.preview, undefined);
       await page.getByRole("button", { name: "Отменить запуск", exact: true }).click();
       await expect(page.locator('.shared-execution [data-state="cancelled"]')).toBeVisible();
+      await page.getByRole("button", { name: "Bridges", exact: true }).click();
+      await page.getByRole("button", { name: /Bridge API/ }).click();
+      await page.getByRole("button", { name: "Выбрать личный материал", exact: true }).click();
+      await page.getByLabel("Мой личный проект").selectOption("codex:" + scope.projectId);
+      await page.getByRole("button", { name: "Личная исходная заметка", exact: true }).click();
+      await expect(page.getByText("PRIVATE_SOURCE", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Вставить в черновик", exact: true }).click();
+      await expect(page.getByLabel("Текст", { exact: true })).toHaveValue("PRIVATE_SOURCE");
+      await page.getByLabel("Текст", { exact: true }).fill("Выбранный общий вывод " + engine);
+      let bridgeDropped = false;
+      await page.route("**/api/team/bridges/*/entries", async (route) => {
+        if (!bridgeDropped && route.request().method() === "POST") {
+          bridgeDropped = true;
+          const response = await route.fetch();
+          assert.equal(response.status(), 200);
+          await route.abort("failed");
+        } else await route.continue();
+      });
+      await page.getByRole("button", { name: "Опубликовать запись", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Повторить подтверждение", exact: true }),
+      ).toBeVisible();
+      await page.evaluate(
+        (projectId) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: { projectId } })),
+        project.id,
+      );
+      await page.getByRole("button", { name: "Bridges", exact: true }).click();
+      await page.getByRole("button", { name: /Bridge API/ }).click();
+      await expect(page.getByLabel("Текст", { exact: true })).toHaveValue(
+        "Выбранный общий вывод " + engine,
+      );
+      await page.getByRole("button", { name: "Повторить подтверждение", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Мой сохранённый источник", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Мой сохранённый источник", exact: true }).click();
+      await expect(page.getByText("PRIVATE_SOURCE", { exact: true })).toBeVisible();
+      const room = hub.teamBridges.page(ownerId, project.id).items[0],
+        findings = hub.teamBridges
+          .get(ownerId, room.id)
+          .entries.filter((e) => e.text === "Выбранный общий вывод " + engine);
+      assert.equal(findings.length, 1);
+      assert.equal(
+        (
+          await friend.request.get(
+            `${base}/api/team/bridges/${room.id}/entries/${findings[0].id}/source`,
+          )
+        ).status(),
+        404,
+      );
       assert.equal(
         personal.store.db
           .prepare("SELECT count(*) n FROM messages WHERE threadId=?")
@@ -532,6 +687,8 @@ try {
         `${engine}: real two-user projects, consent, edit conflict, incomplete Plan draft, revocation and 24 themed viewport combinations passed`,
       );
     } catch (error) {
+      console.error("Browser errors:", errors);
+      console.error(await page.locator(".shared-projects-dialog").ariaSnapshot());
       await page.screenshot({ path: `.local/qa-shared/${engine}-failure.png` });
       await friend.screenshot({ path: `.local/qa-shared/${engine}-friend-failure.png` });
       throw error;

@@ -232,7 +232,7 @@ export class TeamProjects {
         throw new HubError(
           404,
           "PARTICIPANT_UNAVAILABLE",
-          "Участник недоступен. Проверь его логин.",
+          "Участник недоступен. Обнови список пользователей.",
         );
       const membership = this.db
         .prepare("SELECT role,state FROM team_project_members WHERE projectId=? AND userId=?")
@@ -448,6 +448,18 @@ export class TeamProjects {
     });
   }
   private idle(projectId: string, userId?: string) {
+    if (
+      this.db
+        .prepare(
+          "SELECT 1 FROM team_bridge_runs r JOIN team_bridges b ON b.id=r.bridgeId WHERE b.projectId=? AND (r.state IN ('prepared','waiting','running','consulting','unknown') OR json_extract(r.value,'$.step.state') IN ('dispatching','running','unknown')) LIMIT 1",
+        )
+        .get(projectId)
+    )
+      throw new HubError(
+        409,
+        "SHARED_WORK_ACTIVE",
+        "Сначала заверши или проверь координацию Bridge.",
+      );
     if (
       this.db
         .prepare(

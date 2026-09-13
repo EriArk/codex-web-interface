@@ -57,7 +57,7 @@ export class TeamStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
     if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='team_meta'").get()) {
       const version = this.db.prepare("SELECT value FROM team_meta WHERE key='schema'").get();
-      if (version && !["1", "2", "3", "4", "5", "6"].includes(String(version.value))) {
+      if (version && !["1", "2", "3", "4", "5", "6", "7"].includes(String(version.value))) {
         this.db.close();
         throw new Error("TEAM_SCHEMA_UNSUPPORTED");
       }
@@ -174,6 +174,21 @@ export class TeamStore {
         targetId TEXT NOT NULL REFERENCES team_projects(id),rootKey TEXT UNIQUE,state TEXT NOT NULL,value TEXT NOT NULL,updatedAt INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS team_consultations_queue ON team_consultations(state,updatedAt);
+      CREATE TABLE IF NOT EXISTS team_bridges(
+        id TEXT PRIMARY KEY,projectId TEXT NOT NULL REFERENCES team_projects(id),state TEXT NOT NULL,value TEXT NOT NULL,updatedAt INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS team_bridges_project ON team_bridges(projectId,updatedAt);
+      CREATE TABLE IF NOT EXISTS team_bridge_entries(
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE NOT NULL,bridgeId TEXT NOT NULL REFERENCES team_bridges(id),value TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS team_bridge_entries_room ON team_bridge_entries(bridgeId,seq);
+      CREATE TABLE IF NOT EXISTS team_bridge_sources(
+        id TEXT PRIMARY KEY,bridgeId TEXT NOT NULL REFERENCES team_bridges(id),ownerId TEXT NOT NULL REFERENCES team_users(id),value TEXT NOT NULL,createdAt INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS team_bridge_runs(
+        id TEXT PRIMARY KEY,bridgeId TEXT NOT NULL REFERENCES team_bridges(id),state TEXT NOT NULL,value TEXT NOT NULL,updatedAt INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS team_bridge_active_run ON team_bridge_runs(bridgeId) WHERE state IN ('prepared','waiting','running','consulting','unknown');
     `);
     if (
       !this.db
@@ -236,7 +251,7 @@ export class TeamStore {
             );
       });
     }
-    this.db.prepare("UPDATE team_meta SET value='6' WHERE key='schema'").run();
+    this.db.prepare("UPDATE team_meta SET value='7' WHERE key='schema'").run();
     if (
       this.db
         .prepare(`SELECT p.id FROM team_projects p WHERE
