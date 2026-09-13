@@ -295,7 +295,7 @@ export function enrollmentBundle(
       : bytes;
     return { name, data: content.toString("base64") };
   });
-  for (const name of ["setupProbe.js", "deliveryProbe.js"])
+  for (const name of ["setupProbe.js", "deliveryProbe.js", "githubWorkProbe.js"])
     files.push({
       name: name as (typeof ENROLLMENT_FILES)[number],
       data: read(

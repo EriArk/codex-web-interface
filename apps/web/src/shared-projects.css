@@ -105,6 +105,39 @@
   gap: 12px;
   min-width: 0;
 }
+.github-workspace .notebook-markdown {
+  min-height: 0;
+}
+.github-record-button {
+  text-align: start;
+}
+.github-workspace h3 {
+  margin: 0;
+}
+.github-sha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.github-sha code {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.github-workspace code {
+  overflow-wrap: anywhere;
+}
+.github-comment {
+  padding-block: 10px;
+  border-top: 1px solid var(--line);
+}
+.github-compose {
+  border-inline-start: 3px solid var(--accent);
+  scroll-margin-block: 12px;
+}
+.github-workspace > .shared-toolbar input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
 .shared-form label {
   display: flex;
   flex-direction: column;

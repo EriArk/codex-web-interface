@@ -20,6 +20,7 @@ import { useSharedResource } from "./sharedResources";
 import { TeamBridgeInvitations, TeamBridgesPanel } from "./TeamBridgesPanel";
 import { TeamConsultationsPanel } from "./TeamConsultationsPanel";
 import { TeamContactPicker } from "./TeamContactPicker";
+import { TeamGitHubPanel } from "./TeamGitHubPanel";
 import { TeamLinkInvitations, TeamLinksPanel } from "./TeamLinksPanel";
 import type { SharedWorkspaceTarget } from "./TeamProjectsHost";
 import "./notebook.css";
@@ -41,6 +42,11 @@ const activityLabels: Record<string, string> = {
   "material.created": "Добавил общий материал",
   "material.updated": "Изменил общий материал",
   "material.removed": "Удалил общий материал",
+  "github.linked": "Связал проверенную версию issue или PR",
+  "github.identity_confirmed": "Подтвердил свой GitHub-аккаунт",
+  "github.completed": "Выполнил действие в GitHub",
+  "github.failed": "GitHub отклонил действие",
+  "github.unknown": "Проверяет исход GitHub-действия",
 };
 type Page = { items: SharedProject[]; nextOffset: number | null };
 
@@ -143,6 +149,7 @@ export default function TeamProjectsPanel({
           initialKind={target.kind}
           initialScope={target.scope ?? undefined}
           itemId={target.itemId}
+          github={target.github}
           refreshToken={revision}
           refresh={update}
         />
@@ -404,6 +411,7 @@ function SharedProjectWorkspace({
   initialKind,
   initialScope,
   itemId,
+  github,
   refreshToken,
   refresh,
 }: {
@@ -411,6 +419,7 @@ function SharedProjectWorkspace({
   initialKind?: SharedItemKind;
   initialScope?: ProjectScope;
   itemId?: string;
+  github?: SharedWorkspaceTarget["github"];
   refreshToken: number;
   refresh: () => void;
 }) {
@@ -424,9 +433,20 @@ function SharedProjectWorkspace({
     | "links"
     | "consultations"
     | "bridges"
-  >("materials");
+    | "github"
+  >(github ? "github" : "materials");
   const [kind, setKind] = useState<SharedItemKind | "all">(initialKind ?? "all");
+  const tabStrip = useRef<HTMLElement>(null);
   const d = detail.value;
+  useEffect(() => {
+    if (!d?.project.id) return;
+    const nav = tabStrip.current,
+      button = nav?.querySelector<HTMLElement>(`[data-project-tab="${tab}"]`);
+    if (!nav || !button) return;
+    const box = nav.getBoundingClientRect(),
+      selected = button.getBoundingClientRect();
+    nav.scrollLeft += selected.left - box.left - (nav.clientWidth - selected.width) / 2;
+  }, [tab, d?.project.id]);
   if (!d)
     return (
       <div className="shared-scroll">
@@ -445,7 +465,7 @@ function SharedProjectWorkspace({
           {d.project.archived ? " · Архив" : ""}
         </small>
       </div>
-      <nav className="shared-tabs" aria-label="Совместный проект">
+      <nav ref={tabStrip} className="shared-tabs" aria-label="Совместный проект">
         {(
           [
             ["materials", "Материалы"],
@@ -454,12 +474,14 @@ function SharedProjectWorkspace({
             ["links", "Связи проектов"],
             ["consultations", "Консультации"],
             ["bridges", "Bridges"],
+            ["github", "GitHub"],
             ["activity", "История"],
           ] as const
         ).map(([value, label]) => (
           <button
             type="button"
             key={value}
+            data-project-tab={value}
             aria-pressed={tab === value}
             onClick={() => setTab(value)}
           >
@@ -480,6 +502,9 @@ function SharedProjectWorkspace({
           />
         )}
         {tab === "members" && <SharedMembers detail={d} refresh={refresh} />}
+        {tab === "github" && (
+          <TeamGitHubPanel detail={d} source={github?.source} refresh={refresh} />
+        )}
         {tab === "links" && (
           <TeamLinksPanel project={d.project} revision={refreshToken} refresh={refresh} />
         )}

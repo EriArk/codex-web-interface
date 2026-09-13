@@ -2,7 +2,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),{randomUUID}=require('node:crypto'),{execFile}=require('node:child_process'),{promisify}=require('node:util');
 const run=promisify(execFile),root=__dirname,sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const read=async (file,max=2097152)=>{const s=await fs.lstat(file);if(!s.isFile()||s.isSymbolicLink()||s.size>max)throw Error('DELIVERY_REQUEST');return JSON.parse(await fs.readFile(file,'utf8'));};
-const valid=v=>v&&typeof v.root==='string'&&path.isAbsolute(v.root)&&v.root.length<=2048&&v.request&&['inspect','prepare','apply','status'].includes(v.request.op);
+const valid=v=>v&&typeof v.root==='string'&&path.isAbsolute(v.root)&&v.root.length<=2048&&v.request&&['inspect','prepare','apply','status','github'].includes(v.request.op);
 async function worker(){
  const {deliveryProbe}=await import('./deliveryProbe.js');let empty=0;const deadline=Date.now()+540000;
  while(Date.now()<deadline&&empty<8){
@@ -10,7 +10,7 @@ async function worker(){
   for(const file of (await fs.readdir(root)).filter(n=>/^[a-f0-9-]{36}\.request\.json$/.test(n)).slice(0,12)){
    const output=file.replace('.request.json','.response.json');if(await fs.stat(path.join(root,output)).then(()=>true,()=>false))continue;
    let result;
-   try {const job=await read(path.join(root,file),524288);if(!valid(job)||Date.now()-job.at>300000)throw Error('DELIVERY_REQUEST');result={ok:true,value:await deliveryProbe(job.root,job.request)};}
+   try {const job=await read(path.join(root,file),524288);if(!valid(job)||Date.now()-job.at>300000)throw Error('DELIVERY_REQUEST');result={ok:true,value:job.request.op==='github'?await (await import('./githubWorkProbe.js')).githubWorkProbe(job.root,job.request.request):await deliveryProbe(job.root,job.request)};}
    catch(e){result={ok:false,code:/^[A-Z_]{3,60}$/.test(e.message)?e.message:'DELIVERY_UNAVAILABLE'};}
    const temp=path.join(root,output+'.tmp');await fs.writeFile(temp,JSON.stringify(result),{flag:'wx',mode:0o600});await fs.rename(temp,path.join(root,output));count++;
   }
@@ -25,7 +25,7 @@ async function request(){
  const id=randomUUID(),input=path.join(root,id+'.request.json'),output=path.join(root,id+'.response.json'),temp=input+'.tmp';
  await fs.writeFile(temp,JSON.stringify({...value,at:Date.now()}),{flag:'wx',mode:0o600});await fs.rename(temp,input);
  const start=()=>run(path.join(process.env.SystemRoot||'C:\\Windows','System32','schtasks.exe'),['/Run','/TN','CodexWebDelivery'],{windowsHide:true,timeout:2000,maxBuffer:4096});
- try {await start();let next=Date.now()+3000;const deadline=Date.now()+(value.request.op==='apply'?240000:170000);
+ try {await start();let next=Date.now()+3000;const deadline=Date.now()+(['apply','github'].includes(value.request.op)?240000:170000);
   while(Date.now()<deadline){try{process.stdout.write(JSON.stringify(await read(output)));return;}catch(e){if(e.code!=='ENOENT')throw e;}
    if(Date.now()>=next){await start().catch(()=>{});next=Date.now()+3000;}await sleep(200);}
   throw Error('DELIVERY_UNAVAILABLE');

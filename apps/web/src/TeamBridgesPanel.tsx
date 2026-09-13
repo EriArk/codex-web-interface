@@ -500,6 +500,20 @@ function BridgeRoom({
             <h2>{v!.title}</h2>
             <strong className="bridge-state">{stateLabel[v!.state]}</strong>
           </div>
+          {d.canWrite && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() =>
+                openSharedProjects({
+                  projectId: d.myProjectId,
+                  github: { source: { kind: "bridge", id } },
+                })
+              }
+            >
+              Связать с GitHub
+            </button>
+          )}
           <div className="bridge-summary">
             <section className="shared-card">
               <h3>Цель</h3>
@@ -744,6 +758,20 @@ function BridgeRoom({
                 </small>
               </div>
               <Markdown text={e.text} />
+              {d.canWrite && e.kind !== "status" && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    openSharedProjects({
+                      projectId: d.myProjectId,
+                      github: { source: { kind: "bridge", id, entryId: e.id } },
+                    })
+                  }
+                >
+                  Эту запись в GitHub
+                </button>
+              )}
               {e.source && <BridgePrivateSource bridgeId={id} entry={e} />}
               {e.reference && (
                 <a href={e.reference} target="_blank" rel="noreferrer">

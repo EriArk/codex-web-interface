@@ -451,6 +451,14 @@ export class TeamProjects {
     if (
       this.db
         .prepare(
+          "SELECT 1 FROM team_github_operations WHERE projectId=? AND (? IS NULL OR userId=?) AND state IN ('preparing','running','unknown') LIMIT 1",
+        )
+        .get(projectId, userId ?? null, userId ?? null)
+    )
+      throw new HubError(409, "SHARED_WORK_ACTIVE", "Сначала проверь исход GitHub-действия.");
+    if (
+      this.db
+        .prepare(
           "SELECT 1 FROM team_bridge_runs r JOIN team_bridges b ON b.id=r.bridgeId WHERE b.projectId=? AND (r.state IN ('prepared','waiting','running','consulting','unknown') OR json_extract(r.value,'$.step.state') IN ('dispatching','running','unknown')) LIMIT 1",
         )
         .get(projectId)

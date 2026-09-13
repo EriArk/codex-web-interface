@@ -80,6 +80,8 @@ Participants explicitly publish bounded findings from private chats/Reviews/Plan
 
 GitHub account identity is verified on the acting user's machine. Repository access and CodexWeb membership are distinct states/actions. Typed operations support collaborator invitation/removal, bounded Issue list/search/create/link/comment/state, and PR coordination across checkouts. Reconcile uncertain external writes before retry. Never silently post under another person's account, mirror every Bridge message, force push or auto-merge. GitHub Actions are not required for this project.
 
+The candidate now implements this typed GitHub workflow, including durable per-machine receipts and independent per-user observations. See [usage, review boundaries and recovery](TEAM_GITHUB.md). It remains distinct from installation and friend-PC acceptance.
+
 ## Revocation, recovery and operations
 
 Implement revocation with the first identity foundation. Disabling a member invalidates login, subscriptions and device/download/action tickets, while preserving source data and uncertain-operation receipts. Project/Link revocation rechecks access both before dispatch and on return. Removing a user cannot silently orphan a shared project: transfer ownership or archive explicitly.

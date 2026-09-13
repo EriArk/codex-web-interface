@@ -398,3 +398,4 @@ export interface NativePlanAction {
   state: "ready" | "starting" | "submitted" | "unknown" | "unavailable";
   message: string;
 }
+export * from "./github-work.js";

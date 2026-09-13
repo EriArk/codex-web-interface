@@ -1,4 +1,4 @@
-import type { NotebookScope, SharedItemKind } from "@codex-web/shared";
+import type { NotebookScope, SharedItemKind, TeamGitHubSource } from "@codex-web/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { pageWorkspace } from "./accountStorage";
 import { Icon } from "./icons";
@@ -10,6 +10,7 @@ export type SharedWorkspaceTarget = {
   scope?: NotebookScope;
   kind?: SharedItemKind;
   itemId?: string;
+  github?: { source?: TeamGitHubSource };
 };
 export const openSharedProjects = (target: SharedWorkspaceTarget = {}) =>
   window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: target }));

@@ -21,6 +21,7 @@ import { MarkdownTable } from "./MarkdownTable";
 import { SharedExecutionPanel } from "./SharedExecution";
 import { SharedFiles } from "./SharedPublication";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
+import { openSharedProjects } from "./TeamProjectsHost";
 
 export const materialLabels: Record<SharedItemKind, string> = {
   note: "Заметки",
@@ -250,6 +251,20 @@ export function SharedMaterialEditor({
             <Icon name="back" />К списку
           </button>
           <strong>{materialLabels[kind]} · Общий материал</strong>
+          {item && detail.project.repository && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() =>
+                openSharedProjects({
+                  projectId,
+                  github: { source: { kind: "material", id: item.id } },
+                })
+              }
+            >
+              В GitHub
+            </button>
+          )}
         </div>
         {error && (
           <p role="alert" className="notice">

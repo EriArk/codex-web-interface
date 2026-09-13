@@ -1,5 +1,13 @@
 # Verification record
 
+## Shared GitHub candidate — 2026-09-13
+
+The isolated candidate passed **512 tests** in the full Linux suite. Sixteen GitHub tests exercise the fixed machine worker and two-user Hub routes/services: actual temporary Git roots, acting accounts, permissions, immutable observations, exact PR SHA, explicit identity publication, issue/comment/invitation/state/review receipts, concurrent stale-lock recovery, lost acknowledgements, no automatic replay, account/origin changes, revoke/re-add and late response denial. Creating a Plan from a linked PR is attributed to the acting assignee and never starts native work. Full build and Windows PS5 parsing of the changed helper installer passed; the worker also passed syntax checking.
+
+The GitHub browser fixture passed Chromium and WebKit with two authenticated users, separate machine/account fixtures, exact-version PR links, lost prepare acknowledgement followed by close/reopen, retained text and one explicitly confirmed send. A linked PR creates an ordinary assigned Plan. Both engines passed four themes at phone 390px and compact tablet 1024px widths (16 combinations); phone Hi-Tech and tablet CRT screenshots were inspected. Active shared-project tabs scroll horizontally into view without moving the dialog vertically.
+
+No real issue, comment, invitation, repository access or desktop process was changed by verification. See [the GitHub guide](TEAM_GITHUB.md). The new worker needs the matching fixed helper installation before real use; real friend-PC/native-account acceptance remains separate. Production stays on the stable installation; remaining common Report/notification workflows and Gate E recovery/installation checks are still required.
+
 ## Shared Bridge candidate — 2026-09-13
 
 The isolated candidate passed **495 tests** in the full Linux run, followed by **19 focused Bridge/consultation tests** after owner-only goal/budget editing and history filters were added. Build, TypeScript and changed-file lint passed. Production has not changed.

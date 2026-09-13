@@ -2,14 +2,36 @@ import { spawn } from "node:child_process";
 import {
   type DeliveryProbeRequest,
   type DeliveryProbeResult,
+  type GitHubWorkProbeRequest,
+  type GitHubWorkProbeResult,
   HubError,
   type MachineConfig,
 } from "@codex-web/shared";
 import { deliveryProbe } from "./deliveryProbe.js";
+import { githubWorkProbe } from "./githubWorkProbe.js";
 import { quotePowerShell, stopProcess } from "./index.js";
 import { verifyProjectRoot } from "./projectRoots.js";
 
 const messages: Record<string, string> = {
+  GITHUB_WORK_UNAVAILABLE: "GitHub пока недоступен. Проверь вход GitHub CLI на своём компьютере.",
+  GITHUB_WORK_LOGIN: "Нужен вход GitHub CLI на своём компьютере.",
+  GITHUB_WORK_ACCESS: "У выбранного GitHub-аккаунта нет доступа для этого действия.",
+  GITHUB_WORK_CHANGED: "Issue или PR изменился. Проверь новую версию перед действием.",
+  GITHUB_WORK_IDENTITY_CHANGED:
+    "GitHub-аккаунт или репозиторий изменился. Подготовь действие заново.",
+  GITHUB_WORK_REPOSITORY: "Рабочая папка больше не соответствует выбранному GitHub-репозиторию.",
+  GITHUB_WORK_PATH: "Рабочая папка или служебное хранилище недоступны.",
+  GITHUB_WORK_KEY: "Это подтверждение относится к другому GitHub-действию.",
+  GITHUB_WORK_REQUEST: "Проверь параметры GitHub-действия.",
+  GITHUB_WORK_UNKNOWN:
+    "Исход GitHub-действия не подтверждён. Проверка состояния не отправляет его снова.",
+  GITHUB_WORK_BUSY: "В этой рабочей папке уже выполняется GitHub-действие.",
+  GITHUB_WORK_SELF: "Для этого действия выбери другого участника.",
+  GITHUB_WORK_REJECTED: "GitHub отклонил действие. Проверь доступ и текущее состояние.",
+  GITHUB_WORK_CAPACITY:
+    "Хранилище подтверждений GitHub заполнено. Нужна проверка сохранённых операций.",
+  GITHUB_WORK_DATA:
+    "GitHub вернул неподдерживаемые данные. Сохранённое состояние остаётся доступным.",
   DELIVERY_UNAVAILABLE: "Компьютер пока не подтвердил операцию. Проверь её состояние.",
   DELIVERY_CHANGED: "Файлы, ветка или индекс изменились. Подготовь операцию заново.",
   DELIVERY_REMOTE_CHANGED: "Удалённая ветка изменилась. Обнови состояние перед отправкой.",
@@ -37,10 +59,27 @@ export async function runProjectDelivery(
   root: string,
   request: DeliveryProbeRequest,
 ): Promise<DeliveryProbeResult> {
+  return runFixedProjectWorker(machine, root, request, () => deliveryProbe(root, request));
+}
+export async function runProjectGitHub(
+  machine: MachineConfig,
+  root: string,
+  request: GitHubWorkProbeRequest,
+): Promise<GitHubWorkProbeResult> {
+  return runFixedProjectWorker(machine, root, { op: "github", request }, () =>
+    githubWorkProbe(root, request),
+  );
+}
+async function runFixedProjectWorker<T>(
+  machine: MachineConfig,
+  root: string,
+  request: DeliveryProbeRequest | { op: "github"; request: GitHubWorkProbeRequest },
+  local: () => Promise<T>,
+): Promise<T> {
   await verifyProjectRoot(machine, root);
   if (machine.type === "local-linux") {
     try {
-      return await deliveryProbe(root, request);
+      return await local();
     } catch (e) {
       const code = e instanceof Error ? e.message : "DELIVERY_UNAVAILABLE";
       throw new HubError(
@@ -100,7 +139,10 @@ export async function runProjectDelivery(
         );
       }
     };
-    const timer = setTimeout(() => finish(false), request.op === "apply" ? 250000 : 180000);
+    const timer = setTimeout(
+      () => finish(false),
+      ["apply", "github"].includes(request.op) ? 250000 : 180000,
+    );
     child.stdout.on("data", (b) => {
       output += b.toString("utf8");
       if (output.length > 2097152) finish(false);

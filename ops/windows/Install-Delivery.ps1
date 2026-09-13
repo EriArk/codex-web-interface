@@ -9,7 +9,9 @@ if($existing -and $existing.State -eq 'Running'){throw 'Git delivery is busy. Re
 $node=[IO.Path]::GetFullPath($NodeCommand)
 if(-not (Test-Path -LiteralPath $node -PathType Leaf) -or $node -match '\\WindowsApps\\'){throw 'Use a stable Node runtime outside the desktop package'}
 if(-not (Test-Path -LiteralPath $ProbePath -PathType Leaf)){throw 'Build packages/machines on Linux and provide the compiled deliveryProbe.js'}
-foreach($dir in @($directory,(Join-Path $env:LOCALAPPDATA 'CodexWeb\delivery-state'))){
+$githubProbe=Join-Path (Split-Path -Parent $ProbePath) 'githubWorkProbe.js'
+if(-not (Test-Path -LiteralPath $githubProbe -PathType Leaf)){throw 'Provide the matching compiled githubWorkProbe.js beside deliveryProbe.js'}
+foreach($dir in @($directory,(Join-Path $env:LOCALAPPDATA 'CodexWeb\delivery-state'),(Join-Path $env:LOCALAPPDATA 'CodexWeb\github-state'))){
  New-Item -ItemType Directory -Path $dir -Force | Out-Null
  $acl=Get-Acl -LiteralPath $dir;$acl.SetAccessRuleProtection($true,$false)
  foreach($rule in @($acl.Access)){$acl.RemoveAccessRuleSpecific($rule)}
@@ -17,6 +19,7 @@ foreach($dir in @($directory,(Join-Path $env:LOCALAPPDATA 'CodexWeb\delivery-sta
  [IO.Directory]::SetAccessControl($dir,$acl)
 }
 Copy-Item -LiteralPath $ProbePath -Destination (Join-Path $directory 'deliveryProbe.js') -Force
+Copy-Item -LiteralPath $githubProbe -Destination (Join-Path $directory 'githubWorkProbe.js') -Force
 foreach($file in @('DeliveryWorker.cjs','Run-Delivery.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $directory $file) -Force}
 [IO.File]::WriteAllText((Join-Path $directory 'package.json'),' {"type":"module"}',[Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText((Join-Path $directory 'config.json'),(@{node=$node}|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))

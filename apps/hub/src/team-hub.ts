@@ -32,6 +32,8 @@ import { registerTeamConsultations } from "./team-consultation-routes.js";
 import { TeamConsultations } from "./team-consultations.js";
 import { registerTeamExecutions } from "./team-execution-routes.js";
 import { TeamExecutions } from "./team-executions.js";
+import { type GitHubProbe, TeamGitHub } from "./team-github.js";
+import { registerTeamGitHub } from "./team-github-routes.js";
 import { TeamGpt } from "./team-gpt.js";
 import { registerTeamLinks } from "./team-link-routes.js";
 import { TeamLinks } from "./team-links.js";
@@ -96,6 +98,7 @@ type Options = Omit<NonNullable<Parameters<typeof createApp>[1]>, "auth" | "sess
   socketRoot: string;
   personalFactory?: typeof createApp;
   enrollmentVerifier?: typeof verifyEnrollment;
+  githubProbe?: GitHubProbe;
 };
 const credentials = z
   .object({
@@ -258,6 +261,13 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     teamConsultations,
     personal,
     authorizeSharedExecution,
+  );
+  const teamGitHub = new TeamGitHub(
+    teamProjects,
+    teamBridges,
+    personal,
+    authorizeSharedExecution,
+    options.githubProbe,
   );
   const track = (
     userId: string,
@@ -474,6 +484,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     new TeamBridgeSources(teamBridges, personal),
   );
   registerTeamExecutions(app, teamExecutions, actor);
+  registerTeamGitHub(app, teamGitHub, actor);
   const restartPersonal = async (userId: string, change: () => void = () => {}) => {
     registry.active(userId);
     if (reconfiguring.has(userId))
@@ -721,7 +732,14 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       team: 1,
     }));
     const storedWork = () => {
-      let work = activeMutations;
+      let work = activeMutations + (teamGitHub.busy() ? 1 : 0);
+      work += Number(
+        registry.db
+          .prepare(
+            "SELECT COUNT(*) n FROM team_github_operations WHERE state IN ('preparing','running','unknown')",
+          )
+          .get()?.n ?? 0,
+      );
       work += Number(
         registry.db
           .prepare(
@@ -907,6 +925,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   app.addHook("onClose", async () => {
     closing = true;
     await teamBridgeRuns.close();
+    await teamGitHub.close();
     await teamExecutions.close();
     await teamConsultations.close();
     registry.events.off("revoked", revoked);
@@ -944,5 +963,6 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     teamConsultations,
     teamBridges,
     teamBridgeRuns,
+    teamGitHub,
   };
 }
