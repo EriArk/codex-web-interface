@@ -15,7 +15,9 @@ The approved [Team Workspace](TEAM_WORKSPACE.md) adds user identity and explicit
 
 ## Primary design target
 
-Latest owner direction (2026-09-13): Tasks/Notes/Plans/Reports each use an independent window; Files and Git become separate windows rather than a combined support-pane mode. Shared projects join the same workspace shortcut row under a concise label («Общие»). Results keep project-wide scope only, with exact source backlinks. Common casing/screen/button/field primitives must cover existing and new forms, respecting each theme and the visible keyboard viewport. This supersedes older combined-pane/tab descriptions below. The [visual audit and remaining-work plan](ISSUE_AUDIT_2026-09-13.md) specifies the transitions and verification; this redesign is not installed yet.
+Latest owner direction (2026-09-13): Tasks/Notes/Plans/Reports each use an independent window; Files and Git become separate windows rather than a combined support-pane mode. Shared projects join the same workspace shortcut row under a concise label («Общие»). Results keep project-wide scope only, with exact source backlinks. Common casing/screen/button/field primitives must cover existing and new forms, respecting each theme and the visible keyboard viewport. This supersedes older combined-pane/tab descriptions below. The first workspace-window pass and its control/palette follow-up are installed; Files/Git and project-only Results remain in the [remaining-work plan](ISSUE_AUDIT_2026-09-13.md).
+
+Workspace shortcuts keep their earlier unframed icon/label styling. In CRT/Hi-Tech the window heading and project controls belong to the casing, above the inset screen. Project filters use a dropdown with All/unassigned choices and explicit bounded loading of more projects. Settings swatches show the actual theme material/brightness (actual accent in Organizer/Classic Dark), preserving dark matte CRT and light glossy exceptions.
 
 **13-inch iPad, landscape, standalone PWA.**
 

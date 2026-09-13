@@ -2,6 +2,12 @@
 
 The owner asked to finish this pass and continue in short sessions. Code is on `feat/team-workspaces`; checked stages are committed and pushed. This document is the restart point, not a claim that every team acceptance gate is complete.
 
+## Window-control follow-up installed — 2026-09-13
+
+Web-only `8dd1720` is now public, asset `a1785cc15d34fca73319da86865d142d8290c5c166ad97beb1dd856b750faaeb`, confirmed through `/version.json` and the HTML stamp. It restores the earlier unframed workspace shortcuts, puts the window title/tool rails on the casing, replaces project chips with a dropdown and makes settings swatches match actual theme materials/accents without changing panel brightness. Five focused Chromium/WebKit suites, web typecheck/build and repository guard passed.
+
+Engine/gateway `60b326892` and GPT `7f25d37` were not restarted; container IDs/start times were compared before/after. Read-only Doctor confirmed Codex/Companion/login/capabilities and GPT health. All 49 files in the preceding web release were checksum-verified and retained; its manifest/continuity receipt is `backups/web-before-8dd1720.json`. No engine/schema or credential change was made.
+
 ## First window pass installed — 2026-09-13
 
 Web-only revision `ac39079` is installed at the standard public address. `/version.json` and the HTML release stamp both confirm `78e4a0d081a08b28c041fac3096e01c21cdd14c25f76bb4355a55dbcbd44d2c4`. Engine/gateway remain `60b326892`, GPT remains `7f25d37`; container IDs and start times were unchanged across publication. Live read-only Doctor confirmed SSH, Companion, Codex login/capabilities and GPT health before publication, without acquiring a conversation writer.

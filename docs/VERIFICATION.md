@@ -6,6 +6,8 @@ Restores the unframed sidebar shortcuts, moves tool-window headings/controls ont
 
 Linux web typecheck/build, targeted lint (existing non-fatal warnings) and repository guard pass. Chromium/WebKit suites `notebook`, `tasks`, `project-work`, `workspace-windows` and `polymer-themes` verify filtering/saving/retry/conflicts, project pagination beyond 100 entries without changing selection, keyboard/viewport geometry, 12 colors in four themes and preserved Codex/GPT drafts. Each palette swatch is compared before selection with the actual panel material or accent after selection. Screenshot inspection covered phone and tablet chrome; caption contrast was corrected on physical buttons. These are fixture/browser checks, not physical-device acceptance.
 
+Installed web `8dd1720`, asset `a1785cc15d34fca73319da86865d142d8290c5c166ad97beb1dd856b750faaeb`, is confirmed by public version/HTML. Prior assets are retained and verified. Engine/gateway/GPT container identities and start times stayed unchanged; the live read-only Codex/GPT preflight passed.
+
 ## Independent workspace windows — 2026-09-13
 
 The first UI pass adds shared window materials/lifecycle, the five-button Tasks/Notes/Plans/Reports/Shared row and direct personal/shared module windows. Existing stores, revision checks and execution contracts remain unchanged. The result-link → Task workflow survives removal of the universal module tabs through an explicit action.
