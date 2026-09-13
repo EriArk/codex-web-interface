@@ -147,6 +147,12 @@ export class TeamAuth extends Auth {
     );
   }
   async accept(token: string, login: string, name: string, password: string, reply: FastifyReply) {
+    if (this.config.team?.registrationEnabled === false)
+      throw new HubError(
+        503,
+        "MEMBER_REGISTRATION_PAUSED",
+        "Подключение новых участников пока не включено.",
+      );
     this.registry.invitation(token);
     const digest = await teamPasswordHash(password);
     const user = this.registry.accept(

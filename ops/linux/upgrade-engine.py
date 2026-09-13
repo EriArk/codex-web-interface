@@ -39,6 +39,31 @@ def update_env(path, values):
     return old
 
 
+def owner_activation(state, config):
+    """First owner-only team activation; never treat an existing team as single-user."""
+    assert not config.get('team', {}).get('enabled'), 'Team upgrades require full registry backup admission'
+    root = Path(config.get('team', {}).get('root', str(state / 'data/team')))
+    assert root.is_absolute() and not root.is_symlink()
+    assert root.resolve().is_relative_to((state / 'data').resolve()) and root.resolve() != (state / 'data').resolve()
+    assert not root.exists() or (root.is_dir() and not any(root.iterdir())), 'Team state already exists'
+    assert re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{2,39}', config['auth'].get('ownerLogin', ''))
+    target = json.loads(json.dumps(config))
+    target['team'] = dict(config.get('team', {}), enabled=True, registrationEnabled=False, root=str(root))
+    return target, root
+
+
+def restore_owner_activation(state, original, root, revision):
+    """Before public admission, preserve failed team metadata and restore exact old config."""
+    assert root.resolve().is_relative_to((state / 'data').resolve()) and root.resolve() != (state / 'data').resolve()
+    assert not root.is_symlink()
+    if root.exists():
+        root.rename(root.with_name(root.name + '-failed-' + revision + '-' + str(time.time_ns())))
+    temporary = state / 'config.rollback.tmp'
+    temporary.write_bytes(original)
+    temporary.chmod(0o600)
+    temporary.replace(state / 'config.json')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('revision')
@@ -47,6 +72,7 @@ def main():
     p.add_argument('--release', required=True)
     p.add_argument('--verification', required=True)
     p.add_argument('--check', action='store_true')
+    p.add_argument('--enable-team-owner', action='store_true')
     a = p.parse_args()
     if not a.state or not all(re.fullmatch(r'[a-f0-9]{7,64}', x) for x in [a.revision, a.expected]):
         p.error('Explicit state and image revisions required')
@@ -61,7 +87,12 @@ def main():
     container = 'codex-web-engine' if old_engine else 'codex-web-hub'
     old = old_engine or inspect(container)
     assert old and old['Config']['Labels']['org.opencontainers.image.revision'] == a.expected
-    config = json.loads((state / 'config.json').read_text())
+    original_config = (state / 'config.json').read_bytes()
+    config = json.loads(original_config)
+    assert not config.get('team', {}).get('enabled'), 'Use coordinated team-registry backup/restore for an existing team'
+    activation = owner_activation(state, config) if a.enable_team_owner else None
+    if activation:
+        assert all(proof.get(k) for k in ['ownerMigration', 'ownerTeamImage', 'ownerRollback', 'codexContinuityPreflight'])
     database = Path(config['hub']['databasePath']).resolve(strict=True)
     assert database.is_relative_to(state / 'data')
     web = state / 'web-releases'
@@ -118,6 +149,9 @@ def main():
                 if not idle(reserve_terminals=True):
                     continue
                 assert inspect(container)['Config']['Labels']['org.opencontainers.image.revision'] == a.expected
+                assert (state / 'config.json').read_bytes() == original_config, 'Configuration changed while waiting'
+                if activation:
+                    owner_activation(state, config)
                 status('installing')
                 # No public admission after the final database-locked recheck.
                 run(['docker', 'stop', '--time', '30', 'codex-web-hub'])
@@ -145,7 +179,14 @@ def main():
         compose = ['docker', 'compose', '--env-file', str(env), '-f', str(release / 'ops/linux/compose.yaml')]
         exposed = False
         try:
+            if activation:
+                before_config = state / ('before-owner-team-' + a.revision + '.json')
+                before_config.write_bytes(original_config)
+                before_config.chmod(0o600)
+                atomic(state / 'config.json', activation[0])
             run(compose + ['up', '-d', '--no-deps', '--no-build', '--wait', 'engine'])
+            if activation:
+                run(['docker', 'exec', 'codex-web-engine', 'node', 'dist/owner-team-check.js'])
             run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL',
                  '-v', str(state / 'engine') + ':/run/codex-engine:ro', '-v', str(web) + ':/releases',
                  'codex-web-hub:' + a.revision, 'node', 'dist/publish-web.js', '/web', '/releases', '/run/codex-engine/engine.sock', a.revision])
@@ -166,6 +207,8 @@ def main():
                 subprocess.run(['docker', 'stop', '--time', '30', 'codex-web-engine'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 with sqlite3.connect(backup) as source, sqlite3.connect(database) as destination:
                     source.backup(destination)
+                if activation:
+                    restore_owner_activation(state, original_config, activation[1], a.revision)
                 env.write_text(previous_env)
                 if previous_pointer:
                     (web / 'current.json').write_text(previous_pointer)

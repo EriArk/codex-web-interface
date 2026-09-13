@@ -113,6 +113,7 @@ export const configSchema = z
     team: z
       .object({
         enabled: z.boolean().default(false),
+        registrationEnabled: z.boolean().default(true),
         root: z.string().startsWith("/").max(2000),
         maxUsers: z.number().int().min(2).max(10).default(10),
         hubTailnetAddress: tailnetAddressSchema.optional(),

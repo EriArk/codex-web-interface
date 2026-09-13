@@ -67,7 +67,7 @@ Additional Gate C candidate work: common-ledger Report drafts now have frozen pe
 
 ### Owner-requested end of this long pass (2026-09-13)
 
-The owner explicitly requested wrapping up after roadmap/check verification and installing only a checked stage, with remaining work split into short passes. Do not interpret the original integrated-pass request as permission to continue indefinitely. [The current checkpoint](TEAM_CHECKPOINT.md) records implemented versus still-open work, the release boundary and newly filed #170–175. Gates A–E are not all accepted; a team-disabled personal release must not be described as a completed team rollout.
+The owner explicitly requested wrapping up after roadmap/check verification and installing only a checked stage, with remaining work split into short passes. Do not interpret the original integrated-pass request as permission to continue indefinitely. [The current checkpoint](TEAM_CHECKPOINT.md) records implemented versus still-open work, the release boundary and newly filed #170–175. The owner then requested activating the prepared modules and login now: the replacement stage is first-owner team activation with new-member registration paused. Gates A–E are not all accepted; owner-only activation is not a completed multi-user rollout.
 
 ### Gate D — related projects, Bridges and GitHub
 

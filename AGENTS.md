@@ -561,3 +561,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - The original owner's public team login is `eriark`; retain the existing password. `auth.ownerLogin` selects the first team login without changing the existing personal credential lookup in `auth.username`. Preserve the original owner ID after creation; a restart must not rename an existing account implicitly.
 - The original owner bypasses new-user onboarding/setup wizards. Continue the existing machines, projects/chats, Codex identity, original GPT profile and machine-local GitHub login. Team activation must not replace these with empty member configuration or require reenrollment/native sign-in as part of migration.
 - Member invitations/setup are for new users. After setup, everyone uses the standard `https://codex.abysstail.art` address; invitation/recovery links are not everyday login URLs.
+
+## Owner-requested functional activation (2026-09-13)
+
+- The owner now requests enabling as much of the verified prepared functionality as possible, including the login/password experience, on the current installation for evaluation without a second user. Replace the earlier team-disabled staged release with a verified first-owner team activation.
+- Preserve the owner's existing session, native credentials/profiles, projects and ordinary Codex recovery. Do not force logout or run onboarding for the original owner. New-member registration remains closed until its separate admission checks pass; this does not hide the owner's shared-project/workspace modules.
+- Activation still waits for native work through the maintenance guard. Verify the first-owner migration and rollback before public admission, save the prior configuration and retain failed registry state for recovery. Never silently use a single-database rollback for a previously enabled multi-user installation.

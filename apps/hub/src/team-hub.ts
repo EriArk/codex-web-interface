@@ -661,8 +661,18 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     await restartPersonal(userId);
     return { ok: true };
   });
-  app.get("/api/team/users", (req) => ({ items: registry.users(actor(req)) }));
+  app.get("/api/team/users", (req) => ({
+    items: registry.users(actor(req)),
+    registrationEnabled: config.team?.registrationEnabled !== false,
+  }));
   app.post("/api/team/invitations", slow, (req) => {
+    registry.admin(actor(req));
+    if (config.team?.registrationEnabled === false)
+      throw new HubError(
+        503,
+        "MEMBER_REGISTRATION_PAUSED",
+        "Подключение новых участников пока не включено.",
+      );
     const b = z.object({ name: teamNameSchema }).strict().parse(req.body);
     const value = registry.invite(actor(req), b.name);
     return {
@@ -742,6 +752,8 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       revision: process.env.HUB_REVISION ?? "unknown",
       instance,
       team: 1,
+      ownerReady: !failed.has(registry.ownerId),
+      registrationEnabled: config.team?.registrationEnabled !== false,
     }));
     const storedWork = () => {
       let work = activeMutations + (teamGitHub.busy() ? 1 : 0);

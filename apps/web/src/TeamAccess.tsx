@@ -27,7 +27,8 @@ const auditLabels: Record<string, string> = {
 
 export function TeamAccess() {
   const [me, setMe] = useState<TeamUser | null>(null),
-    [users, setUsers] = useState<TeamUser[]>([]);
+    [users, setUsers] = useState<TeamUser[]>([]),
+    [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [name, setName] = useState(""),
     [link, setLink] = useState<{ url: string; expires: number } | null>(null);
   const [notice, setNotice] = useState(""),
@@ -46,7 +47,11 @@ export function TeamAccess() {
     const { user } = await api<{ user: TeamUser }>("/team/me", { signal });
     setMe(user);
     if (user.role === "admin") {
-      setUsers((await api<{ items: TeamUser[] }>("/team/users", { signal })).items);
+      const data = await api<{ items: TeamUser[]; registrationEnabled?: boolean }>("/team/users", {
+        signal,
+      });
+      setUsers(data.items);
+      setRegistrationEnabled(data.registrationEnabled !== false);
       setInvitations(
         (await api<{ items: typeof invitations }>("/team/invitations", { signal })).items.filter(
           (invite) => invite.state === "pending" && invite.expires > Date.now(),
@@ -78,7 +83,7 @@ export function TeamAccess() {
     }
   };
   const invite = async () => {
-    if (busy || !name.trim()) return;
+    if (busy || !name.trim() || !registrationEnabled) return;
     setBusy(true);
     setNotice("");
     setLink(null);
@@ -216,13 +221,22 @@ export function TeamAccess() {
                 maxLength={80}
                 placeholder="Имя"
                 required
-                disabled={busy}
+                disabled={busy || !registrationEnabled}
               />
-              <button className="secondary" type="submit" disabled={busy || !name.trim()}>
+              <button
+                className="secondary"
+                type="submit"
+                disabled={busy || !name.trim() || !registrationEnabled}
+              >
                 <Icon name="link" /> Приглашение
               </button>
             </div>
           </form>
+          {!registrationEnabled && (
+            <p className="review-caption">
+              Совместные проекты доступны. Подключение новых участников будет включено отдельно.
+            </p>
+          )}
           {invitations.length > 0 && (
             <details>
               <summary>Ожидают входа · {invitations.length}</summary>

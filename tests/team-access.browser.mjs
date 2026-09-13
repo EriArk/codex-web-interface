@@ -24,7 +24,7 @@ const config = configSchema.parse({
     resultsPath: join(root, "files"),
   },
   team: { enabled: true, root: join(root, "team") },
-  auth: { username: "owner" },
+  auth: { username: "owner", ownerLogin: "eriark" },
   machines: [],
   projects: [],
 });
@@ -53,9 +53,10 @@ try {
       errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     try {
+      config.team.registrationEnabled = false;
       await page.goto(base);
       await page.evaluate(() => sessionStorage.setItem("codex-draft-identical", "OWNER_DRAFT"));
-      await page.getByLabel("Логин", { exact: true }).fill("owner");
+      await page.getByLabel("Логин", { exact: true }).fill("eriark");
       await page.getByLabel("Пароль", { exact: true }).fill(password);
       await page.getByRole("button", { name: "Войти", exact: true }).click();
       await expect(page.locator(".login-page")).toHaveCount(0);
@@ -72,6 +73,17 @@ try {
       await page.getByRole("button", { name: "Настройки", exact: true }).last().click();
       await page.locator('[data-category="access"]').click();
       await expect(page.getByLabel("Участники установки")).toBeVisible();
+      await expect(page.getByLabel("Пригласить участника")).toBeDisabled();
+      await expect(
+        page.getByText(
+          "Совместные проекты доступны. Подключение новых участников будет включено отдельно.",
+        ),
+      ).toBeVisible();
+      config.team.registrationEnabled = true;
+      await page.reload();
+      await page.getByRole("button", { name: "Настройки", exact: true }).last().click();
+      await page.locator('[data-category="access"]').click();
+      await expect(page.getByLabel("Пригласить участника")).toBeEnabled();
       for (const [width, height] of [
         [390, 844],
         [768, 1024],

@@ -164,6 +164,46 @@ test("chosen owner login preserves the original password, legacy lookup and exis
   assert.equal(collision.status, 409);
 });
 
+test("pausing new registrations leaves existing owner login and project work available", async (t) => {
+  const f = await fixture(t, {}, "eriark");
+  const invite = await f.request("/api/team/invitations", f.owner, "POST", { name: "Later" });
+  f.config.team.registrationEnabled = false;
+  assert.equal((await f.request("/api/team/users")).body.registrationEnabled, false);
+  assert.equal(
+    (await f.request("/api/team/invitations", f.owner, "POST", { name: "Later" })).status,
+    503,
+  );
+  assert.equal(
+    (
+      await f.request("/api/auth/join", {}, "POST", {
+        token: new URL(invite.body.url).hash.slice(6),
+        login: "later",
+        name: "Later",
+        password: f.password,
+      })
+    ).status,
+    503,
+  );
+  const login = await f.request("/api/auth/login", {}, "POST", {
+    login: "eriark",
+    password: f.password,
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.originalOwner, true);
+  const id = randomUUID();
+  assert.equal(
+    (
+      await f.request(`/api/team/projects/${id}`, f.owner, "PUT", {
+        title: "My shared project",
+        visibility: "shared",
+        repository: null,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(f.registry.db.prepare("SELECT count(*) n FROM team_users").get().n, 2);
+});
+
 async function sharedFixture(t, role = "collaborator") {
   const f = await fixture(t),
     projectId = randomUUID(),

@@ -1,5 +1,13 @@
 # Verification record
 
+## First-owner activation preparation — 2026-09-13
+
+The complete isolated Linux suite passed **525 tests**, build, typecheck and lint (existing non-fatal warnings remain). New cases verify backend registration pause while owner login/shared work remains available, and first-owner activation guards with exact-config rollback and preservation of a failed registry. Chromium and WebKit passed login as `eriark`, preserved original-owner drafts, paused-registration controls, account switching and the existing 24 theme/viewport combinations per engine. Changing categories does not remount saved forms; the fixture reloads after changing its server configuration.
+
+A migration rehearsal on the stable backup checked all **207,066 records across 61 private tables** before/after owner creation and reopening. Password hash, public login, stable owner ID and existing native machine/project/GPT bindings were verified without native connections. The historical snapshot had no still-valid sessions at rehearsal time; legacy-session continuity is covered with live disposable credentials by the isolation/browser and exact-image checks rather than claimed from that copy.
+
+The superseded team-disabled installer was canceled while waiting. The replacement cannot be queued until its exact-image owner login/session, gateway/engine restart and restoration to the previous personal image pass; those receipts live beside the deployment logs. Public activation additionally runs a read-only owner identity/password/runtime check before opening the gateway. New-member acceptance and coordinated upgrades of an already-enabled team remain separate work.
+
 ## Original owner login preparation — 2026-09-13
 
 Build/typecheck and all **33 team-isolation tests** passed after adding optional `auth.ownerLogin`. The regression verifies that `eriark` uses the original password hash and stable owner/session, the private credential row remains `owner`, a duplicate member login is rejected, wrong passwords fail and the old password-only owner request stays compatible. The setting applies only when the original team account is first created; it does not rename an existing identity on restart.
