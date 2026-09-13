@@ -8,6 +8,8 @@ A migration rehearsal on the stable backup checked all **207,066 records across 
 
 The superseded team-disabled installer was canceled while waiting. The replacement cannot be queued until its exact-image owner login/session, gateway/engine restart and restoration to the previous personal image pass; those receipts live beside the deployment logs. Public activation additionally runs a read-only owner identity/password/runtime check before opening the gateway. New-member acceptance and coordinated upgrades of an already-enabled team remain separate work.
 
+The first production-image rehearsal exposed an actual Unix-socket defect: the central team limiter's default IP normalizer dereferenced the missing socket peer IP before its internal-route exemption. A fixed private-socket bucket preserves rate limiting and restores the engine handshake. The added real Unix-socket regression passes owner session/login, failed-login limiting (including forged forwarded headers) and internal health/handshake after the login limit is reached. TCP-only browser fixtures could not reveal this deployment transport difference. The failed image was never installed.
+
 ## Original owner login preparation — 2026-09-13
 
 Build/typecheck and all **33 team-isolation tests** passed after adding optional `auth.ownerLogin`. The regression verifies that `eriark` uses the original password hash and stable owner/session, the private credential row remains `owner`, a duplicate member login is rejected, wrong passwords fail and the old password-only owner request stays compatible. The setting applies only when the original team account is first created; it does not rename an existing identity on restart.

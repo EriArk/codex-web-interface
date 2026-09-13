@@ -315,6 +315,9 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   await app.register(rateLimit, {
     max: 600,
     timeWindow: "1 minute",
+    // Unix-domain requests have no remote IP. The default limiter normalizer
+    // dereferences it before allowList, breaking even the engine handshake.
+    keyGenerator: (req) => req.ip ?? "private-unix",
     allowList: (req) => !req.url.startsWith("/api/"),
   });
   await auth.prepare();
