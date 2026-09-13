@@ -1,5 +1,13 @@
 # Verification record
 
+## Windows enrollment candidate — 2026-09-13
+
+- Linux typecheck, build and full suite: **429 tests passed**. The 18 focused root/enrollment/team checks include genuine HTTP dispatch, exact creation/report retries, wrong-owner/token-purpose rejection, immutable fingerprint review, no seed-project startup, activation work guards, failed-runtime cleanup/retry and backup restoration of the same owner/keys with native admission blocked.
+- Chromium and WebKit downloaded the real generated installer ZIP, displayed pending/reported states, kept review controls unavailable to a member, and retained account isolation. Access and connection panels were checked at 390×844, 1376×1032 and 1920×1080 in all four themes, with no horizontal overflow or page errors. Phone screenshots were inspected.
+- Native Windows PowerShell 5 verification: generated BOM-encoded script parsing, expected success/signed-out/stderr exit handling, six firewall-filter cases, fingerprint presentation and offscreen rendering of the actual wizard controls. No package installation, OpenSSH/firewall change, native login or owner conversation was exercised on this PC.
+- Installation artifacts are fixed reviewed helpers plus compiled project/delivery probes. Account credentials and private SSH keys are absent from the downloaded bundle; its one-day enrollment token cannot authenticate other APIs. Browser retries preserve the enrollment keypair.
+- These checks do not establish friend hardware acceptance. Hub Tailnet provisioning, per-user GPT/Remote setup, actual friend installation and the remainder of team collaboration/release gates are outstanding. Stable production remains unchanged.
+
 ## Private team foundation candidate — 2026-09-13
 
 Branch `feat/team-workspaces`; isolated Linux checkout `/home/abysscloud/codex-web-team`. Production Hub/engine stayed on `379fa17`, GPT on `7f25d37`. No candidate native writer was attached to the owner's execution environment.

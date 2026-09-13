@@ -14,6 +14,13 @@ import { tokenHash } from "./auth.js";
 import { deploymentBlockers } from "./deployment-status.js";
 import { ENGINE_PROTOCOL, engineTerminalWork } from "./engine-client.js";
 import { prepareEngineSocket } from "./engine-socket.js";
+import {
+  enrolledRuntime,
+  enrollmentBundle,
+  enrollmentKeys,
+  verifyEnrollment,
+} from "./machine-enrollment.js";
+import { MachineEnrollmentStore } from "./machine-enrollment-store.js";
 import { proxyPrivateHttp, proxyPrivateSocket } from "./private-proxy.js";
 import { Store } from "./store.js";
 import { sessionCookie, TeamAuth } from "./team-auth.js";
@@ -45,20 +52,27 @@ export function privateDirectory(path: string) {
 /** A new account starts with no execution or consumer-account fallback. */
 export function privateConfig(config: HubConfig, registry: TeamStore, userId: string): HubConfig {
   const user = registry.active(userId);
+  const blocked =
+    registry.db.prepare("SELECT value FROM team_meta WHERE key='nativeAdmission'").get()?.value ===
+    "blocked";
+  const enrolled = blocked
+    ? { machines: [], devices: [] }
+    : enrolledRuntime(config, registry, userId);
   if (user.id === registry.ownerId && user.legacy)
     return {
       ...config,
-      machines: structuredClone(config.machines),
-      devices: structuredClone(config.devices),
-      projects: structuredClone(config.projects),
+      machines: blocked ? [] : [...structuredClone(config.machines), ...enrolled.machines],
+      devices: blocked ? [] : [...structuredClone(config.devices), ...enrolled.devices],
+      projects: blocked ? [] : structuredClone(config.projects),
+      gpt: blocked ? undefined : config.gpt,
     };
   const root = privateDirectory(join(config.team!.root, "users", user.id));
   return {
     hub: { ...config.hub, databasePath: join(root, "app.db"), resultsPath: join(root, "results") },
     auth: { username: user.login },
-    machines: [],
+    machines: enrolled.machines,
     projects: [],
-    devices: [],
+    devices: enrolled.devices,
   };
 }
 
@@ -66,6 +80,7 @@ type PersonalApp = Awaited<ReturnType<typeof createApp>>;
 type Options = Omit<NonNullable<Parameters<typeof createApp>[1]>, "auth" | "sessions"> & {
   socketRoot: string;
   personalFactory?: typeof createApp;
+  enrollmentVerifier?: typeof verifyEnrollment;
 };
 const credentials = z
   .object({
@@ -82,6 +97,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const socketRoot = privateDirectory(options.socketRoot);
   const ownerStore = options.store ?? new Store(config.hub.databasePath);
   const registry = new TeamStore(join(config.team.root, "team.db"), config, ownerStore);
+  const enrollments = new MachineEnrollmentStore(registry);
   const auth = new TeamAuth(config, ownerStore, registry);
   const app = Fastify({
     logger: options.logger
@@ -102,6 +118,8 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const instances = new Map<string, Promise<{ runtime: PersonalApp; socket: string }>>();
   const failed = new Set<string>();
   const connections = new Map<string, Map<() => void, string>>();
+  const reconfiguring = new Set<string>();
+  const privateMutations = new Map<string, number>();
   let closing = false,
     maintenanceUntil = 0,
     activeMutations = 0;
@@ -111,6 +129,12 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const personal = (userId: string) => {
     registry.active(userId);
     if (closing) throw new HubError(503, "WORKSPACE_CLOSING", "Сервис переподключается.");
+    if (reconfiguring.has(userId))
+      throw new HubError(
+        503,
+        "WORKSPACE_RECONFIGURING",
+        "Применяется подключение. Черновики сохранены.",
+      );
     let pending = instances.get(userId);
     if (!pending) {
       if (maintenanceActive()) throw maintenanceError();
@@ -132,23 +156,43 @@ export async function createTeamHub(config: HubConfig, options: Options) {
           userId === registry.ownerId ? ownerStore : new Store(selected.hub.databasePath);
         registry.db.prepare("UPDATE team_namespaces SET initialized=1 WHERE userId=?").run(userId);
         const scoped = new TeamAuth(selected, store, registry, userId);
-        const socket = join(socketRoot, `${userId}.sock`);
-        if (Buffer.byteLength(socket) > 100) throw new Error("TEAM_SOCKET_PATH_TOO_LONG");
-        await prepareEngineSocket(socket);
-        const runtime = await (options.personalFactory ?? createApp)(selected, {
-          ...options,
-          webRoot: undefined,
-          store,
-          auth: scoped,
-          executionService: true,
-          authorizeExecution: () => {
-            registry.active(userId);
-            if (maintenanceActive()) throw maintenanceError();
-          },
-        });
-        await runtime.app.listen({ path: socket });
-        chmodSync(socket, 0o600);
-        return { runtime, socket };
+        let runtime: PersonalApp | undefined;
+        try {
+          const socket = join(socketRoot, `${userId}.sock`);
+          if (Buffer.byteLength(socket) > 100) throw new Error("TEAM_SOCKET_PATH_TOO_LONG");
+          await prepareEngineSocket(socket);
+          runtime = await (options.personalFactory ?? createApp)(selected, {
+            ...options,
+            webRoot: undefined,
+            store,
+            auth: scoped,
+            keepStoreOpen: userId === registry.ownerId,
+            executionService: true,
+            authorizeExecution: () => {
+              registry.active(userId);
+              if (maintenanceActive()) throw maintenanceError();
+              if (reconfiguring.has(userId))
+                throw new HubError(503, "WORKSPACE_RECONFIGURING", "Применяется подключение.");
+              if (
+                registry.db.prepare("SELECT value FROM team_meta WHERE key='nativeAdmission'").get()
+                  ?.value === "blocked"
+              )
+                throw new HubError(
+                  503,
+                  "RESTORE_ADMISSION_REQUIRED",
+                  "После восстановления подключения проверяет администратор сервера.",
+                );
+            },
+          });
+          await runtime.app.listen({ path: socket });
+          chmodSync(socket, 0o600);
+          return { runtime, socket };
+        } catch (error) {
+          scoped.dispose();
+          if (runtime) await runtime.app.close().catch(() => {});
+          else if (userId !== registry.ownerId) store.close();
+          throw error;
+        }
       })();
       instances.set(userId, pending);
       void pending.catch(() => {
@@ -260,11 +304,21 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     if (
       !path.startsWith("/api/") ||
       path === "/api/health" ||
+      path === "/api/machine-enrollment/report" ||
       centralAuth.has(path) ||
       path.startsWith("/api/team/")
     )
       return;
     const session = auth.session(req);
+    if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+      privateMutations.set(session.user.id, (privateMutations.get(session.user.id) ?? 0) + 1);
+      reply.raw.once("close", () =>
+        privateMutations.set(
+          session.user.id,
+          Math.max(0, (privateMutations.get(session.user.id) ?? 1) - 1),
+        ),
+      );
+    }
     const { socket } = await personal(session.user.id);
     auth.session(req);
     reply.hijack();
@@ -349,6 +403,148 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     return { ok: true };
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
+  const restartPersonal = async (userId: string, change: () => void = () => {}) => {
+    registry.active(userId);
+    if (reconfiguring.has(userId))
+      throw new HubError(409, "WORKSPACE_RECONFIGURING", "Подключение уже применяется.");
+    if (failed.has(userId)) {
+      instances.delete(userId);
+      failed.delete(userId);
+    }
+    const current = await personal(userId);
+    // Another activation may have claimed the runtime while its startup was awaited.
+    if (reconfiguring.has(userId))
+      throw new HubError(409, "WORKSPACE_RECONFIGURING", "Подключение уже применяется.");
+    reconfiguring.add(userId);
+    try {
+      const blocked = () =>
+        (privateMutations.get(userId) ?? 0) > 0 ||
+        deploymentBlockers(current.runtime.store, { busy: 0, unknown: 0 }).length > 0;
+      if (blocked())
+        throw new HubError(
+          409,
+          "WORKSPACE_BUSY",
+          "Закончи текущие задачи перед изменением подключений.",
+        );
+      const gpt = current.runtime.sessions.config.gpt;
+      if (gpt) {
+        for (const path of ["/active", "/bridge-health"]) {
+          const response = await fetch(new URL(path, gpt.endpoint), {
+            headers: { Authorization: `Bearer ${process.env[gpt.tokenSecret] ?? ""}` },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (!response.ok)
+            throw new HubError(409, "WORKSPACE_BUSY", "Не удалось проверить работу GPT.");
+          const body = (await response.json()) as {
+            generating?: boolean;
+            activeRequests?: unknown[];
+          };
+          if (
+            body.generating ||
+            (path === "/bridge-health" &&
+              (!Array.isArray(body.activeRequests) || body.activeRequests.length))
+          )
+            throw new HubError(409, "WORKSPACE_BUSY", "GPT ещё занят.");
+        }
+      }
+      const terminals = await engineTerminalWork(current.socket, true);
+      if (!terminals.reserved || terminals.busy || terminals.unknown || blocked())
+        throw new HubError(
+          409,
+          "WORKSPACE_BUSY",
+          "В терминале выполняется работа или его состояние не подтверждено.",
+        );
+      registry.active(userId);
+      change();
+      revoked(userId);
+      await current.runtime.app.close();
+      instances.delete(userId);
+      failed.delete(userId);
+    } finally {
+      reconfiguring.delete(userId);
+    }
+    await personal(userId);
+  };
+  app.get("/api/team/machines", async (req) => ({
+    items: enrollments.list(actor(req)),
+    enabled: !!config.team?.hubTailnetAddress,
+    activeMachineIds:
+      (
+        await instances.get(actor(req))?.catch(() => undefined)
+      )?.runtime.sessions.config.machines.map((machine) => machine.id) ?? [],
+  }));
+  app.get("/api/team/machine-reviews", (req) => ({ items: enrollments.list(actor(req), true) }));
+  app.post("/api/team/machines", slow, async (req) => {
+    const userId = actor(req),
+      b = z
+        .object({
+          name: teamNameSchema,
+          request: z
+            .object({ id: z.string().uuid(), token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) })
+            .strict()
+            .optional(),
+        })
+        .strict()
+        .parse(req.body);
+    if (!config.team?.hubTailnetAddress)
+      throw new HubError(
+        503,
+        "TAILNET_SETUP_REQUIRED",
+        "Сначала подключи Hub к Tailscale в настройке сервера.",
+      );
+    const keys = await enrollmentKeys();
+    auth.session(req);
+    return enrollments.create(userId, b.name, keys, b.request);
+  });
+  app.post("/api/team/machines/:id/bundle", slow, (req) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params),
+      { token } = z
+        .object({ token: z.string().length(43) })
+        .strict()
+        .parse(req.body);
+    return enrollmentBundle(config, enrollments, actor(req), id, token);
+  });
+  app.post(
+    "/api/machine-enrollment/report",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    (req) => {
+      if (!config.team?.hubTailnetAddress)
+        throw new HubError(503, "TAILNET_SETUP_REQUIRED", "Приватная сеть Hub ещё не настроена.");
+      return {
+        enrollment: enrollments.report(
+          String(req.headers.authorization).slice(7),
+          req.body,
+          config.team.hubTailnetAddress,
+        ),
+      };
+    },
+  );
+  app.post("/api/team/machines/:id/approve", slow, async (req) => {
+    const userId = actor(req),
+      { id } = z.object({ id: z.string().uuid() }).parse(req.params),
+      { fingerprint } = z
+        .object({ fingerprint: z.string().max(100) })
+        .strict()
+        .parse(req.body);
+    const { row } = enrollments.approval(userId, id, fingerprint);
+    if (row.state !== "approved")
+      await (options.enrollmentVerifier ?? verifyEnrollment)(config, row);
+    auth.session(req);
+    return { enrollment: enrollments.approved(userId, id, fingerprint, row.digest!) };
+  });
+  app.post("/api/team/machines/apply", async (req) => {
+    await restartPersonal(actor(req));
+    return { ok: true };
+  });
+  app.delete("/api/team/machines/:id", async (req) => {
+    const userId = actor(req),
+      { id } = z.object({ id: z.string().uuid() }).parse(req.params),
+      row = enrollments.owned(userId, id);
+    if (row.state === "approved")
+      await restartPersonal(userId, () => enrollments.revoke(userId, id));
+    else enrollments.revoke(userId, id);
+    return { ok: true };
+  });
   app.get("/api/team/me", (req) => ({
     user: publicUser(registry.active(actor(req))),
     originalOwner: actor(req) === registry.ownerId,
@@ -592,7 +788,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     await Promise.allSettled(
       [...instances.values()].map(async (pending) => (await pending).runtime.app.close()),
     );
-    if (!instances.has(registry.ownerId) || failed.has(registry.ownerId)) ownerStore.close();
+    ownerStore.close();
     registry.close();
   });
   // Restore every enabled personal runtime, so closing all browser tabs does not orphan queues.
@@ -607,5 +803,5 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       );
     }
   }
-  return { app, registry, auth, personal };
+  return { app, registry, auth, personal, enrollments };
 }

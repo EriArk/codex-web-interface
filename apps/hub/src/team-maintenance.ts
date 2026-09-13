@@ -70,7 +70,11 @@ function ownership(db: DatabaseSync) {
     db.prepare("PRAGMA foreign_key_check").all().length
   )
     throw new Error("TEAM_REGISTRY_INVALID");
-  if (db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value !== "1")
+  if (
+    !["1", "2"].includes(
+      String(db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value),
+    )
+  )
     throw new Error("TEAM_SCHEMA_UNSUPPORTED");
   const ownerId = z
     .string()
@@ -103,6 +107,15 @@ function mapping(db: DatabaseSync) {
   return JSON.stringify({
     ...ownership(db),
     runtimes: db.prepare("SELECT * FROM team_runtime_config ORDER BY userId").all(),
+    enrollments: db
+      .prepare("SELECT name FROM sqlite_master WHERE name='team_machine_enrollments'")
+      .get()
+      ? db
+          .prepare(
+            "SELECT id,ownerId,state,digest,machineId FROM team_machine_enrollments ORDER BY id",
+          )
+          .all()
+      : [],
   });
 }
 function personalPaths(config: HubConfig, user: { id: string; legacy: boolean }): HubConfig {
@@ -318,6 +331,19 @@ export async function restoreTeamSnapshot(snapshot: string, target: string) {
       registry.exec(
         "BEGIN IMMEDIATE; DELETE FROM team_sessions; UPDATE team_users SET revision=revision+1; UPDATE team_invites SET state='revoked' WHERE state='pending'; UPDATE team_receipts SET state='unknown' WHERE state='pending'; COMMIT;",
       );
+      registry
+        .prepare("INSERT OR REPLACE INTO team_meta(key,value) VALUES('nativeAdmission','blocked')")
+        .run();
+      if (
+        registry
+          .prepare("SELECT name FROM sqlite_master WHERE name='team_machine_enrollments'")
+          .get()
+      )
+        registry
+          .prepare(
+            "UPDATE team_machine_enrollments SET state='revoked' WHERE state IN ('pending','reported')",
+          )
+          .run();
       ownership(registry);
     } finally {
       registry.close();

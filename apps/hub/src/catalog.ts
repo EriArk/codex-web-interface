@@ -108,12 +108,13 @@ export class Catalog {
     }
     for (const machine of this.config.machines) {
       const seed = this.config.projects.find((p) => p.machineId === machine.id && p.enabled);
-      if (seed)
+      const workingDirectory = seed?.workingDirectory ?? machine.allowedProjectRoots?.[0];
+      if (workingDirectory)
         projects.set("unassigned-" + machine.id, {
           id: "unassigned-" + machine.id,
           name: "Без проекта",
           machineId: machine.id,
-          workingDirectory: seed.workingDirectory,
+          workingDirectory,
           enabled: true,
           unassigned: true,
           position: 10000,

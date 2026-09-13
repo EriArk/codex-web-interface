@@ -6,18 +6,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { gunzipSync } from "node:zlib";
+import { createApp } from "../apps/hub/dist/app.js";
 import { Artifacts } from "../apps/hub/dist/artifacts.js";
 import { tokenHash } from "../apps/hub/dist/auth.js";
+import { enrolledRuntime } from "../apps/hub/dist/machine-enrollment.js";
+import { enrollmentReport, hostFingerprint } from "../apps/hub/dist/machine-enrollment-store.js";
 import { createRecoveryLink, createSnapshot } from "../apps/hub/dist/maintenance.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { teamPasswordHash } from "../apps/hub/dist/team-auth.js";
 import { createTeamHub } from "../apps/hub/dist/team-hub.js";
 import { restoreTeamSnapshot, verifyTeamSnapshot } from "../apps/hub/dist/team-maintenance.js";
+import { unzipSync } from "../apps/hub/node_modules/fflate/esm/index.mjs";
 import WebSocket from "../apps/hub/node_modules/ws/wrapper.mjs";
 import { gptSessionAllowed } from "../ops/gpt/session-watch.mjs";
 import { configSchema } from "../packages/shared/dist/index.js";
 
-async function fixture(t) {
+async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), "cw-team-"));
   const config = configSchema.parse({
     hub: {
@@ -42,6 +47,7 @@ async function fixture(t) {
     store,
     socketRoot: join(root, "sock"),
     executionService: true,
+    ...options,
   });
   await hub.app.listen({ host: "127.0.0.1", port: 0 });
   const base = "http://127.0.0.1:" + hub.app.server.address().port;
@@ -234,6 +240,11 @@ test("team restore retains every identity and personal note, rejects missing nam
     );
     assert.equal(registry.prepare("SELECT COUNT(*) n FROM team_sessions").get().n, 0);
     assert.equal(registry.prepare("SELECT COUNT(*) n FROM team_users").get().n, 2);
+    assert.equal(
+      registry.prepare("SELECT value FROM team_meta WHERE key='nativeAdmission'").get().value,
+      "blocked",
+      "restoration cannot reacquire a live native writer",
+    );
   } finally {
     registry.close();
   }
@@ -459,4 +470,303 @@ test("engine maintenance considers another user's unknown work and releases fail
   );
   assert.equal((await f.request("/api/workspace/notes", f.owner)).status, 200);
   assert.throws(() => runtime.sessions.authorizeExecution(), /./);
+});
+
+test("computer enrollment uses a distinct token, reviewed identity and owner-only transport keys", async (t) => {
+  let verified = 0;
+  const f = await fixture(t, {
+    enrollmentVerifier: async (_config, row) => {
+      assert.equal(row.state, "reported");
+      verified++;
+    },
+  });
+  f.config.team.hubTailnetAddress = "100.64.0.1";
+  const intent = {
+    name: "Личный ПК",
+    request: { id: randomUUID(), token: randomBytes(32).toString("base64url") },
+  };
+  const created = await f.request("/api/team/machines", f.friend, "POST", intent);
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const { enrollment, token } = created.body;
+  const keys = JSON.parse(f.enrollments.row(enrollment.id).keys);
+  assert.deepEqual(
+    (await f.request("/api/team/machines", f.friend, "POST", intent)).body,
+    created.body,
+    "lost creation acknowledgement recovers the same installer",
+  );
+  assert.deepEqual(
+    JSON.parse(f.enrollments.row(enrollment.id).keys),
+    keys,
+    "retry keeps the original SSH keys",
+  );
+  assert.equal(
+    (await f.request("/api/team/machines", f.friend, "POST", { ...intent, name: "Changed" }))
+      .status,
+    409,
+  );
+  assert.equal((await f.request("/api/team/machines", f.owner, "POST", intent)).status, 409);
+  assert.notEqual(keys.command, keys.terminal);
+  assert(
+    !JSON.stringify((await f.request("/api/team/machines", f.friend)).body).includes("PRIVATE KEY"),
+  );
+  assert.equal(
+    (await f.request(`/api/team/machines/${enrollment.id}/bundle`, f.owner, "POST", { token }))
+      .status,
+    404,
+  );
+  assert.equal((await f.request("/api/auth/invitation", {}, "POST", { token })).status, 403);
+  assert.equal(
+    (
+      await f.request("/api/workspace/notes", {}, "GET", undefined, {
+        authorization: `Bearer ${token}`,
+      })
+    ).status,
+    401,
+  );
+  const archive = await f.request(`/api/team/machines/${enrollment.id}/bundle`, f.friend, "POST", {
+    token,
+  });
+  assert.equal(archive.status, 200, JSON.stringify(archive.body));
+  const files = unzipSync(Buffer.from(archive.body.base64, "base64"));
+  assert.deepEqual(Object.keys(files).sort(), [
+    "Connect-CodexWeb.ps1",
+    "Connect.cmd",
+    "README.txt",
+  ]);
+  const script = Buffer.from(files["Connect-CodexWeb.ps1"]).toString("utf8");
+  assert(script.startsWith("\uFEFF"));
+  const encoded = /\$encoded = '([A-Za-z0-9+/=]+)'/.exec(script)[1];
+  const payload = JSON.parse(gunzipSync(Buffer.from(encoded, "base64")));
+  assert.equal(payload.descriptor.token, token);
+  assert.equal(payload.descriptor.commandKey, keys.commandPublic);
+  assert(!JSON.stringify(payload).includes("PRIVATE KEY"));
+  for (const file of payload.files)
+    if (file.name.endsWith(".ps1"))
+      assert(Buffer.from(file.data, "base64").toString("utf8").startsWith("\uFEFF"), file.name);
+  const report = {
+    version: 1,
+    address: "100.64.0.2",
+    hostKey: keys.commandPublic,
+    machineGuid: randomUUID(),
+    sid: "S-1-5-21-111-222-333-1001",
+    username: "friend",
+    profile: "C:\\Users\\Friend",
+    roots: ["D:\\Projects"],
+    readiness: {
+      companion: true,
+      codex: true,
+      node: true,
+      git: true,
+      github: true,
+      desktop: false,
+    },
+  };
+  const reportHeaders = { authorization: `Bearer ${token}` };
+  assert.equal(
+    (await f.request("/api/machine-enrollment/report", f.friend, "POST", report, reportHeaders))
+      .status,
+    403,
+    "ambient session cannot substitute script authentication",
+  );
+  assert.equal(
+    (
+      await f.request(
+        "/api/machine-enrollment/report",
+        {},
+        "POST",
+        { ...report, address: "127.0.0.1" },
+        reportHeaders,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await f.request(
+        "/api/machine-enrollment/report",
+        {},
+        "POST",
+        { ...report, address: "100.64.0.1" },
+        reportHeaders,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await f.request("/api/machine-enrollment/report", {}, "POST", report, reportHeaders)).status,
+    200,
+  );
+  assert.equal(
+    (await f.request("/api/machine-enrollment/report", {}, "POST", report, reportHeaders)).status,
+    200,
+    "exact report retry",
+  );
+  assert.equal(
+    (
+      await f.request(
+        "/api/machine-enrollment/report",
+        {},
+        "POST",
+        { ...report, roots: ["D:\\Other"] },
+        reportHeaders,
+      )
+    ).status,
+    409,
+  );
+  const fingerprint = hostFingerprint(report.hostKey);
+  assert.equal(
+    (
+      await f.request(`/api/team/machines/${enrollment.id}/approve`, f.friend, "POST", {
+        fingerprint,
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await f.request(`/api/team/machines/${enrollment.id}/approve`, f.owner, "POST", {
+        fingerprint: "SHA256:changed",
+      })
+    ).status,
+    409,
+  );
+  const approved = await f.request(`/api/team/machines/${enrollment.id}/approve`, f.owner, "POST", {
+    fingerprint,
+  });
+  assert.equal(approved.status, 200, JSON.stringify(approved.body));
+  assert.equal(verified, 1);
+  assert.equal(
+    (await f.request(`/api/team/machines/${enrollment.id}/bundle`, f.friend, "POST", { token }))
+      .status,
+    200,
+    "the exact unexpired installer remains recoverable after approval",
+  );
+  assert.equal(
+    (await f.request("/api/machine-enrollment/report", {}, "POST", report, reportHeaders)).status,
+    200,
+    "lost report acknowledgement after approval",
+  );
+  const selected = enrolledRuntime(f.config, f.registry, f.friendId);
+  assert.equal(selected.machines.length, 1);
+  assert.equal(enrolledRuntime(f.config, f.registry, f.registry.ownerId).machines.length, 0);
+  assert.deepEqual(selected.machines[0].allowedProjectRoots, report.roots);
+  const ssh = await readFile(selected.machines[0].ssh.configFile, "utf8");
+  assert.match(ssh, /StrictHostKeyChecking yes/);
+  assert.match(ssh, /IdentitiesOnly yes/);
+  assert(!ssh.includes("ProxyCommand"));
+  const snapshot = await createSnapshot(f.config, join(f.root, "enrollment-backups"), { keep: 2 });
+  const target = join(f.root, "enrollment-restored");
+  await restoreTeamSnapshot(snapshot, target);
+  const restoredRegistry = new DatabaseSync(join(target, "team", "team.db"));
+  try {
+    const saved = restoredRegistry
+      .prepare("SELECT * FROM team_machine_enrollments WHERE id=?")
+      .get(enrollment.id);
+    assert.equal(saved.ownerId, f.friendId);
+    assert.equal(saved.report, f.enrollments.row(enrollment.id).report);
+    assert.equal(saved.keys, f.enrollments.row(enrollment.id).keys);
+    assert.equal(saved.state, "approved");
+    assert.equal(
+      restoredRegistry.prepare("SELECT value FROM team_meta WHERE key='nativeAdmission'").get()
+        .value,
+      "blocked",
+    );
+  } finally {
+    restoredRegistry.close();
+  }
+  // Store-only transport materialization performs no SSH/RPC. Do not activate fixture fake computers.
+  f.enrollments.revoke(f.friendId, enrollment.id);
+  assert.equal(enrolledRuntime(f.config, f.registry, f.friendId).machines.length, 0);
+  assert.equal(
+    (await f.request("/api/machine-enrollment/report", {}, "POST", report, reportHeaders)).status,
+    404,
+  );
+});
+
+test("personal runtime activation keeps the owner store and refuses concurrent or uncertain work", async (t) => {
+  const f = await fixture(t),
+    original = await f.personal(f.friendId),
+    owner = await f.personal(f.registry.ownerId);
+  original.runtime.store.db
+    .prepare(
+      "INSERT INTO commands(key,scope,digest,state,response,createdAt) VALUES('activation','test','digest','pending','{}',?)",
+    )
+    .run(new Date().toISOString());
+  assert.equal((await f.request("/api/team/machines/apply", f.friend, "POST")).status, 409);
+  assert.equal(await f.personal(f.friendId), original);
+  original.runtime.store.db.exec("DELETE FROM commands WHERE key='activation'");
+  const activated = await f.request("/api/team/machines/apply", f.friend, "POST");
+  assert.equal(activated.status, 200, JSON.stringify(activated.body));
+  assert.notEqual(await f.personal(f.friendId), original);
+  assert.equal(await f.personal(f.registry.ownerId), owner);
+  assert.equal((await f.request("/api/team/machines/apply", f.owner, "POST")).status, 200);
+  assert.equal((await f.request("/api/workspace/notes", f.owner)).status, 200);
+  assert.equal((await f.request("/api/auth/session", f.owner)).status, 200);
+});
+
+test("enrollment paths and host keys reject command injection and malformed native identities", () => {
+  const blob = Buffer.alloc(51);
+  blob.writeUInt32BE(11, 0);
+  blob.write("ssh-ed25519", 4);
+  blob.writeUInt32BE(32, 15);
+  const base = {
+    version: 1,
+    address: "100.70.80.90",
+    hostKey: "ssh-ed25519 " + blob.toString("base64"),
+    machineGuid: randomUUID(),
+    sid: "S-1-5-21-1-2-3-1001",
+    username: "friend",
+    profile: "C:\\Users\\Friend",
+    roots: ["D:\\Projects"],
+    readiness: {
+      companion: true,
+      codex: true,
+      node: true,
+      git: true,
+      github: false,
+      desktop: false,
+    },
+  };
+  for (const patch of [
+    { address: "example.com" },
+    { address: "100.128.0.1" },
+    { address: "100.064.0.2" },
+    { username: "friend\nProxyCommand x" },
+    { roots: ["D:\\Projects:secret"] },
+    { profile: "\\\\server\\profile" },
+    { hostKey: "ssh-ed25519 " + Buffer.alloc(51).toString("base64") },
+    { roots: [] },
+  ])
+    assert.throws(() => enrollmentReport({ ...base, ...patch }));
+  assert.deepEqual(enrollmentReport(base).roots, ["D:\\Projects"]);
+  assert.equal(
+    enrollmentReport({ ...base, username: "Иван Иванов", profile: "C:\\Users\\Иван" }).username,
+    "Иван Иванов",
+  );
+});
+
+test("failed personal startup releases session listeners and can be explicitly retried", async (t) => {
+  let fail = true;
+  const f = await fixture(t, {
+    personalFactory: async (config, options) => {
+      const runtime = await createApp(config, options);
+      if (config.auth.username === "friend" && fail) {
+        fail = false;
+        runtime.app.addHook("onReady", async () => {
+          throw Error("FIXTURE_STARTUP_FAILURE");
+        });
+      }
+      return runtime;
+    },
+  });
+  const before = f.registry.events.listenerCount("sessions");
+  await assert.rejects(f.personal(f.friendId), /FIXTURE_STARTUP_FAILURE/);
+  assert.equal(f.registry.events.listenerCount("sessions"), before);
+  assert.equal(
+    (await f.request("/api/team/machines", f.friend)).status,
+    200,
+    "connection recovery stays accessible",
+  );
+  assert.equal((await f.request("/api/team/machines/apply", f.friend, "POST")).status, 200);
+  assert.equal((await f.request("/api/workspace/notes", f.friend)).status, 200);
 });

@@ -91,6 +91,7 @@ export async function createApp(
     transcribe?: Transcribe;
     auth?: Auth;
     authorizeExecution?: () => void;
+    keepStoreOpen?: boolean;
   } = {},
 ) {
   const app = Fastify({
@@ -920,7 +921,7 @@ export async function createApp(
     await bridgeDoctor.close();
     await push.close();
     await sessions.close();
-    store.close();
+    if (!options.keepStoreOpen) store.close();
   });
   return { app, store, sessions, auth, push, gpt };
 }

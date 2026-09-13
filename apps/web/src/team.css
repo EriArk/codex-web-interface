@@ -3,6 +3,25 @@
   gap: 1rem;
   min-width: 0;
 }
+.team-machines {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.team-machines h3,
+.team-machines p {
+  margin: 0;
+}
+.team-fingerprint {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  padding-block: 0.5rem;
+}
+.team-notice {
+  overflow-wrap: anywhere;
+}
 .team-account {
   display: grid;
   gap: 0.25rem;

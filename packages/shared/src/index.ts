@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { tailnetAddressSchema } from "./enrollment.js";
 
 export * from "./appearance.js";
 export * from "./elicitation.js";
+export * from "./enrollment.js";
 export * from "./gui-preview.js";
 export * from "./relays.js";
 export * from "./staging.js";
@@ -107,6 +109,7 @@ export const configSchema = z
         enabled: z.boolean().default(false),
         root: z.string().startsWith("/").max(2000),
         maxUsers: z.number().int().min(2).max(10).default(10),
+        hubTailnetAddress: tailnetAddressSchema.optional(),
       })
       .optional(),
     machines: z.array(machine).max(20),

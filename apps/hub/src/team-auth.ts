@@ -28,6 +28,10 @@ export function sessionCookie(header: string | undefined, name: string): string 
 export class TeamAuth extends Auth {
   private disposed = false;
   private stopMirror: () => void = () => {};
+  dispose() {
+    this.disposed = true;
+    this.stopMirror();
+  }
   constructor(
     config: HubConfig,
     store: Store,
@@ -216,6 +220,20 @@ export class TeamAuth extends Auth {
       if (!path.startsWith("/api/")) return;
       reply.header("Cache-Control", "no-store");
       if (path === "/api/health" || path === "/api/auth/status") return;
+      if (!this.userId && path === "/api/machine-enrollment/report" && req.method === "POST") {
+        // A purpose-specific script token is checked by this one handler. It is never a login session.
+        if (
+          req.headers.cookie ||
+          (req.headers.origin && req.headers.origin !== this.config.hub.publicBaseUrl) ||
+          !/^Bearer [A-Za-z0-9_-]{43}$/.test(String(req.headers.authorization ?? ""))
+        )
+          throw new HubError(
+            403,
+            "ENROLLMENT_AUTH_REQUIRED",
+            "Нужен одноразовый пакет подключения.",
+          );
+        return;
+      }
       if (
         [
           "/api/auth/login",
@@ -246,8 +264,7 @@ export class TeamAuth extends Auth {
       if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) this.csrf(req);
     });
     app.addHook("onClose", async () => {
-      this.disposed = true;
-      this.stopMirror();
+      this.dispose();
     });
   }
 }

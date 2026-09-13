@@ -14,9 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-client 
 WORKDIR /app
 COPY --from=build --chown=node:node /release/ /app/
 COPY --from=build --chown=node:node /source/apps/web/dist/ /web/
+COPY --chown=node:node ops/windows/ /app/enrollment/
+COPY --from=build --chown=node:node /source/packages/machines/dist/setupProbe.js /source/packages/machines/dist/deliveryProbe.js /app/enrollment/probes/
 ARG SOURCE_REVISION=unknown
 LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 ENV NODE_ENV=production HUB_CONFIG=/config/config.json HUB_WEB_ROOT=/web HUB_REVISION=$SOURCE_REVISION
+ENV HUB_ENROLLMENT_ROOT=/app/enrollment
 USER node
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD ["node", "dist/health-check.js"]
 CMD ["node","dist/main.js"]

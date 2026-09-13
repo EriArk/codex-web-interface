@@ -100,13 +100,16 @@ export class Sessions extends EventEmitter {
       const seed =
         config.projects.find((p) => p.machineId === machineId && p.enabled) ??
         this.catalog.projects().find((p) => p.machineId === machineId);
-      if (!seed)
+      const machine = config.machines.find((m) => m.id === machineId);
+      if (!seed && !machine?.allowedProjectRoots?.[0])
         throw new HubError(
           503,
           "MACHINE_WORKSPACE_REQUIRED",
           "Для компьютера не настроена начальная папка",
         );
-      const runtime = await this.runtime(seed.id);
+      const runtime = seed
+        ? await this.runtime(seed.id)
+        : await this.machineRuntime(machine!, machine!.allowedProjectRoots![0]!);
       runtime.touched = Date.now();
       return runtime.rpc;
     });
@@ -165,21 +168,27 @@ export class Sessions extends EventEmitter {
     return event;
   }
   private async runtime(projectId: string): Promise<Runtime> {
-    this.authorizeExecution();
     const p = this.project(projectId);
-    const runtimeId = p.machineId;
     const machine = this.config.machines.find((m) => m.id === p.machineId);
     if (!machine) throw new HubError(503, "MACHINE_NOT_FOUND", "Машина не настроена");
-    await verifyProjectRoot(machine, p.workingDirectory);
+    return this.machineRuntime(machine, p.workingDirectory);
+  }
+  private async machineRuntime(machine: MachineConfig, workingDirectory: string): Promise<Runtime> {
+    this.authorizeExecution();
+    const runtimeId = machine.id;
+    await verifyProjectRoot(machine, workingDirectory);
     this.authorizeExecution();
     let existing = this.runtimes.get(runtimeId);
     if (existing) return existing;
     existing = (async () => {
       const anchor =
-        this.config.projects.find((seed) => seed.machineId === machine.id && seed.enabled) ?? p;
-      await verifyProjectRoot(machine, anchor.workingDirectory);
+        machine.allowedProjectRoots?.[0] ??
+        this.config.projects.find((seed) => seed.machineId === machine.id && seed.enabled)
+          ?.workingDirectory ??
+        workingDirectory;
+      await verifyProjectRoot(machine, anchor);
       this.authorizeExecution();
-      const rpc = this.clientFactory(machine, anchor.workingDirectory);
+      const rpc = this.clientFactory(machine, anchor);
       rpc.authorize = () => this.authorizeExecution();
       const runtime: Runtime = {
         machineId: machine.id,

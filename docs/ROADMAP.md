@@ -39,7 +39,9 @@ Issues: #151, #6, #37, #152. Depends on Gate A.
 
 This is the first usable milestone, followed by both collaboration scenarios in the same implementation pass.
 
-Root-policy prerequisite is implemented in the candidate: optional enrolled roots constrain directory browsing, native project/thread discovery, project creation, execution CWDs, Files/Git and project previews. Canonical checks reject links/junctions including the configured root; the folder picker can switch between approved roots. Legacy owner configurations retain their existing folder workflow. Enrollment/repair is still needed to configure this policy for a real second machine; it cannot yet be enabled through a completed Windows master.
+Root policy and the initial Windows enrollment master are implemented in the candidate. Optional enrolled roots constrain directory browsing, native discovery, creation, execution CWDs, Files/Git and previews; canonical checks reject links/junctions. Legacy owner configurations retain their folder workflow. New machines can discover projects before a first project exists.
+
+The member downloads one ZIP and opens `Connect.cmd`: a Windows wizard installs missing prerequisites, guides native sign-ins and folder selection, sets separate restricted command/terminal keys and reports a pinned computer identity. Exact retries retain keys and the submitted report. The administrator verifies identity, then the member activates only their idle personal runtime. See [the connection guide](WINDOWS_ENROLLMENT.md). Linux passed 429 tests; Chromium/WebKit covered enrollment download/status and four themes at phone/tablet/PC widths; Windows PS5 parsing and harmless offscreen controls/native-status checks passed. No real friend-PC installation, Tailnet admission, Remote or independent GPT provisioning has been accepted yet. Production is unchanged.
 
 ### Gate C — shared project and independent workstations
 
