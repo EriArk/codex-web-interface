@@ -24,6 +24,8 @@ The owner superseded the team-disabled `99953827f` queue with a request to enabl
 
 This activation requires a migration rehearsal, exact-image login/session and rollback checks, and read-only Codex continuity verification. It still waits for active/unknown Codex/GPT work; verified idle shells alone do not block it. Before public admission, failure restores the prior configuration/database/image and preserves the failed registry privately. Already-enabled team upgrades must use coordinated team backups, not this first-owner rollback. The actual installed/pending revision comes from authenticated Maintenance and the deployment receipt, never Git HEAD. The original GPT profile remains in place.
 
+Release `60b326892` passed those first-owner checks and all 526 tests. It is queued by `codex-web-owner-team-60b326892.service`; the final observed state is **waiting**, with healthy `379fa17` still serving the owner. At that check the guard saw one Codex work/unknown state and GPT activity/browser work. The queue automatically continues once both are idle; this record does not claim completed installation. Evidence is stored privately under `verification-60b326892` on the Hub. Matching Windows GitHub delivery helpers were installed with a local backup, and a read-only worker check confirmed the existing EriArk identity/repository access.
+
 ## Next short passes, in order
 
 1. **Finish new-member admission and subsequent team updates.** Audit all remaining private capability/background-revocation families and coordinated identity/profile restoration/readmission; complete the general team-aware deployment/rollback boundary. Keep stable recovery usable. Gates A/B/E remain open until their recorded checks pass. Owner-only activation does not satisfy those gates.
