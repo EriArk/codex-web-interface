@@ -30,6 +30,9 @@ export class Auth {
   configured(): boolean {
     return !!this.store.db.prepare("SELECT username FROM users LIMIT 1").get();
   }
+  subscribeRevocation(_listener: (sessionHash?: string) => void): () => void {
+    return () => {};
+  }
   async prepare(setupToken?: string): Promise<void> {
     if (!this.configured() && !this.store.db.prepare("SELECT id FROM bootstrap WHERE id=1").get()) {
       if (!setupToken || !/^[A-Za-z0-9_-]{43}$/.test(setupToken))

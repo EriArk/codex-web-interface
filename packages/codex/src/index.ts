@@ -12,6 +12,7 @@ export interface ServerRequest {
   params: RecordValue;
 }
 export class CodexClient extends EventEmitter {
+  authorize: () => void = () => {};
   private nextId = 1;
   private buffer = "";
   private decoder = new StringDecoder("utf8");
@@ -56,6 +57,11 @@ export class CodexClient extends EventEmitter {
     return result;
   }
   request(method: string, params: RecordValue): Promise<RecordValue> {
+    try {
+      this.authorize();
+    } catch (error) {
+      return Promise.reject(error);
+    }
     if (this.ended)
       return Promise.reject(new HubError(503, "CODEX_DISCONNECTED", "Codex connection is closed"));
     const id = this.nextId++;
@@ -78,6 +84,7 @@ export class CodexClient extends EventEmitter {
     this.write({ method, params });
   }
   respond(id: RpcId, result: RecordValue): void {
+    this.authorize();
     this.write({ id, result });
   }
   rejectRequest(id: RpcId): void {

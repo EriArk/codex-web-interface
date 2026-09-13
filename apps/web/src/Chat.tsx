@@ -17,6 +17,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccessPicker } from "./AccessPicker";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
+import { accountSessionStorage as sessionStorage } from "./accountStorage.ts";
 import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";

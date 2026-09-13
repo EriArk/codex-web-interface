@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
+import { workspaceSocket } from "./accountStorage.ts";
 import { api } from "./api";
 import { Icon } from "./icons";
 import "@xterm/xterm/css/xterm.css";
@@ -77,7 +78,7 @@ export function DeviceTerminal({ id, onExit }: { id: string; onExit: () => void 
         if (stopped) return;
         const url = new URL(`/api/device-terminals/${id}/socket`, location.href);
         url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-        socket = new WebSocket(url);
+        socket = workspaceSocket(url);
         socketRef.current = socket;
         socket.onopen = () => socket?.send(JSON.stringify({ ticket }));
         socket.onmessage = (e) => {

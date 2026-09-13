@@ -1,6 +1,8 @@
 import { type FormEvent, useId, useState } from "react";
+import { pageWorkspace } from "./accountStorage.ts";
 import { api, changePassword, messageOf } from "./api";
 import { Icon } from "./icons";
+import { TeamAccess } from "./TeamAccess";
 import type { Session } from "./types";
 import "./accountControls.css";
 export function AccountControls({
@@ -48,6 +50,7 @@ export function AccountControls({
   }
   return (
     <section className="account-controls" aria-label="Доступ к сайту">
+      {!!pageWorkspace && <TeamAccess />}
       <button
         type="button"
         className="secondary account-toggle"

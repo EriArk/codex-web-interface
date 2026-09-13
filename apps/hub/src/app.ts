@@ -88,6 +88,8 @@ export async function createApp(
     stagingProbe?: typeof inspectMachineStaging;
     devices?: DeviceDependencies;
     transcribe?: Transcribe;
+    auth?: Auth;
+    authorizeExecution?: () => void;
   } = {},
 ) {
   const app = Fastify({
@@ -108,7 +110,8 @@ export async function createApp(
   });
   const store = options.store ?? new Store(config.hub.databasePath);
   const sessions = options.sessions ?? new Sessions(config, store);
-  const auth = new Auth(config, store);
+  if (options.authorizeExecution) sessions.authorizeExecution = options.authorizeExecution;
+  const auth = options.auth ?? new Auth(config, store);
   if (options.executionService) {
     const instance = randomUUID();
     app.get("/internal/runtime", async () => ({
@@ -189,7 +192,7 @@ export async function createApp(
       },
     });
   });
-  const gpt = registerGpt(app, config, store);
+  const gpt = registerGpt(app, config, store, options.authorizeExecution);
   registerContentSearch(app, sessions, gpt);
   const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);
   const push = registerPush(app, store, auth, config.hub.publicBaseUrl, {
@@ -250,6 +253,9 @@ export async function createApp(
     devices.sweep();
     for (const socket of sockets.keys()) socket.close(1008, "Session ended");
   };
+  const unsubscribeRevocation = auth.subscribeRevocation((hash) =>
+    hash ? closeSession(hash) : closeAllSessions(),
+  );
   app.post(
     "/api/auth/password",
     { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
@@ -894,11 +900,12 @@ export async function createApp(
     });
   }
   app.addHook("onClose", async () => {
+    unsubscribeRevocation();
     for (const socket of sockets.keys()) socket.close(1001, "Server restarting");
     await bridgeDoctor.close();
     await push.close();
     await sessions.close();
     store.close();
   });
-  return { app, store, sessions, auth, push };
+  return { app, store, sessions, auth, push, gpt };
 }

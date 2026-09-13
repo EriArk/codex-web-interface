@@ -1,6 +1,7 @@
 import type { GptMessage, GptOperation } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { GptVersions } from "./GptVersions";
 import { Icon } from "./icons";

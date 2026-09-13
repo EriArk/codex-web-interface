@@ -1,6 +1,7 @@
 import type { NotebookLink, ProjectAction, ProjectScope } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { accountSessionStorage as sessionStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import { ProjectActionPanel } from "./ProjectAction";

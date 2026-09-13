@@ -1,6 +1,9 @@
 import type { CSSProperties } from "react";
 
 const paths: Record<string, string[]> = {
+  link: [
+    "m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0",
+  ],
   microphone: ["M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"],
   terminal: ["M3 4h18v16H3z", "m6 8 4 4-4 4m7 0h5"],
   server: ["M3 3h18v7H3zM3 14h18v7H3zM7 6h.01M7 17h.01M11 6h6M11 17h6"],

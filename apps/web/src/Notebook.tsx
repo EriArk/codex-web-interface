@@ -16,6 +16,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { CaptureNote } from "./CaptureNote";
 import { CollapsibleCode } from "./CollapsibleCode";

@@ -1,5 +1,18 @@
 # Verification record
 
+## Private team foundation candidate — 2026-09-13
+
+Branch `feat/team-workspaces`; isolated Linux checkout `/home/abysscloud/codex-web-team`. Production Hub/engine stayed on `379fa17`, GPT on `7f25d37`. No candidate native writer was attached to the owner's execution environment.
+
+- Full Linux build/test pass: 418 tests. After the final role/audit and saved-artifact additions, the 10 focused team tests also passed. They exercise real HTTP proxying into separate personal apps/SQLite stores, deliberate note-ID collisions, cross-user download/history denial, cookie duplication, CSRF, stale tabs, password replacement, invitation reuse, role conflicts, last-admin protection and WebSocket revocation.
+- Whole-team backup restores both users' saved content and the original owner ID. Missing/contradictory namespace mappings and existing restore targets are rejected; old sessions/invitations are revoked and pending external receipts remain uncertain.
+- A copy of the verified stable backup was migrated using Store/TeamStore only. Hashes and row counts for 61 private tables, 207,066 records, remained identical before/after migration and reopen. No execution machines, GPT endpoint or artifact source were configured in this check.
+- Engine maintenance checks every materialized private store, including disabled members and unknown receipts. Failed reservations release the main write gate; successful reservations block new mutations/native requests with a bounded lease. Tests preserve access to existing read-only content.
+- Native GPT connection-page admission binds to the intended workspace; the original gateway cannot accept a member merely because their website session is valid.
+- Chromium and WebKit: invitation/registration, account switching, per-account browser drafts and absent member administration controls. Four themes at 390×844, 1376×1032 and 1920×1080: 24 combinations, no horizontal overflow or JavaScript errors. Screenshots were inspected for phone/tablet readability. These are simulated browser checks, not a physical iPhone/iPad acceptance claim.
+
+This evidence covers the initial candidate foundation. Complete background-operation revocation, friend-PC enrollment, isolated real native identities, shared projects and Bridges are still outstanding. Team mode is not ready for production admission.
+
 Checks were run on the Linux server against the user's Windows machine and in isolated browser containers during the initial implementation.
 
 ## Real environment

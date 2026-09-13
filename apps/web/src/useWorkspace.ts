@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { workspaceSocket } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { mergeHistorySnapshot } from "./historyState";
 import type { Approval, Attachment, History, HubEvent, Message, TurnSettings } from "./types";
@@ -61,7 +62,7 @@ export function useWorkspace(threadId: string) {
     const connect = () => {
       if (disposed || document.visibilityState === "hidden") return;
       update(threadId, (s) => ({ ...s, connection: attempt ? "reconnecting" : "connecting" }));
-      ws = new WebSocket(
+      ws = workspaceSocket(
         (location.protocol === "https:" ? "wss://" : "ws://") +
           location.host +
           "/api/events?threadId=" +

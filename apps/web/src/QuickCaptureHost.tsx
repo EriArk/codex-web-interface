@@ -1,5 +1,6 @@
 import type { NotebookScope } from "@codex-web/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { Icon } from "./icons";
 
 const Capture = lazy(() => import("./QuickCapture"));

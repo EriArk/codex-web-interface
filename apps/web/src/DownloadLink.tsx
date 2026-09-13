@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { workspaceUrl } from "./accountStorage.ts";
 import { FilePreview } from "./FilePreview";
 import { Icon } from "./icons";
 import "./download.css";
@@ -94,7 +95,7 @@ export function DownloadLink({
     void (async () => {
       try {
         if (!isDownloadUrl(href)) throw Error("Ссылка на файл недоступна.");
-        const response = await fetch(href, {
+        const response = await fetch(workspaceUrl(href), {
           credentials: "same-origin",
           redirect: "error",
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]),

@@ -5,6 +5,7 @@ export * from "./elicitation.js";
 export * from "./gui-preview.js";
 export * from "./relays.js";
 export * from "./staging.js";
+export * from "./team.js";
 
 import { deviceConfigSchema } from "./devices.js";
 
@@ -99,6 +100,13 @@ export const configSchema = z
       })
       .optional(),
     auth: z.object({ username: z.string().min(1).max(80).default("owner") }),
+    team: z
+      .object({
+        enabled: z.boolean().default(false),
+        root: z.string().startsWith("/").max(2000),
+        maxUsers: z.number().int().min(2).max(10).default(10),
+      })
+      .optional(),
     machines: z.array(machine).max(20),
     devices: z.array(deviceConfigSchema).max(40).default([]),
     projects: z

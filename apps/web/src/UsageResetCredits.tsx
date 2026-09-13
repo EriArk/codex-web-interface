@@ -1,5 +1,6 @@
 import type { ResetCredit, ResetOperation, UsageLimitsData } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 
 type Attempt = { id: string; snapshotId: string; creditId?: string; confirm: true };

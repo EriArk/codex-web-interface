@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { workspaceUrl } from "./accountStorage.ts";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
@@ -17,7 +18,7 @@ function TextFile({ result }: { result: Result }) {
     }
     void (async () => {
       try {
-        const response = await fetch(path, {
+        const response = await fetch(workspaceUrl(path), {
           credentials: "same-origin",
           signal: controller.signal,
         });

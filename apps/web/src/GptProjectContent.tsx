@@ -1,6 +1,7 @@
 import type { GptNativeProject, GptProjectOperation } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";

@@ -15,6 +15,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  accountLocalStorage as localStorage,
+  accountSessionStorage as sessionStorage,
+} from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";

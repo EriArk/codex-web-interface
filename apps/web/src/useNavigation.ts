@@ -1,5 +1,6 @@
 import type { NavigationState } from "@codex-web/shared";
 import { useEffect, useState } from "react";
+import { workspaceSocket } from "./accountStorage.ts";
 
 /** One metadata stream for all projects; independent of the open chat/history stream. */
 export function useNavigation() {
@@ -20,7 +21,7 @@ export function useNavigation() {
         socket?.readyState === 1
       )
         return;
-      const ws = new WebSocket(
+      const ws = workspaceSocket(
         `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/navigation/events`,
       );
       socket = ws;

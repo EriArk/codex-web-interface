@@ -1,3 +1,4 @@
+import { pageWorkspace } from "./accountStorage.ts";
 import type { Session } from "./types";
 
 let csrf = "";
@@ -73,6 +74,8 @@ async function request<T>(
   if (sessionRotation && path !== "/auth/password") await sessionRotation;
   const requestSession = sessionRevision;
   const headers: Record<string, string> = {};
+  if (pageWorkspace && !/^\/auth\/(?:status|login|join|invitation|recover|setup)$/.test(path))
+    headers["X-Workspace-Id"] = pageWorkspace;
   if (options.raw) headers["Content-Type"] = "application/octet-stream";
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (options.method && options.method !== "GET") headers["X-CSRF-Token"] = csrf;
@@ -121,6 +124,8 @@ async function request<T>(
       value.error?.message ?? "Не удалось выполнить действие",
     );
   }
+  if (requestSession !== sessionRevision && !path.startsWith("/auth/"))
+    throw new ApiError(401, "SESSION_CHANGED", "Сессия изменилась. Повтори действие после входа.");
   return value as T;
 }
 export const messageOf = (error: unknown): string =>

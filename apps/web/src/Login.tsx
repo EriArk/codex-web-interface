@@ -5,22 +5,30 @@ import type { Session } from "./types";
 
 const readLink = () => {
   const hash = new URLSearchParams(location.hash.slice(1));
-  return { token: hash.get("recover") ?? hash.get("setup"), recovery: hash.has("recover") };
+  return {
+    token: hash.get("recover") ?? hash.get("join") ?? hash.get("setup"),
+    recovery: hash.has("recover"),
+    joining: hash.has("join"),
+  };
 };
 export function Login({
   requiresSetup,
+  team = false,
   onLogin,
 }: {
   requiresSetup: boolean;
+  team?: boolean;
   onLogin: (session: Session) => void;
 }) {
   const [password, setPassword] = useState(""),
     [confirmation, setConfirmation] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [login, setLogin] = useState(""),
+    [name, setName] = useState("");
   const [link, setLink] = useState(readLink);
-  const { token, recovery } = link,
-    settingPassword = requiresSetup || recovery;
+  const { token, recovery, joining } = link,
+    settingPassword = requiresSetup || recovery || joining;
   useEffect(() => {
     const update = () => setLink(readLink());
     window.addEventListener("hashchange", update);
@@ -36,10 +44,22 @@ export function Login({
     setBusy(true);
     try {
       const session = await api<Session>(
-        recovery ? "/auth/recover" : requiresSetup ? "/auth/setup" : "/auth/login",
+        recovery
+          ? "/auth/recover"
+          : joining
+            ? "/auth/join"
+            : requiresSetup
+              ? "/auth/setup"
+              : "/auth/login",
         {
           method: "POST",
-          body: settingPassword ? { token, password } : { password },
+          body: joining
+            ? { token, password, login, name }
+            : settingPassword
+              ? { token, password }
+              : team
+                ? { login, password }
+                : { password },
         },
       );
       setPassword("");
@@ -71,16 +91,20 @@ export function Login({
           <Icon name="lock" size={14} /> Личное пространство
         </div>
         <h1>
-          {recovery
-            ? "Новый пароль."
-            : requiresSetup
-              ? "Начнём с твоего пароля."
-              : "Твои проекты ждут."}
+          {joining
+            ? "Твоё личное пространство."
+            : recovery
+              ? "Новый пароль."
+              : requiresSetup
+                ? "Начнём с твоего пароля."
+                : "Твои проекты ждут."}
         </h1>
         <p className="muted">
           {settingPassword
             ? "Задай пароль для входа с телефона, планшета и компьютера."
-            : "Один пароль — и ты снова в работе."}
+            : team
+              ? "Войди в свой аккаунт."
+              : "Один пароль — и ты снова в работе."}
         </p>
         {settingPassword && !token ? (
           <div className="notice">
@@ -90,6 +114,37 @@ export function Login({
           </div>
         ) : (
           <form onSubmit={submit}>
+            {team && !recovery && (
+              <>
+                <label htmlFor="account-login">Логин</label>
+                <input
+                  id="account-login"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                  minLength={3}
+                  maxLength={40}
+                  pattern="[a-zA-Z0-9][a-zA-Z0-9_.-]*"
+                />
+              </>
+            )}
+            {joining && (
+              <>
+                <label htmlFor="account-name">Твоё имя</label>
+                <input
+                  id="account-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                  required
+                  maxLength={80}
+                />
+              </>
+            )}
             <label htmlFor="password">{settingPassword ? "Придумай пароль" : "Пароль"}</label>
             <input
               id="password"

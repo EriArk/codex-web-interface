@@ -5,6 +5,7 @@ import type {
   DeviceTerminalInfo,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api } from "./api";
 import { DeviceTerminal } from "./DeviceTerminal";
 import { Icon } from "./icons";

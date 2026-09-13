@@ -1,0 +1,83 @@
+.team-access {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.team-account {
+  display: grid;
+  gap: 0.25rem;
+  padding-block: 0.5rem;
+}
+.team-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.team-people li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.team-people li > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: grid;
+  gap: 0.25rem;
+}
+.team-people small {
+  color: var(--muted);
+}
+.team-person-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+.team-access .text-button {
+  min-height: 44px;
+}
+.team-confirm {
+  margin: 0;
+  min-width: 0;
+}
+.team-invite {
+  display: grid;
+  gap: 0.5rem;
+}
+.team-invite > div,
+.team-link > div,
+.team-confirm > div {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.team-invite input,
+.team-link input {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+}
+.team-confirm,
+.team-link {
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 12px);
+  padding: 0.75rem;
+}
+.team-confirm p,
+.team-link p {
+  margin: 0 0 0.75rem;
+}
+@media (max-width: 480px) {
+  .team-people li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .team-person-actions {
+    justify-content: flex-start;
+  }
+}

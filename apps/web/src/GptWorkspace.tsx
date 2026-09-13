@@ -14,6 +14,10 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccountControls } from "./AccountControls";
 import { AppearanceSettings } from "./AppearanceSettings";
+import {
+  accountLocalStorage as localStorage,
+  accountSessionStorage as sessionStorage,
+} from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import CanvasPanel from "./CanvasPanel";

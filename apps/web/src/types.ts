@@ -7,6 +7,9 @@ export interface Session {
   authenticated: boolean;
   csrf: string;
   expires: number;
+  team?: boolean;
+  user?: import("@codex-web/shared").TeamUser;
+  originalOwner?: boolean;
 }
 export interface Machine {
   id: string;

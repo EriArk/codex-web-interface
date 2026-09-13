@@ -1,4 +1,4 @@
-import {watchHubSession} from './session-watch.mjs';
+import {watchHubSession,gptSessionAllowed} from './session-watch.mjs';
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -9,7 +9,7 @@ if(!origin||new URL(origin).protocol!=='https:')throw Error('GPT_PUBLIC_ORIGIN r
 const hub=process.env.GPT_HUB_URL??'http://127.0.0.1:8780';
 const root=fileURLToPath(new URL('.',import.meta.url));
 const vncPassword=readFileSync(process.env.GPT_VNC_PASSWORD_FILE,'utf8').trim();
-async function auth(req){if(!req.headers.cookie)return false;try{const r=await fetch(hub+'/api/auth/session',{headers:{cookie:req.headers.cookie},signal:AbortSignal.timeout(4000)});const ok=r.ok;await r.body?.cancel();return ok}catch{return false}}
+async function auth(req){if(!req.headers.cookie)return false;try{const r=await fetch(hub+'/api/auth/session',{headers:{cookie:req.headers.cookie,origin},signal:AbortSignal.timeout(4000)});if(!r.ok){await r.body?.cancel();return false}return gptSessionAllowed(await r.json(),process.env.GPT_WORKSPACE_USER_ID)}catch{return false}}
 const paths=new Map([
  ['/gpt-connect',['connect.html','text/html; charset=utf-8']],
  ['/gpt-connect/',['connect.html','text/html; charset=utf-8']],

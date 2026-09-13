@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { CaseColorSettings } from "./CaseColorSettings";
 import { type Theme, themes } from "./theme";
 

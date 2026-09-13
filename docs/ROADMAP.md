@@ -11,7 +11,7 @@ Production remains on stable `379fa17` throughout development. Candidate code, s
 - [x] Owner confirmed audience, first milestone, onboarding, privacy, sharing, Bridge ownership and scope.
 - [x] Create protected stable checkpoint `stable-pre-team-379fa17-20260913T080408Z`: Hub data/files, selected private configuration, source bundle and exact Hub/GPT/speech/guacd images.
 - [x] Verify snapshot checksums and restore into a separate directory. The live services were not replaced.
-- [ ] Publish current documentation/issue dependencies; preserve current production until candidate acceptance.
+- [x] Publish current documentation/issue dependencies; preserve current production until candidate acceptance.
 
 The approximately 2.58 GB checkpoint has 472 inventoried files plus its manifest. Native Windows repositories/Codex account history and the running ChatGPT browser profile are outside the Hub data snapshot. Preserve the original profile; any profile relocation/change requires a separate stopped-browser backup after idle verification.
 
@@ -19,10 +19,14 @@ The approximately 2.58 GB checkpoint has 472 inventoried files plus its manifest
 
 Issues: #149, #150; initial revocation/backup foundations from #158.
 
-- [ ] Stable user identities, invitation acceptance, per-user credentials/sessions/recovery and admin/member roles.
+- [x] Candidate: stable user identities, invitation acceptance, per-user credentials/sessions/recovery and admin/member roles. Not installed.
 - [ ] Bind every personal runtime/store/artifact namespace and background operation to its owner; migrate existing state to the original owner without losing identities or receipts.
 - [ ] Deny cross-user routes, search, events, media, device/Remote tickets and private-source navigation, including direct ID/URL attempts.
 - [ ] Two-user tests and migration/restore of a copied production snapshot pass before a real second user is admitted.
+
+Candidate foundation (2026-09-13): one authentication router dispatches the existing personal APIs into separate private SQLite/artifact runtimes through Unix sockets. The original owner's database and native IDs stay in place; new users start without any machine or GPT fallback. Account-bound browser drafts, session revocation, access audit, role changes, whole-installation backup/restore and all-user maintenance checks are implemented. This is a development checkpoint, not permission to admit real users or replace production.
+
+Evidence so far: the full Linux suite passed 418 tests, followed by 10 focused isolation/recovery tests after the final role and artifact checks. Chromium and WebKit passed registration/account switching/private drafts and 24 theme/viewport combinations in a network-isolated test container. A metadata-only migration of copied stable state preserved all 61 private tables and 207,066 records. It opened no native connection. The remaining gate audit includes background-operation revocation and all private capability families; real independent native accounts and friend-PC acceptance belong to Gate B. See [verification](VERIFICATION.md).
 
 ### Gate B — friend's complete private workspace
 

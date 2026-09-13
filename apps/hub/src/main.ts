@@ -7,6 +7,7 @@ import { loadConfig } from "./config.js";
 import { prepareEngineSocket } from "./engine-socket.js";
 import { loadPushKeys } from "./push.js";
 import { Store } from "./store.js";
+import { createTeamHub } from "./team-hub.js";
 
 process.umask(0o077);
 const config = loadConfig(process.env.HUB_CONFIG ?? "./config.local.yaml");
@@ -16,6 +17,8 @@ if (process.env.HUB_ROLE === "engine") {
   mkdirSync(dirname(engineSocket), { recursive: true, mode: 0o700 });
   await prepareEngineSocket(engineSocket);
 }
+if (config.team?.enabled && !existsSync(config.hub.databasePath))
+  throw new Error("TEAM_OWNER_STORAGE_MISSING");
 const store = new Store(config.hub.databasePath);
 const setupPath = join(dirname(config.hub.databasePath), "setup-link.txt");
 let setupToken: string | undefined;
@@ -37,7 +40,7 @@ try {
 } catch {
   /* Optional delivery must not prevent Codex/GPT startup. */
 }
-const { app } = await createApp(config, {
+const appOptions = {
   setupToken,
   executionService: !!engineSocket,
   store,
@@ -47,7 +50,13 @@ const { app } = await createApp(config, {
       : (process.env.HUB_WEB_ROOT ?? fileURLToPath(new URL("../../web/dist/", import.meta.url))),
   logger: true,
   push: { keys: pushKeys },
-});
+};
+const { app } = config.team?.enabled
+  ? await createTeamHub(config, {
+      ...appOptions,
+      socketRoot: join(dirname(engineSocket ?? config.hub.databasePath), "personal-sockets"),
+    })
+  : await createApp(config, appOptions);
 const shutdown = async () => {
   await app.close();
   process.exit(0);

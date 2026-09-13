@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";

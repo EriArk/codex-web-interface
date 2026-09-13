@@ -194,6 +194,7 @@ export class GptService {
   constructor(
     readonly config: HubConfig,
     readonly store: Store,
+    readonly authorize: () => void = () => {},
   ) {
     this.library = new Library(store, "gpt");
     this.operations = new GptOperations(
@@ -264,6 +265,7 @@ export class GptService {
     return !!this.config.gpt && !!this.token;
   }
   private async response(path: string, body?: unknown, timeout = 30000, signal?: AbortSignal) {
+    this.authorize();
     if (!this.available())
       throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
     const historyRead = body === undefined && path.startsWith("/conversation?");
@@ -1181,8 +1183,13 @@ export class GptService {
   }
 }
 
-export function registerGpt(app: FastifyInstance, config: HubConfig, store: Store) {
-  const service = new GptService(config, store);
+export function registerGpt(
+  app: FastifyInstance,
+  config: HubConfig,
+  store: Store,
+  authorize?: () => void,
+) {
+  const service = new GptService(config, store, authorize);
   app.addHook("preClose", async () => service.close());
   app.addHook("onReady", async () => {
     void service.pump();

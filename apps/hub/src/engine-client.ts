@@ -42,7 +42,7 @@ export function engineInfo(socketPath: string): Promise<EngineInfo> {
 export function engineTerminalWork(
   socketPath: string,
   reserve = false,
-): Promise<{ busy: number; unknown: number; reserved: boolean }> {
+): Promise<{ busy: number; unknown: number; reserved: boolean; work?: number }> {
   return new Promise((resolve, reject) => {
     const req = request(
       { socketPath, path: "/internal/terminals/maintenance", method: reserve ? "POST" : "GET" },
@@ -63,7 +63,8 @@ export function engineTerminalWork(
               !Number.isSafeInteger(value.unknown) ||
               value.busy < 0 ||
               value.unknown < 0 ||
-              typeof value.reserved !== "boolean"
+              typeof value.reserved !== "boolean" ||
+              (value.work !== undefined && (!Number.isSafeInteger(value.work) || value.work < 0))
             )
               throw new Error("TERMINAL_STATUS_UNAVAILABLE");
             resolve(value);

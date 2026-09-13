@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { accountLocalStorage as localStorage, workspaceUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import { RemoteInput, type RemoteInputMode, type RemoteMouseState } from "./remoteInput";
@@ -165,7 +166,7 @@ export function Remote({
             "/api/projects/" +
             encodeURIComponent(projectId) +
             "/remote";
-        const tunnel = new G.WebSocketTunnel(url);
+        const tunnel = new G.WebSocketTunnel(workspaceUrl(url));
         tunnel.onerror = (e) => {
           if (!disposed) {
             setError(e.message || "Связь с рабочим столом прервалась");

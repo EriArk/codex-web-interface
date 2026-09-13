@@ -1,4 +1,5 @@
 import type { GptConversation, GptJob, GptMessage, GptModels, GptProject } from "@codex-web/shared";
+import { accountSessionStorage as sessionStorage } from "./accountStorage.ts";
 
 export interface GptCachedChat {
   stale?: boolean;

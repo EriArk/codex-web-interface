@@ -1,5 +1,6 @@
 import type { ProjectSetupInput, ProjectSetupOperation, SetupRepository } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { Machine, Project } from "./types";

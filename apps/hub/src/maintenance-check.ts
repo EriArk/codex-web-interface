@@ -32,7 +32,10 @@ if (config.gpt) {
   }
 }
 const reserve = process.argv.includes("--reserve-terminals");
-if ((terminalCount || reserve) && !blockers.some((b) => !b.kind.startsWith("terminal"))) {
+if (
+  (config.team?.enabled || terminalCount || reserve) &&
+  !blockers.some((b) => !b.kind.startsWith("terminal"))
+) {
   try {
     const state = await engineTerminalWork(
       process.env.HUB_ENGINE_SOCKET ?? "/run/codex-engine/engine.sock",
@@ -40,6 +43,8 @@ if ((terminalCount || reserve) && !blockers.some((b) => !b.kind.startsWith("term
     );
     for (let i = blockers.length - 1; i >= 0; i--)
       if (blockers[i]?.kind.startsWith("terminal")) blockers.splice(i, 1);
+    if (state.work)
+      blockers.push({ kind: "team_work", count: state.work, label: "TEAM_WORK_PENDING" });
     if (state.busy)
       blockers.push({ kind: "terminal", count: state.busy, label: "TERMINAL_COMMAND_RUNNING" });
     if (state.unknown || (reserve && !state.reserved))

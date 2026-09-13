@@ -1,4 +1,5 @@
 import { type CaseColor, type CasePreferences, caseColorIds } from "@codex-web/shared";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 
 export const themes = [
   {

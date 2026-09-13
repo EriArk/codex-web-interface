@@ -267,6 +267,8 @@ export async function createSnapshot(
     extraResultFiles?: string[];
   } = {},
 ): Promise<string> {
+  if (config.team?.enabled)
+    return (await import("./team-maintenance.js")).createTeamSnapshot(config, destination, options);
   const keep = options.keep ?? 7;
   if (!Number.isInteger(keep) || keep < 1 || keep > 100)
     fail("INVALID_RETENTION", "Keep count must be between 1 and 100");
@@ -466,6 +468,8 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
   }
 }
 export async function createRecoveryLink(config: HubConfig, output: string) {
+  if (config.team?.enabled)
+    return (await import("./team-maintenance.js")).createTeamRecoveryLink(config, output);
   if (!isAbsolute(output)) fail("UNSAFE_FILE", "Use an absolute private recovery file path");
   await privateDirectory(dirname(output));
   if (!(await lstat(config.hub.databasePath)).isFile())
@@ -525,6 +529,16 @@ async function cli() {
     });
     console.log(JSON.stringify({ ok: true, snapshot: path }));
   } else if (operation === "verify" && values.snapshot) {
+    try {
+      await lstat(join(values.snapshot, "team-manifest.json"));
+      const manifest = await (await import("./team-maintenance.js")).verifyTeamSnapshot(
+        values.snapshot,
+      );
+      console.log(JSON.stringify({ ok: true, team: true, users: manifest.users.length }));
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     const manifest = await verifySnapshot(values.snapshot);
     console.log(
       JSON.stringify({
@@ -535,6 +549,17 @@ async function cli() {
       }),
     );
   } else if (operation === "restore" && values.snapshot && values.target) {
+    try {
+      await lstat(join(values.snapshot, "team-manifest.json"));
+      await (await import("./team-maintenance.js")).restoreTeamSnapshot(
+        values.snapshot,
+        values.target,
+      );
+      console.log(JSON.stringify({ ok: true, team: true, sessionsRevoked: true }));
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     await restoreSnapshot(values.snapshot, values.target);
     console.log(JSON.stringify({ ok: true, sessionsRevoked: true }));
   } else if (operation === "recovery" && values.config && values.output) {

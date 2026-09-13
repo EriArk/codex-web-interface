@@ -1,4 +1,10 @@
 import WebSocket from '../../apps/hub/node_modules/ws/wrapper.mjs';
+export function gptSessionAllowed(session, expectedUser) {
+ if (!session || session.authenticated !== true) return false;
+ if (!session.team) return !expectedUser;
+ if (expectedUser) return session.user?.id === expectedUser && session.user?.state === 'active';
+ return session.originalOwner === true && session.user?.state === 'active';
+}
 
 // This stream carries only session readiness. Owner content and credentials never
 // travel back to the browser connection page.

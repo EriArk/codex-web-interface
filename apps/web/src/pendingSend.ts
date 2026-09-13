@@ -1,3 +1,5 @@
+import { accountSessionStorage as sessionStorage } from "./accountStorage.ts";
+
 // The receipt lives exactly as long as the same-tab draft, including reloads and mode switches.
 const prefix = "codex-pending-send:";
 type Receipt = { signature: string; key: string };

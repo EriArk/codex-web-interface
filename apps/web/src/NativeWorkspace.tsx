@@ -2,6 +2,7 @@ import type { NativeWorkspaceReceipt } from "@codex-web/shared";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import "./native-workspace.css";

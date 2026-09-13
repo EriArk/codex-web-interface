@@ -1,5 +1,6 @@
 import type { GuiPreviewAction, GuiPreviewOperation } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import type { GuiPreviewTarget } from "./GuiPreviewHost";
 import { Icon } from "./icons";

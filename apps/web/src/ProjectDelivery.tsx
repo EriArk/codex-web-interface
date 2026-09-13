@@ -7,6 +7,7 @@ import type {
   ProjectDiff,
 } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";

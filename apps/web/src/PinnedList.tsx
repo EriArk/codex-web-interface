@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useId, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { Icon } from "./icons";
 import "./pinned-list.css";
 

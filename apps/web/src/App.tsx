@@ -10,6 +10,11 @@ import {
 } from "react";
 import { AccountControls } from "./AccountControls";
 import { AppearanceSettings, useLegacyLayout } from "./AppearanceSettings";
+import {
+  admitWorkspace,
+  accountLocalStorage as localStorage,
+  accountSessionStorage as sessionStorage,
+} from "./accountStorage.ts";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { Chat } from "./Chat";
@@ -117,8 +122,9 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null),
     [loading, setLoading] = useState(true),
     [requiresSetup, setRequiresSetup] = useState(false),
+    [team, setTeam] = useState(false),
     [recovering, setRecovering] = useState(() =>
-      new URLSearchParams(location.hash.slice(1)).has("recover"),
+      /(?:^|&)(?:recover|join)=/.test(location.hash.slice(1)),
     ),
     [error, setError] = useState("");
   useViewport();
@@ -137,20 +143,22 @@ export default function App() {
     return () => navigator.serviceWorker?.removeEventListener("message", receive);
   }, []);
   useEffect(() => {
-    const update = () => setRecovering(new URLSearchParams(location.hash.slice(1)).has("recover"));
+    const update = () => setRecovering(/(?:^|&)(?:recover|join)=/.test(location.hash.slice(1)));
     window.addEventListener("hashchange", update);
     return () => window.removeEventListener("hashchange", update);
   }, []);
   const login = useCallback((value: Session) => {
+    if (!admitWorkspace(value)) return;
     configureApi(value.csrf, () => setSession(null));
     setSession(value);
   }, []);
   useEffect(() => {
     void (async () => {
       try {
-        const status = await api<{ requiresSetup: boolean }>("/auth/status");
+        const status = await api<{ requiresSetup: boolean; team?: boolean }>("/auth/status");
         setRequiresSetup(status.requiresSetup);
-        if (!status.requiresSetup && !new URLSearchParams(location.hash.slice(1)).has("recover")) {
+        setTeam(!!status.team);
+        if (!status.requiresSetup && !/(?:^|&)(?:recover|join)=/.test(location.hash.slice(1))) {
           try {
             login(await api<Session>("/auth/session"));
           } catch {
@@ -186,6 +194,7 @@ export default function App() {
     return (
       <Login
         requiresSetup={requiresSetup}
+        team={team}
         onLogin={(value) => {
           setRequiresSetup(false);
           setRecovering(false);

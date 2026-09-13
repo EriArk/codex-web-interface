@@ -11,6 +11,7 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { NotebookRequest } from "./Notebook";

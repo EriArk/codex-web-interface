@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { Icon } from "./icons";
 
 const Panel = lazy(() => import("./GuiPreviewPanel"));

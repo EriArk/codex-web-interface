@@ -1,0 +1,605 @@
+import { randomUUID } from "node:crypto";
+import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { type HubConfig, HubError, teamLoginSchema, teamNameSchema } from "@codex-web/shared";
+import cookie from "@fastify/cookie";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
+import staticFiles from "@fastify/static";
+import Fastify, { type FastifyRequest } from "fastify";
+import { ZodError, z } from "zod";
+import { createApp } from "./app.js";
+import { tokenHash } from "./auth.js";
+import { deploymentBlockers } from "./deployment-status.js";
+import { ENGINE_PROTOCOL, engineTerminalWork } from "./engine-client.js";
+import { prepareEngineSocket } from "./engine-socket.js";
+import { proxyPrivateHttp, proxyPrivateSocket } from "./private-proxy.js";
+import { Store } from "./store.js";
+import { sessionCookie, TeamAuth } from "./team-auth.js";
+import { publicUser, TeamStore } from "./team-store.js";
+import { webSecurity } from "./web-security.js";
+
+export function privateDirectory(path: string) {
+  const absolute = resolve(path);
+  if (existsSync(absolute)) {
+    const stat = lstatSync(absolute);
+    if (
+      !stat.isDirectory() ||
+      stat.isSymbolicLink() ||
+      realpathSync(absolute) !== absolute ||
+      (process.getuid && stat.uid !== process.getuid())
+    )
+      throw new Error("TEAM_DIRECTORY_UNSAFE");
+  } else {
+    // Check every existing ancestor before creating anything through it.
+    let ancestor = dirname(absolute);
+    while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+    if (realpathSync(ancestor) !== ancestor) throw new Error("TEAM_DIRECTORY_UNSAFE");
+    mkdirSync(absolute, { recursive: true, mode: 0o700 });
+  }
+  chmodSync(absolute, 0o700);
+  return absolute;
+}
+
+/** A new account starts with no execution or consumer-account fallback. */
+export function privateConfig(config: HubConfig, registry: TeamStore, userId: string): HubConfig {
+  const user = registry.active(userId);
+  if (user.id === registry.ownerId && user.legacy) return config;
+  const root = privateDirectory(join(config.team!.root, "users", user.id));
+  return {
+    hub: { ...config.hub, databasePath: join(root, "app.db"), resultsPath: join(root, "results") },
+    auth: { username: user.login },
+    machines: [],
+    projects: [],
+    devices: [],
+  };
+}
+
+type PersonalApp = Awaited<ReturnType<typeof createApp>>;
+type Options = Omit<NonNullable<Parameters<typeof createApp>[1]>, "auth" | "sessions"> & {
+  socketRoot: string;
+  personalFactory?: typeof createApp;
+};
+const credentials = z
+  .object({
+    token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    password: z.string().min(12).max(1024),
+  })
+  .strict();
+const slow = { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } };
+
+/** Authentication router. Existing personal APIs are mounted behind private, user-bound sockets. */
+export async function createTeamHub(config: HubConfig, options: Options) {
+  if (!config.team?.enabled) throw new Error("TEAM_DISABLED");
+  privateDirectory(config.team.root);
+  const socketRoot = privateDirectory(options.socketRoot);
+  const ownerStore = options.store ?? new Store(config.hub.databasePath);
+  const registry = new TeamStore(join(config.team.root, "team.db"), config, ownerStore);
+  const auth = new TeamAuth(config, ownerStore, registry);
+  const app = Fastify({
+    logger: options.logger
+      ? {
+          level: "info",
+          redact: [
+            "req.headers.cookie",
+            "req.headers.authorization",
+            "req.headers.x-csrf-token",
+            "res.headers.set-cookie",
+          ],
+        }
+      : false,
+    bodyLimit: 256 * 1024,
+    requestTimeout: 60000,
+    trustProxy: false,
+  });
+  const instances = new Map<string, Promise<{ runtime: PersonalApp; socket: string }>>();
+  const failed = new Set<string>();
+  const connections = new Map<string, Map<() => void, string>>();
+  let closing = false,
+    maintenanceUntil = 0,
+    activeMutations = 0;
+  const maintenanceActive = () => Date.now() < maintenanceUntil;
+  const maintenanceError = () =>
+    new HubError(503, "ENGINE_MAINTENANCE", "Обновление сервиса. Черновик сохранён.");
+  const personal = (userId: string) => {
+    registry.active(userId);
+    if (closing) throw new HubError(503, "WORKSPACE_CLOSING", "Сервис переподключается.");
+    let pending = instances.get(userId);
+    if (!pending) {
+      if (maintenanceActive()) throw maintenanceError();
+      pending = (async () => {
+        const selected = privateConfig(config, registry, userId);
+        const initialized = registry.db
+          .prepare("SELECT initialized FROM team_namespaces WHERE userId=?")
+          .get(userId)?.initialized;
+        if (initialized !== 0 && initialized !== 1) throw new Error("TEAM_NAMESPACE_MISSING");
+        if (initialized && !existsSync(selected.hub.databasePath))
+          throw new Error("TEAM_USER_STORAGE_MISSING");
+        if (
+          existsSync(selected.hub.databasePath) &&
+          (lstatSync(selected.hub.databasePath).isSymbolicLink() ||
+            !lstatSync(selected.hub.databasePath).isFile())
+        )
+          throw new Error("TEAM_USER_STORAGE_UNSAFE");
+        const store =
+          userId === registry.ownerId ? ownerStore : new Store(selected.hub.databasePath);
+        registry.db.prepare("UPDATE team_namespaces SET initialized=1 WHERE userId=?").run(userId);
+        const scoped = new TeamAuth(selected, store, registry, userId);
+        const socket = join(socketRoot, `${userId}.sock`);
+        if (Buffer.byteLength(socket) > 100) throw new Error("TEAM_SOCKET_PATH_TOO_LONG");
+        await prepareEngineSocket(socket);
+        const runtime = await (options.personalFactory ?? createApp)(selected, {
+          ...options,
+          webRoot: undefined,
+          store,
+          auth: scoped,
+          executionService: true,
+          authorizeExecution: () => {
+            registry.active(userId);
+            if (maintenanceActive()) throw maintenanceError();
+          },
+        });
+        await runtime.app.listen({ path: socket });
+        chmodSync(socket, 0o600);
+        return { runtime, socket };
+      })();
+      instances.set(userId, pending);
+      void pending.catch(() => {
+        failed.add(userId);
+      });
+    }
+    return pending;
+  };
+  const track = (
+    userId: string,
+    hash: string,
+    cancel: () => void,
+    onClose: (done: () => void) => void,
+  ) => {
+    let set = connections.get(userId);
+    if (!set) {
+      set = new Map();
+      connections.set(userId, set);
+    }
+    set.set(cancel, hash);
+    const saved = set;
+    onClose(() => {
+      saved.delete(cancel);
+      if (!saved.size) connections.delete(userId);
+    });
+  };
+  const revoked = (userId: string, hash?: string) => {
+    const set = connections.get(userId);
+    if (!set) return;
+    for (const [cancel, sessionHash] of set)
+      if (!hash || hash === sessionHash) {
+        cancel();
+        set.delete(cancel);
+      }
+    if (!set.size) connections.delete(userId);
+  };
+  registry.events.on("revoked", revoked);
+  await app.register(cookie);
+  await app.register(helmet, webSecurity(config));
+  await app.register(rateLimit, {
+    max: 600,
+    timeWindow: "1 minute",
+    allowList: (req) => !req.url.startsWith("/api/"),
+  });
+  await auth.prepare();
+  auth.install(app);
+  app.addHook("onRequest", async (req, reply) => {
+    if (!req.url.startsWith("/api/") || ["GET", "HEAD", "OPTIONS"].includes(req.method)) return;
+    if (maintenanceActive()) throw maintenanceError();
+    activeMutations++;
+    // Covers streamed proxy responses and aborted requests as well as local auth/admin actions.
+    reply.raw.once("close", () => {
+      activeMutations--;
+    });
+  });
+  app.setErrorHandler((error, req, reply) => {
+    const status =
+      error instanceof HubError
+        ? error.statusCode
+        : error instanceof ZodError
+          ? 400
+          : ((error as { statusCode?: number }).statusCode ?? 500);
+    if ([403, 409].includes(status) && req.url.startsWith("/api/team/")) {
+      try {
+        const current = auth.session(req);
+        const target =
+          /^\/api\/team\/users\/([a-f0-9-]{36})(?:\/|$)/.exec(req.url)?.[1] ?? "installation";
+        registry.audit(current.user.id, "team.request_denied", target, "denied");
+      } catch {
+        /* An unauthenticated request has no trusted actor to attribute. */
+      }
+    }
+    if (status >= 500)
+      app.log.error({ code: "TEAM_REQUEST_FAILED", requestId: req.id }, "Request failed");
+    reply.code(status).send({
+      error: {
+        code:
+          error instanceof HubError
+            ? error.code
+            : status === 429
+              ? "RATE_LIMITED"
+              : "REQUEST_FAILED",
+        message:
+          error instanceof HubError
+            ? error.message
+            : status === 400
+              ? "Проверь данные запроса."
+              : "Не удалось выполнить запрос.",
+      },
+    });
+  });
+  const centralAuth = new Set(
+    [
+      "status",
+      "session",
+      "login",
+      "setup",
+      "recover",
+      "join",
+      "invitation",
+      "password",
+      "logout",
+      "logout-all",
+    ].map((name) => `/api/auth/${name}`),
+  );
+  // Forward before body parsing, preserving streaming uploads and without retaining request content.
+  app.addHook("onRequest", async (req, reply) => {
+    const path = req.url.split("?")[0]!;
+    if (
+      !path.startsWith("/api/") ||
+      path === "/api/health" ||
+      centralAuth.has(path) ||
+      path.startsWith("/api/team/")
+    )
+      return;
+    const session = auth.session(req);
+    const { socket } = await personal(session.user.id);
+    auth.session(req);
+    reply.hijack();
+    const cancel = proxyPrivateHttp(req.raw, reply.raw, socket, () => {
+      auth.session(req);
+    });
+    track(session.user.id, session.tokenHash, cancel, (done) => reply.raw.once("close", done));
+  });
+  app.all("/api/*", async (_req, reply) =>
+    reply.code(404).send({ error: { code: "NOT_FOUND", message: "Не найдено." } }),
+  );
+  app.get("/api/health", () => ({ ok: true }));
+  app.get("/api/auth/status", () => ({ requiresSetup: false, team: true }));
+  app.get("/api/auth/session", (req) => {
+    const s = auth.session(req);
+    // The pre-team GPT VNC gateway checked only HTTP 200 from this route and
+    // forwarded only Cookie. It must fail closed for members during admission.
+    if (
+      s.user.id !== registry.ownerId &&
+      req.headers.origin !== config.hub.publicBaseUrl &&
+      req.headers["sec-fetch-site"] !== "same-origin" &&
+      req.headers["x-workspace-id"] !== s.user.id
+    )
+      throw new HubError(
+        403,
+        "SESSION_CONTEXT_REQUIRED",
+        "Обнови страницу подключения и войди в свой аккаунт.",
+      );
+    return {
+      authenticated: true,
+      team: true,
+      csrf: s.csrf,
+      expires: s.expires,
+      user: s.user,
+      originalOwner: s.user.id === registry.ownerId,
+    };
+  });
+  app.post("/api/auth/login", slow, (req, reply) => {
+    const body = z
+      .object({ login: z.string().max(80).optional(), password: z.string().min(1).max(1024) })
+      .strict()
+      .parse(req.body);
+    return auth.loginAs(body.login, body.password, reply);
+  });
+  app.post("/api/auth/setup", () => {
+    throw new HubError(409, "SETUP_COMPLETE", "Установка уже настроена.");
+  });
+  app.post("/api/auth/invitation", slow, (req) => {
+    const body = z
+        .object({ token: z.string().max(100) })
+        .strict()
+        .parse(req.body),
+      invite = registry.invitation(body.token);
+    return { name: invite.name, expires: invite.expires };
+  });
+  app.post("/api/auth/join", slow, (req, reply) => {
+    const body = credentials
+      .extend({ login: teamLoginSchema, name: teamNameSchema })
+      .parse(req.body);
+    return auth.accept(body.token, body.login, body.name, body.password, reply);
+  });
+  app.post("/api/auth/recover", slow, (req, reply) => {
+    const b = credentials.parse(req.body);
+    return auth.recover(b.token, b.password, reply);
+  });
+  app.post("/api/auth/password", slow, (req, reply) => {
+    const b = z
+      .object({
+        currentPassword: z.string().min(1).max(1024),
+        password: z.string().min(12).max(1024),
+      })
+      .strict()
+      .parse(req.body);
+    return auth.changePassword(req, b.currentPassword, b.password, reply);
+  });
+  app.post("/api/auth/logout", (req, reply) => {
+    auth.logout(req, reply);
+    return { ok: true };
+  });
+  app.post("/api/auth/logout-all", (req, reply) => {
+    auth.logoutAll(req, reply);
+    return { ok: true };
+  });
+  const actor = (req: FastifyRequest) => auth.session(req).user.id;
+  app.get("/api/team/me", (req) => ({
+    user: publicUser(registry.active(actor(req))),
+    originalOwner: actor(req) === registry.ownerId,
+  }));
+  app.get("/api/team/users", (req) => ({ items: registry.users(actor(req)) }));
+  app.post("/api/team/invitations", slow, (req) => {
+    const b = z.object({ name: teamNameSchema }).strict().parse(req.body);
+    const value = registry.invite(actor(req), b.name);
+    return {
+      id: value.id,
+      expires: value.expires,
+      url: `${config.hub.publicBaseUrl}/#join=${value.token}`,
+    };
+  });
+  app.get("/api/team/invitations", (req) => {
+    registry.admin(actor(req));
+    return {
+      items: registry.db
+        .prepare(
+          "SELECT id,name,kind,state,expires,createdAt FROM team_invites ORDER BY createdAt DESC LIMIT 100",
+        )
+        .all(),
+    };
+  });
+  app.delete("/api/team/invitations/:id", (req) => {
+    const user = actor(req);
+    registry.admin(user);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    registry.db
+      .prepare("UPDATE team_invites SET state='revoked' WHERE id=? AND state='pending'")
+      .run(id);
+    registry.audit(user, "invitation.revoked", id);
+    return { ok: true };
+  });
+  app.post("/api/team/users/:id/state", (req) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params),
+      { disabled } = z.object({ disabled: z.boolean() }).strict().parse(req.body);
+    return { user: registry.disable(actor(req), id, disabled) };
+  });
+  app.post("/api/team/users/:id/role", (req) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = z
+      .object({ role: z.enum(["admin", "member"]), expectedRole: z.enum(["admin", "member"]) })
+      .strict()
+      .parse(req.body);
+    return { user: registry.setRole(actor(req), id, body.role, body.expectedRole) };
+  });
+  app.post("/api/team/users/:id/recovery", slow, (req) => {
+    registry.admin(actor(req));
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const value = registry.invite(actor(req), registry.user(id).name, "member", "recovery", id);
+    return { expires: value.expires, url: `${config.hub.publicBaseUrl}/#recover=${value.token}` };
+  });
+  app.get("/api/team/audit", (req) => {
+    registry.admin(actor(req));
+    const { before } = z
+      .object({ before: z.coerce.number().int().positive().optional() })
+      .parse(req.query);
+    return {
+      items: registry.db
+        .prepare("SELECT * FROM team_audit WHERE seq<? ORDER BY seq DESC LIMIT 50")
+        .all(before ?? Number.MAX_SAFE_INTEGER),
+    };
+  });
+  if (options.executionService) {
+    const instance = randomUUID();
+    app.get("/internal/runtime", () => ({
+      protocol: ENGINE_PROTOCOL,
+      schema: ownerStore.schemaVersion,
+      revision: process.env.HUB_REVISION ?? "unknown",
+      instance,
+      team: 1,
+    }));
+    const storedWork = () => {
+      let work = activeMutations;
+      // Include disabled/offline accounts and unknown receipts, not just today's open browsers.
+      for (const user of registry.db
+        .prepare(
+          "SELECT u.id,u.legacy FROM team_users u JOIN team_namespaces n ON n.userId=u.id WHERE n.initialized=1",
+        )
+        .all()) {
+        const path = user.legacy
+          ? config.hub.databasePath
+          : join(config.team!.root, "users", String(user.id), "app.db");
+        try {
+          if (!existsSync(path) || lstatSync(path).isSymbolicLink())
+            throw new Error("STORAGE_UNAVAILABLE");
+          const db = new DatabaseSync(path, { readOnly: true });
+          try {
+            work += deploymentBlockers(
+              {
+                db,
+                preferences: () =>
+                  JSON.parse(
+                    String(
+                      db.prepare("SELECT value FROM preferences WHERE id=1").get()?.value ?? "{}",
+                    ),
+                  ),
+              },
+              { busy: 0, unknown: 0 },
+            ).reduce((sum, item) => sum + item.count, 0);
+          } finally {
+            db.close();
+          }
+        } catch {
+          work++;
+        }
+      }
+      work += Number(
+        registry.db
+          .prepare("SELECT COUNT(*) n FROM team_receipts WHERE state IN ('pending','unknown')")
+          .get()?.n ?? 0,
+      );
+      return work;
+    };
+    const inspectTerminals = async (reserve: boolean) => {
+      if (reserve) maintenanceUntil = Date.now() + 60000;
+      let work = storedWork();
+      if (reserve && work) {
+        maintenanceUntil = 0;
+        return { busy: 0, unknown: 0, reserved: false, work };
+      }
+      const values = await Promise.all(
+        [...instances.values()].map(async (pending) => {
+          try {
+            const current = await pending;
+            let nativeBusy = false;
+            const gpt = current.runtime.sessions.config.gpt;
+            if (gpt) {
+              // Fixed read-only probes remain possible while native writes are frozen,
+              // including for a disabled account whose earlier request is still finishing.
+              const read = async (path: "/active" | "/bridge-health") => {
+                const response = await fetch(new URL(path, gpt.endpoint), {
+                  headers: { Authorization: `Bearer ${process.env[gpt.tokenSecret] ?? ""}` },
+                  signal: AbortSignal.timeout(10000),
+                });
+                if (!response.ok) throw new Error("GPT_STATUS_UNAVAILABLE");
+                return (await response.json()) as Record<string, unknown>;
+              };
+              const [active, health] = await Promise.all([read("/active"), read("/bridge-health")]);
+              nativeBusy =
+                !!active.generating ||
+                !Array.isArray(health.activeRequests) ||
+                !!health.activeRequests.length;
+            }
+            if (nativeBusy) return { busy: 0, unknown: 0, reserved: false, work: 1 };
+            return await engineTerminalWork(current.socket, false);
+          } catch {
+            return { busy: 0, unknown: 1, reserved: false };
+          }
+        }),
+      );
+      work =
+        storedWork() +
+        values.reduce((sum, value) => sum + ("work" in value ? Number(value.work) || 0 : 0), 0);
+      if (reserve && !work && values.every((value) => !value.busy && !value.unknown)) {
+        const reserved = await Promise.all(
+          [...instances.values()].map(async (pending) => {
+            try {
+              return await engineTerminalWork((await pending).socket, true);
+            } catch {
+              return { busy: 0, unknown: 1, reserved: false };
+            }
+          }),
+        );
+        work = storedWork();
+        if (
+          !work &&
+          maintenanceUntil > Date.now() + 5000 &&
+          reserved.every((value) => value.reserved)
+        )
+          return { busy: 0, unknown: 0, reserved: true, work: 0 };
+        // Individual terminal guards expire themselves. Restore normal API access on a failed reservation.
+        maintenanceUntil = 0;
+        return {
+          busy: reserved.reduce((sum, value) => sum + value.busy, 0),
+          unknown: Math.max(
+            1,
+            reserved.reduce((sum, value) => sum + value.unknown, 0),
+          ),
+          reserved: false,
+          work,
+        };
+      }
+      if (reserve) maintenanceUntil = 0;
+      return {
+        busy: values.reduce((sum, v) => sum + v.busy, 0),
+        unknown: values.reduce((sum, v) => sum + v.unknown, 0),
+        reserved: false,
+        work,
+      };
+    };
+    let reserving: ReturnType<typeof inspectTerminals> | undefined;
+    app.get("/internal/terminals/maintenance", () => inspectTerminals(false));
+    app.post("/internal/terminals/maintenance", () => {
+      if (!reserving)
+        reserving = inspectTerminals(true).finally(() => {
+          reserving = undefined;
+        });
+      return reserving;
+    });
+  }
+  app.server.on("upgrade", (req, socket, head) => {
+    void (async () => {
+      try {
+        if (!req.url?.startsWith("/api/") || req.headers.origin !== config.hub.publicBaseUrl)
+          throw new Error("DENIED");
+        const hash = tokenHash(sessionCookie(req.headers.cookie, auth.cookieName)),
+          session = registry.session(hash);
+        const expected = new URL(req.url, config.hub.publicBaseUrl).searchParams.get("workspace");
+        if (expected && expected !== session.user.id) throw new Error("WORKSPACE_CHANGED");
+        const target = await personal(session.user.id);
+        const cancel = proxyPrivateSocket(req, socket, head, target.socket, () => {
+          registry.session(hash);
+        });
+        track(session.user.id, hash, cancel, (done) => socket.once("close", done));
+      } catch {
+        socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+      }
+    })();
+  });
+  if (options.webRoot && existsSync(options.webRoot)) {
+    await app.register(staticFiles, {
+      root: options.webRoot,
+      maxAge: 0,
+      setHeaders(res, path) {
+        if (["index.html", "sw.js", "version.json"].includes(basename(path)))
+          res.header("Cache-Control", "no-store");
+      },
+    });
+    app.setNotFoundHandler((req, reply) =>
+      req.url.startsWith("/api/")
+        ? reply.code(404).send()
+        : reply.header("Cache-Control", "no-store").sendFile("index.html"),
+    );
+  }
+  app.addHook("onClose", async () => {
+    closing = true;
+    registry.events.off("revoked", revoked);
+    for (const id of connections.keys()) revoked(id);
+    await Promise.allSettled(
+      [...instances.values()].map(async (pending) => (await pending).runtime.app.close()),
+    );
+    if (!instances.has(registry.ownerId) || failed.has(registry.ownerId)) ownerStore.close();
+    registry.close();
+  });
+  // Restore every enabled personal runtime, so closing all browser tabs does not orphan queues.
+  const activeUsers = registry.db.prepare("SELECT id FROM team_users WHERE state='active'").all();
+  for (const user of activeUsers) {
+    try {
+      await personal(String(user.id));
+    } catch {
+      app.log.error(
+        { code: "PERSONAL_RUNTIME_START_FAILED", userId: String(user.id) },
+        "Personal runtime unavailable",
+      );
+    }
+  }
+  return { app, registry, auth, personal };
+}

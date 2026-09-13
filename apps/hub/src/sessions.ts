@@ -62,6 +62,7 @@ interface Approval {
   requestId: string | number;
 }
 export class Sessions extends EventEmitter {
+  authorizeExecution: () => void = () => {};
   relayTools: Record<string, unknown>[] = [];
   relayTool?: (
     thread: ThreadRecord,
@@ -147,6 +148,7 @@ export class Sessions extends EventEmitter {
     return event;
   }
   private async runtime(projectId: string): Promise<Runtime> {
+    this.authorizeExecution();
     const p = this.project(projectId);
     const runtimeId = p.machineId;
     let existing = this.runtimes.get(runtimeId);
@@ -157,6 +159,7 @@ export class Sessions extends EventEmitter {
       const anchor =
         this.config.projects.find((seed) => seed.machineId === machine.id && seed.enabled) ?? p;
       const rpc = this.clientFactory(machine, anchor.workingDirectory);
+      rpc.authorize = () => this.authorizeExecution();
       const runtime: Runtime = {
         machineId: machine.id,
         rpc,
@@ -1313,6 +1316,7 @@ export class Sessions extends EventEmitter {
     if (id) this.emitEvent(t.id, "result.created", { id, type: "error" }, turnId);
   }
   private async request(r: Runtime, request: ServerRequest): Promise<void> {
+    this.authorizeExecution();
     if ([...this.approvals.values()].some((a) => a.rpc === r.rpc && a.requestId === request.id))
       return;
     const t = this.store.threadByCodex(text(request.params.threadId));

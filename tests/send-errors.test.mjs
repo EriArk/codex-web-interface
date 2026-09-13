@@ -9,7 +9,12 @@ import { CodexClient } from "../packages/codex/dist/index.js";
 const source = await readFile(new URL("../apps/web/src/api.ts", import.meta.url), "utf8");
 const { api, configureApi, changePassword } = await import(
   "data:text/javascript;base64," +
-    Buffer.from(stripTypeScriptTypes(source, { mode: "transform" })).toString("base64")
+    Buffer.from(
+      stripTypeScriptTypes(source, { mode: "transform" }).replace(
+        '"./accountStorage.ts"',
+        JSON.stringify(new URL("../apps/web/src/accountStorage.ts", import.meta.url).href),
+      ),
+    ).toString("base64")
 );
 test("proxy HTML and empty responses produce readable API errors, not Safari JSON parsing errors", async () => {
   const original = globalThis.fetch;
