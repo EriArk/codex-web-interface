@@ -57,7 +57,10 @@ export class TeamStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
     if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='team_meta'").get()) {
       const version = this.db.prepare("SELECT value FROM team_meta WHERE key='schema'").get();
-      if (version && !["1", "2", "3", "4", "5", "6", "7", "8"].includes(String(version.value))) {
+      if (
+        version &&
+        !["1", "2", "3", "4", "5", "6", "7", "8", "9"].includes(String(version.value))
+      ) {
         this.db.close();
         throw new Error("TEAM_SCHEMA_UNSUPPORTED");
       }
@@ -202,6 +205,23 @@ export class TeamStore {
       CREATE TABLE IF NOT EXISTS team_github_links(
         id TEXT PRIMARY KEY,projectId TEXT NOT NULL REFERENCES team_projects(id),value TEXT NOT NULL,updatedAt INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS team_report_drafts(
+        id TEXT PRIMARY KEY,projectId TEXT NOT NULL REFERENCES team_projects(id),userId TEXT NOT NULL REFERENCES team_users(id),
+        state TEXT NOT NULL,value TEXT NOT NULL,createdAt INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS team_report_drafts_actor ON team_report_drafts(projectId,userId,createdAt);
+      CREATE TABLE IF NOT EXISTS team_report_checkpoints(
+        projectId TEXT PRIMARY KEY REFERENCES team_projects(id),itemId TEXT NOT NULL REFERENCES team_materials(id),
+        seq INTEGER NOT NULL,capturedAt INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS team_activity_bounds(
+        projectId TEXT PRIMARY KEY REFERENCES team_projects(id),removedThroughSeq INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS team_task_plans(
+        taskId TEXT NOT NULL REFERENCES team_materials(id),taskRevision INTEGER NOT NULL,
+        planId TEXT UNIQUE NOT NULL REFERENCES team_materials(id),projectId TEXT NOT NULL REFERENCES team_projects(id),
+        userId TEXT NOT NULL REFERENCES team_users(id),PRIMARY KEY(taskId,taskRevision)
+      );
     `);
     if (
       !this.db
@@ -264,7 +284,7 @@ export class TeamStore {
             );
       });
     }
-    this.db.prepare("UPDATE team_meta SET value='8' WHERE key='schema'").run();
+    this.db.prepare("UPDATE team_meta SET value='9' WHERE key='schema'").run();
     if (
       this.db
         .prepare(`SELECT p.id FROM team_projects p WHERE

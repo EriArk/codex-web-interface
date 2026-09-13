@@ -63,6 +63,8 @@ Gate C candidate checkpoint (2026-09-13): logical projects have one owner, conse
 
 Verification: latest full Linux suite passed 486 tests, including two actual independent local Git directories, simulated native Work turns, queue/commit revocation races, short revoke/re-add cycles, unknown acknowledgements, selected file integrity and backup recovery. Chromium and WebKit exercised real two-user HTTP state, conflict drafts, incomplete Plan drafts, shared capture, explicit publication/download, queued Plan/cancel, contact selection and Link/consultation consent across 48 theme/viewport combinations. Native accounts and friend hardware are still fixture boundaries; this does not constitute friend-PC acceptance.
 
+Additional Gate C candidate work: common-ledger Report drafts now have frozen periods, explicit edited publication, private preparation history, atomic checkpoints and exact acknowledgement recovery. Personal model-written Reports retain their existing explicit publication path. Tasks prepare one normal assignee-owned Plan per source revision with common backlinks; creation does not send to Codex. Mine/author/assignee/active-completed filters apply before pagination, and unavailable material deep links now show an error. See [workflow and bounds](TEAM_REPORTS.md). Shared Plan reconciliation, shared rotation context, relevant notifications and final permission/recovery acceptance are still outstanding.
+
 ### Gate D — related projects, Bridges and GitHub
 
 Issues: #160, #156, #155. Depends on private boundaries and the required shared-state subset of Gate C.

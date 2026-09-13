@@ -1,5 +1,13 @@
 # Verification record
 
+## Shared Reports, task work and material filters candidate — 2026-09-13
+
+The isolated candidate passed **517 tests** in the full Linux suite, build, TypeScript and lint (existing non-fatal warnings remain). New cases cover creator/assignee filters before pagination, two-user report-draft isolation, frozen periods, edited publication, exact retries, concurrent checkpoint rejection, rollback on a simulated checkpoint write failure, cancellation, access revocation and bounded retained history. A task creates one normal assigned Plan per source revision with common backlinks; neither task conversion nor report preparation creates a native action or changes a Current Chat.
+
+Chromium and WebKit passed the complete shared-workspace browser scenario after the new workflows were added. The report check edits text, closes/reopens the dialog, loses a real successful HTTP publication acknowledgement and retries to the same single report. Both engines exercise four themes at 390px and 1024px for the report editor, as well as the existing six-viewport shared-material and four-viewport Bridge matrices. They verify creator-based Mine filtering, task/Plan backlinks and retained independent execution. Phone CRT and tablet Hi-Tech screenshots were inspected; the final phone form puts preparation history behind a disclosure and keeps theme-transition contrast checks before capture.
+
+See [usage and bounds](TEAM_REPORTS.md). The common report is a bounded shared-ledger summary with explicit publication; personal model-written Reports remain available through their existing private workflow. Production has not been replaced. Shared Plan reconciliation, shared rotation context, relevant notifications and Gate E capability/recovery acceptance remain unfinished. Browser fixtures do not constitute physical friend-PC or Apple acceptance.
+
 ## Shared GitHub candidate — 2026-09-13
 
 The isolated candidate passed **512 tests** in the full Linux suite. Sixteen GitHub tests exercise the fixed machine worker and two-user Hub routes/services: actual temporary Git roots, acting accounts, permissions, immutable observations, exact PR SHA, explicit identity publication, issue/comment/invitation/state/review receipts, concurrent stale-lock recovery, lost acknowledgements, no automatic replay, account/origin changes, revoke/re-add and late response denial. Creating a Plan from a linked PR is attributed to the acting assignee and never starts native work. Full build and Windows PS5 parsing of the changed helper installer passed; the worker also passed syntax checking.

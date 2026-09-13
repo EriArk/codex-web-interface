@@ -72,7 +72,7 @@ function ownership(db: DatabaseSync) {
   )
     throw new Error("TEAM_REGISTRY_INVALID");
   if (
-    !["1", "2", "3", "4", "5", "6", "7", "8"].includes(
+    !["1", "2", "3", "4", "5", "6", "7", "8", "9"].includes(
       String(db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value),
     )
   )

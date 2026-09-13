@@ -3,6 +3,7 @@ import {
   HubError,
   type ProjectRepository,
   projectScopeSchema,
+  sharedMaterialFilterSchema,
   sharedMaterialWriteSchema,
   teamLoginSchema,
 } from "@codex-web/shared";
@@ -12,6 +13,7 @@ import type { createApp } from "./app.js";
 import { stageFile } from "./team-file-sources.js";
 import type { TeamProjects } from "./team-projects.js";
 import { publicationPreview, publicationSources } from "./team-publication.js";
+import { TeamReports } from "./team-reports.js";
 import { workspaceProjects } from "./workspace-projects.js";
 
 export function registerTeamProjects(
@@ -27,6 +29,25 @@ export function registerTeamProjects(
   const before = z
     .object({ before: z.coerce.number().int().positive().default(Number.MAX_SAFE_INTEGER) })
     .strict();
+  const reports = new TeamReports(projects),
+    reportId = (req: FastifyRequest) => z.object({ reportId: uuid }).parse(req.params).reportId;
+  app.get("/api/team/projects/:id/report-drafts", (req) => reports.list(actor(req), id(req)));
+  app.put("/api/team/projects/:id/report-drafts/:reportId", (req) => {
+    z.object({}).strict().parse(req.body);
+    return reports.prepare(actor(req), id(req), reportId(req));
+  });
+  app.get("/api/team/projects/:id/report-drafts/:reportId", (req) =>
+    reports.get(actor(req), id(req), reportId(req)),
+  );
+  app.post("/api/team/projects/:id/report-drafts/:reportId/publish", (req) =>
+    reports.publish(actor(req), id(req), reportId(req), req.body),
+  );
+  app.post("/api/team/projects/:id/report-drafts/:reportId/cancel", (req) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    return reports.cancel(actor(req), id(req), reportId(req));
+  });
   const repository = z
     .string()
     .regex(/^https:\/\/github\.com\/[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/)
@@ -175,13 +196,23 @@ export function registerTeamProjects(
   app.get("/api/team/projects/:id/materials", (req) => {
     const q = page
       .extend({
+        ...sharedMaterialFilterSchema.shape,
+        mine: z
+          .enum(["true", "false"])
+          .default("false")
+          .transform((value) => value === "true"),
         kind: z
           .enum(["all", "core", "note", "task", "plan", "report", "review", "result"])
           .default("all"),
         q: z.string().max(200).default(""),
       })
       .parse(req.query);
-    return projects.items(actor(req), id(req), q.kind, q.q, q.offset);
+    return projects.items(actor(req), id(req), q.kind, q.q, q.offset, {
+      mine: q.mine,
+      author: q.author,
+      assignee: q.assignee,
+      state: q.state,
+    });
   });
   const item = (req: FastifyRequest) => z.object({ itemId: uuid }).parse(req.params).itemId;
   app.get("/api/team/projects/:id/materials/:itemId", (req) =>
@@ -196,6 +227,13 @@ export function registerTeamProjects(
       sharedMaterialWriteSchema.parse(req.body),
     ),
   );
+  app.post("/api/team/projects/:id/materials/:itemId/work", (req) => {
+    const input = z
+      .object({ revision: z.number().int().positive(), confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    return projects.workTask(actor(req), id(req), item(req), key(req), input.revision);
+  });
   app.delete("/api/team/projects/:id/materials/:itemId", (req) => {
     const b = z
       .object({ revision: z.number().int().positive(), confirm: z.literal(true) })

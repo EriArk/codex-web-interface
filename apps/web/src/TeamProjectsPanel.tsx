@@ -4,6 +4,7 @@ import type {
   SharedItem,
   SharedItemKind,
   SharedItemSummary,
+  SharedMaterialFilter,
   SharedMember,
   SharedProject,
   SharedProjectDetail,
@@ -11,10 +12,11 @@ import type {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { accountLocalStorage as storage } from "./accountStorage";
-import { api } from "./api";
+import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import { materialLabels, SharedMaterialEditor } from "./SharedMaterialEditor";
 import { PersonalProjectPicker, SharedPublication } from "./SharedPublication";
+import { SharedReportBuilder } from "./SharedReportBuilder";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { useSharedResource } from "./sharedResources";
 import { TeamBridgeInvitations, TeamBridgesPanel } from "./TeamBridgesPanel";
@@ -42,6 +44,8 @@ const activityLabels: Record<string, string> = {
   "material.created": "Добавил общий материал",
   "material.updated": "Изменил общий материал",
   "material.removed": "Удалил общий материал",
+  "task.plan_created": "Подготовил план по задаче",
+  "report.published": "Опубликовал общий отчёт",
   "github.linked": "Связал проверенную версию issue или PR",
   "github.identity_confirmed": "Подтвердил свой GitHub-аккаунт",
   "github.completed": "Выполнил действие в GitHub",
@@ -557,10 +561,17 @@ function SharedMaterials({
 }) {
   const [q, setQ] = useState(""),
     [query, setQuery] = useState(""),
+    [report, setReport] = useState(false),
+    [filters, setFilters] = useState<SharedMaterialFilter>({
+      mine: false,
+      author: "all",
+      assignee: "all",
+      state: "all",
+    }),
     [offset, setOffset] = useState(0),
     [edit, setEdit] = useState<{ item: SharedItem | null; kind: SharedItemKind } | null>(null);
   const base = `/team/projects/${detail.project.id}/materials`,
-    { run, busy, error } = useSharedAction();
+    { run, busy, error, setError } = useSharedAction();
   useEffect(() => {
     if (!initialItemId) return;
     const controller = new AbortController();
@@ -568,14 +579,49 @@ function SharedMaterials({
       .then((value) => {
         if (!controller.signal.aborted) setEdit({ item: value, kind: value.kind });
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (!controller.signal.aborted) setError(messageOf(error));
+      });
     return () => controller.abort();
-  }, [base, initialItemId]);
+  }, [base, initialItemId, setError]);
+  const filter = (value: Partial<SharedMaterialFilter>) => {
+    setFilters((previous) => ({ ...previous, ...value }));
+    setOffset(0);
+  };
   const page = useSharedResource<{ items: SharedItemSummary[]; nextOffset: number | null }>(
-    edit ? null : base + "?" + new URLSearchParams({ kind, q: query, offset: String(offset) }),
+    edit || report
+      ? null
+      : base +
+          "?" +
+          new URLSearchParams({
+            ...filters,
+            mine: String(filters.mine),
+            kind,
+            q: query,
+            offset: String(offset),
+          }),
     refreshToken,
   );
   const readonly = detail.project.role === "viewer" || detail.project.archived;
+  if (report && !readonly)
+    return (
+      <SharedReportBuilder
+        projectId={detail.project.id}
+        onBack={() => {
+          setReport(false);
+          refresh();
+        }}
+        onPublished={(id) => {
+          void run(() => api<SharedItem>(base + "/" + id)).then((item) => {
+            if (item) {
+              setReport(false);
+              setEdit({ item, kind: "report" });
+              refresh();
+            }
+          });
+        }}
+      />
+    );
   if (edit)
     return (
       <SharedMaterialEditor
@@ -642,8 +688,77 @@ function SharedMaterials({
           Найти
         </button>
       </form>
+      <div className="shared-material-filters">
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={filters.mine}
+          onClick={() => filter({ mine: !filters.mine })}
+        >
+          Мои
+        </button>
+        <details>
+          <summary>
+            Фильтры
+            {filters.author !== "all" || filters.assignee !== "all" || filters.state !== "all"
+              ? " · включены"
+              : ""}
+          </summary>
+          <div className="shared-fields">
+            <label>
+              Автор
+              <select value={filters.author} onChange={(e) => filter({ author: e.target.value })}>
+                <option value="all">Все авторы</option>
+                {detail.members.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Исполнитель
+              <select
+                value={filters.assignee}
+                onChange={(e) => filter({ assignee: e.target.value })}
+              >
+                <option value="all">Все исполнители</option>
+                <option value="none">Не назначен</option>
+                {detail.members.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Задачи и планы
+              <select
+                value={filters.state}
+                onChange={(e) => filter({ state: e.target.value as SharedMaterialFilter["state"] })}
+              >
+                <option value="all">Любое состояние</option>
+                <option value="active">Осталось сделать</option>
+                <option value="done">Завершены</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => filter({ mine: false, author: "all", assignee: "all", state: "all" })}
+            >
+              Сбросить фильтры
+            </button>
+          </div>
+        </details>
+      </div>
       {!readonly && (
         <div className="shared-actions">
+          {(kind === "report" || kind === "all") && (
+            <button type="button" className="secondary" onClick={() => setReport(true)}>
+              Собрать общий отчёт
+            </button>
+          )}
           <label>
             Создать
             <select
@@ -672,7 +787,11 @@ function SharedMaterials({
       {page.loading && !page.value && <p role="status">Загружаем материалы…</p>}
       {!page.value?.items.length && page.value && (
         <p className="muted">
-          {query
+          {query ||
+          filters.mine ||
+          filters.author !== "all" ||
+          filters.assignee !== "all" ||
+          filters.state !== "all"
             ? "Ничего не найдено."
             : "Общих материалов пока нет. Создай новую запись или выбери личные материалы для публикации."}
         </p>

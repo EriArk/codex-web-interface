@@ -383,6 +383,84 @@ try {
         hub.teamProjects.get(ownerId, project.id, item.id).content.body,
         "Черновик друга при конфликте",
       );
+      // Filters apply to creator/assignee, not the most recent editor.
+      await friend.getByRole("button", { name: "Мои", exact: true }).click();
+      await expect(friend.getByRole("button", { name: /Заметка для участников/ })).toHaveCount(0);
+      await friend.getByRole("button", { name: "Мои", exact: true }).click();
+      await expect(friend.getByRole("button", { name: /Заметка для участников/ })).toBeVisible();
+      // A shared report keeps its frozen period and edited text across close/reopen and a lost publication acknowledgement.
+      await page.getByRole("button", { name: "Собрать общий отчёт", exact: true }).click();
+      await expect(page.getByLabel("Текст отчёта", { exact: true })).toHaveValue(/Общая игра/);
+      await page
+        .getByLabel("Название отчёта", { exact: true })
+        .fill("Проверенная сводка " + engine);
+      await page
+        .getByLabel("Текст отчёта", { exact: true })
+        .fill("Только выбранное общее резюме " + engine);
+      await page.getByRole("button", { name: "Закрыть совместные проекты", exact: true }).click();
+      await page.evaluate(
+        (projectId) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: { projectId } })),
+        project.id,
+      );
+      await page.getByRole("button", { name: "Собрать общий отчёт", exact: true }).click();
+      await expect(page.getByLabel("Текст отчёта", { exact: true })).toHaveValue(
+        "Только выбранное общее резюме " + engine,
+      );
+      for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+        await page.evaluate((theme) => {
+          document.documentElement.dataset.theme = theme;
+        }, theme);
+        for (const width of [390, 1024]) {
+          await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
+          await expect(page.getByLabel("Название отчёта", { exact: true })).toBeVisible();
+          await expect
+            .poll(() =>
+              page
+                .locator(".shared-projects-dialog > header")
+                .evaluate(
+                  (el) =>
+                    getComputedStyle(el).color ===
+                    getComputedStyle(el.querySelector('[aria-label="Закрыть совместные проекты"]'))
+                      .color,
+                ),
+            )
+            .toBe(true);
+          assert(
+            await page
+              .locator(".shared-projects-dialog")
+              .evaluate((node) => node.scrollWidth <= node.clientWidth + 2),
+          );
+          await page.screenshot({
+            path: `.local/qa-shared/report-${engine}-${theme}-${width}.png`,
+          });
+        }
+      }
+      let reportDropped = false;
+      await page.route("**/api/team/projects/*/report-drafts/*/publish", async (route) => {
+        if (!reportDropped) {
+          reportDropped = true;
+          const response = await route.fetch();
+          assert.equal(response.status(), 200);
+          await route.abort("failed");
+        } else await route.continue();
+      });
+      await page.getByRole("button", { name: "Опубликовать общий отчёт", exact: true }).click();
+      await expect(
+        page.locator('[aria-label="Сводка общего проекта"] [role="alert"]'),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Опубликовать общий отчёт", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText("Отчёт опубликован");
+      assert.equal(
+        hub.teamProjects.items(ownerId, project.id, "report", "Проверенная сводка", 0).items.length,
+        1,
+      );
+      await page.getByRole("button", { name: "Открыть общий отчёт", exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Проверенная сводка " + engine, exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "К списку", exact: true }).click();
+      await page.setViewportSize({ width: 390, height: 844 });
       // An unfinished structured plan survives close/reopen exactly, including empty points.
       await page.getByLabel("Создать общий материал").selectOption("plan");
       await page.getByRole("button", { name: "Добавить раздел", exact: true }).click();
@@ -481,6 +559,35 @@ try {
       assert.equal(privateView.preview, undefined);
       await page.getByRole("button", { name: "Отменить запуск", exact: true }).click();
       await expect(page.locator('.shared-execution [data-state="cancelled"]')).toBeVisible();
+      const workTask = hub.teamProjects.put(ownerId, project.id, randomUUID(), randomUUID(), {
+        revision: 0,
+        assigneeId: ownerId,
+        content: {
+          kind: "task",
+          title: "Задача для выполнения " + engine,
+          body: "Проверить выбранный сценарий",
+          status: "todo",
+          priority: 1,
+          dueAt: null,
+        },
+      });
+      await page.evaluate(
+        (target) =>
+          window.dispatchEvent(new CustomEvent("open-shared-projects", { detail: target })),
+        { projectId: project.id, itemId: workTask.id, kind: "task" },
+      );
+      await page.getByRole("button", { name: "Работать по задаче", exact: true }).click();
+      await expect(
+        page.getByRole("region", { name: "Выполнение общего плана", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Задачи · " + workTask.title, exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Задачи · " + workTask.title, exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Планы · " + workTask.title, exact: true }),
+      ).toBeVisible();
+      assert.equal(hub.teamExecutions.list(ownerId, project.id, workTask.id).items.length, 0);
       await page.getByRole("button", { name: "Bridges", exact: true }).click();
       await page.getByRole("button", { name: /Bridge API/ }).click();
       await page.getByRole("button", { name: "Выбрать личный материал", exact: true }).click();

@@ -3,6 +3,41 @@ import { coreValueSchema } from "./project-core.js";
 import { planSectionSchema, planWriteSchema } from "./project-work.js";
 import { taskFieldsSchema } from "./tasks.js";
 
+export const sharedMaterialFilterSchema = z
+  .object({
+    mine: z.boolean().default(false),
+    author: z.union([z.literal("all"), z.string().uuid()]).default("all"),
+    assignee: z.union([z.enum(["all", "none"]), z.string().uuid()]).default("all"),
+    state: z.enum(["all", "active", "done"]).default("all"),
+  })
+  .strict();
+export type SharedMaterialFilter = z.infer<typeof sharedMaterialFilterSchema>;
+
+export interface SharedReportDraft {
+  id: string;
+  projectId: string;
+  state: "prepared" | "published" | "cancelled";
+  authorName: string;
+  createdAt: number;
+  content: Extract<SharedMaterial, { kind: "report" }>;
+  checkpoint: {
+    previousReportId: string | null;
+    fromSeq: number;
+    toSeq: number;
+    observedEvents: number;
+    includedEvents: number;
+    truncated: boolean;
+  };
+  itemId?: string;
+}
+export const sharedReportPublishSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(32000),
+    confirm: z.literal(true),
+  })
+  .strict();
+
 export const teamLoginSchema = z
   .string()
   .trim()
@@ -131,6 +166,7 @@ export interface SharedItem {
   editorName: string;
   hasPrivateSource: boolean;
   files?: SharedAsset[];
+  related?: { id: string; kind: SharedItemKind; title: string; unavailable: boolean }[];
   // Only returned to its original publisher, never a capability for another member.
   source?: { client: "codex" | "gpt"; kind: SharedItemKind; id: string; projectId: string };
 }

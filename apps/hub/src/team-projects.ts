@@ -5,9 +5,11 @@ import {
   type SharedAsset,
   type SharedInvitation,
   type SharedItem,
+  type SharedMaterialFilter,
   type SharedMaterialWrite,
   type SharedProject,
   type SharedProjectDetail,
+  sharedMaterialFilterSchema,
   sharedMaterialWriteSchema,
   type TeamCheckout,
 } from "@codex-web/shared";
@@ -72,6 +74,13 @@ export class TeamProjects {
         "INSERT INTO team_project_activity(projectId,actorId,actorName,action,itemId,createdAt) VALUES(?,?,?,?,?,?)",
       )
       .run(projectId, actor, this.registry.user(actor).name, action, itemId, Date.now());
+    this.db
+      .prepare(`INSERT INTO team_activity_bounds(projectId,removedThroughSeq)
+        SELECT ?,max(seq) FROM team_project_activity WHERE projectId=? AND seq NOT IN
+        (SELECT seq FROM team_project_activity WHERE projectId=? ORDER BY seq DESC LIMIT 1000)
+        HAVING max(seq) IS NOT NULL
+        ON CONFLICT(projectId) DO UPDATE SET removedThroughSeq=max(removedThroughSeq,excluded.removedThroughSeq)`)
+      .run(projectId, projectId, projectId);
     this.db
       .prepare(
         "DELETE FROM team_project_activity WHERE projectId=? AND seq NOT IN (SELECT seq FROM team_project_activity WHERE projectId=? ORDER BY seq DESC LIMIT 1000)",
@@ -512,6 +521,17 @@ export class TeamProjects {
       assigneeId: row.assigneeId,
       hasPrivateSource: !!source,
       files: this.assets.list(row.id),
+      related: this.db
+        .prepare(`SELECT m.id,m.kind,m.content,m.deleted FROM team_task_plans l
+        JOIN team_materials m ON m.projectId=l.projectId AND m.id=CASE WHEN l.taskId=? THEN l.planId ELSE l.taskId END
+        WHERE l.projectId=? AND (l.taskId=? OR l.planId=?) ORDER BY l.taskRevision DESC LIMIT 20`)
+        .all(row.id, row.projectId, row.id, row.id)
+        .map((r) => ({
+          id: String(r.id),
+          kind: r.kind as SharedItem["kind"],
+          title: JSON.parse(String(r.content)).title,
+          unavailable: !!r.deleted,
+        })),
       ...(source?.ownerId === actor
         ? {
             source: {
@@ -532,13 +552,45 @@ export class TeamProjects {
     if (!row) throw missing();
     return this.material(actor, row);
   }
-  items(actor: string, projectId: string, kind: string, query: string, offset: number) {
+  items(
+    actor: string,
+    projectId: string,
+    kind: string,
+    query: string,
+    offset: number,
+    filters: Partial<SharedMaterialFilter> = {},
+  ) {
     this.access(actor, projectId);
+    const f = sharedMaterialFilterSchema.parse(filters);
     const rows = this.db
       .prepare(
-        "SELECT * FROM team_materials WHERE projectId=? AND deleted=0 AND (?='all' OR kind=?) AND instr(search,?)>0 ORDER BY updatedAt DESC,id LIMIT 31 OFFSET ?",
+        `SELECT * FROM team_materials WHERE projectId=? AND deleted=0 AND (?='all' OR kind=?) AND instr(search,?)>0
+        AND (?=0 OR assigneeId=? OR createdBy=?)
+        AND (?='all' OR createdBy=?)
+        AND (?='all' OR (?='none' AND assigneeId IS NULL) OR assigneeId=?)
+        AND (?='all' OR (kind IN ('task','plan') AND
+          ((?='done' AND json_extract(content,'$.status')='done') OR
+           (?='active' AND json_extract(content,'$.status')!='done'))))
+        ORDER BY updatedAt DESC,id LIMIT 31 OFFSET ?`,
       )
-      .all(projectId, kind, kind, normalized(query), offset);
+      .all(
+        projectId,
+        kind,
+        kind,
+        normalized(query),
+        +f.mine,
+        actor,
+        actor,
+        f.author,
+        f.author,
+        f.assignee,
+        f.assignee,
+        f.assignee,
+        f.state,
+        f.state,
+        f.state,
+        offset,
+      );
     return {
       items: rows.slice(0, 30).map((row) => {
         const m = this.material(actor, row),
@@ -582,12 +634,101 @@ export class TeamProjects {
     key: string,
     input: SharedMaterialWrite,
     source?: Source,
+    onSaved?: (item: SharedItem) => void,
   ) {
     const value = sharedMaterialWriteSchema.parse(input);
     this.access(actor, projectId, value.content.kind === "core" ? "owner" : "write");
-    return this.once(actor, "material.put:" + projectId + ":" + id, key, { ...value, source }, () =>
-      this.save(actor, projectId, id, value, source),
+    return this.once(
+      actor,
+      "material.put:" + projectId + ":" + id,
+      key,
+      { ...value, source },
+      () => {
+        const item = this.save(actor, projectId, id, value, source);
+        // Trusted companion metadata participates in the same revision/receipt transaction.
+        onSaved?.(item);
+        return item;
+      },
     );
+  }
+  workTask(actor: string, projectId: string, id: string, key: string, revision: number) {
+    this.access(actor, projectId, "write");
+    const prepared = this.once(
+      actor,
+      "task.work:" + projectId + ":" + id,
+      key,
+      { revision },
+      () => {
+        const existing = this.db
+          .prepare(
+            "SELECT planId,userId FROM team_task_plans WHERE projectId=? AND taskId=? AND taskRevision=?",
+          )
+          .get(projectId, id, revision);
+        if (existing) {
+          if (existing.userId !== actor) throw conflict();
+          return { id: String(existing.planId), input: null };
+        }
+        const task = this.get(actor, projectId, id);
+        if (
+          task.revision !== revision ||
+          task.content.kind !== "task" ||
+          task.content.status === "done"
+        )
+          throw conflict();
+        if (task.assigneeId !== actor)
+          throw new HubError(
+            409,
+            "SHARED_ASSIGNEE_REQUIRED",
+            "Сначала назначь задачу себе и сохрани её.",
+          );
+        if (!this.checkout(actor, projectId))
+          throw new HubError(
+            409,
+            "CHECKOUT_REQUIRED",
+            "Сначала подключи свою рабочую папку проекта.",
+          );
+        const content: SharedMaterialWrite["content"] = {
+          kind: "plan",
+          title: task.title,
+          description: `По общей задаче «${task.title}», версия ${task.revision}.\n\n${task.content.body.slice(0, 5400)}${task.content.body.length > 5400 ? "\n[Описание сокращено; полная задача доступна по ссылке.]" : ""}`,
+          status: "draft",
+          sections: [
+            {
+              id: randomUUID(),
+              title: "Работа по задаче",
+              items: [
+                {
+                  id: randomUUID(),
+                  text: "Проверить условия задачи, выполнить согласованные изменения и подходящие проверки",
+                  checked: false,
+                },
+              ],
+            },
+          ],
+        };
+        return { id: randomUUID(), input: { content, revision: 0, assigneeId: actor } };
+      },
+    );
+    if (
+      !prepared.input ||
+      this.db.prepare("SELECT 1 FROM team_task_plans WHERE planId=?").get(prepared.id)
+    )
+      return this.get(actor, projectId, prepared.id);
+    // Preparation is a frozen metadata receipt. Recheck current assignment before its first material write.
+    const latest = this.get(actor, projectId, id);
+    if (
+      latest.revision !== revision ||
+      latest.assigneeId !== actor ||
+      !this.checkout(actor, projectId)
+    )
+      throw conflict();
+    const plan = this.put(actor, projectId, prepared.id, key, prepared.input, undefined, () => {
+      this.db
+        .prepare("INSERT INTO team_task_plans VALUES(?,?,?,?,?)")
+        .run(id, revision, prepared.id, projectId, actor);
+      this.changed(actor, projectId, "task.plan_created", id);
+    });
+    return this.get(actor, projectId, plan.id);
   }
   publish(
     actor: string,

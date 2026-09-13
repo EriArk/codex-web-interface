@@ -12,7 +12,7 @@ import {
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { accountLocalStorage as storage } from "./accountStorage";
+import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
@@ -270,6 +270,53 @@ export function SharedMaterialEditor({
           <p role="alert" className="notice">
             {error}
           </p>
+        )}
+        {!!item?.related?.length && (
+          <nav className="shared-actions" aria-label="Связанная работа">
+            {item.related.map((link) => (
+              <button
+                type="button"
+                className="secondary"
+                key={link.id}
+                disabled={link.unavailable}
+                onClick={() => openSharedProjects({ projectId, itemId: link.id, kind: link.kind })}
+              >
+                {materialLabels[link.kind]} · {link.title}
+                {link.unavailable ? " · удалён" : ""}
+              </button>
+            ))}
+          </nav>
+        )}
+        {item?.kind === "task" && !readonly && (
+          <div className="shared-actions">
+            <button
+              type="button"
+              className="secondary"
+              disabled={
+                busy ||
+                item.assigneeId !== pageWorkspace ||
+                JSON.stringify(item.content) !== JSON.stringify(draft.content) ||
+                item.assigneeId !== draft.assigneeId ||
+                (item.content.kind === "task" && item.content.status === "done")
+              }
+              onClick={() =>
+                void run(() =>
+                  sharedMutation<SharedItem>(path + "/work", "POST", {
+                    revision: item.revision,
+                    confirm: true,
+                  }),
+                ).then((plan) => {
+                  if (plan) openSharedProjects({ projectId, itemId: plan.id, kind: "plan" });
+                })
+              }
+            >
+              Работать по задаче
+            </button>
+            <small>
+              Создаст назначенный тебе план. Выполнение подтверждается отдельно в своей рабочей
+              папке.
+            </small>
+          </div>
         )}
         {current && current.revision !== draft.revision && (
           <div className="shared-warning" role="alert">

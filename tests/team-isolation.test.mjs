@@ -442,6 +442,382 @@ test("shared project keeps one owner and installation admin cannot read a member
   );
 });
 
+test("work from a task creates one attributed normal Plan with shared backlinks, without starting work or crossing checkouts", async (t) => {
+  const f = await sharedFixture(t),
+    id = randomUUID(),
+    path = f.path + "/materials/" + id;
+  const content = {
+    kind: "task",
+    title: "Review task",
+    body: "Required change",
+    status: "todo",
+    dueAt: null,
+    priority: 1,
+  };
+  const create = await f.request(
+    path,
+    f.owner,
+    "PUT",
+    { revision: 0, content, assigneeId: f.friendId },
+    f.headers(),
+  );
+  assert.equal(create.status, 200);
+  assert.equal(
+    (await f.request(path + "/work", f.friend, "POST", { revision: 1, confirm: true }, f.headers()))
+      .status,
+    409,
+    "own checkout required",
+  );
+  f.teamProjects.bind(
+    f.friendId,
+    f.projectId,
+    randomUUID(),
+    { revision: 0, personalProjectId: "friend-work" },
+    { machineId: "friend-machine", repository: null },
+  );
+  assert.equal(
+    (await f.request(path + "/work", f.owner, "POST", { revision: 1, confirm: true }, f.headers()))
+      .status,
+    409,
+    "only the assigned actor prepares work",
+  );
+  const key = f.headers(),
+    result = await f.request(path + "/work", f.friend, "POST", { revision: 1, confirm: true }, key);
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.equal(result.body.kind, "plan");
+  assert.equal(result.body.assigneeId, f.friendId);
+  assert.equal(result.body.createdBy, f.friendId);
+  assert.equal(result.body.related[0].id, id);
+  assert.equal((await f.request(path, f.owner)).body.related[0].id, result.body.id);
+  assert.equal(
+    (await f.request(path + "/work", f.friend, "POST", { revision: 1, confirm: true }, key)).body
+      .id,
+    result.body.id,
+  );
+  assert.equal(
+    (await f.request(path + "/work", f.friend, "POST", { revision: 1, confirm: true }, f.headers()))
+      .body.id,
+    result.body.id,
+    "second client uses the same work record",
+  );
+  assert.equal(
+    (
+      await f.request(
+        path,
+        f.owner,
+        "PUT",
+        { revision: 1, content: { ...content, body: "Changed source" }, assigneeId: f.friendId },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await f.request(path + "/work", f.friend, "POST", { revision: 2, confirm: true }, key)).status,
+    409,
+    "receipt cannot change revision",
+  );
+  assert.equal(
+    (await f.request(path + "/work", f.friend, "POST", { revision: 1, confirm: true }, key)).body
+      .id,
+    result.body.id,
+    "lost acknowledgement stays tied to old source revision",
+  );
+  assert.equal(f.registry.db.prepare("SELECT count(*) n FROM team_executions").get().n, 0);
+  const privateRuntime = (await f.personal(f.friendId)).runtime;
+  assert.equal(
+    privateRuntime.store.db.prepare("SELECT count(*) n FROM project_work_actions").get().n,
+    0,
+  );
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/members/" + f.friendId,
+        f.owner,
+        "PATCH",
+        { revision: 1, role: "collaborator", remove: true },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await f.request(path + "/work", f.friend, "POST", { revision: 1, confirm: true }, key)).status,
+    404,
+  );
+});
+
+test("shared reports freeze a bounded common checkpoint, keep edits private until exact publication, and reject overlapping periods", async (t) => {
+  const f = await sharedFixture(t),
+    base = f.path + "/report-drafts",
+    id = randomUUID();
+  const note = await f.request(
+    f.path + "/materials/" + randomUUID(),
+    f.owner,
+    "PUT",
+    {
+      revision: 0,
+      content: { kind: "note", title: "Common title", body: "COMMON_BODY_NOT_A_TRANSCRIPT" },
+    },
+    f.headers(),
+  );
+  assert.equal(note.status, 200);
+  assert.equal(
+    (
+      await f.request("/api/workspace/notes/" + randomUUID(), f.friend, "PUT", {
+        scope: { client: "codex", projectId: "private", name: "Private" },
+        title: "PRIVATE_TITLE",
+        body: "PRIVATE_BODY",
+        links: [],
+        revision: 0,
+      })
+    ).status,
+    200,
+  );
+  const prepared = await f.request(base + "/" + id, f.friend, "PUT", {});
+  assert.equal(prepared.status, 200, JSON.stringify(prepared.body));
+  assert.match(prepared.body.content.body, /Common title/);
+  assert(!JSON.stringify(prepared.body).includes("PRIVATE_"));
+  assert(!JSON.stringify(prepared.body).includes("COMMON_BODY_NOT_A_TRANSCRIPT"));
+  assert.equal((await f.request(base + "/" + id, f.owner)).status, 404);
+  assert.equal((await f.request(base, f.owner)).body.items.length, 0);
+  const otherId = randomUUID();
+  assert.equal((await f.request(base + "/" + otherId, f.owner, "PUT", {})).status, 200);
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/materials/" + randomUUID(),
+        f.owner,
+        "PUT",
+        { revision: 0, content: { kind: "note", title: "After snapshot", body: "Later" } },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  assert.deepEqual(
+    (await f.request(base + "/" + id, f.friend, "PUT", {})).body,
+    prepared.body,
+    "exact retry retains frozen period and text",
+  );
+  const input = {
+    title: "Reviewed report",
+    body: "Only the selected edited summary.",
+    confirm: true,
+  };
+  const published = await f.request(base + "/" + id + "/publish", f.friend, "POST", input);
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  assert.deepEqual(
+    (await f.request(base + "/" + id + "/publish", f.friend, "POST", input)).body,
+    published.body,
+  );
+  assert.equal(
+    (
+      await f.request(base + "/" + id + "/publish", f.friend, "POST", {
+        ...input,
+        body: "Changed retry",
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await f.request(base + "/" + otherId + "/publish", f.owner, "POST", input)).status,
+    409,
+  );
+  const visible = await f.request(f.path + "/materials/" + published.body.itemId, f.owner);
+  assert.equal(visible.body.content.body, input.body);
+  assert.equal(visible.body.createdBy, f.friendId);
+  assert.equal((await f.request(f.path + "/materials?kind=report", f.friend)).body.items.length, 1);
+  const next = await f.request(base + "/" + randomUUID(), f.owner, "PUT", {});
+  assert.equal(next.body.checkpoint.fromSeq, prepared.body.checkpoint.toSeq);
+  assert.equal(next.body.content.periodFrom, prepared.body.content.periodTo);
+  assert.match(next.body.content.body, /After snapshot/);
+  assert(
+    !next.body.content.body.includes("Common title"),
+    "already checkpointed event is not repeated",
+  );
+  for (const user of [f.registry.ownerId, f.friendId]) {
+    const { runtime } = await f.personal(user);
+    assert.equal(
+      runtime.store.db.prepare("SELECT count(*) n FROM project_work_actions").get().n,
+      0,
+    );
+    assert.equal(
+      runtime.store.db.prepare("SELECT count(*) n FROM project_current_chats").get().n,
+      0,
+    );
+  }
+});
+
+test("report publication and checkpoint are atomic; cancellation and revoked membership cannot advance them", async (t) => {
+  const f = await sharedFixture(t),
+    base = f.path + "/report-drafts",
+    id = randomUUID();
+  assert.equal((await f.request(base + "/" + id, f.friend, "PUT", {})).status, 200);
+  f.registry.db.exec(
+    "CREATE TRIGGER report_failure BEFORE INSERT ON team_report_checkpoints BEGIN SELECT RAISE(ABORT,'fixture_failure'); END",
+  );
+  const input = { title: "Atomic report", body: "Reviewed content", confirm: true };
+  assert.equal(
+    (await f.request(base + "/" + id + "/publish", f.friend, "POST", input)).status,
+    500,
+  );
+  assert.equal((await f.request(base + "/" + id, f.friend)).body.state, "prepared");
+  assert.equal((await f.request(f.path + "/materials?kind=report", f.owner)).body.items.length, 0);
+  f.registry.db.exec("DROP TRIGGER report_failure");
+  assert.equal(
+    (await f.request(base + "/" + id + "/cancel", f.friend, "POST", { confirm: true })).status,
+    200,
+  );
+  assert.equal(
+    (await f.request(base + "/" + id + "/publish", f.friend, "POST", input)).status,
+    409,
+  );
+  const another = randomUUID();
+  assert.equal((await f.request(base + "/" + another, f.friend, "PUT", {})).status, 200);
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/members/" + f.friendId,
+        f.owner,
+        "PATCH",
+        { revision: 1, role: "collaborator", remove: true },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  assert.equal((await f.request(base + "/" + another, f.friend)).status, 404);
+  assert.equal(
+    (await f.request(base + "/" + another + "/publish", f.friend, "POST", input)).status,
+    404,
+  );
+  const invitation = await f.request(
+    f.path + "/invitations",
+    f.owner,
+    "POST",
+    {
+      userId: f.friendId,
+      role: "collaborator",
+      revision: (await f.request(f.path)).body.project.revision,
+    },
+    f.headers(),
+  );
+  assert.equal(invitation.status, 200, JSON.stringify(invitation.body));
+  assert.equal(
+    (
+      await f.request(
+        "/api/team/project-invitations/" + invitation.body.id,
+        f.friend,
+        "POST",
+        { accept: true },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await f.request(base + "/" + another + "/publish", f.friend, "POST", input)).status,
+    409,
+    "re-adding a member does not revive the old confirmation",
+  );
+  assert.equal(f.registry.db.prepare("SELECT count(*) n FROM team_report_checkpoints").get().n, 0);
+});
+
+test("shared report retention is explicit and unrelated project sequence gaps do not imply truncation", async (t) => {
+  const f = await sharedFixture(t),
+    base = f.path + "/report-drafts",
+    other = randomUUID(),
+    actor = f.registry.ownerId;
+  f.teamProjects.create(actor, other, {
+    title: "Unrelated",
+    visibility: "private",
+    repository: null,
+  });
+  const before = await f.request(base + "/" + randomUUID(), f.owner, "PUT", {});
+  assert.equal(before.body.checkpoint.truncated, false);
+  for (let i = 0; i < 1005; i++) f.teamProjects.changed(actor, f.projectId, "material.updated");
+  const report = await f.request(base + "/" + randomUUID(), f.owner, "PUT", {});
+  assert.equal(report.status, 200, JSON.stringify(report.body));
+  assert.equal(report.body.checkpoint.observedEvents, 1000);
+  assert.equal(report.body.checkpoint.includedEvents, 60);
+  assert.equal(report.body.checkpoint.truncated, true);
+  assert(report.body.content.body.length <= 32000);
+  assert.match(report.body.content.body, /Часть периода сокращена/);
+});
+
+test("shared material filters apply before pagination, distinguish creators and assignees, and retain project authorization", async (t) => {
+  const f = await sharedFixture(t),
+    ownerId = f.registry.ownerId;
+  const put = async (user, content, assigneeId = null) => {
+    const result = await f.request(
+      f.path + "/materials/" + randomUUID(),
+      user,
+      "PUT",
+      { revision: 0, content, assigneeId },
+      f.headers(),
+    );
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body;
+  };
+  const task = (title, status) => ({
+    kind: "task",
+    title,
+    body: "check filters",
+    status,
+    priority: 1,
+    dueAt: null,
+  });
+  const assigned = await put(f.owner, task("Older assigned work", "doing"), f.friendId);
+  const own = await put(f.friend, task("Created by friend", "done"), ownerId);
+  await put(f.owner, task("Unassigned", "todo"));
+  for (let i = 0; i < 34; i++)
+    await put(f.owner, { kind: "note", title: "New note " + i, body: "General" });
+  const list = async (query, user = f.friend) => {
+    const result = await f.request(f.path + "/materials?" + query, user);
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body;
+  };
+  assert.equal((await list("mine=false")).items.length, 30);
+  assert.deepEqual(
+    (await list("mine=true")).items.map((i) => i.id).sort(),
+    [assigned.id, own.id].sort(),
+  );
+  assert.deepEqual(
+    (await list("mine=true&state=active")).items.map((i) => i.id),
+    [assigned.id],
+  );
+  assert.deepEqual(
+    (await list("author=" + f.friendId)).items.map((i) => i.id),
+    [own.id],
+  );
+  assert.deepEqual(
+    (await list("assignee=" + f.friendId)).items.map((i) => i.id),
+    [assigned.id],
+  );
+  assert.equal((await list("kind=task&assignee=none")).items.length, 1);
+  assert.equal((await list("kind=note&state=done")).items.length, 0);
+  assert.deepEqual(
+    (await list("state=done")).items.map((i) => i.id),
+    [own.id],
+  );
+  assert.equal((await list("assignee=" + randomUUID())).items.length, 0);
+  assert.equal((await f.request(f.path + "/materials?mine=no", f.friend)).status, 400);
+  assert.equal(
+    (
+      await f.request(
+        f.path + "/members/" + f.friendId,
+        f.owner,
+        "PATCH",
+        { revision: 1, role: "collaborator", remove: true },
+        f.headers(),
+      )
+    ).status,
+    200,
+  );
+  assert.equal((await f.request(f.path + "/materials?mine=true", f.friend)).status, 404);
+});
+
 test("shared viewer permissions, attributed revisions, exact retries and revocation apply to every material route", async (t) => {
   const f = await sharedFixture(t, "viewer"),
     itemId = randomUUID(),
