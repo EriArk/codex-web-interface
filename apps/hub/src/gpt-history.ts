@@ -161,6 +161,14 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
             role: (generatedImage ? "assistant" : author.role) as "user" | "assistant",
             text: body,
             createdAt: Number(message.create_time) || 0,
+            ...(author.role === "assistant"
+              ? {
+                  phase:
+                    message.channel === "commentary" ? ("commentary" as const) : ("final" as const),
+                  complete:
+                    message.status === "finished_successfully" && metadata.is_complete !== false,
+                }
+              : {}),
             files: [...files.values()],
             ...(unsupported.size ? { unsupported: [...unsupported] } : {}),
           },

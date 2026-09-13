@@ -107,6 +107,13 @@ try {
             });
           return route.fulfill({
             json: {
+              ...(mode === "history-retained"
+                ? {
+                    stale: true,
+                    refreshMessage:
+                      "Показана сохранённая история. Обновление временно недоступно; повторим автоматически.",
+                  }
+                : {}),
               items: [
                 {
                   id: "public-answer",
@@ -269,6 +276,34 @@ try {
       console.log(
         name +
           ": history throttling keeps messages and draft, uses inline sync status and clears on recovery",
+      );
+      // No client cache: a restarted Hub can still supply its saved public branch.
+      mode = "history-retained";
+      await page.evaluate(() => window.dispatchEvent(new Event("private-session-ended")));
+      await page.reload();
+      await expect(page.getByText("Сохранённый настоящий ответ", { exact: true })).toBeVisible();
+      await expect(sync).toContainText("сохранённая история");
+      await expect(page.locator(".gpt-history-state")).toHaveCount(0);
+      await expect(page.locator(".global-notice")).toHaveCount(0);
+      await expect(editor).toHaveValue("Черновик во время задержки истории");
+      await page.screenshot({ path: `.local/qa-gpt-outbox/history-cold-retained-${name}.png` });
+      // With no saved branch at all, explicit Retry owns one local error, never a second banner.
+      mode = "history-error";
+      await page.evaluate(() => window.dispatchEvent(new Event("private-session-ended")));
+      await page.reload();
+      await page.getByRole("button", { name: "Повторить загрузку" }).click();
+      await expect(page.locator(".global-notice")).toHaveCount(0);
+      await expect(
+        page.getByText(
+          "ChatGPT временно ограничил обновление истории. Повторим автоматически после паузы.",
+          { exact: true },
+        ),
+      ).toHaveCount(1);
+      mode = "ok";
+      await page.clock.runFor(16000);
+      await expect(editor).toHaveValue("Черновик во время задержки истории");
+      console.log(
+        name + ": cold reload retains Hub history; manual Retry never duplicates the history error",
       );
       const now = await page.evaluate(() => Date.now());
       const failed = {

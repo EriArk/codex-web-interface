@@ -1,6 +1,8 @@
 import type { GptConversation, GptJob, GptMessage, GptModels, GptProject } from "@codex-web/shared";
 
 export interface GptCachedChat {
+  stale?: boolean;
+  refreshMessage?: string;
   contextMessage?: string;
   hasNewer?: boolean;
   messages: GptMessage[];
@@ -77,9 +79,21 @@ export function flushGptCache() {
     }),
   );
   try {
-    const data = JSON.stringify({ version: 1, expires: Date.now() + 30 * 60000, data: gptCache });
+    // Oversized outbox answers or one older chat must not erase every reload snapshot.
+    const saved = { ...gptCache, jobs: gptCache.jobs.slice(0, 10), chats: { ...gptCache.chats } };
+    const encode = () =>
+      JSON.stringify({ version: 1, expires: Date.now() + 30 * 60000, data: saved });
+    let data = encode();
+    if (data.length >= 1800000) {
+      saved.jobs = [];
+      data = encode();
+    }
+    const oldest = Object.entries(saved.chats).sort((a, b) => a[1].checkedAt - b[1].checkedAt);
+    while (data.length >= 1800000 && oldest.length) {
+      delete saved.chats[oldest.shift()![0]];
+      data = encode();
+    }
     if (data.length < 1800000) sessionStorage.setItem(key, data);
-    else sessionStorage.removeItem(key);
   } catch {
     // Safari storage may be unavailable; memory retention still works.
   }

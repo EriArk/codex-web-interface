@@ -24,6 +24,7 @@ import {
   gptProjectConversations,
   gptProjects,
 } from "./gpt-history.js";
+import { GptHistoryDisk } from "./gpt-history-disk.js";
 import { gptLinkedText } from "./gpt-links.js";
 import { GptOperations, gptOperationInput } from "./gpt-operations.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
@@ -61,9 +62,27 @@ const error = (code: string, message: string, status = 409) => new HubError(stat
 export class GptService {
   private readonly historyBackoff = new GptReadBackoff();
   private readonly historyReads = new Map<string, Promise<Json>>();
-  readonly historyCache = new GptHistoryCache(async (id) =>
-    gptHistory(await this.json("/conversation?id=" + encodeURIComponent(id)), id),
-  );
+  readonly historyCache: GptHistoryCache;
+  private observedHistory?: { id: string; value: Json; checkedAt: number };
+  /** Short sharing window for display/completion observers, never mutation preconditions. */
+  async readConversation(id: string) {
+    const observed = this.observedHistory;
+    if (observed?.id === id && Date.now() - observed.checkedAt < 15000) return observed.value;
+    const value = await this.json("/conversation?id=" + encodeURIComponent(id));
+    if (
+      !value.mapping ||
+      typeof value.mapping !== "object" ||
+      !gptId(value.current_node) ||
+      !value.mapping[value.current_node]
+    )
+      throw error(
+        "GPT_HISTORY_UNAVAILABLE",
+        "Не удалось прочитать историю ChatGPT. Сохранённая переписка остаётся доступной.",
+        503,
+      );
+    this.observedHistory = { id, value, checkedAt: Date.now() };
+    return value;
+  }
   readonly operations: GptOperations;
   readonly projectContent: GptProjectContent;
   readonly workspaceWork: GptWorkspaceWork;
@@ -188,7 +207,10 @@ export class GptService {
         !this.libraryBusy &&
         !this.modelsPending &&
         !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
-      (id) => this.historyCache.invalidate(id),
+      (id) => {
+        this.observedHistory = undefined;
+        this.historyCache.invalidate(id);
+      },
       this.lifetime.signal,
     );
     this.projectContent = new GptProjectContent(
@@ -226,6 +248,11 @@ export class GptService {
       throw error("GPT_PREVIEW_SOURCE", "Демо недоступно.");
     });
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
+    this.historyCache = new GptHistoryCache(
+      async (id) => gptHistory(await this.readConversation(id), id),
+      Date.now,
+      new GptHistoryDisk(join(this.root, "history")),
+    );
     // Never replay an ambiguous native submission after a Hub restart.
     store.db
       .prepare(
@@ -256,6 +283,8 @@ export class GptService {
         await response.body?.cancel();
         if (historyRead && (response.status === 429 || response.status >= 500))
           throw this.historyBackoff.fail(response.status, response.headers.get("retry-after"));
+        if (historyRead && [401, 403].includes(response.status))
+          throw error("GPT_LOGIN_REQUIRED", "Проверь вход в ChatGPT на странице подключения.", 403);
         if (historyRead)
           throw error(
             "GPT_HISTORY_UNAVAILABLE",
@@ -507,14 +536,17 @@ export class GptService {
           .all()
           .filter((e) => e.kind === "thread" && e.projectId === nativeId)) {
           this.library.save("thread", child.id, { deleted: true, archived: false, name: "" });
-          this.historyCache.invalidate(child.id);
+          this.historyCache.remove(child.id);
           this.store.db.prepare("DELETE FROM gpt_jobs WHERE nativeId=?").run(child.id);
         }
       }
       if (kind === "thread") {
+        this.observedHistory = undefined;
         this.historyCache.invalidate(nativeId);
-        if (action.action === "delete")
+        if (action.action === "delete") {
+          this.historyCache.remove(nativeId);
           this.store.db.prepare("DELETE FROM gpt_jobs WHERE nativeId=?").run(nativeId);
+        }
       }
       return { ok: true };
     } finally {
@@ -789,6 +821,7 @@ export class GptService {
   }
   private update(jobId: string, values: Json) {
     if (values.status && ["completed", "cancelled", "unknown", "failed"].includes(values.status)) {
+      this.observedHistory = undefined;
       const nativeId = this.job(jobId).nativeId;
       if (nativeId) this.historyCache.invalidate(nativeId);
     }
@@ -911,9 +944,7 @@ export class GptService {
             const current = this.job(jobId);
             if (current.nativeId && current.nativeId !== native.nativeId) return;
             if (!current.nativeId) this.update(jobId, { nativeId: native.nativeId });
-            const history = await this.json(
-              "/conversation?id=" + encodeURIComponent(native.nativeId),
-            );
+            const history = await this.readConversation(native.nativeId);
             if (this.stopped || done) return;
             this.historyCache.seed(native.nativeId, gptHistory(history, native.nativeId));
             const completion = gptCompletion(history, current.text, current.createdAt);
@@ -931,6 +962,9 @@ export class GptService {
                 .join("\n\n"),
               assets: JSON.stringify(assets),
             });
+            // This exact fresh read already confirmed completion; retain it after status invalidation.
+            this.historyCache.seed(native.nativeId, gptHistory(history, native.nativeId));
+            this.observedHistory = { id: native.nativeId, value: history, checkedAt: Date.now() };
             done = true;
             streamController.abort();
           } catch {
