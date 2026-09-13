@@ -2,9 +2,20 @@
 
 ## Security goal
 
-This is a single-user private tool with unusually powerful backend access: Codex can modify projects and run commands, and Remote Desktop can control a Windows machine.
+The installed personal tool has unusually powerful backend access: Codex can modify projects and run commands, and Remote Desktop can control a Windows machine. The approved team milestone adds explicit user isolation before another real account is admitted. See [Team Workspace](TEAM_WORKSPACE.md).
 
-Treat authentication and network boundaries as core product requirements even though there is only one user.
+Treat authentication, private resource ownership and network boundaries as core product requirements. Production remains on the stable personal release while team changes are verified with isolated state.
+
+## Team authorization requirements
+
+- Resolve an authenticated principal before selecting a personal runtime/Store/native connector. No browser user ID/header, default-first-machine or failed-connection fallback can select another user's services.
+- User-owned storage, artifacts, native queues, drafts, notifications, browser profiles and credentials remain separate. Existing owner state is migrated without identity changes or copying native credentials.
+- Reauthorize reads, writes, search, source links, media, WebSockets and terminal/Remote tickets. Bind asynchronous work to initiator/project/checkout/revision; recheck before dispatch, commit and publication. Revocation never guesses that an external operation was cancelled.
+- Admin has installation/access authority without implicit private-content/terminal/Remote access. Host OS administration remains trusted; this is not end-to-end encryption against the server owner.
+- Private project → shared publication is explicit. Membership grants only shared materials; Link/Bridge permissions grant only bounded approved coordination. Native chats/accounts/machines are not shared through either construct.
+- Machine enrollment is one-use, owner-bound and independently admin approved with pinned SSH identity. Allowed project roots must handle canonical paths, junctions, symlinks, UNC and sibling-prefix escapes. Tailscale does not relax host authentication or expose Windows ports publicly.
+- Backups include every personal namespace and shared ownership mapping. Missing mappings fail closed; restore revokes sessions and preserves uncertain receipts. Disabling a member must not delete local source repositories or external accounts.
+- Before cutover, adversarial two-user tests include stale links/tickets, direct IDs, native identity confusion, revocation races, shared edit conflicts and backup restoration.
 
 ## Primary invariant
 

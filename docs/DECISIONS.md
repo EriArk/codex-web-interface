@@ -2,6 +2,22 @@
 
 This file records decisions that should be treated as fixed unless the owner explicitly changes them.
 
+## 2026-09-13 — Owner-approved team milestone and stable production
+
+The owner approved [Team Workspace](TEAM_WORKSPACE.md) after an explicit planning discussion. This supersedes the single-user-only product constraint and deferrals of #6/#37. The current Hub gains separate full personal workspaces, initially for the owner and a friend using their own Windows PC, Codex, consumer GPT and GitHub accounts. A complete separate-Hub installer remains deferred.
+
+The first usable result is the friend's independent workspace through an invitation/Windows master with chosen project roots and admin-verified pairing. Both shared logical projects with personal checkouts and narrow links between private projects follow in the same pass. The friend can participate in real PC/mobile acceptance.
+
+Admin manages infrastructure/access metadata and has no implicit in-app private-content or device access. Each private runtime and background receipt has an explicit owner. Migrate existing identities/password/history/files to the original owner without cross-user fallback. Implement revocation and backup ownership with the identity foundation.
+
+Sharing a formerly private project requires selecting existing materials. New Notes/Tasks/Plans/Reports inside an already shared project are visibly shared by default. Personal chats, drafts, accounts, terminals and unpublished evidence remain private. Per-user Current/Previous Chats and Git work remain independent.
+
+Mutual link permission may authorize bounded automatic read-only consultations; implementation remains an explicit target action. A Bridge has a chosen owning project and uses that project's owner's authorized Codex account/machine for coordination. Other projects respond using their own accounts. GitHub memberships and native identities remain separate.
+
+The owner explicitly confirmed the installed `379fa17` is stable and requires staying on it while team changes are prepared. Production UI, engine and database remain untouched by intermediate team development. Candidate code/state/profile namespaces are isolated; use copied snapshots without connecting copied owner native writers. A protected pre-team snapshot, restored separately and verified, is the baseline. Cutover waits for normal release/maintenance checks and protection of newer writes.
+
+The agreed pass includes #149–160, #6/#37 and confirmed bugs. Full Canvas, global GPT-chat search, extra native integrations, full conversation voice, separate-Hub distribution and GitHub Actions are excluded. Documentation plus existing GitHub issues are the authoritative plan/task records. See the current gates in [Roadmap](ROADMAP.md).
+
 ## 2026-09-10: Tablet materials and optional previous layout
 
 The owner approved stronger shared theme materials and modest tablet geometry changes,

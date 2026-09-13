@@ -1,6 +1,6 @@
 # Codex Web Interface
 
-Private Codex workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine.
+Private Codex/GPT workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine. The installed personal workspace is the stable baseline; [private team workspaces](docs/TEAM_WORKSPACE.md) are the approved next milestone, not yet a claim of installed multi-user support.
 
 ## Available now
 
@@ -12,7 +12,13 @@ Private Codex workspace for iPhone, iPad and desktop. The browser talks to a Lin
 - Latest 20 chat messages on open; an explicit button loads 20 more without moving the reading position.
 - Results for file changes, checks, plans and Remote screenshots; detailed commands in Activity.
 - Manual Remote Desktop through Guacamole: phone trackpad, tablet touch/stylus, pinch zoom and controls over the full landscape screen.
-- Dedicated single-view phone shell, three-pane wide layout, PWA manifest and three shared themes.
+- Dedicated single-view phone shell, adaptive wide layout, PWA manifest and four shared themes.
+- Real consumer ChatGPT projects/chats, durable sends, files/images, editing/regeneration and native project instructions/files.
+- Tasks, Notes, executable Plans, Reports, Project Core, current-chat rotation, Review/Delivery and bounded project consultations.
+- Files/Git with README/releases, system diagnostics, private device terminals and configured GUI previews.
+- Native dictation with waveform/timer, system or background read-aloud, account usage/resets and six settings categories.
+- Native work progress, context/diff, live command output, content search, ChatGPT schedules and bounded saved Canvas access. See the documented native limitations below.
+- Independent web gateway and persistent execution engine, with guarded updates, private snapshots and recovery.
 
 ## Deployment
 
@@ -62,7 +68,9 @@ For loopback development, use publicBaseUrl `http://127.0.0.1:8780` and secureCo
 
 [docs/VERIFICATION.md](docs/VERIFICATION.md) records real Windows checks separately from simulated browser fixtures. Mobile Chromium/WebKit checks do not substitute for testing Safari and standalone mode on a physical iPhone/iPad.
 
-Native Codex project discovery and bounded external history are implemented. [Sync and Remote behavior](docs/SYNC_AND_REMOTE.md) explains the desktop saved-folder limitation and continuation semantics. Notes, a general file/Git browser, additional machines and automatic collection of arbitrary generated artifacts remain later modules. The local Linux transport is implemented; this deployment has only the authenticated Windows backend configured.
+Native Codex project discovery and bounded external history are implemented. [Sync and Remote behavior](docs/SYNC_AND_REMOTE.md) explains the desktop saved-folder limitation and continuation semantics. Notes, Files/Git and generated artifact Results are implemented. Additional execution machines and selected project-root enforcement are prerequisites of the current team milestone. The local Linux transport exists; broad second-machine acceptance is tracked separately from configured device terminals.
+
+[Roadmap](docs/ROADMAP.md) distinguishes implemented personal features, pending team work and physical acceptance. Current production stays on its verified stable image while team changes are developed and tested with isolated state. The full Canvas editor, global search through every native GPT conversation and a distributable separate-Hub installer are not part of this pass.
 
 Read [AGENTS.md](AGENTS.md), [decisions](docs/DECISIONS.md), [architecture](docs/ARCHITECTURE.md), [mobile UX](docs/MOBILE.md) and [security](docs/SECURITY.md) before substantial changes.
 

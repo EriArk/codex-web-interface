@@ -2,7 +2,21 @@
 
 ## Overview
 
-Codex Web Interface is a single-user web Hub with pluggable execution backends.
+The installed Codex Web Interface is a personal web workspace with pluggable execution backends. The owner-approved next architecture adds isolated personal workspaces and explicit team collaboration on the same Hub; [Team Workspace](TEAM_WORKSPACE.md) defines those boundaries. Production remains on the stable personal release until the replacement passes acceptance.
+
+The current public service is a replaceable web/API gateway. The persistent engine owns native sessions, SQLite, authentication, queues, GPT orchestration and private PTYs over a private Unix socket. Gateway changes do not replace the execution engine. Windows execution goes through the logged-in local-only Companion, not an interactive SSH desktop session.
+
+### Team composition
+
+Resolve a durable authenticated principal before dispatching a private API. Each user owns one personal runtime containing their Store/artifacts, machine configuration, catalog, native sessions, GPT connector/profile and background jobs. Reuse the same functional route/UI implementations with scoped dependencies; never fall back to the first configured owner or machine.
+
+Personal SQLite/artifact namespaces keep native IDs and existing private module contracts independent. A shared installation/collaboration registry holds users, pairings, logical projects, memberships, checkouts, published objects, Links/Bridges and access audit records. The original owner's database and native file/thread identities remain the migration baseline. Shared project permission never implies access to a personal runtime, native conversation or machine.
+
+Logical Project and personal Checkout are distinct: shared Core/workspace evidence belongs to the Project; machine/path/native IDs/Current Chat and Git state belong to the user's Checkout. A Bridge belongs to one chosen Project and runs coordination on its owner's authorized Codex account. Cross-project dispatch uses mutually accepted Link policy and returns bounded published context only.
+
+All long-lived work records initiator identity, selected project/checkout, source revision and exact receipt. Authorization is rechecked before dispatch, mutation commit and response publication. WebSockets/download/Remote/terminal tickets remain bound to the current user and resource permission. Revocation and multi-namespace backup are foundation work, not optional UI polish.
+
+### Original transport shape
 
 ```text
                                   Internet
@@ -63,7 +77,7 @@ Responsibilities:
 - Codex chat;
 - approval dialogs;
 - Results/Files/Activity/Remote pane;
-- Notes/Plan/Machines later;
+- Notes/Tasks/Plans/Reports/Core, project review/delivery and device workspaces;
 - theme rendering;
 - reconnect/resume UX.
 
@@ -83,7 +97,7 @@ Responsibilities:
 - protocol normalization;
 - result persistence/indexing;
 - Remote Desktop authorization/proxy integration;
-- future notes/tasks/machine status APIs.
+- notes/tasks/project-work/device APIs, plus the next milestone's user-owned runtime and explicit collaboration boundaries.
 
 ### `packages/machines`
 

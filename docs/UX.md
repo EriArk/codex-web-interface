@@ -1,5 +1,18 @@
 # UX Specification
 
+## Current team milestone
+
+The approved [Team Workspace](TEAM_WORKSPACE.md) adds user identity and explicit collaboration to the same functional themed UI. Desktop and mobile are both required for the second user. Production remains on the current stable interface while candidate screens are tested separately.
+
+- Access settings contain personal account/security; admins additionally see users/invitations and machine-pairing metadata. Personal content never appears in an administrative user preview.
+- Joining follows invitation → own credentials → Windows master → chosen project folders → diagnostics → admin-approved PC. Native Codex/GPT/GitHub sign-ins have independent readiness states; one unavailable account does not masquerade as another person's connection.
+- Navigation distinguishes My projects and Shared with me. Shared project headers name owner/role and the current user's checkout. Files/Git, chat and work target that checkout; opening the overview preserves existing drafts and selection.
+- Sharing an existing project shows a material-selection review. New common project records show their shared audience; personal capture remains explicit. Private source links keep published evidence readable without opening the source.
+- Project membership uses Viewer/Collaborator/Owner. Show authors, assignments, revision conflicts and useful activity, preserving drafts. Do not add presence surveillance or mandatory self-review bureaucracy.
+- Links invite the other owner without listing their private projects. Bridges prioritize goal, questions, findings, decisions and action state. Show the owning project/account, consultation allowance and Stop. Implementation actions remain explicit.
+- Repository access and CodexWeb membership have separate status/actions. Account/machine/link removal explains the exact scope while preserving shared history.
+- Compact screens use existing sheets/single-view navigation; wide screens use available space with independent scrolling. Existing keyboard, 44px targets, theme contrast and session-change draft isolation apply to every new form.
+
 ## Primary design target
 
 **13-inch iPad, landscape, standalone PWA.**

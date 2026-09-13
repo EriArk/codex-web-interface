@@ -4,7 +4,7 @@ This repository is intended to be implemented primarily with Codex. Read this fi
 
 ## Product in one sentence
 
-Build a **private, iPad-first PWA with first-class iPhone support** that lets one user work with Codex running either on a Windows PC in the same LAN as the Linux Hub or locally on the Hub, while keeping execution machines off the public Internet.
+Build a **private, iPad-first PWA with first-class iPhone and desktop support** containing independent personal Codex/GPT workspaces and explicitly shared development projects for a small trusted team. Execution machines remain off the public Internet.
 
 ## Source-of-truth order
 
@@ -32,7 +32,7 @@ Do not silently change a fixed decision. If a constraint is blocking implementat
 - Browser talks only to the Hub API. Never expose raw Codex App Server directly to the browser.
 - Also support a local Linux backend that spawns Codex on the Hub itself.
 - Remote Desktop is secondary/manual. Prefer RDP through Guacamole when available; keep the provider abstract.
-- Single-user product. Authentication is still mandatory.
+- Authentication is mandatory. The existing single-owner installation is the migration baseline; team access must remain disabled until user identity and complete private-resource isolation are verified.
 - Project is the primary UX entity; machine is infrastructure behind it.
 - One functional UI, multiple themes. Do not create separate implementations per theme or per device.
 
@@ -207,7 +207,7 @@ Do not duplicate source repositories into Hub storage just for the UI.
 
 ## Implementation order
 
-Follow `docs/ROADMAP.md`. In particular:
+Follow the current milestones in `docs/ROADMAP.md` and the approved team specification in `docs/TEAM_WORKSPACE.md`. The original implementation order below is historical; its personal-workspace modules already exist:
 
 1. scaffold Hub + PWA + auth;
 2. prove one remote Windows Codex conversation end-to-end;
@@ -532,3 +532,19 @@ Before mobile support is considered complete, the same core workflow must also w
 - An open terminal at a verified idle shell prompt must not block engine updates. The owner authorizes replacing these idle sessions during maintenance. Active commands, background jobs and unverified shell state still block it; quiet output or low CPU is not proof of idle work.
 - Use shell lifecycle signals and bounded read-only process checks. Freeze terminal creation/input during the final maintenance check so a verified idle terminal cannot accept a new command before engine replacement. Never replay terminal input after reconnect.
 - This supersedes the earlier blanket rule that every open terminal blocks deployment. Preserve all unrelated Codex/GPT work and the gateway/engine separation.
+
+## Owner-approved private team workspaces (2026-09-13)
+
+- Implement issues #149–160, prerequisite machine roots #6 and additional machines #37, and confirmed reliability defects in one integrated pass. First acceptance is the friend's complete independent workspace on the current Hub; both shared-project and related-private-project collaboration follow in this pass. Actual acceptance, not a calendar target, determines completion.
+- The owner now authorizes onboarding a second user and their Windows PC through an invitation and guided script. This supersedes single-user and #6/#37 deferrals. Distribution of a separate Hub installation (#11), full Canvas, global GPT-history search, additional native integrations and duplex voice remain outside this pass. Do not use GitHub Actions.
+- Every user owns their Codex/GPT/GitHub identities, machine, native chats, drafts, usage, settings and notifications. Admin manages installation/access metadata but receives no implicit application access to private content or another user's terminal/Remote. Temporary machine delegation is deferred. Host administration remains with the installation owner; no end-to-end encryption claim is made.
+- Safely migrate all existing personal state to the original owner, preserving identities, password, referenced files and uncertain operation receipts. Back up the stable installation before changing data or installing team changes; verify restoration separately. Never expose a second login to the existing unscoped services.
+- The friend selects allowed project roots during PC enrollment; normal website project browsing cannot expand those roots. Use private Tailscale/system SSH and pinned machine identity, with admin approval before activation. Keep native credentials on the respective machine/profile and retain the local-only Companion.
+- Separate logical shared Project from per-user Checkout. Every user keeps an independent Current/Previous Chat chain and Git state. Sharing never grants source-chat, machine or unpublished artifact access. Existing project materials are selected explicitly when sharing; new Notes/Tasks/Plans/Reports inside an already shared project are shared by default, with an explicit personal alternative.
+- Use Viewer/Collaborator/Owner roles, attributed writes, revision conflicts and assignment-bound execution. Publishing findings must not silently publish their private source. A collaborator cannot change another user's Current Chat or execute work on their machine.
+- Cross-user links require mutual consent. Automatic read-only consultation is explicitly authorized per link and bounded by depth/stop/early resolution. Implementation still requires the target user's explicit ordinary action.
+- Each Bridge belongs to a chosen logical project. That project's owner supplies the coordinator Codex account/machine; other projects answer with their own accounts. Preserve bounded shared handoffs/decisions and exact receipts. A Bridge does not enlarge link permissions or automatically mutate repositories.
+- GitHub project membership, repository access and individual GitHub identities remain separate. Typed actions cover invitations, Issues and PR coordination; never auto-merge, force push or copy tokens to the Hub.
+- Build revocation, identity-preserving backup and access audit foundations with initial identity work, then verify full offboarding/re-add at the end. Preserve historical attribution and active/unknown receipts without replay. Engine maintenance considers every user's active work.
+- Keep one responsive themed UI across PC, tablet and phone. Documentation and GitHub issues are the authoritative roadmap/tasks; do not duplicate this implementation backlog into personal application Plans.
+- The owner explicitly requires continuing everyday work on stable `379fa17` until the replacement is ready. Develop team changes on an isolated branch/runtime/database; do not publish intermediate UI or migrate production while implementing. Prepare verified backup/restore and release admission checks before any cutover. Never acquire the owner's native writers through a staging copy.

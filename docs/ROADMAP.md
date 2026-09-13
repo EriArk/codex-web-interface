@@ -1,8 +1,80 @@
 # Roadmap
 
-The project should grow in layers. Do not build the full personal platform before the core remote Codex workflow is proven.
+## Current milestone — private team workspaces (approved 2026-09-13)
 
-The 13-inch iPad is the reference wide workspace, but iPhone is a first-class client and must not be deferred into an undefined future responsive pass.
+The personal-workspace foundation is implemented. The next pass follows [the agreed specification](TEAM_WORKSPACE.md) and [tracker #159](https://github.com/EriArk/codex-web-interface/issues/159). Initially two people use the current Hub, each with their own Windows PC and Codex/GPT/GitHub accounts. Desktop and mobile remain first-class clients.
+
+Production remains on stable `379fa17` throughout development. Candidate code, state and browser profiles are isolated. Do not publish partial team changes or migrate the live installation to demonstrate progress. Never connect a copied owner runtime to live native writers. Implementation, test evidence, installation and real acceptance are tracked separately.
+
+### Gate 0 — stable checkpoint and decisions
+
+- [x] Owner confirmed audience, first milestone, onboarding, privacy, sharing, Bridge ownership and scope.
+- [x] Create protected stable checkpoint `stable-pre-team-379fa17-20260913T080408Z`: Hub data/files, selected private configuration, source bundle and exact Hub/GPT/speech/guacd images.
+- [x] Verify snapshot checksums and restore into a separate directory. The live services were not replaced.
+- [ ] Publish current documentation/issue dependencies; preserve current production until candidate acceptance.
+
+The approximately 2.58 GB checkpoint has 472 inventoried files plus its manifest. Native Windows repositories/Codex account history and the running ChatGPT browser profile are outside the Hub data snapshot. Preserve the original profile; any profile relocation/change requires a separate stopped-browser backup after idle verification.
+
+### Gate A — identity and structural private-state isolation
+
+Issues: #149, #150; initial revocation/backup foundations from #158.
+
+- [ ] Stable user identities, invitation acceptance, per-user credentials/sessions/recovery and admin/member roles.
+- [ ] Bind every personal runtime/store/artifact namespace and background operation to its owner; migrate existing state to the original owner without losing identities or receipts.
+- [ ] Deny cross-user routes, search, events, media, device/Remote tickets and private-source navigation, including direct ID/URL attempts.
+- [ ] Two-user tests and migration/restore of a copied production snapshot pass before a real second user is admitted.
+
+### Gate B — friend's complete private workspace
+
+Issues: #151, #6, #37, #152. Depends on Gate A.
+
+- [ ] Isolate Codex/GPT/GitHub, browser profiles, queues, quotas, dictation, speech artifacts, preferences and notifications.
+- [ ] Enforce selected roots; support independently configured LAN/Tailnet execution machines and per-machine failure handling.
+- [ ] Invitation → Windows bootstrap/master → candidate → verified admin pairing → repairable doctor. No public Windows listener.
+- [ ] Test complete private Codex/GPT workflows on desktop/mobile; the friend uses their own native identities and PC.
+
+This is the first usable milestone, followed by both collaboration scenarios in the same implementation pass.
+
+### Gate C — shared project and independent workstations
+
+Issues: #153, #154, #157. Depends on Gate B; shared-state schema/permission design starts in Gate A.
+
+- [ ] Viewer/Collaborator/Owner membership and explicit sharing of selected existing materials.
+- [ ] Per-user checkout, Current/Previous Chats, Git identity and private drafts; no implicit machine or source-chat access.
+- [ ] New shared-project Notes/Tasks/Plans/Reports are visibly shared by default; personal capture stays available.
+- [ ] Authorship, assignments, revision conflicts, duplicate-work detection, relevant activity/notifications and shared evidence.
+- [ ] Two independent checkouts can work simultaneously; private sources remain private after publication.
+
+### Gate D — related projects, Bridges and GitHub
+
+Issues: #160, #156, #155. Depends on private boundaries and the required shared-state subset of Gate C.
+
+- [ ] Mutually accepted cross-user Links with explicit direction, target participant and bounded automatic consultation permission.
+- [ ] Bridges have a chosen owning project; that project's owner provides the coordinator account/machine. Other projects answer with their own authorized accounts.
+- [ ] Durable goal/handoffs/questions/decisions, bounded consultation and explicit target implementation actions.
+- [ ] Correct GitHub identity for repository invitation, Issues/comments and PR coordination; no automatic full transcript mirroring or merge.
+- [ ] Exercise both shared-repository development and coordination between private related projects.
+
+### Gate E — lifecycle and release acceptance
+
+Issue #158, physical acceptance #10; foundations already required in Gate A.
+
+- [ ] Revoke member/project/link access during idle and active/unknown work; preserve receipts and historical authorship.
+- [ ] Test all personal stores plus shared state through backup/restore; reject missing ownership and stale capabilities.
+- [ ] Real friend enrollment, independent accounts, shared checkout, linked project consultation, revoke and re-add.
+- [ ] Linux builds, backend tests and Chromium/WebKit checks pass; record physical PC/mobile outcomes separately.
+- [ ] Candidate release passes admission and rollback checks. Only then arrange cutover without losing current work or newer user writes.
+
+### Deferred and separate
+
+- #11: distributing a complete separate Hub installation. Friend-PC enrollment into this Hub is in scope.
+- #14: historical stabilization/distribution tracker; ongoing personal reliability is relevant, old unchecked completed modules are not new backlog.
+- Full Canvas creation/editing, cross-chat GPT search, extra native integrations and full voice conversation are outside this pass.
+- GitHub Actions are excluded. Use Linux verification and preserve the owner's everyday hardware feedback loop.
+
+## Historical initial roadmap
+
+The original phases below describe the path to the existing personal product. They are retained as history; they do not override the current gates or reclassify implemented modules as future work.
 
 ## Phase 0 — Repository scaffold
 
