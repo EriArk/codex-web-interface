@@ -1,5 +1,13 @@
 # Verification record
 
+## End-of-pass checks and shared rotation — 2026-09-13
+
+The final isolated Linux run passed **522 tests**, build, TypeScript and lint (pre-existing non-fatal warnings remain). Five added rotation checks cover common Core/own-only handoff, one exact native bootstrap, another user's unchanged Current, and access loss at dispatch, immediately before native creation, and between creation and bootstrap. A known pre-creation rejection is recorded as not submitted rather than an unknown send. The existing private rotation/unknown-receipt suite also passes.
+
+Chromium and WebKit passed the reviewed rotation scenario with one bootstrap, Current/history navigation and the preserved old draft. The preceding Reports/shared-project/GitHub browser matrices remain applicable; this final change adds no frontend markup. The original owner's production runtime was only inspected, never attached from staging.
+
+At release preparation, engine/gateway `379fa17` are healthy, GPT `7f25d37` is running and team mode is disabled. The existing maintenance guard reported two Codex work/unknown states plus GPT work/browser busy. These are admission blockers, not authorization to interrupt. A team-disabled image can be queued only after its isolated engine/gateway image checks; the actual deployment receipt records installation. See [the checkpoint and remaining work](TEAM_CHECKPOINT.md). Team capability/readmission and real friend acceptance remain open.
+
 ## Shared Reports, task work and material filters candidate — 2026-09-13
 
 The isolated candidate passed **517 tests** in the full Linux suite, build, TypeScript and lint (existing non-fatal warnings remain). New cases cover creator/assignee filters before pagination, two-user report-draft isolation, frozen periods, edited publication, exact retries, concurrent checkpoint rejection, rollback on a simulated checkpoint write failure, cancellation, access revocation and bounded retained history. A task creates one normal assigned Plan per source revision with common backlinks; neither task conversion nor report preparation creates a native action or changes a Current Chat.

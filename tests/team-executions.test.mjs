@@ -7,6 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { TeamExecutions } from "../apps/hub/dist/team-executions.js";
 import { TeamProjects } from "../apps/hub/dist/team-projects.js";
+import { sharedRotationPolicy } from "../apps/hub/dist/team-rotation-context.js";
 import { TeamStore } from "../apps/hub/dist/team-store.js";
 import { handoffFixture, settings } from "./handoff-fixture.mjs";
 
@@ -176,6 +177,99 @@ async function fixture(t) {
     },
   };
 }
+test("shared rotation carries common Core and only the acting user's handoff into one confirmed new chat", async (t) => {
+  const f = await fixture(t),
+    scope = { client: "codex", projectId: "project", name: "Общий" };
+  f.friend.projectWork.policy = sharedRotationPolicy(f.projects, f.friendId, () => f.friend);
+  f.projects.put(f.ownerId, f.projectId, randomUUID(), randomUUID(), {
+    revision: 0,
+    assigneeId: null,
+    content: {
+      kind: "core",
+      title: "Основа",
+      value: {
+        purpose: "Общие требования",
+        behavior: "",
+        rules: "",
+        constraints: "",
+        architecture: "",
+        preferences: "",
+      },
+    },
+  });
+  for (const [native, text] of [
+    [f.owner, "OWNER_PRIVATE_SENTINEL"],
+    [f.friend, "MY_HANDOFF_SENTINEL"],
+  ])
+    native.store.append(
+      native.thread.id,
+      "assistant.completed",
+      { id: randomUUID(), text, phase: "final" },
+      "old-turn",
+    );
+  const previous = f.owner.projectWork.context.current(scope).threadId;
+  const base = f.friend.rpc.request.bind(f.friend.rpc);
+  f.friend.rpc.request = async (method, params) => {
+    if (method === "thread/start") {
+      f.friend.calls.push({ method, params });
+      return { thread: { id: randomUUID(), historyMode: "paginated" } };
+    }
+    return base(method, params);
+  };
+  const prepared = await f.friend.projectWork.prepare(randomUUID(), { scope, kind: "rotate" });
+  assert.match(prepared.text, /Общие требования/);
+  assert.match(prepared.text, /MY_HANDOFF_SENTINEL/);
+  assert(!prepared.text.includes("OWNER_PRIVATE_SENTINEL"));
+  const sent = await f.friend.projectWork.submit(prepared.id);
+  assert.equal(sent.state, "running");
+  assert.notEqual(f.friend.projectWork.context.current(scope).threadId, f.friend.thread.id);
+  assert.equal(f.owner.projectWork.context.current(scope).threadId, previous);
+  await f.friend.projectWork.submit(prepared.id);
+  assert.equal(f.friend.calls.filter((v) => v.method === "thread/start").length, 1);
+  assert.equal(f.count(f.friend), 1);
+  assert.equal(f.count(f.owner), 0);
+});
+
+test("shared rotation rechecks access after preparation and at native creation, preserving the old Current", async (t) => {
+  for (const phase of ["dispatch", "commit", "bootstrap"])
+    await t.test(phase, async (t) => {
+      const f = await fixture(t),
+        scope = { client: "codex", projectId: "project", name: "Общий" };
+      const policy = sharedRotationPolicy(f.projects, f.friendId, () => f.friend);
+      f.friend.projectWork.policy = policy;
+      const prepared = await f.friend.projectWork.prepare(randomUUID(), { scope, kind: "rotate" });
+      const revoke = () => f.registry.disable(f.ownerId, f.friendId, true);
+      if (phase === "dispatch") revoke();
+      else if (phase === "commit") {
+        const base = f.friend.sessions.runtime.bind(f.friend.sessions);
+        f.friend.sessions.runtime = async (...args) => {
+          const result = await base(...args);
+          revoke();
+          return result;
+        };
+      } else {
+        const base = f.friend.rpc.request.bind(f.friend.rpc);
+        f.friend.rpc.request = async (method, params) => {
+          if (method === "thread/start") {
+            f.friend.calls.push({ method, params });
+            revoke();
+            return { thread: { id: randomUUID(), historyMode: "paginated" } };
+          }
+          return base(method, params);
+        };
+      }
+      await assert.rejects(f.friend.projectWork.submit(prepared.id));
+      assert.equal(f.friend.projectWork.context.current(scope).threadId, f.friend.thread.id);
+      assert.equal(f.friend.projectWork.get(prepared.id).state, "blocked");
+      assert.equal(
+        f.friend.calls.filter((v) => v.method === "thread/start").length,
+        phase === "bootstrap" ? 1 : 0,
+      );
+      assert.equal(f.count(f.friend), 0);
+      assert.equal(f.count(f.owner), 0);
+    });
+});
+
 test("two real independent Git folders: only assignee's ordinary native Work turn, exact receipt, private preview", async (t) => {
   const f = await fixture(t),
     coreId = randomUUID();

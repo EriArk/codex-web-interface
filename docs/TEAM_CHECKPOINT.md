@@ -1,0 +1,39 @@
+# Checkpoint at the end of the long team pass — 2026-09-13
+
+The owner asked to finish this pass and continue in short sessions. Code is on `feat/team-workspaces`; checked stages are committed and pushed. This document is the restart point, not a claim that every team acceptance gate is complete.
+
+## Implemented candidate
+
+- Private identities, account-scoped runtime/storage, root restrictions and guided Windows enrollment foundations; isolated GPT provisioning and stopped-profile backup/restore.
+- Shared projects, explicit membership and single ownership, per-user checkout/Current, revisioned common materials, assignee-owned Plan execution and selective publication.
+- Consented Links, bounded consultations and Bridges with the chosen project's coordinator account.
+- Own-machine GitHub operations with reviewed targets and exact receipts; no automatic merge or force push.
+- Frozen-period shared Reports with explicit publication, Task → Plan, backlinks and paged personal/author/assignee filters.
+- Shared rotation: common Core and common saved state plus only the acting user's previous-chat handoff. Revocation or changed bindings block creation/bootstrap without moving another user's Current.
+- Native Plan → Implement (#165); #166 has a documented diagnosis only.
+
+## Release boundary
+
+Stable owner installation at the start of this checkpoint: engine/gateway `379fa17`, GPT `7f25d37`. A protected, checksum-verified stable backup and isolated restore exist; the running original GPT profile is preserved in place.
+
+The next checked engine/web image can be staged with **team mode disabled**, retaining the current owner's ordinary client and credentials. Its guarded installer waits for Codex/GPT work and uncertain submissions; verified idle terminals alone do not block it. The deployed revision is reported by authenticated Maintenance, `web-releases/maintenance.json` and the deployment receipt, not inferred from Git HEAD. No live second-user admission, original-profile replacement or forced interruption belongs to this stage.
+
+## Next short passes, in order
+
+1. **Finish release admission for team mode.** Audit all remaining private capability/background-revocation families and coordinated identity/profile restoration/readmission; rehearse the team-aware deployment/rollback boundary. Keep stable recovery usable. Gates A/B/E remain open until their recorded checks pass.
+2. **Complete shared work follow-through.** Explicit accepted-result reconciliation into the exact shared Plan revision, relevant notifications and the remaining draft/checkout picker details. Existing private Plan reconciliation does not yet update a common Plan automatically; do not claim that it does.
+3. **Connect the friend.** Configure actual Tailnet admission, install matching helpers, finish the persistent invite-to-ready web guide (#173), then verify real PC/accounts and smaller tablet. Current Windows wizard/provisioning fixtures do not constitute real friend acceptance.
+4. **Focused personal defects.** #168 exact generated artifact navigation, #166 native Computer Use lifecycle. Keep #167 engineering viewer and #169 writable editor as separate scoped changes.
+
+## Newly filed work, recorded without extending this pass
+
+Open Issues were checked again at wrap-up. New #170–175 are not implemented by this checkpoint:
+
+- #170: protected per-user server execution sandboxes — separate infrastructure design, no shared shell shortcut.
+- #171: usage/reset visibility in the main Settings view.
+- #172: quick project GitHub Issue creation from the top bar.
+- #173: continuous invite-driven setup, building on existing enrollment/provisioning.
+- #174: categorized in-app guide after the feature set stabilizes.
+- #175: independent per-user text and interface scaling through shared layout tokens.
+
+GitHub Issues and ROADMAP remain the task source. Do not duplicate this backlog into the owner's personal application Plans. Actual installation and friend/hardware acceptance remain separate from code/test completion.

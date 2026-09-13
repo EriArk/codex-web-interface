@@ -40,6 +40,7 @@ import { TeamLinks } from "./team-links.js";
 import { registerTeamProjects } from "./team-project-routes.js";
 import { TeamProjects } from "./team-projects.js";
 import { attachTeamRelayTools } from "./team-relay-tools.js";
+import { sharedRotationPolicy } from "./team-rotation-context.js";
 import { publicUser, TeamStore } from "./team-store.js";
 import { webSecurity } from "./web-security.js";
 
@@ -194,13 +195,24 @@ export async function createTeamHub(config: HubConfig, options: Options) {
             keepStoreOpen: userId === registry.ownerId,
             executionService: true,
             projectActionPolicy: {
-              prepare: (action) => teamExecutions.policy(userId, () => runtime).prepare(action),
-              dispatch: (action, queued) =>
-                teamExecutions.policy(userId, () => runtime).dispatch(action, queued),
-              beforeSubmit: (action) =>
-                teamExecutions.policy(userId, () => runtime).beforeSubmit(action),
-              beforeCommit: (action) =>
-                teamExecutions.policy(userId, () => runtime).beforeCommit(action),
+              prepare: (action) => {
+                teamExecutions.policy(userId, () => runtime).prepare(action);
+                sharedRotationPolicy(teamProjects, userId, () => runtime).prepare(action);
+              },
+              dispatch: (action, queued) => {
+                teamExecutions.policy(userId, () => runtime).dispatch(action, queued);
+                sharedRotationPolicy(teamProjects, userId, () => runtime).dispatch(action, queued);
+              },
+              beforeSubmit: async (action) => {
+                await teamExecutions.policy(userId, () => runtime).beforeSubmit(action);
+                await sharedRotationPolicy(teamProjects, userId, () => runtime).beforeSubmit(
+                  action,
+                );
+              },
+              beforeCommit: (action) => {
+                teamExecutions.policy(userId, () => runtime).beforeCommit(action);
+                sharedRotationPolicy(teamProjects, userId, () => runtime).beforeCommit(action);
+              },
             },
             authorizeExecution: () => {
               registry.active(userId);

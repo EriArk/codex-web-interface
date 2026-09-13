@@ -850,10 +850,20 @@ export class Sessions extends EventEmitter {
       this.locks.delete(projectId);
     }
   }
-  async create(projectId: string, title: string, diagnostic = false): Promise<ThreadRecord> {
+  async create(
+    projectId: string,
+    title: string,
+    diagnostic = false,
+    beforeCommit?: () => void,
+  ): Promise<ThreadRecord> {
     this.project(projectId);
     return this.locked(projectId, async () => {
       const r = await this.runtime(projectId);
+      try {
+        beforeCommit?.();
+      } catch (error) {
+        throw new NotSubmittedError(error);
+      }
       const result = await r.rpc.request("thread/start", {
         ...(diagnostic || !this.relayTools.length ? {} : { dynamicTools: this.relayTools }),
         cwd: this.project(projectId).workingDirectory,

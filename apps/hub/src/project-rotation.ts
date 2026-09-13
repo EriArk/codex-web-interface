@@ -6,6 +6,7 @@ import {
   type ProjectScope,
 } from "@codex-web/shared";
 import type { GptService } from "./gpt.js";
+import type { ProjectActionPolicy } from "./project-actions.js";
 import { boundContext, type ProjectContext } from "./project-context.js";
 import { ProjectCores } from "./project-core.js";
 import type { Sessions } from "./sessions.js";
@@ -99,7 +100,7 @@ export class ProjectRotations {
   private fingerprint(value: unknown) {
     return createHash("sha256").update(JSON.stringify(value)).digest("hex");
   }
-  async submit(value: ProjectAction) {
+  async submit(value: ProjectAction, policy?: ProjectActionPolicy) {
     const oldId = String(value.snapshot.oldThreadId);
     this.context.assertProject(value.scope);
     const current = this.context.current(value.scope);
@@ -142,6 +143,7 @@ export class ProjectRotations {
       });
     }
     this.sessions.assertWritable(value.scope.projectId);
+    await policy?.beforeSubmit(value);
     // Freeze the old pointer before native creation changes catalog recency.
     this.context.adopt(value.scope, oldId);
     let uncertain = false;
@@ -161,7 +163,10 @@ export class ProjectRotations {
           "rotate-create:" + value.scope.projectId,
           value.id,
           { title },
-          () => this.sessions.create(value.scope.projectId, title),
+          () =>
+            this.sessions.create(value.scope.projectId, title, false, () =>
+              policy?.beforeCommit(value),
+            ),
         )) as ThreadRecord;
         newId = thread.id;
         value = this.write({
@@ -185,7 +190,21 @@ export class ProjectRotations {
         "turn:" + newId,
         value.id,
         { text: value.text, settings: value.settings, attachments: [] },
-        () => this.sessions.startTurn(newId!, value.text, value.settings, [], value.id),
+        () =>
+          this.sessions.startTurn(
+            newId!,
+            value.text,
+            value.settings,
+            [],
+            value.id,
+            false,
+            policy
+              ? {
+                  beforeSubmit: () => policy.beforeSubmit(value),
+                  beforeCommit: () => policy.beforeCommit(value),
+                }
+              : undefined,
+          ),
       )) as { turnId: string };
       value = this.write({ ...value, state: "running", turnId: result.turnId });
       this.context.rotate(value.scope, oldId, newId);

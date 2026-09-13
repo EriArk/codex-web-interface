@@ -391,7 +391,7 @@ export class ProjectActions {
       this.context.assertProject(value.scope);
       // Guard all delivery kinds, including direct calls to the personal action endpoint.
       this.policy?.dispatch(value, false);
-      if (value.kind === "rotate") return await this.rotations.submit(value);
+      if (value.kind === "rotate") return await this.rotations.submit(value, this.policy);
       const rotation = this.db
         .prepare(
           "SELECT 1 FROM project_work_actions WHERE scopeKey=? AND kind='rotate' AND state IN ('dispatching','queued','running','unknown') LIMIT 1",
