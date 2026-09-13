@@ -2,6 +2,8 @@
 
 ## Direct Files/Git windows and project Results — 2026-09-13
 
+Installed as web-only `754632d`; public asset `87d03a3d8ad1c2a6beccd281ef71b08a3065538a6690b1a14660f604db06f8d8`. Public HTML/version agree, prior assets are retained and engine/gateway/GPT container IDs/start times are unchanged. Private rollback receipt: `backups/web-before-754632d.json`.
+
 Compatible frontend pass: separate header buttons/windows, Settings in the sidebar only in both clients, broad Files preview and Git overview, Codex project-only Results with exact source links. No Hub contract/schema, native writer, Git mutation policy or credential migration is changed.
 
 Linux web typecheck/build, repository guard and 18 existing inspector/artifact/category tests passed. Focused browser verification covers `project-inspector`, `project-results`, `project-delivery`, `gui-preview` and `polymer-themes` in Chromium/WebKit: inline phone actions, bounded wide file preview, Git README/diff/releases, late responses after project change, precise cross-chat Results navigation, nested preview/delivery windows, uncertain-operation handling and preserved drafts. The inspector includes 320/390/768/1024/1280/1376/1920 widths, square 44px header targets, folder restoration, focus return and simulated keyboard viewport. Palette/settings verification covers all twelve material colors, both clients, failed-save recovery and a fresh browser device. Mock GPT Results now supplies its real empty-count contract; absent count metadata also cannot crash the shared feed.

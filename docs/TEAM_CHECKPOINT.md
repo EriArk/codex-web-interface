@@ -2,6 +2,14 @@
 
 The owner asked to finish this pass and continue in short sessions. Code is on `feat/team-workspaces`; checked stages are committed and pushed. This document is the restart point, not a claim that every team acceptance gate is complete.
 
+## Direct Files/Git windows installed — 2026-09-13
+
+Web-only `754632d` is public, asset `87d03a3d8ad1c2a6beccd281ef71b08a3065538a6690b1a14660f604db06f8d8`, verified through public version and HTML stamps. Files and Git have separate direct header icons/windows and broad layouts; Settings remains in the sidebar footer in both clients. Codex Results uses the whole project's existing authorized feed with exact source links. Files is still read-only; GPT project aggregation and writable Files require the next server contracts after #158.
+
+Linux typecheck/build, repository guard, 18 inspector/artifact/category tests and five focused Chromium/WebKit suites passed. File-window tests include 320–1920px widths, keyboard viewport, focus/folder restoration, exact file/result navigation and late project responses. Palette tests retain all twelve colors and both-client drafts/settings access. No formal physical-device acceptance is claimed.
+
+Read-only Doctor verified Codex/Companion/login and GPT before publication. Engine/gateway `60b326892` and GPT `7f25d37` container IDs/start times remained unchanged. All 49 files in previous asset `a1785cc15d34fca73319da86865d142d8290c5c166ad97beb1dd856b750faaeb` were checksum-verified and retained; pointer/manifest/continuity receipt is `backups/web-before-754632d.json`. The image is a web-only asset publisher, never a replacement engine.
+
 ## Window-control follow-up installed — 2026-09-13
 
 Web-only `8dd1720` is now public, asset `a1785cc15d34fca73319da86865d142d8290c5c166ad97beb1dd856b750faaeb`, confirmed through `/version.json` and the HTML stamp. It restores the earlier unframed workspace shortcuts, puts the window title/tool rails on the casing, replaces project chips with a dropdown and makes settings swatches match actual theme materials/accents without changing panel brightness. Five focused Chromium/WebKit suites, web typecheck/build and repository guard passed.
