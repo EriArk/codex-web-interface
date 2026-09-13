@@ -1,5 +1,11 @@
 # Verification record
 
+## Original owner login preparation — 2026-09-13
+
+Build/typecheck and all **33 team-isolation tests** passed after adding optional `auth.ownerLogin`. The regression verifies that `eriark` uses the original password hash and stable owner/session, the private credential row remains `owner`, a duplicate member login is rejected, wrong passwords fail and the old password-only owner request stays compatible. The setting applies only when the original team account is first created; it does not rename an existing identity on restart.
+
+The live configuration now reserves `eriark`, with a private prior-config backup. A read-only before/after check confirmed the password hash and personal username are unchanged. No database/profile/credential migration, service restart or team activation was performed for this setting. Original-owner wizard bypass and continued native Codex/GPT/GitHub identities are explicit migration requirements.
+
 ## End-of-pass checks and shared rotation — 2026-09-13
 
 The final isolated Linux run passed **522 tests**, build, TypeScript and lint (pre-existing non-fatal warnings remain). Five added rotation checks cover common Core/own-only handoff, one exact native bootstrap, another user's unchanged Current, and access loss at dispatch, immediately before native creation, and between creation and bootstrap. A known pre-creation rejection is recorded as not submitted rather than an unknown send. The existing private rotation/unknown-receipt suite also passes.

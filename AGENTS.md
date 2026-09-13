@@ -555,3 +555,9 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - The owner now permits installing verified stages before the entire team pass is finished, provided ordinary Codex work and the owner's ability to request recovery remain operational. This supersedes the blanket prohibition on intermediate publication; it does not authorize installing an unverified or incomplete working tree.
 - Before each installation, verify the Codex connection/recovery path, preserve a restorable prior release and use the applicable gateway/engine maintenance guard. Never acquire an owner writer in staging or interrupt active native work merely to update. Explain actual installed and pending portions separately.
+
+## Owner login and migration continuity (2026-09-13)
+
+- The original owner's public team login is `eriark`; retain the existing password. `auth.ownerLogin` selects the first team login without changing the existing personal credential lookup in `auth.username`. Preserve the original owner ID after creation; a restart must not rename an existing account implicitly.
+- The original owner bypasses new-user onboarding/setup wizards. Continue the existing machines, projects/chats, Codex identity, original GPT profile and machine-local GitHub login. Team activation must not replace these with empty member configuration or require reenrollment/native sign-in as part of migration.
+- Member invitations/setup are for new users. After setup, everyone uses the standard `https://codex.abysstail.art` address; invitation/recovery links are not everyday login URLs.

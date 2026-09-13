@@ -29,7 +29,7 @@ import { gptSessionAllowed } from "../ops/gpt/session-watch.mjs";
 import { teamConnection } from "../ops/gpt/team-connection.mjs";
 import { configSchema } from "../packages/shared/dist/index.js";
 
-async function fixture(t, options = {}) {
+async function fixture(t, options = {}, ownerLogin) {
   const root = await mkdtemp(join(tmpdir(), "cw-team-"));
   const config = configSchema.parse({
     hub: {
@@ -37,7 +37,7 @@ async function fixture(t, options = {}) {
       databasePath: join(root, "owner.db"),
       resultsPath: join(root, "owner-results"),
     },
-    auth: { username: "owner" },
+    auth: { username: "owner", ownerLogin },
     team: { enabled: true, root: join(root, "team") },
     machines: [],
     projects: [],
@@ -116,6 +116,53 @@ async function fixture(t, options = {}) {
     friendId: joined.body.user.id,
   };
 }
+
+test("chosen owner login preserves the original password, legacy lookup and existing session", async (t) => {
+  const f = await fixture(t, {}, "eriark");
+  const owner = f.registry.user(f.registry.ownerId);
+  assert.equal(owner.login, "eriark");
+  const runtime = (await f.personal(owner.id)).runtime;
+  const original = runtime.sessions.store.db
+    .prepare("SELECT username,passwordHash FROM users")
+    .all();
+  assert.equal(original.length, 1);
+  assert.equal(original[0].username, "owner");
+  assert.equal(owner.passwordHash, original[0].passwordHash);
+  assert.equal((await f.request("/api/auth/session")).body.user.id, owner.id);
+  const login = await f.request("/api/auth/login", {}, "POST", {
+    login: "eriark",
+    password: f.password,
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.id, owner.id);
+  assert.equal(
+    (await f.request("/api/auth/login", {}, "POST", { password: f.password })).status,
+    200,
+  );
+  assert.equal(
+    (await f.request("/api/auth/login", {}, "POST", { login: "owner", password: f.password }))
+      .status,
+    401,
+  );
+  assert.equal(
+    (
+      await f.request("/api/auth/login", {}, "POST", {
+        login: "eriark",
+        password: "incorrect-password",
+      })
+    ).status,
+    401,
+  );
+  const invite = await f.request("/api/team/invitations", f.owner, "POST", { name: "Another" });
+  const token = new URL(invite.body.url).hash.slice(6);
+  const collision = await f.request("/api/auth/join", {}, "POST", {
+    token,
+    login: "eriark",
+    name: "Another",
+    password: f.password,
+  });
+  assert.equal(collision.status, 409);
+});
 
 async function sharedFixture(t, role = "collaborator") {
   const f = await fixture(t),

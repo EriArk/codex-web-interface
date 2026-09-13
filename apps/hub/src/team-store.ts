@@ -248,7 +248,7 @@ export class TeamStore {
       if (!account) throw new Error("TEAM_REQUIRES_EXISTING_OWNER");
       this.ownerId = randomUUID();
       this.transaction(() => {
-        const login = teamLoginSchema.safeParse(config.auth.username);
+        const login = teamLoginSchema.safeParse(config.auth.ownerLogin ?? config.auth.username);
         this.db
           .prepare(
             "INSERT INTO team_users(id,login,name,role,state,passwordHash,legacy,createdAt) VALUES(?,?,?,'admin','active',?,1,?)",

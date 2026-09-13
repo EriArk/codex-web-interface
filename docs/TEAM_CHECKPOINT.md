@@ -14,6 +14,10 @@ The owner asked to finish this pass and continue in short sessions. Code is on `
 
 ## Release boundary
 
+Owner login preparation: `auth.ownerLogin` is `eriark` for the first team migration. The existing `auth.username`/personal password record remains unchanged. Team initialization copies its current password hash into the original owner's account with that login; an already-created team identity is never renamed by restarting with this option. The reserved login is persisted in the installation configuration for the later team-enabled release.
+
+The original owner must skip member onboarding. Continue the existing machines, native Codex identity/history, original GPT browser profile and machine-local GitHub credentials; do not provision fresh replacements or require reenrollment. New-member wizard #173 must branch on the stable original-owner identity, not merely whether a setup checklist exists.
+
 Stable owner installation at the start of this checkpoint: engine/gateway `379fa17`, GPT `7f25d37`. A protected, checksum-verified stable backup and isolated restore exist; the running original GPT profile is preserved in place.
 
 Image `codex-web-hub:99953827f` passed isolated engine/gateway checks and is queued with **team mode disabled**, retaining the current owner's ordinary client and credentials. The installer service `codex-web-personal-stage-99953827f` was observed waiting for two Codex work/unknown states; stable `379fa17` was still healthy. The installer waits for Codex/GPT work and uncertain submissions; verified idle terminals alone do not block it. The deployed revision is reported by authenticated Maintenance, `web-releases/maintenance.json` and the deployment receipt, not inferred from Git HEAD. No live second-user admission, original-profile replacement or forced interruption belongs to this stage.

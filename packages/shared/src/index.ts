@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { tailnetAddressSchema } from "./enrollment.js";
+import { teamLoginSchema } from "./team.js";
 
 export * from "./appearance.js";
 export * from "./elicitation.js";
@@ -103,7 +104,12 @@ export const configSchema = z
           .default("GPT_SERVICE_TOKEN"),
       })
       .optional(),
-    auth: z.object({ username: z.string().min(1).max(80).default("owner") }),
+    auth: z.object({
+      username: z.string().min(1).max(80).default("owner"),
+      // Public login chosen for the original owner's first team migration.
+      // Keep the existing personal credential lookup independent of it.
+      ownerLogin: teamLoginSchema.optional(),
+    }),
     team: z
       .object({
         enabled: z.boolean().default(false),
