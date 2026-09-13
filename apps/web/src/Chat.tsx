@@ -1,9 +1,4 @@
-import {
-  hasUnreadCompletion,
-  isNativeImageSource,
-  type ResultCategory,
-  type ThreadActivity,
-} from "@codex-web/shared";
+import { hasUnreadCompletion, type ResultCategory, type ThreadActivity } from "@codex-web/shared";
 import {
   type FormEvent,
   Fragment,
@@ -13,9 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
-import Markdown from "react-markdown";
+import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccessPicker } from "./AccessPicker";
+import { type ArtifactRequest, artifactComponents, artifactSource } from "./ArtifactMarkdown";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
 import { accountSessionStorage as sessionStorage } from "./accountStorage.ts";
 import { api } from "./api";
@@ -25,7 +21,6 @@ import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { ContextUsage } from "./ContextUsage";
 import { CopyButton } from "./CopyButton";
 import { useDictation } from "./Dictation";
-import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
@@ -46,39 +41,19 @@ import { useThreadReviews, WorkReviewLink } from "./WorkReviewLink";
 const positions = new Map<string, number>();
 const MessageText = memo(function MessageText({
   text,
-  onImages,
+  onArtifact,
 }: {
   text: string;
-  onImages?: () => void;
+  onArtifact?: (source: string) => void;
 }) {
   return (
     <Markdown
+      urlTransform={(url) => (onArtifact && artifactSource(url) ? url : defaultUrlTransform(url))}
       remarkPlugins={[remarkGfm]}
       components={{
         pre: CollapsibleCode,
         table: MarkdownTable,
-        ...(onImages
-          ? {
-              img: ({ node, ...props }) =>
-                isNativeImageSource(String(node?.properties.src ?? props.src ?? "")) ? (
-                  <button type="button" className="result-chip" onClick={onImages}>
-                    <Icon name="image" size={16} />
-                    Изображение в результатах
-                    <Icon name="chevron" size={14} />
-                  </button>
-                ) : (
-                  <img {...props} alt={props.alt ?? ""} loading="lazy" />
-                ),
-            }
-          : {}),
-        a: ({ node: _node, ...props }) =>
-          isDownloadUrl(props.href) ? (
-            <DownloadLink href={props.href} className="download-text">
-              {props.children}
-            </DownloadLink>
-          ) : (
-            <a {...props} target="_blank" rel="noopener noreferrer" />
-          ),
+        ...artifactComponents(onArtifact),
       }}
     >
       {text}
@@ -262,6 +237,7 @@ export function Chat({
   onDecision,
   onAnswer,
   onResult,
+  onArtifact,
   onReconnect,
   onLatest,
   completion,
@@ -292,6 +268,7 @@ export function Chat({
   onDecision: (id: string, d: "accept" | "decline") => void;
   onAnswer: (id: string, a: Record<string, string[]>) => void;
   onResult: (id: string, category?: ResultCategory) => void;
+  onArtifact?: (request: ArtifactRequest) => void;
   onReconnect: () => Promise<RecoveryOutcome>;
   onLatest: () => void;
 }) {
@@ -655,8 +632,19 @@ export function Chat({
                     <div className="message-body">
                       <MessageText
                         text={message.text}
-                        onImages={
-                          message.role === "assistant" ? () => onResult("", "images") : undefined
+                        onArtifact={
+                          message.role === "assistant" && onArtifact
+                            ? (source) =>
+                                onArtifact({
+                                  scope: threadId,
+                                  endpoint: `/threads/${encodeURIComponent(threadId)}/results/reveal`,
+                                  reference: {
+                                    source,
+                                    messageId: message.id,
+                                    turnId: message.turnId,
+                                  },
+                                })
+                            : undefined
                         }
                       />
                       {!message.text && !message.attachments?.length && (

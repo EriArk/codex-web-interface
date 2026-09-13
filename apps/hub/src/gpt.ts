@@ -41,6 +41,7 @@ import {
   libraryMutation,
 } from "./library.js";
 import { assertPreviewFrame, Previews, previewCsp } from "./previews.js";
+import { resultReferenceSchema } from "./result-references.js";
 import type { Store } from "./store.js";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -1416,6 +1417,26 @@ export function registerGpt(
     );
     if (!item) throw error("RESULT_NOT_FOUND", "Результат не найден.", 404);
     return item;
+  });
+  app.post("/api/gpt/conversations/:id/results/reveal", async (req) => {
+    const p = z.object({ id }).parse(req.params),
+      ref = resultReferenceSchema.parse(req.body);
+    service.library.assertExists("thread", p.id);
+    const messages = await service.historyCache.messages(p.id);
+    const message = messages.find((item) => item.id === ref.messageId && item.role === "assistant");
+    const source = ref.source.startsWith("sandbox:")
+      ? gptSandboxFiles(`[file](<${ref.source}>)`, p.id, ref.messageId).files[0]?.url
+      : ref.source;
+    const file = message?.files.find((item) => item.url === source);
+    const result =
+      file && gptResults(p.id, [message!], service.previews).find((item) => item.id === file.id);
+    if (!result)
+      throw error(
+        "RESULT_NOT_FOUND",
+        "Этот файл или изображение недоступны в исходном сообщении.",
+        404,
+      );
+    return result;
   });
   const gptPreview = async (previewId: string) => {
     const scope = service.previews.thread(previewId);

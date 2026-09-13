@@ -39,6 +39,8 @@ const raw = {
 };
 const messages = gptHistory(raw, "conversation"),
   results = gptResults("conversation", messages, null);
+messages[0].text +=
+  "\n\n[Картинка](/api/gpt/assets/file_image) [Нет доступа](/api/gpt/assets/denied)";
 let failure = false,
   slow = false,
   reads = 0;
@@ -106,6 +108,12 @@ const server = createServer(async (req, res) => {
     });
   if (path.endsWith("/results"))
     return json(resultPage(results, url.searchParams.get("category") ?? "all"));
+  if (path.endsWith("/results/reveal")) {
+    res.statusCode = 404;
+    return json({
+      error: { code: "RESULT_NOT_FOUND", message: "Файл недоступен в исходном сообщении." },
+    });
+  }
   return json({ items: [], projects: [], conversations: [], nextOffset: null });
 });
 try {
@@ -183,6 +191,9 @@ try {
       await expect(md).toBeVisible();
       failure = true;
       await md.tap();
+      const inspector = page.locator(".result-inspector");
+      await expect(inspector.locator(".result-inspector-heading")).toContainText("test.md");
+      await inspector.getByRole("button", { name: "Скачать файл", exact: true }).tap();
       const dialog = page.getByRole("dialog", { name: "Сохранить файл" });
       await expect(dialog.getByRole("alert")).toContainText("Не удалось получить файл");
       failure = false;
@@ -192,7 +203,9 @@ try {
       await dialog.getByRole("button", { name: "Закрыть сохранение" }).tap();
       await expect(dialog).toHaveCount(0);
       await expect(draft).toHaveValue("Keep my draft");
+      await page.locator(".mobile-tabs").getByRole("button", { name: "Чат", exact: true }).tap();
       await md.tap();
+      await inspector.getByRole("button", { name: "Скачать файл", exact: true }).tap();
       const share = dialog.getByRole("button", { name: "Сохранить / поделиться" });
       await expect(share).toBeVisible();
       assert.equal(await page.evaluate(() => window.shared.length), 0);
@@ -211,6 +224,7 @@ try {
       assert.equal(ctx.pages().length, 1);
       await dialog.getByRole("button", { name: "Закрыть сохранение" }).tap();
       slow = false;
+      await inspector.getByRole("button", { name: "Вернуться к результатам" }).tap();
       await page.getByRole("button", { name: "Результаты", exact: true }).last().tap();
       await page.getByRole("button", { name: "Открыть снимок" }).tap();
       await page
@@ -234,6 +248,13 @@ try {
         .click();
       await expect(share).toBeVisible();
       await dialog.getByRole("button", { name: "Закрыть сохранение" }).click();
+      await page.getByRole("button", { name: "Картинка", exact: true }).click();
+      await expect(inspector.locator(".result-inspector-image")).toBeVisible();
+      await page.getByRole("button", { name: "Нет доступа", exact: true }).click();
+      await expect(inspector.getByRole("status")).toContainText("недоступен");
+      await expect(draft).toHaveValue("Keep my draft");
+      assert.equal(page.url(), initialUrl);
+      await page.getByRole("button", { name: "Картинка", exact: true }).click();
       await page.evaluate(() =>
         Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false }),
       );

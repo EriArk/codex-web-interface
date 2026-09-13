@@ -1,5 +1,5 @@
 ﻿import { createHash } from "node:crypto";
-import { projectFilePath, readProjectFile } from "@codex-web/machines";
+import { copyProjectFile, projectFilePath, type readProjectFile } from "@codex-web/machines";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 import type { Artifacts } from "./artifacts.js";
 import type { Store, ThreadRecord } from "./store.js";
@@ -66,7 +66,7 @@ export class GeneratedArtifacts {
     private store: Store,
     private artifacts: Artifacts,
     private target: (threadId: string) => { machine: MachineConfig; root: string },
-    private read = readProjectFile,
+    private read?: typeof readProjectFile,
   ) {
     // A restart is not proof that bytes were captured. Keep an explicit retryable result.
     for (const row of store.db
@@ -79,7 +79,7 @@ export class GeneratedArtifacts {
     }
   }
   onChange: (threadId: string, resultId: string, turnId: string | null) => void = () => {};
-  private publish(c: Capture, notify = true) {
+  private publish(c: Capture, notify = true, failure?: string) {
     const file = c.artifactId
       ? this.store.db
           .prepare(
@@ -101,7 +101,7 @@ export class GeneratedArtifacts {
           message:
             c.status === "capturing"
               ? "Сохраняем файл…"
-              : "Файл не сохранён. Можно повторить загрузку текущей версии.",
+              : failure || "Файл не сохранён. Можно повторить загрузку текущей версии (до 512 МБ).",
         };
     const sourceKey = "artifact:" + c.id;
     const old = this.store.db
@@ -177,13 +177,29 @@ export class GeneratedArtifacts {
       .catch(() => {})
       .then(async () => {
         try {
-          const target = this.target(c.threadId),
-            bytes = await this.read(target.machine, target.root, c.path);
+          const target = this.target(c.threadId);
           const mime =
             mimeTypes[c.name.split(".").at(-1)?.toLowerCase() || ""] || "application/octet-stream";
+          const file = this.read
+            ? this.artifacts.putFile(
+                c.threadId,
+                c.turnId,
+                c.name,
+                c.path,
+                mime,
+                await this.read(target.machine, target.root, c.path),
+              )
+            : await this.artifacts.putStream(
+                c.threadId,
+                c.turnId,
+                c.name,
+                c.path,
+                mime,
+                (destination, limit) =>
+                  copyProjectFile(target.machine, target.root, c.path, destination, limit),
+              );
           this.store.db.exec("SAVEPOINT artifact_capture_commit");
           try {
-            const file = this.artifacts.putFile(c.threadId, c.turnId, c.name, c.path, mime, bytes);
             c.artifactId = file.artifactId;
             c.status = "captured";
             this.store.db
@@ -197,10 +213,12 @@ export class GeneratedArtifacts {
             );
             throw error;
           }
-        } catch {
+        } catch (error) {
           c.artifactId = null;
           c.status = "failed";
           this.store.db.prepare("UPDATE artifact_captures SET status='failed' WHERE id=?").run(id);
+          this.publish(c, true, error instanceof HubError ? error.message : undefined);
+          return;
         }
         this.publish(c);
       })

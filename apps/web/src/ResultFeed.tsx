@@ -6,6 +6,7 @@ import {
   resultCategory,
 } from "@codex-web/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import type { ArtifactRequest, ArtifactSelection } from "./ArtifactMarkdown";
 import { ApiError, api, messageOf } from "./api";
 import { Results } from "./Results";
 
@@ -23,6 +24,7 @@ export function ResultFeed({
   onSaveLink,
   onOverlayChange,
   onCount,
+  reveal = null,
 }: {
   endpoint: string;
   revision: string | number;
@@ -37,7 +39,48 @@ export function ResultFeed({
   onTurn?: (id: string, threadId?: string) => void;
   onOverlayChange: (open: boolean) => void;
   onCount?: (count: number) => void;
+  reveal?: ArtifactRequest | null;
 }) {
+  const [selection, setSelection] = useState<ArtifactSelection | null>(null);
+  const [revealRetry, setRevealRetry] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry repeats a read of the exact source reference.
+  useEffect(() => {
+    setSelection(reveal ? { request: reveal } : null);
+    if (!reveal) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        let item: ResultItem;
+        if ("result" in reveal) item = reveal.result;
+        else {
+          let reference: object = reveal.reference;
+          if (reveal.reference.source.startsWith("data:image/")) {
+            const hash = await crypto.subtle.digest(
+              "SHA-256",
+              new TextEncoder().encode(reveal.reference.source),
+            );
+            reference = {
+              ...reveal.reference,
+              source: "",
+              sourceHash: Array.from(new Uint8Array(hash), (byte) =>
+                byte.toString(16).padStart(2, "0"),
+              ).join(""),
+            };
+          }
+          item = await api<ResultItem>(reveal.endpoint, {
+            method: "POST",
+            body: reference,
+            signal: controller.signal,
+            timeoutMs: 30000,
+          });
+        }
+        if (!controller.signal.aborted) setSelection({ request: reveal, item });
+      } catch (error) {
+        if (!controller.signal.aborted) setSelection({ request: reveal, error: messageOf(error) });
+      }
+    })();
+    return () => controller.abort();
+  }, [reveal, revealRetry]);
   const [focused, setFocused] = useState<ResultItem | null>(null);
   const [sourceRevision, setSourceRevision] = useState<number | undefined>(undefined);
   const sourceRef = useRef<number | undefined>(undefined),
@@ -202,6 +245,8 @@ export function ResultFeed({
       results={all}
       visible={visible}
       focusId={focusId}
+      selection={selection?.request === reveal ? selection : null}
+      onRevealRetry={() => setRevealRetry((value) => value + 1)}
       busy={busy}
       hasMore={cursor !== null}
       onOlder={() => void older()}

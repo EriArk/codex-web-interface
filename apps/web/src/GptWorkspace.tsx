@@ -10,10 +10,11 @@ import type {
   ResultItem,
 } from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import Markdown from "react-markdown";
+import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccountControls } from "./AccountControls";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { type ArtifactRequest, artifactComponents, artifactSource } from "./ArtifactMarkdown";
 import {
   accountLocalStorage as localStorage,
   accountSessionStorage as sessionStorage,
@@ -27,7 +28,7 @@ import { openContentSearch } from "./ContentSearch";
 import { CopyButton } from "./CopyButton";
 import { DeploymentStatus } from "./DeploymentStatus";
 import { useDictation } from "./Dictation";
-import { DownloadLink, isDownloadUrl } from "./DownloadLink";
+import { DownloadLink } from "./DownloadLink";
 import {
   EntityArchive,
   EntityMenu,
@@ -92,28 +93,21 @@ const Files = memo(function Files({ files }: { files: GptFile[] }) {
     </div>
   );
 });
-const Text = memo(function Text({ value }: { value: string }) {
+const Text = memo(function Text({
+  value,
+  onArtifact,
+}: {
+  value: string;
+  onArtifact?: (source: string) => void;
+}) {
   return (
     <Markdown
+      urlTransform={(url) => (onArtifact && artifactSource(url) ? url : defaultUrlTransform(url))}
       remarkPlugins={[remarkGfm]}
       components={{
         pre: CollapsibleCode,
         table: MarkdownTable,
-        a: ({ node: _node, ...props }) =>
-          isDownloadUrl(props.href) ? (
-            <DownloadLink href={props.href} className="download-text">
-              {props.children}
-            </DownloadLink>
-          ) : !props.href ? (
-            <span>{props.children}</span>
-          ) : (
-            <a
-              {...props}
-              className={props.title === "Источник" ? "source-link" : undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-            />
-          ),
+        ...artifactComponents(onArtifact),
       }}
     >
       {value}
@@ -614,6 +608,7 @@ export function GptWorkspace({
   }, [selected, createdJob, jobs]);
   const handledWorkspace = useRef(0);
   const [workspaceResult, setWorkspaceResult] = useState("");
+  const [artifactRequest, setArtifactRequest] = useState<ArtifactRequest | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new explicit destination navigates once and never reacquires a writer.
   useEffect(() => {
     if (!workspaceDestination || handledWorkspace.current === workspaceDestination.version) return;
@@ -859,10 +854,36 @@ export function GptWorkspace({
   const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
   const openResults = (category: ResultCategory = "all") => {
+    setArtifactRequest(null);
+    setWorkspaceResult("");
     setResultCategory(category);
     setResultFocusVersion((v) => v + 1);
     setRightHidden(false);
     setView("results");
+  };
+  const openArtifact = (source: string, files: GptFile[], messageId: string) => {
+    const scope = selected || createdJob;
+    const file = files.find((item) => item.url === source);
+    openResults();
+    setArtifactRequest(
+      file
+        ? {
+            scope,
+            result: {
+              id: file.id,
+              turnId: messageId,
+              type: file.image ? "image" : "file",
+              title: file.name,
+              createdAt: new Date().toISOString(),
+              payload: { url: file.url, mime: file.mime, bytes: file.bytes },
+            },
+          }
+        : {
+            scope,
+            endpoint: `/gpt/conversations/${encodeURIComponent(selected)}/results/reveal`,
+            reference: { source, messageId },
+          },
+    );
   };
   const completionLocked = useCompletionPosition({
     scope: createdJob || selected,
@@ -945,7 +966,10 @@ export function GptWorkspace({
               </div>
               <div className="message-body">
                 {!isActive(job) && !!job.progress?.length && <GptProgress items={job.progress} />}
-                <Text value={job.answer} />
+                <Text
+                  value={job.answer}
+                  onArtifact={(source) => openArtifact(source, job.assets, job.id)}
+                />
                 <ResponseResults text={job.answer} files={job.assets} onOpen={openResults} />
               </div>
             </article>
@@ -1624,7 +1648,14 @@ export function GptWorkspace({
                                 1,
                         )
                         .map((job) => <GptProgress key={job.id} items={job.progress ?? []} />)}
-                    <Text value={message.text} />
+                    <Text
+                      value={message.text}
+                      onArtifact={
+                        message.role === "assistant"
+                          ? (source) => openArtifact(source, message.files, message.id)
+                          : undefined
+                      }
+                    />
                     {!!message.unsupported?.length && (
                       <aside className="native-content-notice">
                         <p>
@@ -1825,6 +1856,7 @@ export function GptWorkspace({
         <div className="support-pane gpt-results">
           <ResultFeed
             focusId={workspaceResult}
+            reveal={artifactRequest?.scope === (selected || createdJob) ? artifactRequest : null}
             onSaveLink={
               selected
                 ? (r) =>

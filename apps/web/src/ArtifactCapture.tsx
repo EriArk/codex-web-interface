@@ -5,17 +5,19 @@ export function ArtifactCapture({
   id,
   status,
   onComplete,
+  message,
 }: {
   id: string;
   status: string;
   onComplete?: () => void;
+  message?: string;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
     <div className="artifact-capture">
       <p className="small muted">
-        {busy || status === "capturing" ? "Сохраняем файл…" : "Файл не сохранён."}
+        {busy || status === "capturing" ? "Сохраняем файл…" : message || "Файл не сохранён."}
       </p>
       {error && <p role="alert">{error}</p>}
       {status !== "capturing" && (

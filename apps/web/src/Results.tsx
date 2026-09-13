@@ -6,6 +6,7 @@ import {
   resultCategory,
 } from "@codex-web/shared";
 import { ArtifactCapture } from "./ArtifactCapture";
+import type { ArtifactSelection } from "./ArtifactMarkdown";
 import { workspaceMediaUrl } from "./accountStorage.ts";
 import { DownloadLink } from "./DownloadLink";
 import { ResultFilters } from "./ResultFilters";
@@ -41,6 +42,8 @@ export function Results({
   toolbar,
   onFile,
   onSaveLink,
+  selection,
+  onRevealRetry,
 }: {
   focusVersion?: number;
   onRetry?: () => void;
@@ -59,12 +62,16 @@ export function Results({
   toolbar?: ReactNode;
   onFile?: (path: string) => void;
   onSaveLink?: (result: ResultItem) => void;
+  selection?: ArtifactSelection | null;
+  onRevealRetry?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
     [preview, setPreview] = useState<Result | null>(null),
     [inspected, setInspected] = useState<Result | null>(null),
+    [revealNotice, setRevealNotice] = useState<string | null>(null),
     [inspecting, setInspecting] = useState(false);
+  const revealed = useRef<ArtifactSelection["request"] | null>(null);
   useEffect(() => {
     onOverlayChange(!!image || !!preview);
     return () => onOverlayChange(false);
@@ -79,12 +86,26 @@ export function Results({
       );
   }, [focusId, visible, results]);
   const inspect = (result: Result) => {
+    setRevealNotice(null);
     setInspected(result);
     setInspecting(true);
   };
   useEffect(() => {
     if (focusId || focusVersion) setInspecting(false);
   }, [focusId, focusVersion]);
+  useEffect(() => {
+    if (!selection) {
+      revealed.current = null;
+      return;
+    }
+    if (revealed.current !== selection.request) {
+      revealed.current = selection.request;
+      setInspecting(true);
+    }
+    setInspected(selection.item ?? null);
+    setRevealNotice(selection.item ? null : selection.error || "Открываем результат…");
+  }, [selection]);
+  const current = inspected && (results.find((item) => item.id === inspected.id) ?? inspected);
   return (
     <section className="results-pane pane" data-visible={visible} aria-label="Результаты">
       <div className="pane-heading">
@@ -116,13 +137,34 @@ export function Results({
         </div>
       )}
       <div className="result-preview-slot" hidden={!inspecting}>
-        {inspected && (
+        {revealNotice && (
+          <div className="result-inspector">
+            <div className="result-inspector-heading">
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Вернуться к результатам"
+                onClick={() => setInspecting(false)}
+              >
+                <Icon name="back" />
+              </button>
+              <strong>Результат</strong>
+            </div>
+            <p role="status">{revealNotice}</p>
+            {selection?.error && (
+              <button type="button" className="secondary" onClick={onRevealRetry}>
+                Повторить
+              </button>
+            )}
+          </div>
+        )}
+        {current && !revealNotice && (
           <ResultInspector
-            result={inspected}
+            key={current.id}
+            result={current}
+            onRetry={onRetry}
             onClose={() => setInspecting(false)}
-            onExpand={() =>
-              inspected.type === "image" ? setImage(inspected) : setPreview(inspected)
-            }
+            onExpand={() => (current.type === "image" ? setImage(current) : setPreview(current))}
           />
         )}
       </div>
@@ -210,6 +252,7 @@ export function Results({
                 <ArtifactCapture
                   id={r.payload.captureId}
                   status={r.payload.status || "failed"}
+                  message={r.payload.message}
                   onComplete={onRetry}
                 />
               )}

@@ -598,3 +598,8 @@ Before mobile support is considered complete, the same core workflow must also w
 ## Owner-requested Canvas navigation follow-up (2026-09-13)
 
 - On the next GPT Results pass, include existing Canvas documents as Results cards and open the existing document viewer from them. Remove the separate Canvas header shortcut. Keep exact private conversation/document identities. This is a deferred navigation task, not approval to expand into full Canvas authoring now.
+
+## Owner-requested artifact links and large exports (2026-09-14)
+
+- Prioritize #168 and the reported reader-case ZIP download. An assistant file/image link opens its exact object in Results/Preview, preserving mounted chat, draft, staged attachments and live output. Do not infer identity from a filename or navigate the browser to a local/native file URL.
+- Saved Codex exports support up to 512 MiB through a bounded, checksum-verified machine-to-Hub stream and authenticated streaming HTTP downloads. Keep the aggregate storage quota and exact source snapshot semantics. Large downloads use browser downloads instead of a file-sized JavaScript Blob; small file previews/sharing retain their existing limits. Do not relax ordinary file-browser, upload, GPT or shared-publication limits as a side effect.

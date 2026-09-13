@@ -23,6 +23,11 @@ export function deploymentBlockers(
     "GPT: отправка или ответ ещё не завершены",
   );
   add(
+    "artifact",
+    "SELECT count(*) n FROM artifact_captures WHERE status='capturing'",
+    "Файл ещё переносится с компьютера в результаты",
+  );
+  add(
     "gpt_project",
     "SELECT count(*) n FROM gpt_project_operations WHERE state IN ('pending','unknown')",
     "GPT: изменение проекта ещё не подтверждено",

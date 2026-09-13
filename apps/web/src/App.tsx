@@ -354,12 +354,16 @@ function Workspace({
   const [resultCount, setResultCount] = useState(0);
   const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
+  const [artifactRequest, setArtifactRequest] = useState<
+    import("./ArtifactMarkdown").ArtifactRequest | null
+  >(null);
   const [focusResult, setFocusResult] = useState(""),
     [focusTurn, setFocusTurn] = useState("");
   const [focusMessage, setFocusMessage] = useState("");
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new conversation clears its predecessor's result navigation.
   useEffect(() => {
     setFocusResult("");
+    setArtifactRequest(null);
     setResultFocusVersion(0);
     setResultCategory("all");
   }, [threadId]);
@@ -778,6 +782,7 @@ function Workspace({
     }
   };
   const showResult = (id: string, category: ResultCategory = "all") => {
+    setArtifactRequest(null);
     setProjectTool(null);
     setResultCategory(category);
     setResultFocusVersion((v) => v + 1);
@@ -1372,6 +1377,10 @@ function Workspace({
             )
           }
           onResult={showResult}
+          onArtifact={(request) => {
+            showResult("");
+            setArtifactRequest(request);
+          }}
           onReconnect={resume}
           onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
         />
@@ -1445,6 +1454,7 @@ function Workspace({
             onOverlayChange={setResultOverlay}
             visible={view === "results" || view === "chat"}
             focusId={focusResult}
+            reveal={artifactRequest?.scope === threadId ? artifactRequest : null}
             focusCategory={resultCategory}
             focusVersion={resultFocusVersion}
             onTurn={(id, source) => {

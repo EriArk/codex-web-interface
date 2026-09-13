@@ -76,6 +76,7 @@ export function DownloadLink({
     [file, setFile] = useState<File | null>(null),
     [objectUrl, setObjectUrl] = useState(""),
     [error, setError] = useState(""),
+    [direct, setDirect] = useState<{ name: string; bytes: number } | null>(null),
     [retry, setRetry] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly starts a fresh bounded download.
@@ -83,6 +84,7 @@ export function DownloadLink({
     if (!open) {
       setFile(null);
       setObjectUrl("");
+      setDirect(null);
       return;
     }
     const controller = new AbortController();
@@ -90,11 +92,35 @@ export function DownloadLink({
     setFile(null);
     setObjectUrl("");
     setError("");
+    setDirect(null);
     dialog.current?.showModal();
     dialog.current?.focus({ preventScroll: true });
     void (async () => {
       try {
         if (!isDownloadUrl(href)) throw Error("Ссылка на файл недоступна.");
+        if (/^\/api\/artifacts\/[a-zA-Z0-9_-]+$/.test(href)) {
+          const head = await fetch(workspaceUrl(href), {
+            method: "HEAD",
+            credentials: "same-origin",
+            redirect: "error",
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]),
+          });
+          if (!head.ok)
+            throw Error(
+              head.status === 401
+                ? "Войди снова, чтобы скачать файл."
+                : "Файл удалён или доступ к нему закрыт.",
+            );
+          const bytes = Number(head.headers.get("content-length"));
+          if (bytes > 32 * 1024 * 1024) {
+            if (!controller.signal.aborted)
+              setDirect({
+                name: fileName(head.headers.get("content-disposition"), name, mime || ""),
+                bytes,
+              });
+            return;
+          }
+        }
         const response = await fetch(workspaceUrl(href), {
           credentials: "same-origin",
           redirect: "error",
@@ -181,7 +207,7 @@ export function DownloadLink({
             onCancel={() => setOpen(false)}
           >
             <div className="download-heading">
-              <strong>{file?.name || name}</strong>
+              <strong>{direct?.name || file?.name || name}</strong>
               <button
                 type="button"
                 className="icon-button"
@@ -191,12 +217,31 @@ export function DownloadLink({
                 <Icon name="close" />
               </button>
             </div>
-            {!file && !error && (
+            {!file && !direct && !error && (
               <p role="status">
                 <span className="spinner" /> Подготавливаю файл…
               </p>
             )}
             {file && <FilePreview key={file.name + retry} file={file} objectUrl={objectUrl} />}
+            {direct && (
+              <div className="download-actions">
+                <p>
+                  {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
+                    direct.bytes / 1024 / 1024,
+                  )}{" "}
+                  МБ · Сохранение через загрузки браузера
+                </p>
+                <a
+                  className="secondary"
+                  href={workspaceUrl(href!)}
+                  download={direct.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Скачать файл
+                </a>
+              </div>
+            )}
             {error && <p role="alert">{error}</p>}
             {file ? (
               <div className="download-actions">

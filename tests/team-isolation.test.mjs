@@ -1619,6 +1619,33 @@ test("private artifact bytes and copied download URLs stay scoped even for admin
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "FRIEND_PRIVATE_BYTES");
   assert.equal((await f.request(result.url, f.owner)).status, 404);
+  assert.equal(
+    (await fetch(f.base + result.url, { method: "HEAD", headers: f.owner })).status,
+    404,
+  );
+  assert.equal(
+    (await fetch(f.base + result.url, { headers: { ...f.owner, range: "bytes=0-4" } })).status,
+    404,
+  );
+  const resultId = runtime.store.result(
+    thread.id,
+    null,
+    "private-file",
+    "artifact",
+    "private.txt",
+    { url: result.url },
+  );
+  const reference = { source: result.url, messageId: "answer" };
+  assert.equal(
+    (await f.request(`/api/threads/${thread.id}/results/reveal`, f.friend, "POST", reference)).body
+      .id,
+    resultId,
+  );
+  assert.equal(
+    (await f.request(`/api/threads/${thread.id}/results/reveal`, f.owner, "POST", reference))
+      .status,
+    404,
+  );
   assert.equal((await f.request(`/api/threads/${thread.id}/history`, f.owner)).status, 404);
 });
 

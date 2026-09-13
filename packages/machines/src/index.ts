@@ -177,6 +177,7 @@ export { guiPreviewMessage, runGuiPreview } from "./guiPreview.js";
 export { inspectProject } from "./inspector.js";
 export { deliveryMessage, runProjectDelivery, runProjectGitHub } from "./projectDelivery.js";
 export { PROJECT_FILE_LIMIT, projectFilePath, readProjectFile } from "./projectFile.js";
+export { ARTIFACT_FILE_LIMIT, copyProjectFile } from "./projectFileTransfer.js";
 export { runProjectSetup, setupMessage } from "./projectSetup.js";
 export { readMachineResources } from "./resources.js";
 export { inspectMachineStaging } from "./staging.js";

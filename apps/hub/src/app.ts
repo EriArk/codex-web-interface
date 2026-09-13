@@ -56,6 +56,7 @@ import { registerQueue } from "./queue.js";
 import { registerQuickCapture } from "./quick-capture.js";
 import { registerRelays } from "./relay-routes.js";
 import { connectRemote, remoteProvider } from "./remote.js";
+import { resolveResultReference, resultReferenceSchema } from "./result-references.js";
 import { Sessions } from "./sessions.js";
 import { registerSpeech } from "./speech.js";
 import { registerStagingStorage } from "./staging-storage.js";
@@ -514,6 +515,18 @@ export async function createApp(
     void sessions.catalog.artifacts.capture(id).catch(() => {});
     return reply.code(202).send({ status: sessions.catalog.artifacts.get(id).status });
   });
+  app.post("/api/threads/:id/results/reveal", async (req) => {
+    const thread = sessions.thread(paramId(req));
+    const project = sessions.project(thread.projectId);
+    const machine = sessions.catalog.machine(project.machineId);
+    return resolveResultReference(
+      store,
+      thread,
+      machine,
+      thread.workingDirectory || project.workingDirectory,
+      resultReferenceSchema.parse(req.body),
+    );
+  });
   app.get("/api/threads/:id/results", async (req) => {
     const id = paramId(req);
     sessions.thread(id);
@@ -722,9 +735,39 @@ export async function createApp(
   });
   app.get("/api/artifacts/:id", async (req, reply) => {
     const id = z.string().uuid().parse(paramId(req)),
-      artifact = artifacts.get(id);
+      artifact = artifacts.describe(id);
     sessions.thread(artifact.threadId);
+    let range: { start: number; end: number } | undefined;
+    if (req.headers.range) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+      if (match && (match[1] || match[2])) {
+        const start = match[1] ? Number(match[1]) : Math.max(0, artifact.bytes - Number(match[2]));
+        const end =
+          match[1] && match[2]
+            ? Math.min(Number(match[2]), artifact.bytes - 1)
+            : artifact.bytes - 1;
+        if (
+          Number.isSafeInteger(start) &&
+          Number.isSafeInteger(end) &&
+          start >= 0 &&
+          start <= end &&
+          start < artifact.bytes
+        )
+          range = { start, end };
+      }
+      if (!range)
+        return reply.code(416).header("Content-Range", `bytes */${artifact.bytes}`).send();
+      reply
+        .code(206)
+        .header("Content-Range", `bytes ${range.start}-${range.end}/${artifact.bytes}`);
+    }
+    // Open only after authorization. Fastify streams with backpressure through the
+    // gateway; a 400 MB export never becomes a Buffer in either server.
+    const stream = artifacts.stream(id, range);
     return reply
+      .header("Accept-Ranges", "bytes")
+      .header("Cache-Control", "private, no-store")
+      .header("Content-Length", range ? range.end - range.start + 1 : artifact.bytes)
       .header(
         "Content-Type",
         /^image\/(png|jpeg|webp|gif)$/.test(artifact.mime)
@@ -736,7 +779,7 @@ export async function createApp(
         "attachment; filename*=UTF-8''" + encodeURIComponent(artifact.name),
       )
       .header("X-Content-Type-Options", "nosniff")
-      .send(artifact.data);
+      .send(stream);
   });
   app.post("/api/threads/:id/screenshots", { bodyLimit: 12 * 1024 * 1024 }, async (req) => {
     const id = paramId(req),

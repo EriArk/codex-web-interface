@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ArtifactCapture } from "./ArtifactCapture";
 import { workspaceMediaUrl, workspaceUrl } from "./accountStorage.ts";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
@@ -68,11 +69,14 @@ export function ResultInspector({
   result,
   onClose,
   onExpand,
+  onRetry,
 }: {
   result: Result;
   onClose: () => void;
   onExpand: () => void;
+  onRetry?: () => void;
 }) {
+  const [imageError, setImageError] = useState(false);
   return (
     <div className="result-inspector">
       <div className="result-inspector-heading">
@@ -96,15 +100,27 @@ export function ResultInspector({
           </button>
         )}
       </div>
-      {result.type === "preview" ? (
+      {result.payload.captureId && !result.payload.url ? (
+        <ArtifactCapture
+          id={result.payload.captureId}
+          status={result.payload.status || "failed"}
+          message={result.payload.message}
+          onComplete={onRetry}
+        />
+      ) : result.type === "preview" ? (
         <PreviewViewer key={result.id} result={result} onClose={onClose} embedded />
       ) : result.type === "image" ? (
         <>
-          <img
-            className="result-inspector-image"
-            src={workspaceMediaUrl(result.payload.url)}
-            alt={result.title}
-          />
+          {imageError ? (
+            <p role="status">Изображение удалено или доступ к нему закрыт.</p>
+          ) : (
+            <img
+              className="result-inspector-image"
+              src={workspaceMediaUrl(result.payload.url)}
+              alt={result.title}
+              onError={() => setImageError(true)}
+            />
+          )}
           <DownloadLink className="secondary" href={result.payload.url} name={result.title}>
             Скачать
           </DownloadLink>
