@@ -4,6 +4,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { HubError, type MachineConfig } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { quotePowerShell, stopProcess } from "./index.js";
 
 const transferError = (timeout = false) =>
@@ -27,11 +28,13 @@ export function quoteSftpPath(path: string): string {
 }
 
 async function command(
+  machine: MachineConfig,
   binary: string,
   args: string[],
   input: string,
   deadline: number,
 ): Promise<string> {
+  authorizeMachine(machine);
   const remaining = deadline - Date.now();
   if (remaining <= 0) throw transferError(true);
   return new Promise((resolve, reject) => {
@@ -75,6 +78,7 @@ export async function transferWindowsAttachment(
   sourcePath: string,
   deadline: number,
 ): Promise<string> {
+  authorizeMachine(machine);
   if (!machine.ssh) throw new HubError(503, "SSH_NOT_CONFIGURED", "SSH target is not configured");
   const ssh = machine.ssh;
   const source = resolve(sourcePath);
@@ -99,6 +103,7 @@ export async function transferWindowsAttachment(
   ];
   const ps = (script: string, until = deadline) =>
     command(
+      machine,
       "ssh",
       [
         ...options,
@@ -151,6 +156,7 @@ export async function transferWindowsAttachment(
     // Windows OpenSSH SFTP requires /C:/... for an absolute drive path.
     const remote = "/" + paths.temporary.replaceAll("\\", "/");
     await command(
+      machine,
       "sftp",
       [...options, "-b", "-", machine.ssh.target],
       "put " + quoteSftpPath(source) + " " + quoteSftpPath(remote) + "\n",

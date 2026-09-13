@@ -39,6 +39,8 @@ Issues: #151, #6, #37, #152. Depends on Gate A.
 
 This is the first usable milestone, followed by both collaboration scenarios in the same implementation pass.
 
+Root-policy prerequisite is implemented in the candidate: optional enrolled roots constrain directory browsing, native project/thread discovery, project creation, execution CWDs, Files/Git and project previews. Canonical checks reject links/junctions including the configured root; the folder picker can switch between approved roots. Legacy owner configurations retain their existing folder workflow. Enrollment/repair is still needed to configure this policy for a real second machine; it cannot yet be enabled through a completed Windows master.
+
 ### Gate C — shared project and independent workstations
 
 Issues: #153, #154, #157. Depends on Gate B; shared-state schema/permission design starts in Gate A.

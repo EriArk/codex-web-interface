@@ -229,15 +229,19 @@ export class TeamAuth extends Auth {
         return;
       }
       const session = this.session(req);
-      const expected =
-        req.headers["x-workspace-id"] ??
-        new URL(req.url, this.config.hub.publicBaseUrl).searchParams.get("workspace");
-      if (path !== "/api/auth/session" && expected && expected !== session.user.id)
+      const expected = [
+        req.headers["x-workspace-id"],
+        ...new URL(req.url, this.config.hub.publicBaseUrl).searchParams.getAll("workspace"),
+      ].filter(Boolean);
+      if (path !== "/api/auth/session" && expected.some((value) => value !== session.user.id))
         throw new HubError(
           401,
           "WORKSPACE_CHANGED",
           "В другой вкладке изменился аккаунт. Войди снова.",
         );
+      // Workspace identity belongs to the auth envelope, not the personal API query schema.
+      if (req.query && typeof req.query === "object")
+        delete (req.query as Record<string, unknown>).workspace;
       reply.header("X-Workspace-Id", session.user.id);
       if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) this.csrf(req);
     });

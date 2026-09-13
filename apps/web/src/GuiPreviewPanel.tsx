@@ -1,6 +1,6 @@
 import type { GuiPreviewAction, GuiPreviewOperation } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { accountLocalStorage as localStorage } from "./accountStorage.ts";
+import { accountLocalStorage as localStorage, workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import type { GuiPreviewTarget } from "./GuiPreviewHost";
 import { Icon } from "./icons";
@@ -296,7 +296,7 @@ export default function GuiPreviewPanel({
                 aria-label="Открыть снимок в результатах"
                 onClick={() => view(op)}
               >
-                <img src={op.artifact.url} alt={op.label} />
+                <img src={workspaceMediaUrl(op.artifact.url)} alt={op.label} />
               </button>
             )}
             {op.capture === "desktop-crop" && <small>Снимок области рабочего стола</small>}

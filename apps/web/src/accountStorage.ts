@@ -79,9 +79,13 @@ export function admitWorkspace(session: Session): boolean {
   return false;
 }
 export function workspaceUrl(input: string | URL) {
+  if (!pageWorkspace) return input.toString();
   const url = new URL(input, location.href);
   if (pageWorkspace && url.host === location.host) url.searchParams.set("workspace", pageWorkspace);
   return url.toString();
+}
+export function workspaceMediaUrl(input: string | undefined) {
+  return input ? workspaceUrl(input) : input;
 }
 export function workspaceSocket(input: string | URL) {
   return new WebSocket(workspaceUrl(input));

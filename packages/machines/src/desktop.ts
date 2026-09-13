@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { HubError, type MachineConfig } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { quotePowerShell, stopProcess } from "./index.js";
 
 export interface DesktopState {
@@ -84,6 +85,7 @@ export async function controlDesktop(
   id?: string,
   threadId?: string,
 ): Promise<DesktopState> {
+  authorizeMachine(machine);
   if (machine.type !== "ssh-windows" || !machine.codex.desktopControl || !machine.ssh)
     throw desktopError("DESKTOP_CONTROL_UNAVAILABLE");
   if (action !== "Status" && !/^[a-f0-9-]{36}$/i.test(id ?? ""))

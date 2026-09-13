@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { HubError, type MachineConfig } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { quotePowerShell, stopProcess } from "./index.js";
 
 export interface NativeActivity {
@@ -36,6 +37,7 @@ export async function readNativeActivity(
   home: string,
   ids: string[],
 ): Promise<NativeActivity[]> {
+  authorizeMachine(machine);
   if (!machine.codex.activityNode || !home || ids.length > 3000)
     throw new HubError(503, "ACTIVITY_UNAVAILABLE", "Наблюдение за другими клиентами не настроено");
   const payload = Buffer.from(JSON.stringify({ home, ids })).toString("base64");

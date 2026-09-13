@@ -16,6 +16,7 @@ export interface Machine {
   name: string;
   type: "ssh-windows" | "local-linux";
   projectsDirectory: string;
+  allowedProjectRoots?: string[];
   canCreateProjects?: boolean;
   desktopRestartAvailable?: boolean;
   remoteAvailable: boolean;

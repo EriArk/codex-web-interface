@@ -3,7 +3,12 @@ import { EventEmitter } from "node:events";
 import { unlinkSync } from "node:fs";
 import { join, posix, win32 } from "node:path";
 import { CodexClient, type ServerRequest } from "@codex-web/codex";
-import { readWorkspaceDependencies, spawnCodex } from "@codex-web/machines";
+import {
+  assertProjectRoot,
+  readWorkspaceDependencies,
+  spawnCodex,
+  verifyProjectRoot,
+} from "@codex-web/machines";
 import {
   type Capabilities,
   type Elicitation,
@@ -129,8 +134,20 @@ export class Sessions extends EventEmitter {
   }
   thread(id: string): ThreadRecord {
     const t = this.store.thread(id);
-    this.project(t.projectId);
+    const project = this.project(t.projectId);
+    assertProjectRoot(
+      this.catalog.machine(project.machineId),
+      t.workingDirectory || project.workingDirectory,
+    );
     return t;
+  }
+  private async verifyThreadRoot(thread: ThreadRecord) {
+    const project = this.project(thread.projectId);
+    await verifyProjectRoot(
+      this.catalog.machine(project.machineId),
+      thread.workingDirectory || project.workingDirectory,
+    );
+    this.authorizeExecution();
   }
   pending(id: string): Record<string, unknown>[] {
     return [...this.approvals.values()]
@@ -151,13 +168,17 @@ export class Sessions extends EventEmitter {
     this.authorizeExecution();
     const p = this.project(projectId);
     const runtimeId = p.machineId;
-    let existing = this.runtimes.get(runtimeId);
-    if (existing) return existing;
     const machine = this.config.machines.find((m) => m.id === p.machineId);
     if (!machine) throw new HubError(503, "MACHINE_NOT_FOUND", "Машина не настроена");
+    await verifyProjectRoot(machine, p.workingDirectory);
+    this.authorizeExecution();
+    let existing = this.runtimes.get(runtimeId);
+    if (existing) return existing;
     existing = (async () => {
       const anchor =
         this.config.projects.find((seed) => seed.machineId === machine.id && seed.enabled) ?? p;
+      await verifyProjectRoot(machine, anchor.workingDirectory);
+      this.authorizeExecution();
       const rpc = this.clientFactory(machine, anchor.workingDirectory);
       rpc.authorize = () => this.authorizeExecution();
       const runtime: Runtime = {
@@ -857,6 +878,7 @@ export class Sessions extends EventEmitter {
   }
   async fork(id: string, attachmentIds: string[] = []): Promise<ThreadRecord> {
     const original = this.thread(id);
+    await this.verifyThreadRoot(original);
     this.attachments.validateCopy(id, attachmentIds);
     return this.locked(original.projectId, async () => {
       const r = await this.runtime(original.projectId);
@@ -923,6 +945,7 @@ export class Sessions extends EventEmitter {
     });
   }
   async resume(id: string): Promise<ThreadRecord> {
+    await this.verifyThreadRoot(this.thread(id));
     const t = this.thread(id);
     if (t.archived) throw new HubError(409, "THREAD_ARCHIVED", "Сначала разархивируй диалог.");
     return this.locked(t.projectId, async () => {
@@ -1050,6 +1073,7 @@ export class Sessions extends EventEmitter {
     let committing = false;
     try {
       let t = this.thread(id);
+      await this.verifyThreadRoot(t);
       this.assertWritable(t.projectId);
       if (!(await this.owns(id))) await this.externalActivity.refresh();
       t = this.thread(id);

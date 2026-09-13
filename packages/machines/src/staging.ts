@@ -5,12 +5,14 @@ import {
   type StagingRequest,
   type StagingResponse,
 } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { quotePowerShell, stopProcess } from "./index.js";
 import { stagingProbe } from "./stagingProbe.js";
 export async function inspectMachineStaging(
   machine: MachineConfig,
   request: StagingRequest = { op: "inspect" },
 ): Promise<StagingResponse> {
+  authorizeMachine(machine);
   if (machine.type !== "ssh-windows" || !machine.ssh || !machine.codex.activityNode)
     throw new HubError(409, "STAGING_UNAVAILABLE", "Не удалось проверить копии на компьютере.");
   const program = `(${stagingProbe.toString()})(require('node:path').join(process.env.LOCALAPPDATA,'CodexWeb'),${JSON.stringify(request)}).then(value=>process.stdout.write(JSON.stringify(value))).catch(()=>process.exitCode=1)`;

@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { HubError, type MachineConfig } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { stopProcess } from "./index.js";
 
 export interface WorkspaceDependencies {
@@ -39,6 +40,7 @@ export function workspaceDependenciesScript(): string {
 export async function readWorkspaceDependencies(
   machine: MachineConfig,
 ): Promise<WorkspaceDependencies> {
+  authorizeMachine(machine);
   if (machine.type === "local-linux") {
     const root = join(homedir(), ".cache/codex-runtimes/codex-primary-runtime");
     let manifest: Record<string, unknown>;

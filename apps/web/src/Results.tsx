@@ -6,6 +6,7 @@ import {
   resultCategory,
 } from "@codex-web/shared";
 import { ArtifactCapture } from "./ArtifactCapture";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { DownloadLink } from "./DownloadLink";
 import { ResultFilters } from "./ResultFilters";
 import { ResultInspector } from "./ResultInspector";
@@ -179,7 +180,7 @@ export function Results({
                   aria-label="Открыть снимок"
                 >
                   <img
-                    src={r.payload.url}
+                    src={workspaceMediaUrl(r.payload.url)}
                     loading="lazy"
                     alt={r.title}
                     width={r.payload.width}
@@ -297,7 +298,7 @@ export function Results({
             </button>
           </div>
           <div className="viewer-image">
-            <img src={image.payload.url} alt={image.title} />
+            <img src={workspaceMediaUrl(image.payload.url)} alt={image.title} />
           </div>
         </div>
       )}

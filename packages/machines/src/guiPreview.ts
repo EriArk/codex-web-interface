@@ -6,6 +6,7 @@ import {
   type MachineConfig,
 } from "@codex-web/shared";
 import { quotePowerShell, stopProcess } from "./index.js";
+import { verifyProjectRoot } from "./projectRoots.js";
 
 const messages: Record<string, string> = {
   PREVIEW_UNAVAILABLE: "Предпросмотр пока недоступен. Проверь подключение компьютера.",
@@ -30,6 +31,7 @@ export async function runGuiPreview(
   root: string,
   request: GuiPreviewRequest,
 ): Promise<GuiPreviewResponse> {
+  await verifyProjectRoot(machine, root);
   if (machine.type !== "ssh-windows" || !machine.ssh || !machine.codex.activityNode) {
     if (request.op === "catalog") return { installed: false, actions: [] };
     throw new HubError(409, "PREVIEW_UNAVAILABLE", guiPreviewMessage("PREVIEW_UNAVAILABLE"));

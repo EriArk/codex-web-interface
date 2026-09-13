@@ -7,6 +7,7 @@ import {
 } from "@codex-web/shared";
 import { deliveryProbe } from "./deliveryProbe.js";
 import { quotePowerShell, stopProcess } from "./index.js";
+import { verifyProjectRoot } from "./projectRoots.js";
 
 const messages: Record<string, string> = {
   DELIVERY_UNAVAILABLE: "Компьютер пока не подтвердил операцию. Проверь её состояние.",
@@ -36,6 +37,7 @@ export async function runProjectDelivery(
   root: string,
   request: DeliveryProbeRequest,
 ): Promise<DeliveryProbeResult> {
+  await verifyProjectRoot(machine, root);
   if (machine.type === "local-linux") {
     try {
       return await deliveryProbe(root, request);

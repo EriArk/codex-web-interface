@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
@@ -176,7 +177,9 @@ export function AttachmentList({
                   </span>
                 ) : (
                   <img
-                    src={file.previewUrl + (attempt[file.id] ? `?retry=${attempt[file.id]}` : "")}
+                    src={workspaceMediaUrl(
+                      file.previewUrl + (attempt[file.id] ? `?retry=${attempt[file.id]}` : ""),
+                    )}
                     alt=""
                     loading="lazy"
                     onError={() => setUnavailable((v) => ({ ...v, [file.id]: true }))}
@@ -227,7 +230,7 @@ export function AttachmentList({
         </div>
         {preview && (
           <div className="viewer-image">
-            <img src={preview.previewUrl} alt={preview.name} />
+            <img src={workspaceMediaUrl(preview.previewUrl)} alt={preview.name} />
           </div>
         )}
       </dialog>

@@ -16,6 +16,7 @@ export class AudioMessageSpeech {
     remove: (id: string) => Promise<unknown>;
     media?: () => MediaSession | undefined;
     playback?: (active: boolean) => void;
+    audioUrl?: (clip: string) => string;
   };
   constructor(dependencies: AudioMessageSpeech["dependencies"]) {
     this.dependencies = dependencies;
@@ -171,7 +172,7 @@ export class AudioMessageSpeech {
         .catch(() => {
           if (valid()) this.fail(id, "Не удалось подготовить озвучивание. Попробуй ещё раз.");
         });
-      audio.src = "/api/speech/" + clip + "/audio";
+      audio.src = this.dependencies.audioUrl?.(clip) ?? "/api/speech/" + clip + "/audio";
       void audio.play().catch((error) => {
         if (!valid()) return;
         if (error?.name === "NotAllowedError")

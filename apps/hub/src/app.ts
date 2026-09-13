@@ -7,6 +7,7 @@ import type {
   runProjectDelivery,
   runProjectSetup,
 } from "@codex-web/machines";
+import { bindMachineAuthority, projectPathAllowed } from "@codex-web/machines";
 import {
   caseColorIds,
   type HubConfig,
@@ -111,6 +112,12 @@ export async function createApp(
   const store = options.store ?? new Store(config.hub.databasePath);
   const sessions = options.sessions ?? new Sessions(config, store);
   if (options.authorizeExecution) sessions.authorizeExecution = options.authorizeExecution;
+  const releaseAuthorities = options.authorizeExecution
+    ? config.machines.map((machine) => bindMachineAuthority(machine, options.authorizeExecution!))
+    : [];
+  app.addHook("onClose", async () => {
+    for (const release of releaseAuthorities) release();
+  });
   const auth = options.auth ?? new Auth(config, store);
   if (options.executionService) {
     const instance = randomUUID();
@@ -413,10 +420,18 @@ export async function createApp(
       warning = "Компьютер недоступен. Показаны сохранённые диалоги.";
     }
     return {
-      threads: store.threads(project.id).map((t) => ({
-        ...t,
-        pinned: sessions.catalog.library.get("thread", t.codexThreadId)?.pinned === true,
-      })),
+      threads: store
+        .threads(project.id)
+        .filter((t) =>
+          projectPathAllowed(
+            sessions.catalog.machine(project.machineId),
+            t.workingDirectory || project.workingDirectory,
+          ),
+        )
+        .map((t) => ({
+          ...t,
+          pinned: sessions.catalog.library.get("thread", t.codexThreadId)?.pinned === true,
+        })),
       warning,
     };
   });

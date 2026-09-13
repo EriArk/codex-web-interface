@@ -8,6 +8,7 @@ import type {
 } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { GptProjectButton } from "./GptProjectContent";
 import { GuiPreviewButton } from "./GuiPreviewHost";
@@ -445,7 +446,7 @@ export function ProjectOverview({
                         }
                       >
                         {result.imageUrl ? (
-                          <img src={result.imageUrl} loading="lazy" alt="" />
+                          <img src={workspaceMediaUrl(result.imageUrl)} loading="lazy" alt="" />
                         ) : (
                           <Icon
                             name={

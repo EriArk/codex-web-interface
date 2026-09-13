@@ -4,9 +4,11 @@ import { open, realpath } from "node:fs/promises";
 import { posix, win32 } from "node:path";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 import { quotePowerShell, stopProcess } from "./index.js";
+import { assertProjectRoot, verifyProjectRoot } from "./projectRoots.js";
 
 export const PREVIEW_LIMIT = 2 * 1024 * 1024;
 export function previewPath(machine: MachineConfig, root: string, input: string): string {
+  assertProjectRoot(machine, root);
   const paths = machine.type === "local-linux" ? posix : win32;
   let value: string;
   try {
@@ -41,6 +43,7 @@ export async function readMachinePreview(
   root: string,
   input: string,
 ): Promise<Buffer> {
+  await verifyProjectRoot(machine, root);
   const path = previewPath(machine, root, input);
   if (machine.type === "local-linux") {
     const actualRoot = await realpath(root),

@@ -19,6 +19,8 @@ const machine = z
     id,
     name: z.string().min(1).max(120),
     type: z.enum(["local-linux", "ssh-windows"]),
+    // Omitted only for pre-team owner configurations. Enrollment always supplies roots.
+    allowedProjectRoots: z.array(z.string().min(1).max(2048)).min(1).max(20).optional(),
     ssh: z
       .object({
         target: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.@-]{0,200}$/),

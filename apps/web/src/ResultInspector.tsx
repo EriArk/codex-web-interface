@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { workspaceUrl } from "./accountStorage.ts";
+import { workspaceMediaUrl, workspaceUrl } from "./accountStorage.ts";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
@@ -100,7 +100,11 @@ export function ResultInspector({
         <PreviewViewer key={result.id} result={result} onClose={onClose} embedded />
       ) : result.type === "image" ? (
         <>
-          <img className="result-inspector-image" src={result.payload.url} alt={result.title} />
+          <img
+            className="result-inspector-image"
+            src={workspaceMediaUrl(result.payload.url)}
+            alt={result.title}
+          />
           <DownloadLink className="secondary" href={result.payload.url} name={result.title}>
             Скачать
           </DownloadLink>

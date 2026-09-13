@@ -2,12 +2,14 @@ import { spawn } from "node:child_process";
 import { HubError, type InspectRequest, type MachineConfig } from "@codex-web/shared";
 import { quotePowerShell, stopProcess } from "./index.js";
 import { inspectorProbe } from "./inspectorProbe.js";
+import { verifyProjectRoot } from "./projectRoots.js";
 
 export async function inspectProject(
   machine: MachineConfig,
   root: string,
   request: InspectRequest,
 ): Promise<Awaited<ReturnType<typeof inspectorProbe>>> {
+  await verifyProjectRoot(machine, root);
   const failure = () =>
     new HubError(
       503,

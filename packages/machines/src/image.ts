@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
 import { HubError, type MachineConfig } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { quotePowerShell, stopProcess } from "./index.js";
 
 const limit = 8 * 1024 * 1024;
 export async function readMachineImage(machine: MachineConfig, path: string): Promise<Buffer> {
+  authorizeMachine(machine);
   if (
     !/\.(png|jpe?g|webp|gif|avif|tiff?|heic|heif)$/i.test(path) ||
     !(machine.type === "local-linux" ? path.startsWith("/") : /^[a-z]:[\\/]/i.test(path))

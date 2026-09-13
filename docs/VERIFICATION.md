@@ -13,6 +13,8 @@ Branch `feat/team-workspaces`; isolated Linux checkout `/home/abysscloud/codex-w
 
 This evidence covers the initial candidate foundation. Complete background-operation revocation, friend-PC enrollment, isolated real native identities, shared projects and Bridges are still outstanding. Team mode is not ready for production admission.
 
+Follow-up candidate checks: the full suite subsequently passed 424 tests with root policies, machine authority checks and private media URL binding; Chromium/WebKit again passed both account workflows and all 24 theme/viewport combinations. After canonical native catalog filtering was added, all 22 focused catalog/root/team tests passed. The Windows root-probe script was executed in native PowerShell against temporary project fixtures: ordinary directory and permitted missing descendant accepted; missing existing folder, junction root and missing child below a junction rejected (five checks). No native Codex/GPT connection was opened. Tests cover every exported machine transport entry point after revocation, and a closed runtime cannot regain an unscoped machine capability. Complete friend hardware/onboarding acceptance remains outstanding.
+
 Checks were run on the Linux server against the user's Windows machine and in isolated browser containers during the initial implementation.
 
 ## Real environment

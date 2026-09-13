@@ -17,6 +17,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import {
   accountLocalStorage as localStorage,
   accountSessionStorage as sessionStorage,
+  workspaceMediaUrl,
 } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
@@ -79,7 +80,7 @@ const Files = memo(function Files({ files }: { files: GptFile[] }) {
       {files.map((file) => (
         <DownloadLink key={file.id} href={file.url} name={file.name} className="gpt-file-download">
           {file.image ? (
-            <img src={file.url} alt={file.name} loading="lazy" />
+            <img src={workspaceMediaUrl(file.url)} alt={file.name} loading="lazy" />
           ) : (
             <>
               <Icon name="file" />
@@ -1766,7 +1767,7 @@ export function GptWorkspace({
                 <div className="gpt-upload-list">
                   {files.map((file) => (
                     <div key={file.id}>
-                      {file.image && <img src={file.url} alt="" />}
+                      {file.image && <img src={workspaceMediaUrl(file.url)} alt="" />}
                       <span>{file.name}</span>
                       <button
                         type="button"

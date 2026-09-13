@@ -4,9 +4,11 @@ import { open, realpath } from "node:fs/promises";
 import { posix, win32 } from "node:path";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 import { quotePowerShell, stopProcess } from "./index.js";
+import { assertProjectRoot, verifyProjectRoot } from "./projectRoots.js";
 
 export const PROJECT_FILE_LIMIT = 32 * 1024 * 1024;
 export function projectFilePath(machine: MachineConfig, root: string, input: string): string {
+  assertProjectRoot(machine, root);
   const paths = machine.type === "local-linux" ? posix : win32;
   let value: string;
   try {
@@ -41,6 +43,7 @@ export async function readProjectFile(
   input: string,
   options: { rejectSymlinks?: boolean } = {},
 ): Promise<Buffer> {
+  await verifyProjectRoot(machine, root);
   const path = projectFilePath(machine, root, input);
   if (machine.type === "local-linux") {
     const actualRoot = await realpath(root),

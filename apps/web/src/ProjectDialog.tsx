@@ -505,6 +505,28 @@ export function ProjectDialog({
                   </button>
                 </div>
                 <div className="folder-picker-list">
+                  {machine?.allowedProjectRoots && machine.allowedProjectRoots.length > 1 && (
+                    <label className="field-label">
+                      Разрешённые папки
+                      <select
+                        aria-label="Разрешённая корневая папка"
+                        value={machine.allowedProjectRoots.includes(browse.path) ? browse.path : ""}
+                        disabled={browsing}
+                        onChange={(event) => {
+                          if (event.target.value) void openFolder(event.target.value);
+                        }}
+                      >
+                        <option value="" disabled>
+                          Перейти в другую папку…
+                        </option>
+                        {machine.allowedProjectRoots.map((root) => (
+                          <option key={root} value={root}>
+                            {root}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {browse.parent && (
                     <button
                       type="button"

@@ -1,4 +1,5 @@
 import { Component, lazy, type ReactNode, Suspense, useEffect, useState } from "react";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api } from "./api";
 
 const PdfPreview = lazy(() => import("./PdfFilePreview"));
@@ -89,7 +90,7 @@ function TextOrHtml({ file, html }: { file: File; html: boolean }) {
       <iframe
         className="file-html"
         title={"Предпросмотр " + file.name}
-        src={url}
+        src={workspaceMediaUrl(url)}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
       />

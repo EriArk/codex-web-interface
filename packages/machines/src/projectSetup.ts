@@ -5,7 +5,9 @@ import {
   type SetupProbeRequest,
   type SetupProbeResult,
 } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { quotePowerShell, stopProcess } from "./index.js";
+import { verifyProjectRoot } from "./projectRoots.js";
 import { setupProbe } from "./setupProbe.js";
 
 const messages: Record<string, string> = {
@@ -37,6 +39,9 @@ export async function runProjectSetup(
   machine: MachineConfig,
   request: SetupProbeRequest,
 ): Promise<SetupProbeResult> {
+  authorizeMachine(machine);
+  if (request.op === "inspect" || request.op === "apply")
+    await verifyProjectRoot(machine, request.input.workingDirectory, request.input.createDirectory);
   if (machine.type === "local-linux") {
     try {
       return await setupProbe(request);

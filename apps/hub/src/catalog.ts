@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join, posix, win32 } from "node:path";
 import type { CodexClient } from "@codex-web/codex";
+import { assertProjectRoot, projectPathAllowed, verifyProjectRoot } from "@codex-web/machines";
 import {
   type HubConfig,
   HubError,
@@ -52,6 +53,7 @@ export class Catalog {
   private refreshing?: Promise<void>;
   private threadRefresh = new Map<string, { at: number; pending?: Promise<void> }>();
   private pages = new Map<string, { until: number; value: Promise<HistoryPage> }>();
+  private directoryChecks = new Map<string, { until: number; value: Promise<boolean> }>();
   readonly projectSupport = new Map<string, boolean>();
   readonly library: Library;
   readonly images: NativeImages;
@@ -117,14 +119,43 @@ export class Catalog {
           position: 10000,
         });
     }
-    return [...projects.values()].sort(
-      (a, b) => (a.position ?? 999) - (b.position ?? 999) || a.name.localeCompare(b.name),
-    );
+    return [...projects.values()]
+      .filter((p) => {
+        const machine = this.machine(p.machineId);
+        return [p.workingDirectory, ...(p.roots ?? [])].every((root) =>
+          projectPathAllowed(machine, root),
+        );
+      })
+      .sort((a, b) => (a.position ?? 999) - (b.position ?? 999) || a.name.localeCompare(b.name));
   }
   machine(id: string): MachineConfig {
     const machine = this.config.machines.find((m) => m.id === id);
     if (!machine) throw new HubError(404, "MACHINE_NOT_FOUND", "Компьютер не найден");
     return machine;
+  }
+  private async verifyThreadRoot(thread: ThreadRecord) {
+    const project = this.projects().find((p) => p.id === thread.projectId);
+    if (!project) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект недоступен.");
+    await verifyProjectRoot(
+      this.machine(project.machineId),
+      thread.workingDirectory || project.workingDirectory,
+    );
+  }
+  private async allowedDirectory(machine: MachineConfig, path: string) {
+    if (!projectPathAllowed(machine, path)) return false;
+    if (!machine.allowedProjectRoots) return true;
+    const key = machine.id + ":" + this.pathKey(machine, path),
+      old = this.directoryChecks.get(key);
+    if (old && old.until > Date.now()) return old.value;
+    // Reuse only catalog metadata checks. Execution and file reads revalidate independently.
+    if (this.directoryChecks.size >= 256)
+      this.directoryChecks.delete(this.directoryChecks.keys().next().value!);
+    const value = verifyProjectRoot(machine, path).then(
+      () => true,
+      () => false,
+    );
+    this.directoryChecks.set(key, { until: Date.now() + 30000, value });
+    return value;
   }
   pathKey(machine: MachineConfig, path: string): string {
     return machine.type === "ssh-windows"
@@ -135,6 +166,7 @@ export class Catalog {
       : posix.normalize(path).replace(/\/+$/, "");
   }
   absolute(machine: MachineConfig, path: string): string {
+    assertProjectRoot(machine, path);
     if (
       !path ||
       path.length > 2048 ||
@@ -148,15 +180,17 @@ export class Catalog {
       );
     return machine.type === "ssh-windows" ? win32.normalize(path) : posix.normalize(path);
   }
-  private saveProject(
+  private async saveProject(
     machine: MachineConfig,
     raw: Record<string, unknown>,
-  ): CatalogProject | undefined {
+  ): Promise<CatalogProject | undefined> {
     const sourceId = str(raw.id, 100),
       roots = array(raw.roots)
         .map((r) => str(r.path, 2048))
         .filter(Boolean);
     if (!sourceId || !roots.length) return;
+    if (!roots.every((root) => projectPathAllowed(machine, root))) return;
+    for (const root of roots) if (!(await this.allowedDirectory(machine, root))) return;
     const normalized = roots.map((path) => this.absolute(machine, path));
     const old = this.projects().find((p) => p.machineId === machine.id && p.sourceId === sourceId);
     const seed = this.config.projects.find(
@@ -210,7 +244,7 @@ export class Catalog {
             });
             if (!Array.isArray(page.data)) throw new Error("Invalid project catalog");
             for (const project of array(page.data)) {
-              const saved = this.saveProject(machine, project);
+              const saved = await this.saveProject(machine, project);
               if (saved) found.add(saved.sourceId ?? "");
             }
             cursor = page.nextCursor;
@@ -289,7 +323,8 @@ export class Catalog {
         id: m.id,
         name: m.name,
         type: m.type,
-        projectsDirectory: root,
+        projectsDirectory: m.allowedProjectRoots?.[0] ?? root,
+        allowedProjectRoots: m.allowedProjectRoots,
         canCreateProjects: this.projectSupport.get(m.id) !== false,
         remoteAvailable: !!m.remote,
         desktopRestartAvailable: m.type === "ssh-windows" && !!m.codex.desktopControl,
@@ -299,13 +334,14 @@ export class Catalog {
   async directories(machineId: string, path: string) {
     const machine = this.machine(machineId),
       cwd = this.absolute(machine, path);
+    await verifyProjectRoot(machine, cwd);
     const rpc = await this.connect(machineId);
     const result = await rpc.request("fs/readDirectory", { path: cwd });
     const osPath = machine.type === "ssh-windows" ? win32 : posix;
     const parent = osPath.dirname(cwd);
     return {
       path: cwd,
-      parent: parent === cwd ? null : parent,
+      parent: parent === cwd || !projectPathAllowed(machine, parent) ? null : parent,
       entries: array(result.entries)
         .filter(
           (entry) =>
@@ -331,6 +367,7 @@ export class Catalog {
   ) {
     const machine = this.machine(machineId),
       cwd = this.absolute(machine, path);
+    await verifyProjectRoot(machine, cwd, createDirectory);
     await this.refresh();
     if (this.projectSupport.get(machineId) === false)
       throw new HubError(
@@ -348,7 +385,7 @@ export class Catalog {
       roots: [{ path: cwd }],
       idempotencyKey,
     });
-    const project = this.saveProject(machine, obj(result.project));
+    const project = await this.saveProject(machine, obj(result.project));
     if (!project)
       throw new HubError(502, "PROJECT_CREATE_FAILED", "Codex не подтвердил создание проекта");
     this.refreshed = 0;
@@ -377,7 +414,7 @@ export class Catalog {
         projectId: p.sourceId,
         name: action.name,
       });
-      if (!this.saveProject(this.machine(p.machineId), obj(result.project)))
+      if (!(await this.saveProject(this.machine(p.machineId), obj(result.project))))
         throw new HubError(502, "PROJECT_UPDATE_FAILED", "Codex не подтвердил название.");
       this.library.save("project", id, { name: action.name });
     } else {
@@ -403,6 +440,7 @@ export class Catalog {
     for (const raw of array(page.data)) {
       if (raw.ephemeral || raw.parentThreadId || this.library.get("thread", str(raw.id))?.deleted)
         continue;
+      if (!(await this.allowedDirectory(this.machine(machineId), str(raw.cwd, 2048)))) continue;
       const existing = this.store.threadByCodex(str(raw.id));
       const owner =
         this.projects().find((p) =>
@@ -452,11 +490,13 @@ export class Catalog {
           if (
             !sourceId ||
             !cwd ||
+            !projectPathAllowed(machine, cwd) ||
             seen.has(sourceId) ||
             this.library.get("thread", sourceId)?.deleted
           )
             continue;
           seen.add(sourceId);
+          if (!(await this.allowedDirectory(machine, cwd))) continue;
           const path = this.pathKey(machine, cwd);
           const project =
             projects.find((p) => p.sourceId === raw.projectId && raw.projectId) ??
@@ -530,6 +570,7 @@ export class Catalog {
     return this.store.thread(thread.id);
   }
   async readThread(thread: ThreadRecord): Promise<{ version: number }> {
+    await this.verifyThreadRoot(thread);
     const project = this.projects().find((p) => p.id === thread.projectId);
     if (!project) throw new HubError(404, "PROJECT_NOT_FOUND", "Проект не найден");
     const rpc = await this.connect(project.machineId);
@@ -724,6 +765,7 @@ export class Catalog {
       );
   }
   async history(thread: ThreadRecord, before?: string, turnId?: string): Promise<HistoryPage> {
+    await this.verifyThreadRoot(thread);
     // App Server persists a new draft only after its first turn; it has no native history yet.
     if (
       thread.origin !== "desktop" &&
@@ -935,6 +977,7 @@ export class Catalog {
     messageId: string,
     turnId?: string,
   ): Promise<HistoryPage> {
+    await this.verifyThreadRoot(thread);
     // Pages remain bounded. Never scan an entire old conversation to resolve a backlink.
     for (const [key, entry] of this.pages) {
       if (!key.startsWith(thread.id + ":") || entry.until === Number.POSITIVE_INFINITY) continue;

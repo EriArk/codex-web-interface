@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { Result } from "./types";
@@ -125,7 +126,7 @@ export function PreviewViewer({
           {ready && (
             <iframe
               title={result.title}
-              src={result.payload.url}
+              src={workspaceMediaUrl(result.payload.url)}
               sandbox="allow-scripts"
               referrerPolicy="no-referrer"
             />

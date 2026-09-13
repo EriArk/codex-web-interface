@@ -1,5 +1,6 @@
 import type { NotebookLink } from "@codex-web/shared";
 import { useCallback, useEffect, useState } from "react";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import "./bridge-doctor.css";
@@ -216,7 +217,7 @@ export function BridgeDoctorPanel({
             </div>
             {i.evidence?.kind === "redacted-layout" && (
               <img
-                src={`/api/gpt/doctor/${i.id}/evidence`}
+                src={workspaceMediaUrl(`/api/gpt/doctor/${i.id}/evidence`)}
                 alt="Структура интерфейса, личное содержимое скрыто"
                 loading="lazy"
               />

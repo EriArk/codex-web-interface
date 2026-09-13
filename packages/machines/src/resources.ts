@@ -3,9 +3,11 @@ import { statfs } from "node:fs/promises";
 import { freemem, totalmem, uptime } from "node:os";
 import type { MachineConfig, MachineProbe } from "@codex-web/shared";
 import { quotePowerShell, stopProcess } from "./index.js";
+import { verifyProjectRoot } from "./projectRoots.js";
 
 type Metrics = NonNullable<MachineProbe["metrics"]>;
 export async function readMachineResources(machine: MachineConfig, root: string): Promise<Metrics> {
+  await verifyProjectRoot(machine, root);
   if (machine.type === "local-linux") {
     const disk = await statfs(root).catch(() => undefined);
     const limit = process.constrainedMemory();

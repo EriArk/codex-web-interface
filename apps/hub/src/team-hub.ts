@@ -45,7 +45,13 @@ export function privateDirectory(path: string) {
 /** A new account starts with no execution or consumer-account fallback. */
 export function privateConfig(config: HubConfig, registry: TeamStore, userId: string): HubConfig {
   const user = registry.active(userId);
-  if (user.id === registry.ownerId && user.legacy) return config;
+  if (user.id === registry.ownerId && user.legacy)
+    return {
+      ...config,
+      machines: structuredClone(config.machines),
+      devices: structuredClone(config.devices),
+      projects: structuredClone(config.projects),
+    };
   const root = privateDirectory(join(config.team!.root, "users", user.id));
   return {
     hub: { ...config.hub, databasePath: join(root, "app.db"), resultsPath: join(root, "results") },

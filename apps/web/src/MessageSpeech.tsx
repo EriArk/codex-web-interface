@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { accountLocalStorage as localStorage } from "./accountStorage.ts";
+import { accountLocalStorage as localStorage, workspaceUrl } from "./accountStorage.ts";
 import { api } from "./api";
 import { AudioMessageSpeech } from "./audioSpeech";
 import { Icon } from "./icons";
@@ -20,6 +20,7 @@ const systemPlayer = new Controller(device);
 let previousAudioType: string | undefined;
 const audioPlayer = new AudioMessageSpeech({
   audio: () => new Audio(),
+  audioUrl: (clip) => workspaceUrl("/api/speech/" + clip + "/audio"),
   create: (id, text, language, voice) =>
     api("/speech/" + id, { method: "POST", body: { text, language, ...(voice ? { voice } : {}) } }),
   remove: (id) => api("/speech/" + id, { method: "DELETE" }),

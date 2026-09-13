@@ -1,10 +1,18 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { HubError, type MachineConfig } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 
 export { type NativeActivity, readNativeActivity } from "./activity.js";
+export { authorizeMachine, bindMachineAuthority } from "./authority.js";
 export { controlDesktop, type DesktopState, desktopError } from "./desktop.js";
 export { readMachineImage } from "./image.js";
 export { PREVIEW_LIMIT, previewPath, readMachinePreview } from "./preview.js";
+export {
+  assertProjectRoot,
+  normalizedProjectPath,
+  projectPathAllowed,
+  verifyProjectRoot,
+} from "./projectRoots.js";
 export { readWorkspaceDependencies, type WorkspaceDependencies } from "./workspace.js";
 
 export function quotePowerShell(value: string): string {
@@ -52,6 +60,7 @@ export function spawnCodex(
   cwd: string,
   args: readonly string[] = ["app-server", "--listen", "stdio://"],
 ): ChildProcessWithoutNullStreams {
+  authorizeMachine(machine);
   const options = {
     stdio: "pipe" as const,
     detached: process.platform !== "win32",
@@ -139,6 +148,7 @@ export async function stageAttachment(
   sourcePath: string,
   deadline = Date.now() + 40_000,
 ): Promise<string> {
+  authorizeMachine(machine);
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(projectId) || !/^[0-9a-f-]{36}$/.test(id))
     throw new HubError(400, "INVALID_ATTACHMENT", "Invalid attachment identifier");
   const { mkdir, copyFile, chmod } = await import("node:fs/promises");

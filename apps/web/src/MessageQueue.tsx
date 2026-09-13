@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { Attachment } from "./types";
@@ -214,7 +215,7 @@ export function MessageQueue({
                   <div className="queue-files">
                     {item.attachments.map((f) => (
                       <span key={f.id}>
-                        {f.image && <img src={f.previewUrl} alt="" />}
+                        {f.image && <img src={workspaceMediaUrl(f.previewUrl)} alt="" />}
                         {f.name}
                       </span>
                     ))}

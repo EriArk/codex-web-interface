@@ -1,5 +1,6 @@
 import type { Elicitation, ElicitationValue } from "@codex-web/shared";
 import { useRef, useState } from "react";
+import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import "./elicitation.css";
@@ -92,7 +93,7 @@ export function ElicitationCard({
                             checked={values[f.key] === o.value}
                             onChange={() => update(f.key, o.value)}
                           />
-                          {o.image && <img src={o.image} alt="" />}
+                          {o.image && <img src={workspaceMediaUrl(o.image)} alt="" />}
                           <span>{o.title}</span>
                         </label>
                       ))}
@@ -274,7 +275,7 @@ export function ElicitationCard({
           {form.mode === "url" && (
             <a
               className="secondary elicitation-open"
-              href={`/api/approvals/${id}/open`}
+              href={workspaceMediaUrl(`/api/approvals/${id}/open`)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOpened(true)}
