@@ -48,6 +48,9 @@
   height: 44px;
   padding: 0;
 }
+:root .settings-browser .settings-heading > .panel-close {
+  color: inherit;
+}
 .settings-layout {
   flex: 1;
   min-height: 0;

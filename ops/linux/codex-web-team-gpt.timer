@@ -1,0 +1,10 @@
+[Unit]
+Description=Check requested private CodexWeb ChatGPT browsers
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=30
+Unit=codex-web-team-gpt.service
+
+[Install]
+WantedBy=timers.target

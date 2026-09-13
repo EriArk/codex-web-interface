@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { pageWorkspace } from "./accountStorage.ts";
 import { Icon } from "./icons";
+import { TeamGpt } from "./TeamGpt";
 import { TeamMachines } from "./TeamMachines";
 import "./settings-sections.css";
 
@@ -123,7 +124,10 @@ export function SettingsSections({
               </h3>
               {sections[category.id](open && active === category.id)}
               {pageWorkspace && category.id === "connections" && (
-                <TeamMachines visible={open && active === category.id} />
+                <>
+                  <TeamGpt visible={open && active === category.id} />
+                  <TeamMachines visible={open && active === category.id} />
+                </>
               )}
             </section>
           ))}

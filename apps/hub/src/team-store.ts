@@ -56,7 +56,7 @@ export class TeamStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
     if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='team_meta'").get()) {
       const version = this.db.prepare("SELECT value FROM team_meta WHERE key='schema'").get();
-      if (version && !["1", "2"].includes(String(version.value))) {
+      if (version && !["1", "2", "3"].includes(String(version.value))) {
         this.db.close();
         throw new Error("TEAM_SCHEMA_UNSUPPORTED");
       }
@@ -97,6 +97,12 @@ export class TeamStore {
         tokenHash TEXT NOT NULL UNIQUE, keys TEXT NOT NULL, state TEXT NOT NULL,
         report TEXT, digest TEXT, machineId TEXT UNIQUE, createdAt INTEGER NOT NULL, expires INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS team_gpt_profiles(
+        userId TEXT PRIMARY KEY REFERENCES team_users(id), slot INTEGER NOT NULL UNIQUE,
+        state TEXT NOT NULL CHECK(state IN ('requested','ready','failed')),
+        serviceToken TEXT NOT NULL, bridgeToken TEXT NOT NULL, vncPassword TEXT NOT NULL,
+        revision INTEGER NOT NULL, code TEXT, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
+      );
     `);
     const recorded = this.db.prepare("SELECT value FROM team_meta WHERE key='originalOwner'").get();
     if (recorded) {
@@ -129,7 +135,7 @@ export class TeamStore {
             Date.now(),
           );
         this.db.prepare("INSERT INTO team_meta VALUES('originalOwner',?)").run(this.ownerId);
-        this.db.prepare("INSERT INTO team_meta VALUES('schema','2')").run();
+        this.db.prepare("INSERT INTO team_meta VALUES('schema','3')").run();
         const put = this.db.prepare("INSERT INTO team_sessions VALUES(?,?,?,?,0)");
         for (const row of legacy.db
           .prepare("SELECT * FROM sessions WHERE expires>?")
@@ -152,7 +158,7 @@ export class TeamStore {
             );
       });
     }
-    this.db.prepare("UPDATE team_meta SET value='2' WHERE key='schema'").run();
+    this.db.prepare("UPDATE team_meta SET value='3' WHERE key='schema'").run();
     if (!recorded) this.db.prepare("INSERT INTO team_namespaces VALUES(?,1)").run(this.ownerId);
     if (
       this.db

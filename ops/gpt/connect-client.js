@@ -12,7 +12,8 @@ function text(value){status.textContent=value;status.hidden=!value}
 function resize(){document.documentElement.style.setProperty('--height',(window.visualViewport?.height??innerHeight)+'px');if(!client)return;const d=client.getDisplay();if(!d.getWidth())return;const scale=Math.min(surface.clientWidth/d.getWidth(),surface.clientHeight/d.getHeight(),1);d.scale(scale);host.style.left=Math.max(0,(surface.clientWidth-d.getWidth()*scale)/2)+'px';}
 async function connect(){
  client?.disconnect();host.replaceChildren();text('Подключаем браузер…');
- const tunnel=new G.WebSocketTunnel(location.origin.replace(/^http/,'ws')+'/gpt-connect/remote');
+ const workspace=document.querySelector('meta[name="codex-workspace"]')?.content;
+ const tunnel=new G.WebSocketTunnel(location.origin.replace(/^http/,'ws')+'/gpt-connect/remote'+(workspace?'?workspace='+encodeURIComponent(workspace):''));
  client=new G.Client(tunnel);const active=client,d=active.getDisplay();host.append(d.getElement());d.onresize=resize;
  active.onerror=e=>text(e.message||'Связь прервалась. Нажми «Подключиться».');tunnel.onerror=active.onerror;active.onstatechange=s=>{if(s===3){text('');resize()}else if(s===5)text('Браузер отключён. Нажми «Подключиться».')};
  mouse=new G.Mouse(d.getElement());mouse.onmousedown=mouse.onmouseup=mouse.onmousemove=s=>active.sendMouseState(s,true);

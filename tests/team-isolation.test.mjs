@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { createServer as tcpServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -13,13 +16,17 @@ import { tokenHash } from "../apps/hub/dist/auth.js";
 import { enrolledRuntime } from "../apps/hub/dist/machine-enrollment.js";
 import { enrollmentReport, hostFingerprint } from "../apps/hub/dist/machine-enrollment-store.js";
 import { createRecoveryLink, createSnapshot } from "../apps/hub/dist/maintenance.js";
+import { GuacParser, instruction } from "../apps/hub/dist/remote.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { teamPasswordHash } from "../apps/hub/dist/team-auth.js";
+import { TeamGpt, teamGptName } from "../apps/hub/dist/team-gpt.js";
+import { reconcileGptProfiles } from "../apps/hub/dist/team-gpt-host.js";
 import { createTeamHub } from "../apps/hub/dist/team-hub.js";
 import { restoreTeamSnapshot, verifyTeamSnapshot } from "../apps/hub/dist/team-maintenance.js";
 import { unzipSync } from "../apps/hub/node_modules/fflate/esm/index.mjs";
 import WebSocket from "../apps/hub/node_modules/ws/wrapper.mjs";
 import { gptSessionAllowed } from "../ops/gpt/session-watch.mjs";
+import { teamConnection } from "../ops/gpt/team-connection.mjs";
 import { configSchema } from "../packages/shared/dist/index.js";
 
 async function fixture(t, options = {}) {
@@ -769,4 +776,279 @@ test("failed personal startup releases session listeners and can be explicitly r
   );
   assert.equal((await f.request("/api/team/machines/apply", f.friend, "POST")).status, 200);
   assert.equal((await f.request("/api/workspace/notes", f.friend)).status, 200);
+});
+
+test("personal GPT provisioning is idempotent and never reuses another account, profile, or gateway identity", async (t) => {
+  const f = await fixture(t);
+  f.config.team.gptProfiles = { enabled: true, maxProfiles: 2, portBase: 8900 };
+  const service = new TeamGpt(f.config, f.registry);
+  assert.equal(
+    (await f.request("/api/team/gpt", f.friend, "POST", { userId: f.registry.ownerId })).status,
+    400,
+  );
+  assert.equal((await f.request("/api/team/gpt", f.friend, "POST", {})).status, 200);
+  const row = service.row(f.friendId);
+  assert.equal(service.runtime(f.friendId), undefined);
+  assert.equal((await f.request("/api/team/gpt", f.friend, "POST", {})).status, 200);
+  assert.deepEqual(service.row(f.friendId), row);
+  assert(
+    !JSON.stringify((await f.request("/api/team/gpt", f.friend)).body).includes(row.serviceToken),
+  );
+  assert.equal(service.row(f.registry.ownerId), undefined);
+  const commands = [],
+    networks = new Map(),
+    containers = new Map();
+  const run = async (args) => {
+    commands.push(args);
+    if (args[0] === "network" && args[1] === "ls") return [...networks.keys()].join("\n");
+    if (args[0] === "container" && args[1] === "ls") return [...containers.keys()].join("\n");
+    if (args[1] === "inspect")
+      return JSON.stringify([(args[0] === "network" ? networks : containers).get(args[2])]);
+    const labels = Object.fromEntries(
+      args.flatMap((arg, i) => (arg === "--label" ? [args[i + 1].split("=")] : [])),
+    );
+    if (args[0] === "network" && args[1] === "create") {
+      networks.set(args.at(-1), {
+        Labels: labels,
+        Driver: "bridge",
+        Internal: args.includes("--internal"),
+        Options: {
+          "com.docker.network.bridge.gateway_mode_ipv4": args.includes("--internal")
+            ? "isolated"
+            : "nat",
+        },
+      });
+      return "network";
+    }
+    if (args[0] === "create") {
+      const get = (flag) => args[args.indexOf(flag) + 1];
+      const imageIndex = args.findIndex(
+        (arg) => arg.startsWith("codex-web-gpt:") || arg.startsWith("guacamole/guacd:"),
+      );
+      containers.set(get("--name"), {
+        Config: {
+          Labels: labels,
+          Image: args[imageIndex],
+          User: get("--user"),
+          Cmd: args.slice(imageIndex + 1),
+          Env: args.flatMap((arg, i) => (arg === "--env" ? [args[i + 1]] : [])),
+        },
+        State: { Running: false },
+        Mounts: args.includes("--mount")
+          ? [
+              {
+                Type: "bind",
+                Source: get("--mount").split("source=")[1].split(",")[0],
+                Destination: "/data",
+              },
+            ]
+          : [],
+        HostConfig: {
+          CapDrop: ["ALL"],
+          SecurityOpt: ["no-new-privileges:true"],
+          PortBindings: Object.fromEntries(
+            args.flatMap((arg, i) =>
+              arg === "--publish"
+                ? [
+                    [
+                      args[i + 1].split(":")[2] + "/tcp",
+                      [{ HostIp: "127.0.0.1", HostPort: args[i + 1].split(":")[1] }],
+                    ],
+                  ]
+                : [],
+            ),
+          ),
+        },
+        NetworkSettings: { Networks: { [get("--network")]: {} } },
+      });
+      return "container";
+    }
+    if (args[0] === "network" && args[1] === "connect") {
+      containers.get(args[3]).NetworkSettings.Networks[args[2]] = {};
+      return "";
+    }
+    if (args[0] === "start") {
+      containers.get(args[1]).State.Running = true;
+      return "started";
+    }
+    throw Error("UNEXPECTED_FIXTURE_DOCKER_COMMAND");
+  };
+  const options = { image: "codex-web-gpt:75a5929", run, health: async () => false };
+  await reconcileGptProfiles(f.config, f.registry.db, options);
+  assert.equal(
+    service.row(f.friendId).state,
+    "requested",
+    "startup delay is not a failed or duplicate profile",
+  );
+  const outcome = await reconcileGptProfiles(f.config, f.registry.db, {
+    ...options,
+    health: async (endpoint, token) => {
+      assert.equal(endpoint, "http://127.0.0.1:8900/service-health");
+      assert.equal(token, row.serviceToken);
+      return true;
+    },
+  });
+  assert.equal(outcome.prepared, 1);
+  assert.equal(commands.filter((args) => args[0] === "create").length, 3);
+  assert.equal(commands.filter((args) => args[0] === "start").length, 3);
+  assert(!JSON.stringify(commands).includes(row.serviceToken));
+  assert.equal(process.env[service.runtime(f.friendId).tokenSecret], row.serviceToken);
+  assert.equal(service.runtime(f.registry.ownerId), undefined);
+  assert.equal(service.connection(f.friendId).host, teamGptName(f.friendId));
+  f.registry.db
+    .prepare("UPDATE team_gpt_profiles SET state='requested' WHERE userId=?")
+    .run(f.friendId);
+  const container = containers.get(teamGptName(f.friendId) + "-edge");
+  container.HostConfig.PortBindings["8786/tcp"][0].HostIp = "0.0.0.0";
+  assert.equal((await reconcileGptProfiles(f.config, f.registry.db, options)).failed, 1);
+  assert.equal(service.row(f.friendId).code, "GPT_CONTAINER_IDENTITY_CHANGED");
+  assert.equal(service.runtime(f.friendId), undefined);
+  container.HostConfig.PortBindings["8786/tcp"][0].HostIp = "127.0.0.1";
+  service.request(f.friendId);
+  await reconcileGptProfiles(f.config, f.registry.db, { ...options, health: async () => true });
+  const socketPath = join(f.root, "gateway.sock");
+  const gateway = createServer(async (req, res) => {
+    const reply = await f.app.inject({ method: "GET", url: req.url, headers: req.headers });
+    res.writeHead(reply.statusCode, { "content-type": "application/json" }).end(reply.body);
+  });
+  await new Promise((resolve) => gateway.listen(socketPath, resolve));
+  t.after(() => new Promise((resolve) => gateway.close(resolve)));
+  const connection = await teamConnection(
+    socketPath,
+    f.friend.cookie,
+    f.config.hub.publicBaseUrl,
+    f.friendId,
+  );
+  assert.equal(connection.password, row.vncPassword);
+  assert.equal(connection.gatewayPort, 9000);
+  await assert.rejects(
+    teamConnection(socketPath, f.owner.cookie, f.config.hub.publicBaseUrl, f.friendId),
+  );
+  await assert.rejects(
+    teamConnection(socketPath, f.friend.cookie, f.config.hub.publicBaseUrl, f.registry.ownerId),
+  );
+  assert.equal((await f.request("/api/internal/gpt/connection", f.friend)).status, 404);
+  f.registry.disable(f.registry.ownerId, f.friendId, true);
+  await assert.rejects(
+    teamConnection(socketPath, f.friend.cookie, f.config.hub.publicBaseUrl, f.friendId),
+  );
+  f.registry.disable(f.registry.ownerId, f.friendId, false);
+  f.registry.db
+    .prepare("INSERT OR REPLACE INTO team_meta VALUES('nativeAdmission','blocked')")
+    .run();
+  assert.equal(service.runtime(f.friendId), undefined);
+  await assert.rejects(
+    reconcileGptProfiles(f.config, f.registry.db, options),
+    /RESTORE_ADMISSION_REQUIRED/,
+  );
+  await assert.rejects(
+    teamConnection(socketPath, f.friend.cookie, f.config.hub.publicBaseUrl, f.friendId),
+  );
+});
+
+test("protected GPT connection page and live Remote bind one user and close on revocation", async (t) => {
+  const f = await fixture(t),
+    connected = [],
+    sockets = new Set();
+  const guacd = tcpServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    const parser = new GuacParser();
+    socket.on("data", (data) => {
+      for (const parts of parser.feed(String(data))) {
+        if (parts[0] === "select")
+          socket.write(instruction("args", "hostname", "port", "password"));
+        if (parts[0] === "connect") {
+          connected.push(parts.slice(1));
+          socket.write(instruction("ready", "fixture"));
+        }
+      }
+    });
+  });
+  await new Promise((resolve) => guacd.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => guacd.close(resolve));
+  });
+  const remotePort = guacd.address().port;
+  assert(remotePort >= 9000 && remotePort <= 65109);
+  f.config.team.gptProfiles = { enabled: true, maxProfiles: 2, portBase: remotePort - 100 };
+  const service = new TeamGpt(f.config, f.registry);
+  service.request(f.friendId);
+  f.registry.db
+    .prepare("UPDATE team_gpt_profiles SET state='ready' WHERE userId=?")
+    .run(f.friendId);
+  const row = service.row(f.friendId),
+    socketPath = join(f.root, "login.sock");
+  const uds = createServer(async (req, res) => {
+    const reply = await f.app.inject({ method: "GET", url: req.url, headers: req.headers });
+    res.writeHead(reply.statusCode, { "content-type": "application/json" }).end(reply.body);
+  });
+  await new Promise((resolve) => uds.listen(socketPath, resolve));
+  t.after(() => new Promise((resolve) => uds.close(resolve)));
+  const portProbe = tcpServer();
+  await new Promise((resolve) => portProbe.listen(0, "127.0.0.1", resolve));
+  const port = portProbe.address().port;
+  await new Promise((resolve) => portProbe.close(resolve));
+  const process = spawn(globalThis.process.execPath, ["ops/gpt/login-gateway.mjs"], {
+    env: {
+      ...globalThis.process.env,
+      GPT_PUBLIC_ORIGIN: f.config.hub.publicBaseUrl,
+      GPT_HUB_URL: f.base,
+      HUB_ENGINE_SOCKET: socketPath,
+      GPT_GATEWAY_PORT: String(port),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  t.after(async () => {
+    if (process.exitCode === null) {
+      process.kill("SIGTERM");
+      await once(process, "exit");
+    }
+  });
+  await new Promise((resolve, reject) => {
+    process.stdout.once("data", resolve);
+    process.once("error", reject);
+    process.once("exit", () => reject(Error("gateway startup failed")));
+  });
+  const page = await fetch(`http://127.0.0.1:${port}/gpt-connect`, {
+    headers: { cookie: f.friend.cookie },
+  });
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert(html.includes(`content="${f.friendId}"`));
+  assert(!html.includes(row.vncPassword));
+  const denied = async (workspace) =>
+    new Promise((resolve, reject) => {
+      const socket = new WebSocket(
+        `ws://127.0.0.1:${port}/gpt-connect/remote?workspace=${workspace}`,
+        { headers: { Cookie: f.friend.cookie, Origin: f.config.hub.publicBaseUrl } },
+      );
+      socket.on("unexpected-response", (_, res) => {
+        res.resume();
+        socket.terminate();
+        resolve(res.statusCode);
+      });
+      socket.on("error", () => {});
+      socket.on("open", () => {
+        socket.terminate();
+        reject(Error("unexpected cross-workspace connection"));
+      });
+    });
+  assert.equal(await denied(f.registry.ownerId), 401);
+  assert.equal(await denied(""), 401);
+  const live = new WebSocket(`ws://127.0.0.1:${port}/gpt-connect/remote?workspace=${f.friendId}`, {
+    headers: { Cookie: f.friend.cookie, Origin: f.config.hub.publicBaseUrl },
+  });
+  t.after(() => live.terminate());
+  await once(live, "message");
+  assert.deepEqual(connected, [[teamGptName(f.friendId), "5900", row.vncPassword]]);
+  const closed = once(live, "close");
+  f.registry.disable(f.registry.ownerId, f.friendId, true);
+  await closed;
+  assert.equal(
+    (await fetch(`http://127.0.0.1:${port}/gpt-connect`, { headers: { cookie: f.friend.cookie } }))
+      .status,
+    401,
+  );
 });

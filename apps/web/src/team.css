@@ -3,13 +3,16 @@
   gap: 1rem;
   min-width: 0;
 }
-.team-machines {
+.team-machines,
+.team-gpt {
   margin-top: 1.25rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
 }
 .team-machines h3,
-.team-machines p {
+.team-machines p,
+.team-gpt h3,
+.team-gpt p {
   margin: 0;
 }
 .team-fingerprint {

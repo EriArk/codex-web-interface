@@ -110,6 +110,13 @@ export const configSchema = z
         root: z.string().startsWith("/").max(2000),
         maxUsers: z.number().int().min(2).max(10).default(10),
         hubTailnetAddress: tailnetAddressSchema.optional(),
+        gptProfiles: z
+          .object({
+            enabled: z.boolean().default(false),
+            maxProfiles: z.number().int().min(1).max(10).default(2),
+            portBase: z.number().int().min(8900).max(65000).default(8900),
+          })
+          .optional(),
       })
       .optional(),
     machines: z.array(machine).max(20),

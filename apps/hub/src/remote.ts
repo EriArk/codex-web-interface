@@ -93,8 +93,9 @@ export function connectRemote(
   socket: WebSocket,
   provider: RemoteProvider,
   size: { width: number; height: number },
+  gatewayPort = 4822,
 ): () => void {
-  const guacd = createConnection({ host: "127.0.0.1", port: 4822 });
+  const guacd = createConnection({ host: "127.0.0.1", port: gatewayPort });
   const decoder = new StringDecoder("utf8"),
     parser = new GuacParser(),
     inputParser = new GuacParser();

@@ -145,6 +145,7 @@ export default function App() {
   useEffect(() => {
     const update = () => setRecovering(/(?:^|&)(?:recover|join)=/.test(location.hash.slice(1)));
     window.addEventListener("hashchange", update);
+    update();
     return () => window.removeEventListener("hashchange", update);
   }, []);
   const login = useCallback((value: Session) => {

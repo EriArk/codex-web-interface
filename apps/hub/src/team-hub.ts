@@ -24,6 +24,7 @@ import { MachineEnrollmentStore } from "./machine-enrollment-store.js";
 import { proxyPrivateHttp, proxyPrivateSocket } from "./private-proxy.js";
 import { Store } from "./store.js";
 import { sessionCookie, TeamAuth } from "./team-auth.js";
+import { TeamGpt } from "./team-gpt.js";
 import { publicUser, TeamStore } from "./team-store.js";
 import { webSecurity } from "./web-security.js";
 
@@ -64,12 +65,13 @@ export function privateConfig(config: HubConfig, registry: TeamStore, userId: st
       machines: blocked ? [] : [...structuredClone(config.machines), ...enrolled.machines],
       devices: blocked ? [] : [...structuredClone(config.devices), ...enrolled.devices],
       projects: blocked ? [] : structuredClone(config.projects),
-      gpt: blocked ? undefined : config.gpt,
+      gpt: new TeamGpt(config, registry).runtime(userId),
     };
   const root = privateDirectory(join(config.team!.root, "users", user.id));
   return {
     hub: { ...config.hub, databasePath: join(root, "app.db"), resultsPath: join(root, "results") },
     auth: { username: user.login },
+    gpt: new TeamGpt(config, registry).runtime(userId),
     machines: enrolled.machines,
     projects: [],
     devices: enrolled.devices,
@@ -98,6 +100,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const ownerStore = options.store ?? new Store(config.hub.databasePath);
   const registry = new TeamStore(join(config.team.root, "team.db"), config, ownerStore);
   const enrollments = new MachineEnrollmentStore(registry);
+  const teamGpt = new TeamGpt(config, registry);
   const auth = new TeamAuth(config, ownerStore, registry);
   const app = Fastify({
     logger: options.logger
@@ -301,6 +304,8 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   // Forward before body parsing, preserving streaming uploads and without retaining request content.
   app.addHook("onRequest", async (req, reply) => {
     const path = req.url.split("?")[0]!;
+    if (path.startsWith("/api/internal/"))
+      return reply.code(404).send({ error: { code: "NOT_FOUND", message: "Не найдено." } });
     if (
       !path.startsWith("/api/") ||
       path === "/api/health" ||
@@ -549,6 +554,24 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     user: publicUser(registry.active(actor(req))),
     originalOwner: actor(req) === registry.ownerId,
   }));
+  app.get("/api/team/gpt", async (req) => {
+    const userId = actor(req),
+      current = await instances.get(userId)?.catch(() => undefined);
+    return { ...teamGpt.status(userId), activated: !!current?.runtime.sessions.config.gpt };
+  });
+  app.post("/api/team/gpt", slow, (req) => {
+    z.object({})
+      .strict()
+      .parse(req.body ?? {});
+    return teamGpt.request(actor(req));
+  });
+  app.post("/api/team/gpt/apply", async (req) => {
+    const userId = actor(req);
+    if (!teamGpt.runtime(userId))
+      throw new HubError(409, "GPT_PROFILE_NOT_READY", "Личный браузер ещё не готов.");
+    await restartPersonal(userId);
+    return { ok: true };
+  });
   app.get("/api/team/users", (req) => ({ items: registry.users(actor(req)) }));
   app.post("/api/team/invitations", slow, (req) => {
     const b = z.object({ name: teamNameSchema }).strict().parse(req.body);
@@ -610,6 +633,19 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     };
   });
   if (options.executionService) {
+    app.get("/internal/gpt/connection", (req) => {
+      const session = auth.session(req);
+      const { workspace } = z
+        .object({ workspace: z.string().uuid().optional() })
+        .strict()
+        .parse(req.query);
+      if (
+        req.headers.origin !== config.hub.publicBaseUrl ||
+        (workspace && workspace !== session.user.id)
+      )
+        throw new HubError(403, "WORKSPACE_CHANGED", "Войди снова в нужный аккаунт.");
+      return teamGpt.connection(session.user.id);
+    });
     const instance = randomUUID();
     app.get("/internal/runtime", () => ({
       protocol: ENGINE_PROTOCOL,

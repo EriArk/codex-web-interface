@@ -90,6 +90,22 @@ try {
           );
           const panel = page.getByLabel("Участники установки");
           assert.equal(await panel.evaluate((el) => el.scrollWidth > el.clientWidth + 1), false);
+          await expect
+            .poll(
+              () =>
+                page
+                  .locator(".settings-heading")
+                  .evaluate(
+                    (el) =>
+                      getComputedStyle(el).color ===
+                      getComputedStyle(el.querySelector('[aria-label="Закрыть настройки"]')).color,
+                  ),
+              {
+                message:
+                  "close control follows the actual header foreground after theme transition",
+              },
+            )
+            .toBe(true);
           await page.screenshot({ path: `.local/qa-team/${engine}-${theme}-${width}.png` });
         }
       }
@@ -130,10 +146,23 @@ try {
         }),
       ).toBeVisible();
       config.team.hubTailnetAddress = "100.64.0.1";
+      config.team.gptProfiles = { enabled: true, maxProfiles: 2, portBase: 8900 };
       // Reopen the category to refresh immediately, without waiting for the polling interval.
       await page.locator('[data-category="access"]').click();
       await page.locator('[data-category="connections"]').click();
       await expect(page.getByLabel("Название компьютера")).toBeVisible();
+      await page.getByRole("button", { name: "Подготовить мой ChatGPT", exact: true }).click();
+      await expect(page.getByText("Сервер готовит твой браузер.", { exact: false })).toBeVisible();
+      // No real browser/account is provisioned by this network-isolated UI fixture.
+      hub.registry.db
+        .prepare("UPDATE team_gpt_profiles SET state='ready' WHERE userId=?")
+        .run(friendId);
+      await page.locator('[data-category="access"]').click();
+      await page.locator('[data-category="connections"]').click();
+      await expect(page.getByRole("link", { name: "Открыть мой ChatGPT и войти" })).toHaveAttribute(
+        "href",
+        "/gpt-connect",
+      );
       await page.getByLabel("Название компьютера").fill("Мой игровой компьютер " + engine);
       const download = page.waitForEvent("download");
       await page.getByRole("button", { name: "Подключить Windows ПК", exact: true }).click();
@@ -180,6 +209,10 @@ try {
             document.documentElement.dataset.theme = id;
           }, theme);
           const panel = page.locator(".team-machines");
+          assert.equal(
+            await page.locator(".team-gpt").evaluate((el) => el.scrollWidth > el.clientWidth + 1),
+            false,
+          );
           assert.equal(await panel.evaluate((el) => el.scrollWidth > el.clientWidth + 1), false);
           assert.equal(
             await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
@@ -196,6 +229,16 @@ try {
         engine +
           ": invitation, account switch, private drafts and 12 theme/viewport combinations passed",
       );
+    } catch (error) {
+      await page.screenshot({ path: `.local/qa-team/${engine}-failure.png` });
+      console.error(
+        await page.evaluate(() => ({
+          joining: location.hash.startsWith("#join="),
+          title: document.querySelector("h1")?.textContent,
+          labels: [...document.querySelectorAll("label")].map((label) => label.textContent),
+        })),
+      );
+      throw error;
     } finally {
       await context.close();
       await browser.close();

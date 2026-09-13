@@ -32,6 +32,9 @@ export function Login({
   useEffect(() => {
     const update = () => setLink(readLink());
     window.addEventListener("hashchange", update);
+    // A same-document invitation may arrive between render and subscription,
+    // especially immediately after logout in WebKit.
+    update();
     return () => window.removeEventListener("hashchange", update);
   }, []);
   async function submit(event: FormEvent) {

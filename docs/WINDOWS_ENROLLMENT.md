@@ -28,6 +28,6 @@ Registry backups retain the approved owner/machine identity and private transpor
 
 The current checks cover installer packaging and PS5 UTF-8 decoding, native status handling, fingerprint display, firewall rule classification, exact retry, root containment, approval authorization, owner-only transport materialization, runtime recovery and identity-preserving backups. Windows checks render controls offscreen and use harmless native fixture commands; they do not install software or change the owner's SSH/firewall/accounts.
 
-The first real friend-PC installation, simultaneous native-account workflows, per-user GPT browser provisioning, Remote setup and final lifecycle acceptance remain tracked in [the roadmap](ROADMAP.md). An installed package is not evidence of a completed hardware test.
+The first real friend-PC installation, simultaneous native-account workflows, Windows Remote setup and final lifecycle acceptance remain tracked in [the roadmap](ROADMAP.md). Personal GPT provisioning and its isolated browser are described in [TEAM_GPT.md](TEAM_GPT.md). An installed package is not evidence of a completed hardware test.
 
 Native Codex installation follows [OpenAI's Windows instructions](https://learn.chatgpt.com/docs/windows/windows-app). Dependencies use their official WinGet sources; GitHub authorization remains in [GitHub CLI](https://cli.github.com/manual/gh_auth_login).

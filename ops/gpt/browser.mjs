@@ -40,7 +40,11 @@ start('node',['/opt/gpt/bridge.mjs']);
 const password=readFileSync('/data/vnc-password','utf8').trim();
 await new Promise((resolve,reject)=>{const p=start('x11vnc',['-storepasswd',password,'/data/vnc-auth']);p.once('exit',code=>code===0?resolve():reject(Error('VNC password setup failed')))});
 start('x11vnc',['-display',':91','-rfbauth','/data/vnc-auth','-rfbport','5900','-forever','-shared','-noxdamage','-repeat']);
-context=await chromium.launchPersistentContext('/data/profile',{channel:'chromium',headless:false,viewport:null,args:['--hide-crash-restore-bubble','--no-first-run','--no-default-browser-check','--window-size=480,900','--start-maximized','--disable-extensions-except=/opt/bridge/tools/chrome-bridge-extension','--load-extension=/opt/bridge/tools/chrome-bridge-extension']});
+const workspaceId=process.env.GPT_WORKSPACE_ID;
+if(workspaceId&&!/^[a-f0-9-]{36}$/.test(workspaceId))throw Error('GPT_WORKSPACE_INVALID');
+context=await chromium.launchPersistentContext('/data/profile',{channel:'chromium',headless:false,viewport:null,
+ ...(workspaceId?{proxy:{server:'http://codex-web-gpt-'+workspaceId+'-edge:3128',bypass:'127.0.0.1,localhost'}}:{}),
+ args:['--hide-crash-restore-bubble','--no-first-run','--no-default-browser-check','--window-size=480,900','--start-maximized','--disable-extensions-except=/opt/bridge/tools/chrome-bridge-extension','--load-extension=/opt/bridge/tools/chrome-bridge-extension']});
 context.on('close',()=>{if(!closing)void close('browser-closed',1)});
 context.on('page',page=>page.on('crash',()=>console.error('GPT lifecycle: page-crashed')));
 const bridgeToken=readFileSync('/data/bridge-token','utf8').trim();
@@ -63,6 +67,9 @@ server=createServer(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!authorized(req)){res.writeHead(401).end();return}
  const url=new URL(req.url,'http://localhost');
+ if(req.method==='GET'&&url.pathname==='/service-health'){
+  res.writeHead(closing?503:200,{'Content-Type':'application/json'}).end(JSON.stringify({ready:!closing}));return;
+ }
  if(req.method==='POST'&&['/bridge/sessions/new','/bridge/sessions/select'].includes(url.pathname)){
   try{
    const body=await readJson(req,4096),sessionId=url.pathname.endsWith('/new')?null:(body.sessionId??'');

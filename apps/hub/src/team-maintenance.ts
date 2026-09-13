@@ -71,7 +71,7 @@ function ownership(db: DatabaseSync) {
   )
     throw new Error("TEAM_REGISTRY_INVALID");
   if (
-    !["1", "2"].includes(
+    !["1", "2", "3"].includes(
       String(db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value),
     )
   )
@@ -107,6 +107,9 @@ function mapping(db: DatabaseSync) {
   return JSON.stringify({
     ...ownership(db),
     runtimes: db.prepare("SELECT * FROM team_runtime_config ORDER BY userId").all(),
+    gptProfiles: db.prepare("SELECT name FROM sqlite_master WHERE name='team_gpt_profiles'").get()
+      ? db.prepare("SELECT userId,slot,state,revision FROM team_gpt_profiles ORDER BY userId").all()
+      : [],
     enrollments: db
       .prepare("SELECT name FROM sqlite_master WHERE name='team_machine_enrollments'")
       .get()

@@ -1,5 +1,12 @@
 # Verification record
 
+## Personal GPT candidate — 2026-09-13
+
+- Full Linux suite: **433 passed**. Added private GPT request/retry, identity tamper rejection, internal socket routing, public-only proxy/DNS tests, and a real login-gateway process with a fixture Guacamole transport. Wrong workspace and revoked session connections are rejected; revocation closes an established tunnel.
+- A disposable empty profile used real Docker networks and the candidate GPT browser. Its authenticated adapter, dedicated Guacamole handshake and public HTTP proxy worked. The browser had no default route; direct Internet/LAN/Tailnet and proxied internal destinations were denied. All three test containers and their two networks were removed after verification. No production profile, login, native prompt or owner writer was used.
+- Chromium/WebKit access, personal-machine installer and GPT setup flows passed across four themes and phone/tablet/PC dimensions. A repeatable WebKit failure found a missed same-document invitation immediately after logout; synchronizing the fragment on subscription fixed it. A login-gateway readiness log also moved after the listener actually binds.
+- New profile host setup is documented in TEAM_GPT.md. These checks establish candidate behavior, not friend-PC/native-account acceptance. Stopped-profile backup/readmission, Windows Remote and remaining collaboration gates are still outstanding. Stable production is unchanged.
+
 ## Windows enrollment candidate — 2026-09-13
 
 - Linux typecheck, build and full suite: **429 tests passed**. The 18 focused root/enrollment/team checks include genuine HTTP dispatch, exact creation/report retries, wrong-owner/token-purpose rejection, immutable fingerprint review, no seed-project startup, activation work guards, failed-runtime cleanup/retry and backup restoration of the same owner/keys with native admission blocked.

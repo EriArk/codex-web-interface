@@ -43,6 +43,8 @@ Root policy and the initial Windows enrollment master are implemented in the can
 
 The member downloads one ZIP and opens `Connect.cmd`: a Windows wizard installs missing prerequisites, guides native sign-ins and folder selection, sets separate restricted command/terminal keys and reports a pinned computer identity. Exact retries retain keys and the submitted report. The administrator verifies identity, then the member activates only their idle personal runtime. See [the connection guide](WINDOWS_ENROLLMENT.md). Linux passed 429 tests; Chromium/WebKit covered enrollment download/status and four themes at phone/tablet/PC widths; Windows PS5 parsing and harmless offscreen controls/native-status checks passed. No real friend-PC installation, Tailnet admission, Remote or independent GPT provisioning has been accepted yet. Production is unchanged.
 
+Additional Gate B candidate progress: independent GPT profiles, account-bound login/Remote routing and a host provisioning service are implemented. Real disposable Docker checks passed private ingress, public-only egress, no direct LAN/Tailnet route and a dedicated Guacamole handshake. The original owner's profile remains untouched. See [GPT setup and remaining profile recovery work](TEAM_GPT.md). No friend native login has been tested.
+
 ### Gate C — shared project and independent workstations
 
 Issues: #153, #154, #157. Depends on Gate B; shared-state schema/permission design starts in Gate A.
@@ -79,6 +81,8 @@ Issue #158, physical acceptance #10; foundations already required in Gate A.
 - #14: historical stabilization/distribution tracker; ongoing personal reliability is relevant, old unchecked completed modules are not new backlog.
 - Full Canvas creation/editing, cross-chat GPT search, extra native integrations and full voice conversation are outside this pass.
 - GitHub Actions are excluded. Use Linux verification and preserve the owner's everyday hardware feedback loop.
+
+New defects observed during this pass: #165 native Plan → Implement transition, and #166 native Computer Use pipe/lifecycle diagnosis. These are additional focused work; do not replace Computer Use with Preview or infer support from the existence of an executable.
 
 ## Historical initial roadmap
 
