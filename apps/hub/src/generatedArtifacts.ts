@@ -108,7 +108,11 @@ export class GeneratedArtifacts {
       .prepare("SELECT id FROM results WHERE threadId=? AND sourceKey=?")
       .get(c.threadId, sourceKey);
     const type =
-      file && /^image\/(png|jpeg|webp|gif)$/.test(String(file.mime)) ? "image" : "artifact";
+      file &&
+      Number(file.bytes) <= 32 * 1024 * 1024 &&
+      /^image\/(png|jpeg|webp|gif)$/.test(String(file.mime))
+        ? "image"
+        : "artifact";
     const id = old
       ? String(old.id)
       : this.store.result(c.threadId, c.turnId, sourceKey, type, c.name, payload);
