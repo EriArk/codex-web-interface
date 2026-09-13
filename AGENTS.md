@@ -594,3 +594,7 @@ Before mobile support is considered complete, the same core workflow must also w
 
 - Files and Git have separate icon-only buttons in the Codex header, each opening its own window directly for the selected project. This supersedes the combined header shortcut/menu. Keep equal square touch targets and preserve chat state.
 - Remove the Settings button from the top bar in both Codex and GPT; Settings remains in the sidebar footer.
+
+## Owner-requested Canvas navigation follow-up (2026-09-13)
+
+- On the next GPT Results pass, include existing Canvas documents as Results cards and open the existing document viewer from them. Remove the separate Canvas header shortcut. Keep exact private conversation/document identities. This is a deferred navigation task, not approval to expand into full Canvas authoring now.

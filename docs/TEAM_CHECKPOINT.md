@@ -2,6 +2,14 @@
 
 The owner asked to finish this pass and continue in short sessions. Code is on `feat/team-workspaces`; checked stages are committed and pushed. This document is the restart point, not a claim that every team acceptance gate is complete.
 
+## Enabled-Team maintenance tooling verified — 2026-09-13
+
+The #158 host updater now supports subsequent engine updates with coordinated cold checkpoints of every Hub namespace, shared assets, private configuration and the exact former engine/web pair. It verifies ownership/access/profile bindings, private table presence/passwords/native thread IDs and rehearses restoration before public admission. Pre-admission failures restore all managed data and retain the failed candidate; a durable admission marker forbids rollback over newly accepted writes. Running GPT profile mounts and their inodes remain untouched. This is tooling for the next engine release, not a live engine replacement or full #158 offboarding acceptance.
+
+Verification: 41 focused Linux tests passed, including a Python fault suite with 15 scenarios; first-owner activation, Team isolation, profile-backup and Unix-engine tests remain green. The updater also rejects a `web-only` publisher image as an engine candidate. A new private current-state backup, `stable-team-maintenance-20260913T204514Z`, was checksum-verified and restored separately. The exact rollback helper then rehearsed a network-isolated boot of the installed `60b326892` engine on that restored copy, checked privacy/native identity admission and restored it again. No copied native connection was opened. Receipts: `summary.json` and `final-rehearsal.json` inside that protected backup.
+
+Production remains on engine/gateway `60b326892`, GPT `7f25d37` and web `754632d`; container IDs/start times and public web pointer were unchanged throughout the rehearsal. Native maintenance currently reports active/unknown Codex work, so no engine cutover was attempted. Each later engine image still needs its own build/compatibility proof and final idle guard. Next functional contracts: writable Files #169, GPT project Results and the newly requested Canvas document cards/removal of its header button.
+
 ## Direct Files/Git windows installed — 2026-09-13
 
 Web-only `754632d` is public, asset `87d03a3d8ad1c2a6beccd281ef71b08a3065538a6690b1a14660f604db06f8d8`, verified through public version and HTML stamps. Files and Git have separate direct header icons/windows and broad layouts; Settings remains in the sidebar footer in both clients. Codex Results uses the whole project's existing authorized feed with exact source links. Files is still read-only; GPT project aggregation and writable Files require the next server contracts after #158.
