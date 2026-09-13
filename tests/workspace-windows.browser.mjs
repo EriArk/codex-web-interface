@@ -26,6 +26,39 @@ for (const [engine, type] of [
   await context.addCookies([{ name, value, url: origin, httpOnly: true, sameSite: "Strict" }]);
   const page = await context.newPage(),
     errors = [];
+  let extraProjectReads = 0;
+  await page.route("**/api/workspace/projects*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("offset") === "100") {
+      extraProjectReads++;
+      return route.fulfill({
+        json: {
+          items: [
+            {
+              scope: { client: "codex", projectId: "later", name: "Проект на следующей странице" },
+              availability: "available",
+            },
+          ],
+          nextOffset: null,
+        },
+      });
+    }
+    const response = await route.fetch(),
+      pageData = await response.json();
+    return route.fulfill({
+      response,
+      json: {
+        items: [
+          ...pageData.items,
+          ...Array.from({ length: 99 }, (_, i) => ({
+            scope: { client: "codex", projectId: `extra-${i}`, name: `Дополнительный проект ${i}` },
+            availability: "available",
+          })),
+        ],
+        nextOffset: 100,
+      },
+    });
+  });
   page.on("pageerror", (e) => errors.push(e.message));
   const open = async (label) => {
     if (page.viewportSize().width < 800)
@@ -54,6 +87,21 @@ for (const [engine, type] of [
       await open(label);
       const dialog = page.locator(`dialog[data-workspace-module="${mode}"]`);
       await expect(dialog).toBeVisible();
+      const projects = dialog.locator(".workspace-project-filter select");
+      await expect(projects).toBeVisible();
+      await expect(projects.locator('option[value="codex:project"]')).toHaveCount(1);
+      await projects.selectOption("codex:project");
+      await expect(projects).toHaveValue("codex:project");
+      if (!(await projects.locator('option[value="codex:later"]').count())) {
+        const reads = extraProjectReads;
+        await expect(projects.locator('option[value="load-more"]')).toHaveCount(1);
+        await projects.selectOption("load-more");
+        await expect(projects.locator('option[value="codex:later"]')).toHaveCount(1);
+        await expect(projects).toHaveValue("codex:project");
+        assert.equal(extraProjectReads, reads + 1);
+      }
+      await projects.selectOption("all");
+      await expect(dialog.locator(".task-project-filters")).toHaveCount(0);
       await expect(dialog.getByRole("navigation", { name: "Разделы проекта" })).toHaveCount(0);
       await expect(page.locator(".workspace-window[open]")).toHaveCount(1);
       await page.keyboard.press("Escape");
@@ -62,6 +110,32 @@ for (const [engine, type] of [
     }
     await open("Заметки");
     const dialog = page.locator('dialog[data-workspace-module="notes"]');
+    for (const theme of ["crt-green", "hitech-2000s"]) {
+      await page.evaluate((theme) => {
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.caseColor = "blue";
+      }, theme);
+      for (const width of [390, 1376]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1032 });
+        await expect
+          .poll(() =>
+            dialog
+              .locator(".notebook-heading")
+              .evaluate((el) => getComputedStyle(el).backgroundImage),
+          )
+          .not.toBe("none");
+        assert.equal(
+          await dialog
+            .locator(".notebook-task-controls")
+            .evaluate((el) => getComputedStyle(el).backgroundColor),
+          "rgba(0, 0, 0, 0)",
+        );
+        await page.screenshot({
+          path: `.local/qa-windows/${engine}-${theme}-toolbar-${width}.png`,
+        });
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
     await dialog.getByRole("button", { name: "Новая заметка", exact: true }).click();
     await dialog.getByRole("textbox", { name: "Название заметки" }).fill("Материалы и контраст");
     await dialog
@@ -128,6 +202,10 @@ for (const [engine, type] of [
             const key = getComputedStyle(el.querySelector(".notebook-save .primary"));
             for (const stop of ["--cap-top", "--cap-mid", "--cap-low"])
               values.push(ratio(key.color, resolved(stop)));
+            const caption = el.querySelector(".notebook-context small");
+            if (caption)
+              for (const stop of ["--cap-top", "--cap-mid", "--cap-low"])
+                values.push(ratio(getComputedStyle(caption).color, resolved(stop)));
             probe.remove();
           }
           return values;

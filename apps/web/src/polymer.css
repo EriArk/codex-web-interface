@@ -55,7 +55,7 @@
   --polymer-letter-shadow: 0 1px 0 #06131ce6, 0 -1px 0 #ffffff1a;
 }
 
-:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) {
+:is(:root, .case-swatch):is([data-theme="crt-green"], [data-theme="hitech-2000s"]) {
   --case-tint: var(--polymer-tint);
   --case-top: color-mix(in srgb, var(--case-tint) 94%, #fff);
   --case-mid: var(--case-tint);
@@ -92,7 +92,7 @@
   --field-shadow: inset 0 2px 3px #00161626, 0 1px #fff8;
   --status-surface: var(--case-low);
 }
-:root[data-theme="crt-green"] {
+:is(:root, .case-swatch)[data-theme="crt-green"] {
   /* Evening casing: a neutral charcoal mix, never a green filter. */
   --case-tint: color-mix(in srgb, var(--polymer-tint) 16%, #07080b);
   --case-top: color-mix(in srgb, var(--case-tint) 98%, #fff);
@@ -115,7 +115,7 @@
   --field-shadow: inset 0 2px 4px #000a, 0 1px #9ce9ae18;
 }
 /* Deliberately bright, polished shells, even around the evening CRT screen. */
-:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]):is(
+:is(:root, .case-swatch):is([data-theme="crt-green"], [data-theme="hitech-2000s"]):is(
   [data-case-color="white"],
   [data-case-color="yellow"],
   [data-case-color="silver"]
@@ -140,7 +140,7 @@
     0 3px 3px #0005;
 }
 /* Dark CRT plastic is matte: relief comes from seams, not illuminated edges. */
-:root[data-theme="crt-green"]:not(
+:is(:root, .case-swatch)[data-theme="crt-green"]:not(
   :is([data-case-color="white"], [data-case-color="yellow"], [data-case-color="silver"])
 ) {
   --case-top: var(--case-tint);
@@ -684,6 +684,12 @@ button.case-swatch {
 button.case-swatch[aria-pressed="true"] {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+button.case-swatch:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) {
+  background: var(--case-surface);
+  color: var(--case-ink);
+  border-color: var(--case-seam);
+  box-shadow: var(--case-shadow);
 }
 .case-color-error {
   font-size: 13px;

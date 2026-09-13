@@ -99,9 +99,36 @@ for (const [engine, type] of [
         ["Зелёный", "green"],
         ["Бирюзовый", "turquoise"],
       ]) {
+        const preview = await button(label).evaluate((el) => {
+          const style = getComputedStyle(el);
+          return { image: style.backgroundImage, color: style.backgroundColor, ink: style.color };
+        });
         await button(label).click();
         await expect(button(label)).toBeEnabled();
         await expect(page.locator("html")).toHaveAttribute("data-case-color", id);
+        if (["crt-green", "hitech-2000s"].includes(theme)) {
+          await expect
+            .poll(() =>
+              page
+                .locator(".workspace-header")
+                .evaluate((el) => getComputedStyle(el).backgroundImage),
+            )
+            .toBe(preview.image);
+          assert.equal(
+            await page.locator(".workspace-header").evaluate((el) => getComputedStyle(el).color),
+            preview.ink,
+          );
+        } else {
+          const accent = await page.evaluate(() => {
+            const probe = document.createElement("span");
+            probe.style.backgroundColor = "var(--accent)";
+            document.body.append(probe);
+            const color = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return color;
+          });
+          assert.equal(preview.color, accent, `${theme}/${id}: swatch predicts the actual accent`);
+        }
         assert.equal(
           f.store.preferences()[
             {

@@ -70,19 +70,22 @@ for (const [engine, type] of [
     await open();
     const panel = page.getByRole("dialog", { name: "Задачи", exact: true });
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole("button", { name: "Все", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(panel.getByRole("combobox", { name: "Проекты задач" })).toHaveValue("all");
     await expect(
       panel.locator(".notebook-row").filter({ hasText: "Личное напоминание" }),
     ).toBeVisible();
     await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toBeVisible();
-    await panel.getByRole("button", { name: "Без проекта", exact: true }).click();
+    await panel
+      .getByRole("combobox", { name: "Проекты задач" })
+      .selectOption({ label: "Без проекта" });
     await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toHaveCount(0);
-    await panel.getByRole("button", { name: "Другой проект · GPT", exact: true }).click();
+    await panel
+      .getByRole("combobox", { name: "Проекты задач" })
+      .selectOption({ label: "Другой проект · GPT" });
     await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toBeVisible();
-    await panel.getByRole("button", { name: "Project · Codex", exact: true }).click();
+    await panel
+      .getByRole("combobox", { name: "Проекты задач" })
+      .selectOption({ label: "Project · Codex" });
     await expect(panel.locator(".notebook-row").filter({ hasText: "GPT задача" })).toHaveCount(0);
     await panel.getByRole("button", { name: "Новая задача", exact: true }).tap();
     const title = panel.getByRole("textbox", { name: "Название задачи" }),
@@ -124,7 +127,7 @@ for (const [engine, type] of [
     ).toBeVisible();
     await page.screenshot({ path: `.local/qa-tasks/${engine}-phone-list.png` });
     await panel.getByRole("button", { name: "Вернуть в работу: Проверить читалку" }).tap();
-    assert.equal(tasks.get(task.id).status, "todo");
+    await expect.poll(() => tasks.get(task.id).status).toBe("todo");
     await panel.getByRole("combobox", { name: "Состояние задач" }).selectOption("open");
     await panel
       .locator(".notebook-row")
@@ -173,10 +176,7 @@ for (const [engine, type] of [
     await page.locator(".theme-option.hitech-2000s input").check();
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
     await open();
-    await expect(panel.getByRole("button", { name: "Все", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(panel.getByRole("combobox", { name: "Проекты задач" })).toHaveValue("all");
     await page.screenshot({ path: `.local/qa-tasks/${engine}-tablet.png` });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await panel.getByRole("button", { name: "Закрыть задачи" }).click();
@@ -188,10 +188,7 @@ for (const [engine, type] of [
     await expect(gpt).toBeVisible();
     await gpt.fill("Мой черновик GPT");
     await open();
-    await expect(panel.getByRole("button", { name: "Все", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(panel.getByRole("combobox", { name: "Проекты задач" })).toHaveValue("all");
     await expect(
       panel.locator(".notebook-row").filter({ hasText: "Проверить результат" }),
     ).toBeVisible();

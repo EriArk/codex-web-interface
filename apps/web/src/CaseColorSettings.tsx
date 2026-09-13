@@ -41,6 +41,7 @@ export function CaseColorSettings({ theme }: { theme: Theme }) {
             key={color}
             type="button"
             className="case-swatch"
+            data-theme={theme}
             data-case-color={color}
             aria-label={caseColorNames[color]}
             title={caseColorNames[color]}

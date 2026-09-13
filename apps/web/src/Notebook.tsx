@@ -34,6 +34,7 @@ import { useSharedResource } from "./sharedResources";
 import { openSharedProjects } from "./TeamProjectsHost";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import { useWorkspaceAudience, WorkspaceAudience } from "./WorkspaceAudience";
+import { WorkspaceProjectFilter } from "./WorkspaceProjectFilter";
 import "./notebook.css";
 export type NotebookRequest = {
   scope: NotebookScope;
@@ -440,12 +441,6 @@ function NotebookEditor({
       window.removeEventListener("online", refresh);
     };
   }, [request, refreshDrafts]);
-  useEffect(() => {
-    if (isTask && scope)
-      dialog.current
-        ?.querySelector('.task-project-filters [aria-pressed="true"]')
-        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [isTask, scope]);
   const operation = async (fn: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
@@ -722,50 +717,36 @@ function NotebookEditor({
       )}
       {
         <div className="notebook-task-controls" data-editing={!!edit}>
-          <fieldset
-            className="task-project-filters"
-            aria-label={isTask ? "Проекты задач" : "Проекты заметок"}
-          >
-            {[
-              ["all", "Все"] as const,
+          <WorkspaceProjectFilter
+            label={isTask ? "Проекты задач" : "Проекты заметок"}
+            value={scope}
+            choices={[
+              ["all", "Все проекты"],
               ...orderedScopes.map(([key, s]) => [key, projectLabel(s)] as const),
-            ].map(([key, name]) => (
-              <button
-                type="button"
-                key={key}
-                aria-pressed={scope === key}
-                disabled={busy}
-                onClick={() => setScope(key)}
-              >
-                {name}
-              </button>
-            ))}
-            {projects.nextOffset !== null && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void operation(async () => {
-                    const next = await api<TaskProjectsPage>(
-                      `/workspace/projects?offset=${projects.nextOffset}`,
-                    );
-                    setProjects((old) => ({
-                      items: [
-                        ...old.items,
-                        ...next.items.filter(
-                          (p) =>
-                            !old.items.some((n) => notebookKey(n.scope) === notebookKey(p.scope)),
-                        ),
-                      ],
-                      nextOffset: next.nextOffset,
-                    }));
-                  })
-                }
-              >
-                Ещё проекты
-              </button>
-            )}
-          </fieldset>
+            ]}
+            disabled={busy}
+            onChange={setScope}
+            onMore={
+              projects.nextOffset !== null
+                ? () =>
+                    void operation(async () => {
+                      const next = await api<TaskProjectsPage>(
+                        `/workspace/projects?offset=${projects.nextOffset}`,
+                      );
+                      setProjects((old) => ({
+                        items: [
+                          ...old.items,
+                          ...next.items.filter(
+                            (p) =>
+                              !old.items.some((n) => notebookKey(n.scope) === notebookKey(p.scope)),
+                          ),
+                        ],
+                        nextOffset: next.nextOffset,
+                      }));
+                    })
+                : undefined
+            }
+          />
           <button
             type="button"
             className="icon-button"

@@ -90,6 +90,70 @@
 :root .workspace-window > .shared-project-identity small {
   margin-top: 3px;
 }
+.workspace-project-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  max-width: 620px;
+}
+.workspace-project-filter > span {
+  flex: none;
+  font-size: 0.9rem;
+}
+.workspace-project-filter select {
+  appearance: auto;
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+/* The title and tool rails are part of the casing, above the inset screen. */
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .workspace-window
+  > .notebook-heading {
+  background: var(--window-shell);
+  border: 1px solid var(--window-edge);
+  border-radius: 10px 10px 5px 5px;
+  box-shadow: var(--case-shadow);
+  padding: 4px 10px;
+  text-shadow: var(--case-letter-shadow);
+  margin-bottom: 4px;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .workspace-window
+  > :is(
+    .notebook-task-controls,
+    .notebook-controls,
+    .shared-project-identity,
+    .shared-audience-bar,
+    .shared-tabs
+  ) {
+  background: transparent;
+  color: var(--case-ink);
+  border-bottom: 0;
+  padding: 8px 10px 12px;
+  text-shadow: var(--case-letter-shadow);
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .workspace-window
+  > .shared-project-identity
+  small {
+  color: inherit;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
+  .workspace-window
+  > .notebook-task-controls
+  > .icon-button {
+  flex: 0 0 44px;
+  height: 44px;
+  background: var(--cap-surface);
+  color: var(--cap-ink);
+  border: 1px solid var(--case-seam);
+  border-radius: 7px;
+  box-shadow: var(--cap-shadow);
+}
 :root .workspace-window :is(.notebook-list, .notebook-editor, .shared-scroll) {
   padding: 14px;
   overscroll-behavior: contain;
@@ -120,15 +184,7 @@
 :root .workspace-window > .notebook-heading button:focus-visible {
   outline-color: var(--window-ink);
 }
-:root
-  .workspace-window
-  :is(
-    .secondary,
-    .primary,
-    .notebook-mode button,
-    .task-project-filters button,
-    .shared-tabs button
-  ) {
+:root .workspace-window :is(.secondary, .primary, .notebook-mode button, .shared-tabs button) {
   min-height: 44px;
   border: 1px solid var(--window-edge);
   border-radius: 7px;
@@ -141,10 +197,11 @@
 :root .workspace-window .primary {
   font-weight: 700;
 }
-:root
-  .workspace-window
-  :is(.notebook-mode, .task-project-filters, .shared-tabs)
-  button[aria-pressed="true"],
+:root .workspace-window :is(.primary, .secondary) :is(small, .muted) {
+  color: inherit;
+  text-shadow: inherit;
+}
+:root .workspace-window :is(.notebook-mode, .shared-tabs) button[aria-pressed="true"],
 :root .workspace-window :is(.primary, .secondary):active:not(:disabled) {
   background: var(--window-pressed);
   box-shadow: var(--window-pressed-shadow);
@@ -201,21 +258,8 @@
     inset 3px 0 var(--accent),
     inset 0 1px 3px #0002;
 }
-:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .workspace-shortcuts button {
-  margin: 3px 0;
-  border: 1px solid var(--case-seam);
-  border-radius: 8px;
-  background: var(--cap-surface);
-  box-shadow: var(--cap-shadow);
-  color: var(--cap-ink);
-  text-shadow: var(--cap-letter-shadow);
-}
 :root .workspace-shortcuts button svg {
   color: inherit;
-}
-:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .workspace-shortcuts button:active {
-  background: var(--case-pressed);
-  box-shadow: var(--case-pressed-shadow);
 }
 @media (max-width: 700px) {
   :root[data-theme] dialog.workspace-window,

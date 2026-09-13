@@ -49,9 +49,8 @@ for (const [engine, type] of [
     await open();
     await expect(panel).toBeVisible();
     await panel
-      .getByRole("group", { name: "Проекты заметок" })
-      .getByRole("button", { name: "Project · Codex", exact: true })
-      .click();
+      .getByRole("combobox", { name: "Проекты заметок" })
+      .selectOption({ label: "Project · Codex" });
     await panel.getByRole("button", { name: "Новая заметка", exact: true }).tap();
     const title = panel.getByRole("textbox", { name: "Название заметки" }),
       body = panel.getByRole("textbox", { name: "Текст заметки" });
@@ -154,10 +153,7 @@ for (const [engine, type] of [
     await expect(gpt).toBeVisible();
     await gpt.fill("Черновик GPT остаётся");
     await open();
-    await expect(panel.getByRole("button", { name: "Все", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(panel.getByRole("combobox", { name: "Проекты заметок" })).toHaveValue("all");
     await panel.getByRole("button", { name: "Новая заметка" }).click();
     await title.fill("Общая заметка из GPT");
     await body.fill("Не трогаем нативный браузер");
@@ -171,8 +167,8 @@ for (const [engine, type] of [
       { client: "codex", kind: "thread", id: f.thread.id, title: f.thread.title },
       true,
     );
-    await panel.getByRole("button", { name: "Без проекта", exact: true }).click();
-    await panel.getByRole("button", { name: "Все", exact: true }).click();
+    await panel.getByRole("combobox", { name: "Проекты заметок" }).selectOption("global");
+    await panel.getByRole("combobox", { name: "Проекты заметок" }).selectOption("all");
     await panel
       .getByRole("region", { name: "Закреплённые", exact: true })
       .getByRole("button", { name: "Handoff chat", exact: true })

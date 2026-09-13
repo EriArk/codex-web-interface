@@ -583,3 +583,9 @@ Before mobile support is considered complete, the same core workflow must also w
 - Files starts read-only. An explicit lock control enables file management for the selected authorized project/checkout: create files/folders, rename, copy and move; deletion names the target and requires confirmation. Changing project or closing the window relocks it. The control must reflect real server capabilities, never a cosmetic unlock.
 - Use typed authenticated operations through the existing machine transport, constrained to canonical project roots and the acting user's checkout. Preserve revision/conflict checks and uncertain-operation receipts; no caller shell commands, silent overwrites, credential transfer or public machine listener. This is an explicit extension of the former read-only Files inspector; Git mutations retain their existing separate review flow.
 - Record writable file management with #169 and the Files/Git window pass. Its engine changes still require the coordinated enabled-Team upgrade/restore prerequisite in #158; compatible UI-only releases remain independent.
+
+## Owner-requested window controls and accurate color previews (2026-09-13)
+
+- Restore the earlier unframed icon/label appearance of the sidebar Tasks/Notes/Plans/Reports/Shared shortcuts. Keep their common row, placement and touch targets; do not turn them into individual raised keycaps.
+- In CRT and Hi-Tech, tool-window headings and project/tool controls belong to the physical casing above the inset reading area. Project filters use a dropdown, replacing horizontal project-chip strips; retain All/unassigned scopes and bounded catalog pagination.
+- Settings color swatches must preview the actual current-theme material using the same color/shading definitions as the installed casing (or actual accent in Organizer/Classic Dark). Preserve existing panel brightness, matte CRT darkness and glossy white/yellow/silver exceptions; change the swatches, not the panels.

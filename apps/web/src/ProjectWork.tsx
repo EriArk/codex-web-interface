@@ -31,6 +31,7 @@ import { sharedMutation } from "./sharedRequests";
 import { openSharedProjects } from "./TeamProjectsHost";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import { useWorkspaceAudience, WorkspaceAudience } from "./WorkspaceAudience";
+import { WorkspaceProjectFilter } from "./WorkspaceProjectFilter";
 import "./notebook.css";
 import "./project-work.css";
 
@@ -479,44 +480,32 @@ export function ProjectWorkPanel({
         </button>
       </header>
       <div className="notebook-task-controls" data-editing={editing}>
-        <fieldset className="task-project-filters" aria-label="Проекты рабочего раздела">
-          {[
-            ["all", "Все"],
-            ...[...choices].map(([key, p]) => [
-              key,
-              `${p.name} · ${p.client === "gpt" ? "GPT" : "Codex"}`,
-            ]),
-          ].map(([key, name]) => (
-            <button
-              type="button"
-              key={key}
-              aria-pressed={scope === key}
-              disabled={busy}
-              onClick={() => setScope(key!)}
-            >
-              {name}
-            </button>
-          ))}
-          {projects.nextOffset !== null && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const next = await api<TaskProjectsPage>(
-                    "/workspace/projects?offset=" + projects.nextOffset,
-                  );
-                  setProjects((old) => ({
-                    items: [...old.items, ...next.items],
-                    nextOffset: next.nextOffset,
-                  }));
-                })
-              }
-            >
-              Ещё проекты
-            </button>
-          )}
-        </fieldset>
+        <WorkspaceProjectFilter
+          label="Проекты рабочего раздела"
+          value={scope}
+          choices={[
+            ["all", "Все проекты"],
+            ...[...choices].map(
+              ([key, p]) => [key, `${p.name} · ${p.client === "gpt" ? "GPT" : "Codex"}`] as const,
+            ),
+          ]}
+          disabled={busy}
+          onChange={setScope}
+          onMore={
+            projects.nextOffset !== null
+              ? () =>
+                  void run(async () => {
+                    const next = await api<TaskProjectsPage>(
+                      "/workspace/projects?offset=" + projects.nextOffset,
+                    );
+                    setProjects((old) => ({
+                      items: [...old.items, ...next.items],
+                      nextOffset: next.nextOffset,
+                    }));
+                  })
+              : undefined
+          }
+        />
         <button
           type="button"
           className="icon-button"
