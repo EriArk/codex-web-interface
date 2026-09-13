@@ -31,3 +31,16 @@
 .task-boundary:has(.work-review-link) {
   flex-wrap: wrap;
 }
+.native-plan-action {
+  margin-block: 10px 4px;
+}
+.native-plan-action .result-chip {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+}
+.native-plan-action p {
+  margin: 6px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}

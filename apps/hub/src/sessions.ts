@@ -1077,7 +1077,11 @@ export class Sessions extends EventEmitter {
     attachmentIds: string[] = [],
     clientMessageId?: string,
     diagnostic = false,
-    internal?: { beforeCommit?: () => void; outputSchema?: Record<string, unknown> },
+    internal?: {
+      beforeCommit?: () => void;
+      beforeSubmit?: (rpc: CodexClient) => Promise<void>;
+      outputSchema?: Record<string, unknown>;
+    },
   ): Promise<Record<string, unknown>> {
     let committing = false;
     try {
@@ -1149,6 +1153,7 @@ export class Sessions extends EventEmitter {
           });
           r.loaded.add(id);
         }
+        await internal?.beforeSubmit?.(r.rpc);
         const prepared = await this.attachments.prepare(
           { ...this.config, projects: this.catalog.projects() },
           id,

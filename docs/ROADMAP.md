@@ -84,6 +84,8 @@ Issue #158, physical acceptance #10; foundations already required in Gate A.
 
 New defects observed during this pass: #165 native Plan → Implement transition, and #166 native Computer Use pipe/lifecycle diagnosis. These are additional focused work; do not replace Computer Use with Preview or infer support from the existence of an executable.
 
+The candidate now implements #165's native Plan → Work transition with exact structured-plan validation, Current Chat/settings binding, queue/ownership guards and a durable receipt. Native desktop inspection established the actual follow-up contract; five backend regressions and Chromium/WebKit lost-acknowledgement/reload/draft scenarios passed. Full Linux suite: 438 passed. See [native contract](NATIVE_PLAN.md). #166's [read-only diagnosis](COMPUTER_USE_DIAGNOSIS.md) identifies the desktop-owned pipe lifecycle missing from standalone Companion; no global settings or desktop lifecycle was changed. These additions remain isolated from production. Smaller-tablet viewport coverage is being added after the owner's clarification.
+
 ## Historical initial roadmap
 
 The original phases below describe the path to the existing personal product. They are retained as history; they do not override the current gates or reclassify implemented modules as future work.

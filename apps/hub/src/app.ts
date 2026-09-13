@@ -40,6 +40,7 @@ import { registerGpt } from "./gpt.js";
 import { registerGuiPreviews } from "./gui-previews.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
+import { NativePlans, registerNativePlans } from "./native-plan.js";
 import { registerNavigation } from "./navigation.js";
 import { registerNotebook } from "./notebook.js";
 import { registerProjectOverview } from "./overview.js";
@@ -691,6 +692,7 @@ export async function createApp(
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
   const projectWork = registerProjectWork(app, sessions, gpt, queue);
+  registerNativePlans(app, new NativePlans(sessions, projectWork.context));
   registerRelays(app, sessions, projectWork, queue);
   registerGuiPreviews(app, sessions, artifacts, projectWork.context, options.guiPreviewProbe);
   registerWorkspaceTasks(app, sessions);

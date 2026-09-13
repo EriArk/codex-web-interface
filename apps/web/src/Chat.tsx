@@ -30,6 +30,7 @@ import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
 import { SpeechButton, useSpeechScope } from "./MessageSpeech";
+import { NativePlan } from "./NativePlan";
 import { clearAcknowledgedSend, matchesPendingSend } from "./pendingSend";
 import { TurnDetails } from "./TurnDetails";
 import { useCompletionPosition } from "./useCompletionPosition";
@@ -677,6 +678,18 @@ export function Chat({
                         ]}
                       />
                     </div>
+                    {message.role === "assistant" &&
+                      message.phase === "plan" &&
+                      state.messages.findLast((m) => m.phase === "plan")?.id === message.id && (
+                        <NativePlan
+                          key={threadId + ":" + message.id}
+                          threadId={threadId}
+                          messageId={message.id}
+                          revision={`${state.thread.status}:${state.thread.activeTurnId ?? ""}:${state.messages.at(-1)?.id ?? ""}`}
+                          visible={visible}
+                          disabled={busy || writeBlocked || queue.busy}
+                        />
+                      )}
                     {message.role === "assistant" &&
                       message.phase !== "commentary" &&
                       results.some((r) => r.turnId === message.turnId) && (

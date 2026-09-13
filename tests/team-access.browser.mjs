@@ -74,6 +74,9 @@ try {
       await expect(page.getByLabel("Участники установки")).toBeVisible();
       for (const [width, height] of [
         [390, 844],
+        [768, 1024],
+        [1024, 768],
+        [1280, 800],
         [1376, 1032],
         [1920, 1080],
       ]) {
@@ -227,7 +230,7 @@ try {
       assert.deepEqual(errors, []);
       console.log(
         engine +
-          ": invitation, account switch, private drafts and 12 theme/viewport combinations passed",
+          ": invitation, account switch, private drafts and 24 theme/viewport combinations passed",
       );
     } catch (error) {
       await page.screenshot({ path: `.local/qa-team/${engine}-failure.png` });

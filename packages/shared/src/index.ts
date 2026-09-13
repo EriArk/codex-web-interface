@@ -387,3 +387,12 @@ export {
 } from "./tasks.js";
 export * from "./usage.js";
 export * from "./work-review.js";
+
+export interface NativePlanAction {
+  threadId: string;
+  messageId: string;
+  turnId: string;
+  revision: string;
+  state: "ready" | "starting" | "submitted" | "unknown" | "unavailable";
+  message: string;
+}

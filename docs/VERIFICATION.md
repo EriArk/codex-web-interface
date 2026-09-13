@@ -1,5 +1,13 @@
 # Verification record
 
+Compact tablet addition (2026-09-13): Chromium and WebKit passed native Plan controls at 390×844, 768×1024, 1024×768, 1280×800 and 1376×1032 in four themes. Below 1100px, navigation and the wide-pane control remain hidden, Chat/Results switch one primary pane and preserve the typed draft. Team enrollment/settings/account switching passed the same widths plus 1920×1080 (48 theme/viewport combinations across both engines). Inspected WebKit compact landscape Hi-Tech and portrait CRT screenshots; no horizontal overflow, controls remain reachable. Exact friend tablet model is unknown; this is browser verification, not hardware acceptance.
+
+## Native Plan candidate and Computer Use diagnosis — 2026-09-13
+
+- Full Linux backend suite: **438 passed**. Five focused native Plan tests cover structured successful Plan versus Work/failed/interrupted/unknown, exact desktop prompt/mode, duplicate activation, canonical/source/settings/current-chat changes, queue guards, pending attachment preservation, exact lost-acknowledgement reconciliation and isolated thread metadata reads.
+- Chromium/WebKit passed native Plan → Work with lost acknowledgement, reload, one native start, preserved typed draft, another selected chat and four themes at phone/13-inch tablet widths. The action's tablet touch height was corrected to 44px after a screenshot/geometry check found the shared small-chip size. No real native task was started by these fixtures.
+- Read-only installed desktop/App Server inspection established #165's real ordinary-turn contract and #166's desktop-owned Computer Use pipe/approval lifecycle. Source identifiers and limitations are in NATIVE_PLAN.md and COMPUTER_USE_DIAGNOSIS.md. No native Computer Use success, configuration repair or physical acceptance is claimed. Production remains unchanged.
+
 ## Personal GPT candidate — 2026-09-13
 
 - Full Linux suite: **433 passed**. Added private GPT request/retry, identity tamper rejection, internal socket routing, public-only proxy/DNS tests, and a real login-gateway process with a fixture Guacamole transport. Wrong workspace and revoked session connections are rejected; revocation closes an established tunnel.

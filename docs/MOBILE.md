@@ -1,5 +1,7 @@
 # Mobile / iPhone UX
 
+The second member also uses a smaller tablet (owner update, 2026-09-13; exact model pending). Candidate verification must include compact tablet portrait/landscape, initially 768×1024, 1024×768 and 1280×800 CSS viewports alongside the 13-inch reference. Use available CSS width, not diagonal size or device sniffing. Below the wide-layout boundary keep one primary pane, drawer navigation and preserved drafts when switching Chat/Results. Do not reduce touch targets or text to squeeze in three columns. Browser simulation is not hardware acceptance.
+
 The 13-inch iPad remains the primary reference device, but iPhone support is a **first-class product requirement**, not a shrunken desktop fallback.
 
 The expected mobile use case is occasional but real: check a project, message Codex, approve/interrupt work, inspect a screenshot/result, view status, or briefly take control through Remote while away from the iPad.
