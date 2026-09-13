@@ -2,7 +2,7 @@
 
 ## Current team milestone
 
-The approved [Team Workspace](TEAM_WORKSPACE.md) adds user identity and explicit collaboration to the same functional themed UI. Desktop and mobile are both required for the second user. Production remains on the current stable interface while candidate screens are tested separately.
+The approved [Team Workspace](TEAM_WORKSPACE.md) adds user identity and explicit collaboration to the same functional themed UI. Desktop and mobile are both required for the second user. Owner-enabled functionality is installed; admission of a real second user is still pending. Subsequent changes are tested separately before installation.
 
 - Access settings contain personal account/security; admins additionally see users/invitations and machine-pairing metadata. Personal content never appears in an administrative user preview.
 - Joining follows invitation → own credentials → Windows master → chosen project folders → diagnostics → admin-approved PC. Native Codex/GPT/GitHub sign-ins have independent readiness states; one unavailable account does not masquerade as another person's connection.
@@ -14,6 +14,8 @@ The approved [Team Workspace](TEAM_WORKSPACE.md) adds user identity and explicit
 - Compact screens use existing sheets/single-view navigation; wide screens use available space with independent scrolling. Existing keyboard, 44px targets, theme contrast and session-change draft isolation apply to every new form.
 
 ## Primary design target
+
+Latest owner direction (2026-09-13): Tasks/Notes/Plans/Reports each use an independent window; Files and Git become separate windows rather than a combined support-pane mode. Shared projects join the same workspace shortcut row under a concise label («Общие»). Results keep project-wide scope only, with exact source backlinks. Common casing/screen/button/field primitives must cover existing and new forms, respecting each theme and the visible keyboard viewport. This supersedes older combined-pane/tab descriptions below. The [visual audit and remaining-work plan](ISSUE_AUDIT_2026-09-13.md) specifies the transitions and verification; this redesign is not installed yet.
 
 **13-inch iPad, landscape, standalone PWA.**
 

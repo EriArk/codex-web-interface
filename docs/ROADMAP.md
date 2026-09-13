@@ -1,10 +1,20 @@
 # Roadmap
 
+## Next short passes — audit of 2026-09-13
+
+The current [issue and interface audit](ISSUE_AUDIT_2026-09-13.md) accounts for all 30 open and 50 closed issues, including new #176/#177. It distinguishes missing functionality from implemented work awaiting acceptance. The owner requests a plan before further development; the window/material redesign below is **planned, not installed**.
+
+Execution order: (1) shared window/material primitives and the five-item workspace shortcut row; (2) independent Tasks/Notes and Plans/Reports windows plus consistent forms; (3) separate Files/Git windows, project-only Results and exact artifact navigation #168; (4) everyday settings #171/#175/#177 and focused native #165/#166 checks; (5) finish team admission/bindings/onboarding/shared follow-through; (6) separate editor #169 and Technical Viewer #167; (7) protected server sandboxes #170; (8) final Help #174 and acceptance. Keep each step a short independently verified pass. Top-level documentation #176 is an immediate separate cleanup and stays current throughout.
+
+**Release dependency:** finish the coordinated already-enabled-team backup/upgrade/restore path in #158 before the next engine/schema update, even if an earlier UX step needs that update. Compatible web-only releases can use the existing independent gateway/assets path. Friend-PC admission does not gate owner-only UI polish; real independent accounts/hardware do gate team acceptance. Full acceptance details and remaining work per issue are in the audit; Gates A–E below retain their original scope.
+
 ## Current milestone — private team workspaces (approved 2026-09-13)
 
 The personal-workspace foundation is implemented. The next pass follows [the agreed specification](TEAM_WORKSPACE.md) and [tracker #159](https://github.com/EriArk/codex-web-interface/issues/159). Initially two people use the current Hub, each with their own Windows PC and Codex/GPT/GitHub accounts. Desktop and mobile remain first-class clients.
 
-Production currently remains on stable `379fa17`; candidate code, state and browser profiles are isolated. The owner now permits verified staged updates before the whole pass is finished, provided ordinary Codex and the ability to request recovery remain operational. Each installation still requires its Codex continuity, backup/rollback and maintenance checks; an unfinished working tree is not installable. Never connect a copied owner runtime to live native writers. Implementation, test evidence, installation and real acceptance are tracked separately.
+Production was verified during the audit on engine/gateway `60b326892`, with maintenance status `installed`, healthy services and the original GPT `7f25d37` profile retained. Owner-only Team activation is enabled, login is `eriark` with the existing password, and new-member registration remains closed. `379fa17` is the preserved pre-team backup baseline. Ordinary Codex and recovery continuity remain required for every subsequent update; never connect a copied owner runtime to live native writers. Implementation, test evidence, installation and real acceptance are tracked separately.
+
+The dated candidate-progress paragraphs below are historical development evidence, including their then-current “not installed” statements and test counts. They do not override the installed status above. Unchecked gates remain unchecked until their complete acceptance passes; deployed owner functionality alone does not satisfy independent-member acceptance.
 
 ### Gate 0 — stable checkpoint and decisions
 

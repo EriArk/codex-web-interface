@@ -2,7 +2,9 @@
 
 ## Overview
 
-The installed Codex Web Interface is a personal web workspace with pluggable execution backends. The owner-approved next architecture adds isolated personal workspaces and explicit team collaboration on the same Hub; [Team Workspace](TEAM_WORKSPACE.md) defines those boundaries. Production remains on the stable personal release until the replacement passes acceptance.
+The installed Codex Web Interface combines personal workspaces with pluggable execution backends and owner-enabled team functionality on one Hub; [Team Workspace](TEAM_WORKSPACE.md) defines the privacy/collaboration boundaries. The 2026-09-13 audit confirmed engine/gateway `60b326892` installed, with new-member registration still closed. Independent-member acceptance is incomplete; see the [current audit](ISSUE_AUDIT_2026-09-13.md) and [release checkpoint](TEAM_CHECKPOINT.md).
+
+This introduction describes the current boundary. Some original v1 sections below still need the comprehensive documentation reconciliation tracked in #176, especially historical storage/module and Companion descriptions; they do not supersede AGENTS.md, later decisions or the current feature-specific contracts.
 
 The current public service is a replaceable web/API gateway. The persistent engine owns native sessions, SQLite, authentication, queues, GPT orchestration and private PTYs over a private Unix socket. Gateway changes do not replace the execution engine. Windows execution goes through the logged-in local-only Companion, not an interactive SSH desktop session.
 

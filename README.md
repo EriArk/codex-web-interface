@@ -1,10 +1,10 @@
 # Codex Web Interface
 
-Private Codex/GPT workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine. The installed personal workspace is the stable baseline; [private team workspaces](docs/TEAM_WORKSPACE.md) are the approved next milestone, not yet a claim of installed multi-user support.
+Private Codex/GPT workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine. The current installation includes owner-enabled [private team workspace](docs/TEAM_WORKSPACE.md) functionality; registration of additional members remains closed pending independent-account and isolation acceptance. See [the current issue and interface audit](docs/ISSUE_AUDIT_2026-09-13.md) for what is installed, unfinished and planned.
 
 ## Available now
 
-- Password-only login. The owner chooses the first password through a private, single-use setup link.
+- Authenticated access: initial personal enrollment uses a private single-use setup link; the migrated owner uses their login and existing password, preserving native accounts and workflow. Member invitation/setup remains a separate admission step.
 - Automatic discovery of real Windows Codex projects and conversations; create a project or choose an existing folder from the website.
 - Continue the same native thread, with streaming, resume, approvals, questions and interrupt.
 - Live model discovery, native Work/Plan mode and model-specific reasoning effort, saved per thread.
@@ -70,7 +70,7 @@ For loopback development, use publicBaseUrl `http://127.0.0.1:8780` and secureCo
 
 Native Codex project discovery and bounded external history are implemented. [Sync and Remote behavior](docs/SYNC_AND_REMOTE.md) explains the desktop saved-folder limitation and continuation semantics. Notes, Files/Git and generated artifact Results are implemented. Additional execution machines and selected project-root enforcement are prerequisites of the current team milestone. The local Linux transport exists; broad second-machine acceptance is tracked separately from configured device terminals.
 
-[Roadmap](docs/ROADMAP.md) distinguishes implemented personal features, pending team work and physical acceptance. Current production stays on its verified stable image while team changes are developed and tested with isolated state. The full Canvas editor, global search through every native GPT conversation and a distributable separate-Hub installer are not part of this pass.
+[Roadmap](docs/ROADMAP.md) distinguishes implemented personal features, installed owner-enabled team functionality, pending member admission and physical acceptance. Further changes are developed and verified with isolated state before guarded updates. The full Canvas editor, global search through every native GPT conversation and a distributable separate-Hub installer are not part of this pass.
 
 Read [AGENTS.md](AGENTS.md), [decisions](docs/DECISIONS.md), [architecture](docs/ARCHITECTURE.md), [mobile UX](docs/MOBILE.md) and [security](docs/SECURITY.md) before substantial changes.
 

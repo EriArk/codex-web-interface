@@ -2,6 +2,12 @@
 
 The owner asked to finish this pass and continue in short sessions. Code is on `feat/team-workspaces`; checked stages are committed and pushed. This document is the restart point, not a claim that every team acceptance gate is complete.
 
+## Installation confirmed at the subsequent audit
+
+Read-only inspection on 2026-09-13 confirmed engine/gateway `60b326892` healthy and Maintenance `installed`; GPT remains `7f25d37` with its original profile. The owner's Team workspace is enabled and new-member registration stays closed. The previous queue observation below is historical, not the current release state. No separate friend-PC/account acceptance is implied.
+
+The owner has now requested an issue/visual audit before continuing. Use [the complete remaining-work map](ISSUE_AUDIT_2026-09-13.md) and the updated [ROADMAP](ROADMAP.md) for the next short passes, including #176/#177, independent workspace windows, separate Files/Git windows and project-only Results. Those new UI changes have not been implemented by this documentation pass.
+
 ## Implemented candidate
 
 - Private identities, account-scoped runtime/storage, root restrictions and guided Windows enrollment foundations; isolated GPT provisioning and stopped-profile backup/restore.
@@ -24,9 +30,11 @@ The owner superseded the team-disabled `99953827f` queue with a request to enabl
 
 This activation requires a migration rehearsal, exact-image login/session and rollback checks, and read-only Codex continuity verification. It still waits for active/unknown Codex/GPT work; verified idle shells alone do not block it. Before public admission, failure restores the prior configuration/database/image and preserves the failed registry privately. Already-enabled team upgrades must use coordinated team backups, not this first-owner rollback. The actual installed/pending revision comes from authenticated Maintenance and the deployment receipt, never Git HEAD. The original GPT profile remains in place.
 
-Release `60b326892` passed those first-owner checks and all 526 tests. It is queued by `codex-web-owner-team-60b326892.service`; the final observed state is **waiting**, with healthy `379fa17` still serving the owner. At that check the guard saw one Codex work/unknown state and GPT activity/browser work. The queue automatically continues once both are idle; this record does not claim completed installation. Evidence is stored privately under `verification-60b326892` on the Hub. Matching Windows GitHub delivery helpers were installed with a local backup, and a read-only worker check confirmed the existing EriArk identity/repository access.
+At the end of the previous long pass, release `60b326892` had passed the first-owner checks and all 526 tests and was queued by `codex-web-owner-team-60b326892.service`. The last observation in that pass was **waiting**, with healthy `379fa17` still serving the owner; the guard saw Codex work/unknown state and GPT activity/browser work. The later installation is confirmed above. Evidence is stored privately under `verification-60b326892` on the Hub. Matching Windows GitHub delivery helpers were installed with a local backup, and a read-only worker check confirmed the existing EriArk identity/repository access.
 
-## Next short passes, in order
+## Remaining functional work at the previous checkpoint
+
+This list preserves the previous checkpoint; the latest ordered passes, including the owner's UI revision, are in ROADMAP and the linked audit above.
 
 1. **Finish new-member admission and subsequent team updates.** Audit all remaining private capability/background-revocation families and coordinated identity/profile restoration/readmission; complete the general team-aware deployment/rollback boundary. Keep stable recovery usable. Gates A/B/E remain open until their recorded checks pass. Owner-only activation does not satisfy those gates.
 2. **Complete shared work follow-through.** Explicit accepted-result reconciliation into the exact shared Plan revision, relevant notifications and the remaining draft/checkout picker details. Existing private Plan reconciliation does not yet update a common Plan automatically; do not claim that it does.
