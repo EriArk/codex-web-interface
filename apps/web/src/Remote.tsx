@@ -73,6 +73,7 @@ export function Remote({
   onSnapshot,
   onImmersiveChange,
   onBack,
+  onCollapse,
 }: {
   projectId: string;
   threadId: string;
@@ -81,6 +82,7 @@ export function Remote({
   onSnapshot: () => void;
   onImmersiveChange: (value: boolean) => void;
   onBack: () => void;
+  onCollapse?: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null),
     inputHost = useRef<HTMLDivElement>(null),
@@ -497,6 +499,11 @@ export function Remote({
     }
   };
   const expand = () => {
+    if (full && onCollapse) {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      onCollapse();
+      return;
+    }
     setFull((value) => !value);
     if (!full && pane.current?.requestFullscreen)
       void pane.current.requestFullscreen().catch(() => {});

@@ -8,30 +8,25 @@ import {
   useRef,
   useState,
 } from "react";
-import { AccountControls } from "./AccountControls";
-import { AppearanceSettings, useLegacyLayout } from "./AppearanceSettings";
+import { useLegacyLayout } from "./AppearanceSettings";
 import {
   admitWorkspace,
   accountLocalStorage as localStorage,
   accountSessionStorage as sessionStorage,
 } from "./accountStorage.ts";
 import { ApiError, api, configureApi, messageOf } from "./api";
-import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import { Chat } from "./Chat";
 import type { RecoveryOutcome } from "./ConnectionRecovery";
 import { ContentSearch, type SearchRequest } from "./ContentSearch";
-import { DeploymentStatus } from "./DeploymentStatus";
-import { DesktopControl } from "./DesktopControl";
-import { EntityArchive, type LibraryChange, libraryEvent } from "./EntityMenu";
+import { type LibraryChange, libraryEvent } from "./EntityMenu";
 import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { MachineHealthPanel } from "./MachineHealth";
-import { SpeechSettings } from "./MessageSpeech";
-import { NativeInventory } from "./NativeInventory";
 import { NotebookPanel, type NotebookRequest, type WorkspaceDestination } from "./Notebook";
-import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
+import { type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PaneDivider } from "./PaneDivider";
+import { PcRemote } from "./PcRemote";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectFiles } from "./ProjectFiles";
 import { ProjectNavigation } from "./ProjectNavigation";
@@ -40,8 +35,6 @@ import { completePendingSend, pendingSendKey } from "./pendingSend";
 import { Remote } from "./Remote";
 import { ResultFeed } from "./ResultFeed";
 import { ActivityPane } from "./Results";
-import { SettingsSections } from "./SettingsSections";
-import { StorageUsage } from "./StorageUsage";
 import { applyTheme, cachedTheme, hydrateCaseColors } from "./theme";
 import type {
   Activity,
@@ -55,12 +48,11 @@ import type {
   TurnSettings,
   View,
 } from "./types";
-import { UsageLimits } from "./UsageLimits";
-import { UsageLimitsProvider } from "./UsageLimitsState";
 import { useNavigation } from "./useNavigation";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
 import { useWorkspace } from "./useWorkspace";
+import { WorkspaceSettings } from "./WorkspaceSettings";
 
 const GptWorkspace = lazy(() =>
   import("./GptWorkspace").then((module) => ({ default: module.GptWorkspace })),
@@ -264,6 +256,7 @@ function Workspace({
   selectionRef.current = { projectId, threadId };
   const [drawer, setDrawer] = useState(false),
     [settings, setSettings] = useState(false),
+    [pcRemote, setPcRemote] = useState(false),
     [navCollapsed, setNavCollapsed] = useState(false),
     [rightHidden, setRightHidden] = useState(readPreference("right-hidden", "false") === "true"),
     [busy, setBusy] = useState(false),
@@ -373,16 +366,15 @@ function Workspace({
   const legacyLayout = useLegacyLayout();
   const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "0")));
   const root = useRef<HTMLDivElement>(null),
-    settingsDialog = useRef<HTMLDialogElement>(null),
     drawerDialog = useProjectDrawer(drawer);
   useProjectSwipe(drawerDialog, drawer, () => setDrawer(false), "close");
-  useProjectSwipe(settingsDialog, settings, () => setSettings(false), "close");
   useProjectSwipe(
     root,
     client === "codex" &&
       view !== "remote" &&
       !drawer &&
       !settings &&
+      !pcRemote &&
       !createProject &&
       !overviewId &&
       !resultOverlay,
@@ -396,6 +388,7 @@ function Workspace({
       view === "chat" &&
       !overviewId &&
       !settings &&
+      !pcRemote &&
       !drawer &&
       !machinePanel &&
       !notebook,
@@ -633,16 +626,6 @@ function Workspace({
       disposed = true;
     };
   }, [view, threadId, state.revision]);
-  useEffect(() => {
-    if (settings) {
-      const panel = settingsDialog.current;
-      if (panel) {
-        panel.tabIndex = -1;
-        panel.showModal();
-        panel.focus({ preventScroll: true });
-      }
-    } else settingsDialog.current?.close();
-  }, [settings]);
   const selectThread = (id: string, owner = projectId) => {
     if (owner !== projectId) {
       setProjectId(owner);
@@ -1075,8 +1058,7 @@ function Workspace({
       onClose={() => setDrawer(false)}
       onRemote={() => {
         setDrawer(false);
-        setRightHidden(false);
-        setView("remote");
+        setPcRemote(true);
       }}
       onSettings={() => {
         setDrawer(false);
@@ -1099,8 +1081,8 @@ function Workspace({
       {name === "results" && resultCount > 0 && <span className="tab-count">{resultCount}</span>}
     </button>
   );
-  if (client === "gpt")
-    return (
+  const workspace =
+    client === "gpt" ? (
       <>
         {notebookPanel}
         {contentSearch && (
@@ -1127,525 +1109,478 @@ function Workspace({
               onNotebook={setNotebook}
               notebookOpen={!!notebook}
               workspaceDestination={workspaceDestination}
-              theme={theme}
-              onTheme={setTheme}
-              onSession={onSession}
-              onLogout={onLogout}
+              settings={settings}
+              overlayOpen={machinePanel || pcRemote}
+              onSettings={(open = true) => setSettings(open)}
+              onRemote={() => setPcRemote(true)}
             />
           </Suspense>
         </GptLoadBoundary>
       </>
-    );
-  return (
-    <div
-      className={`workspace ${navCollapsed ? "nav-collapsed" : ""}`}
-      data-view={view}
-      data-right-hidden={rightHidden}
-      data-remote-immersive={remoteImmersive}
-      ref={root}
-      style={{ "--right-width": rightWidth ? `${rightWidth}%` : undefined } as CSSProperties}
-    >
-      <aside className="desktop-nav">{navigation}</aside>
-      <header className="workspace-header">
-        <button
-          type="button"
-          className="icon-button menu-button"
-          aria-label="Открыть проекты"
-          onClick={() => {
-            if (window.innerWidth >= 1100) setNavCollapsed((v) => !v);
-            else setDrawer(true);
-          }}
-        >
-          <Icon name="menu" />
-        </button>
-        <button
-          type="button"
-          className="header-project overview-trigger"
-          aria-label="Обзор текущего проекта"
-          disabled={!project || project.unassigned}
-          onClick={() => project && openProjectOverview(project.id)}
-        >
-          <span>
-            <Icon name="folder" size={17} />
-            {project?.name ?? "Рабочее пространство"}
-          </span>
-          <small>
-            {view === "overview" ? "Обзор проекта" : (selectedThreadTitle ?? "Выбери диалог")}
-          </small>
-        </button>
-        <div className="header-connection">
-          <span
-            className={
-              sending || ["running", "starting"].includes(state.thread.status)
-                ? "spinner"
-                : `status-dot ${state.thread.status === "waiting_approval" ? "attention" : state.connection === "connected" ? "online" : ""}`
-            }
-            role="img"
-            aria-label={
-              state.thread.status === "waiting_approval"
-                ? "Codex ждёт ответа"
-                : sending || ["running", "starting"].includes(state.thread.status)
-                  ? "Codex работает"
-                  : "Соединение"
-            }
-          />
-          <span>
-            {threadId
-              ? state.connection === "connected"
-                ? "На связи"
-                : "Подключение…"
-              : "Личный Hub"}
-          </span>
-        </div>
+    ) : (
+      <div
+        className={`workspace ${navCollapsed ? "nav-collapsed" : ""}`}
+        data-view={view}
+        data-right-hidden={rightHidden}
+        data-remote-immersive={remoteImmersive}
+        ref={root}
+        style={{ "--right-width": rightWidth ? `${rightWidth}%` : undefined } as CSSProperties}
+      >
+        <aside className="desktop-nav">{navigation}</aside>
+        <header className="workspace-header">
+          <button
+            type="button"
+            className="icon-button menu-button"
+            aria-label="Открыть проекты"
+            onClick={() => {
+              if (window.innerWidth >= 1100) setNavCollapsed((v) => !v);
+              else setDrawer(true);
+            }}
+          >
+            <Icon name="menu" />
+          </button>
+          <button
+            type="button"
+            className="header-project overview-trigger"
+            aria-label="Обзор текущего проекта"
+            disabled={!project || project.unassigned}
+            onClick={() => project && openProjectOverview(project.id)}
+          >
+            <span>
+              <Icon name="folder" size={17} />
+              {project?.name ?? "Рабочее пространство"}
+            </span>
+            <small>
+              {view === "overview" ? "Обзор проекта" : (selectedThreadTitle ?? "Выбери диалог")}
+            </small>
+          </button>
+          <div className="header-connection">
+            <span
+              className={
+                sending || ["running", "starting"].includes(state.thread.status)
+                  ? "spinner"
+                  : `status-dot ${state.thread.status === "waiting_approval" ? "attention" : state.connection === "connected" ? "online" : ""}`
+              }
+              role="img"
+              aria-label={
+                state.thread.status === "waiting_approval"
+                  ? "Codex ждёт ответа"
+                  : sending || ["running", "starting"].includes(state.thread.status)
+                    ? "Codex работает"
+                    : "Соединение"
+              }
+            />
+            <span>
+              {threadId
+                ? state.connection === "connected"
+                  ? "На связи"
+                  : "Подключение…"
+                : "Личный Hub"}
+            </span>
+          </div>
 
-        <button
-          type="button"
-          className="icon-button wide-pane-control"
-          aria-label={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
-          title={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
-          aria-expanded={!rightHidden}
-          aria-controls="support-panel"
-          onClick={() => setRightHidden((value) => !value)}
-        >
-          <Icon name="panel-right" />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          onClick={() => newThread()}
-          disabled={busy || !projectId}
-          aria-label="Создать диалог"
-        >
-          <Icon name="plus" />
-        </button>
-        <button
-          type="button"
-          className="icon-button header-files"
-          aria-label="Файлы проекта"
-          title={project ? `Файлы: ${project.name}` : "Выбери проект"}
-          aria-expanded={projectTool === "files"}
-          aria-haspopup="dialog"
-          disabled={!project || project.unassigned}
-          onClick={() => {
-            setProjectTool("files");
-          }}
-        >
-          <Icon name="folder" />
-        </button>
-        <button
-          type="button"
-          className="icon-button header-git"
-          aria-label="Git проекта"
-          title={project ? `Git: ${project.name}` : "Выбери проект"}
-          aria-expanded={projectTool === "git"}
-          aria-haspopup="dialog"
-          disabled={!project || project.unassigned}
-          onClick={() => setProjectTool("git")}
-        >
-          <Icon name="branch" />
-        </button>
-      </header>
-      {notice && (
-        <div className="global-notice" role="status">
-          <span>{notice}</span>
+          <button
+            type="button"
+            className="icon-button wide-pane-control"
+            aria-label={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
+            title={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
+            aria-expanded={!rightHidden}
+            aria-controls="support-panel"
+            onClick={() => setRightHidden((value) => !value)}
+          >
+            <Icon name="panel-right" />
+          </button>
           <button
             type="button"
             className="icon-button"
-            onClick={() => setNotice("")}
-            aria-label="Закрыть уведомление"
+            onClick={() => newThread()}
+            disabled={busy || !projectId}
+            aria-label="Создать диалог"
           >
-            <Icon name="close" size={17} />
+            <Icon name="plus" />
           </button>
-        </div>
-      )}
-      <main className="workspace-content">
-        {overviewProject && !overviewProject.unassigned && (
-          <ProjectOverviewModal
-            key={overviewId}
-            onClose={() => setOverviewId("")}
-            scope={{ client: "codex", projectId: overviewId, name: overviewProject.name }}
-            onTarget={openNotebookTarget}
-            onNotebook={setNotebook}
-            onNew={() => newThread(overviewId)}
-            onFiles={() => {
-              selectOverviewProject();
-              setProjectTool("files", overviewId);
+          <button
+            type="button"
+            className="icon-button header-files"
+            aria-label="Файлы проекта"
+            title={project ? `Файлы: ${project.name}` : "Выбери проект"}
+            aria-expanded={projectTool === "files"}
+            aria-haspopup="dialog"
+            disabled={!project || project.unassigned}
+            onClick={() => {
+              setProjectTool("files");
             }}
-            onGit={() => {
-              selectOverviewProject();
-              setProjectTool("git", overviewId);
-            }}
-            onResults={() => {
-              selectOverviewProject();
-              setFocusResult("");
-              setView("results");
-              setRightHidden(false);
-            }}
-            onMachines={() => setMachinePanel(true)}
-            onRemote={() => {
-              selectOverviewProject();
-              setView("remote");
-              setRightHidden(false);
-            }}
-          />
+          >
+            <Icon name="folder" />
+          </button>
+          <button
+            type="button"
+            className="icon-button header-git"
+            aria-label="Git проекта"
+            title={project ? `Git: ${project.name}` : "Выбери проект"}
+            aria-expanded={projectTool === "git"}
+            aria-haspopup="dialog"
+            disabled={!project || project.unassigned}
+            onClick={() => setProjectTool("git")}
+          >
+            <Icon name="branch" />
+          </button>
+        </header>
+        {notice && (
+          <div className="global-notice" role="status">
+            <span>{notice}</span>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setNotice("")}
+              aria-label="Закрыть уведомление"
+            >
+              <Icon name="close" size={17} />
+            </button>
+          </div>
         )}
-        <Chat
-          onCapture={(message) =>
-            setNotebook({
-              mode: "notes",
-              scope:
-                project && !project.unassigned
-                  ? { client: "codex", projectId: project.id, name: project.name }
-                  : null,
-              capture: {
+        <main className="workspace-content">
+          {overviewProject && !overviewProject.unassigned && (
+            <ProjectOverviewModal
+              key={overviewId}
+              onClose={() => setOverviewId("")}
+              scope={{ client: "codex", projectId: overviewId, name: overviewProject.name }}
+              onTarget={openNotebookTarget}
+              onNotebook={setNotebook}
+              onNew={() => newThread(overviewId)}
+              onFiles={() => {
+                selectOverviewProject();
+                setProjectTool("files", overviewId);
+              }}
+              onGit={() => {
+                selectOverviewProject();
+                setProjectTool("git", overviewId);
+              }}
+              onResults={() => {
+                selectOverviewProject();
+                setFocusResult("");
+                setView("results");
+                setRightHidden(false);
+              }}
+              onMachines={() => setMachinePanel(true)}
+              onRemote={() => {
+                selectOverviewProject();
+                setView("remote");
+                setRightHidden(false);
+              }}
+            />
+          )}
+          <Chat
+            onCapture={(message) =>
+              setNotebook({
+                mode: "notes",
                 scope:
                   project && !project.unassigned
                     ? { client: "codex", projectId: project.id, name: project.name }
                     : null,
-                text: message.text,
-                role: message.role === "user" ? "user" : "assistant",
-                target: {
-                  client: "codex",
-                  kind: "thread",
-                  id: threadId,
-                  threadId,
-                  projectId,
-                  turnId: message.turnId ?? undefined,
-                  messageId: message.id,
-                  title: state.thread.title || "Чат Codex",
-                },
-              },
-            })
-          }
-          machineId={project?.machineId}
-          projectId={projectId}
-          threadId={threadId}
-          state={state}
-          sending={sending}
-          sendError={sendError}
-          writeBlocked={writeBlocked}
-          visible={view !== "overview" && (wide || view === "chat")}
-          speechVisible={
-            !overviewId &&
-            !drawer &&
-            !settings &&
-            !machinePanel &&
-            !notebook &&
-            !createProject &&
-            !remoteImmersive &&
-            !resultOverlay
-          }
-          canMarkSeen={
-            !overviewId &&
-            view !== "overview" &&
-            !pendingNotebookResult &&
-            !drawer &&
-            !settings &&
-            !machinePanel &&
-            !notebook &&
-            !createProject &&
-            !remoteImmersive &&
-            !resultOverlay &&
-            navigationState.connected
-          }
-          completion={navigationState.state.threads.find((t) => t.id === threadId)}
-          busy={busy}
-          results={results}
-          focusTurn={focusTurn}
-          focusMessage={focusMessage}
-          onSend={send}
-          onStop={() =>
-            void action(() => api(`/threads/${threadId}/interrupt`, { method: "POST" }))
-          }
-          onOlder={older}
-          onCreate={() => newThread()}
-          onDecision={(id, decision) =>
-            void action(() =>
-              api(`/approvals/${id}`, {
-                method: "POST",
-                key: crypto.randomUUID(),
-                body: { decision },
-              }),
-            )
-          }
-          onAnswer={(id, answers) =>
-            void action(() =>
-              api(`/approvals/${id}/answers`, {
-                method: "POST",
-                key: crypto.randomUUID(),
-                body: { answers },
-              }),
-            )
-          }
-          onResult={showResult}
-          onArtifact={(request) => {
-            showResult("");
-            setArtifactRequest(request);
-          }}
-          onReconnect={resume}
-          onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
-        />
-        <PaneDivider
-          value={rightWidth || (legacyLayout ? 38 : 34)}
-          onChange={(value) => {
-            setRightWidth(value);
-            try {
-              localStorage.setItem("codex-right-width", String(value));
-            } catch {
-              /* Optional preference. */
-            }
-          }}
-        />
-        <div className="support-pane" id="support-panel">
-          <div className="support-tabs">
-            {tab("results", "Результаты", "results")}
-            {tab("activity", "Активность", "activity")}
-          </div>
-          <ResultFeed
-            onCount={setResultCount}
-            onSaveLink={(r) =>
-              setNotebook({
-                scope: project
-                  ? { client: "codex", projectId: project.id, name: project.name }
-                  : null,
-                target: {
-                  client: "codex",
-                  kind: "result",
-                  id: r.id,
-                  title: r.title,
-                  threadId: r.threadId ?? threadId,
-                  projectId,
-                  turnId: r.turnId ?? undefined,
+                capture: {
+                  scope:
+                    project && !project.unassigned
+                      ? { client: "codex", projectId: project.id, name: project.name }
+                      : null,
+                  text: message.text,
+                  role: message.role === "user" ? "user" : "assistant",
+                  target: {
+                    client: "codex",
+                    kind: "thread",
+                    id: threadId,
+                    threadId,
+                    projectId,
+                    turnId: message.turnId ?? undefined,
+                    messageId: message.id,
+                    title: state.thread.title || "Чат Codex",
+                  },
                 },
               })
             }
-            onFile={(raw) => {
-              const root = (project?.workingDirectory ?? "")
-                .replaceAll("\\", "/")
-                .replace(/\/$/, "");
-              let path = raw.replaceAll("\\", "/");
-              const matches = /^[A-Za-z]:/.test(root)
-                ? path.toLowerCase().startsWith(root.toLowerCase() + "/")
-                : path.startsWith(root + "/");
-              if (matches) path = path.slice(root.length + 1);
-              if (/^(?:\/|[A-Za-z]:)/.test(path)) {
-                setNotice("Файл находится вне выбранного проекта.");
-                return;
-              }
-              setFileFocus((v) => ({ path, version: v.version + 1, projectId }));
-              setProjectTool("files");
-            }}
-            key={`project-results:${projectId}`}
-            endpoint={projectId ? "/projects/" + encodeURIComponent(projectId) + "/results" : ""}
-            revision={
-              String(state.revision) +
-              ":" +
-              libraryRevision +
-              ":" +
-              results.map((r) => r.id).join(",")
-            }
-            toolbar={
-              project && (
-                <div className="result-project-label">
-                  <Icon name="folder" size={15} />
-                  <span>{project.name}</span>
-                </div>
-              )
-            }
-            onOverlayChange={setResultOverlay}
-            visible={view === "results" || view === "chat"}
-            focusId={focusResult}
-            reveal={artifactRequest?.scope === threadId ? artifactRequest : null}
-            focusCategory={resultCategory}
-            focusVersion={resultFocusVersion}
-            onTurn={(id, source) => {
-              if (source && source !== threadId) {
-                threadRequest.current++;
-                setThreadId(source);
-                setView("chat");
-                setPendingResultTurn({ threadId: source, turnId: id });
-              } else void showTurn(id).catch((e) => setNotice(messageOf(e)));
-            }}
-          />
-          <ActivityPane
-            threadId={threadId}
-            items={activity}
-            visible={view === "activity"}
-            hasMore={!!activityCursor}
-            onOlder={() =>
-              void action(async () => {
-                const data = await api<{ items: Activity[]; nextBefore: number | null }>(
-                  `/threads/${threadId}/activity?before=${activityCursor}`,
-                );
-                setActivity((old) => [...old, ...data.items]);
-                setActivityCursor(data.nextBefore);
-              })
-            }
-          />
-          <Remote
+            machineId={project?.machineId}
             projectId={projectId}
             threadId={threadId}
-            visible={view === "remote" && (!wide || !rightHidden)}
-            available={!!project?.remoteAvailable}
-            onImmersiveChange={setRemoteImmersive}
-            onBack={() => setView("chat")}
-            onSnapshot={() => {
-              setNotice("Снимок сохранён в результатах");
-              void loadResults();
+            state={state}
+            sending={sending}
+            sendError={sendError}
+            writeBlocked={writeBlocked}
+            visible={view !== "overview" && (wide || view === "chat")}
+            speechVisible={
+              !overviewId &&
+              !drawer &&
+              !settings &&
+              !pcRemote &&
+              !machinePanel &&
+              !notebook &&
+              !createProject &&
+              !remoteImmersive &&
+              !resultOverlay
+            }
+            canMarkSeen={
+              !overviewId &&
+              view !== "overview" &&
+              !pendingNotebookResult &&
+              !drawer &&
+              !settings &&
+              !pcRemote &&
+              !machinePanel &&
+              !notebook &&
+              !createProject &&
+              !remoteImmersive &&
+              !resultOverlay &&
+              navigationState.connected
+            }
+            completion={navigationState.state.threads.find((t) => t.id === threadId)}
+            busy={busy}
+            results={results}
+            focusTurn={focusTurn}
+            focusMessage={focusMessage}
+            onSend={send}
+            onStop={() =>
+              void action(() => api(`/threads/${threadId}/interrupt`, { method: "POST" }))
+            }
+            onOlder={older}
+            onCreate={() => newThread()}
+            onDecision={(id, decision) =>
+              void action(() =>
+                api(`/approvals/${id}`, {
+                  method: "POST",
+                  key: crypto.randomUUID(),
+                  body: { decision },
+                }),
+              )
+            }
+            onAnswer={(id, answers) =>
+              void action(() =>
+                api(`/approvals/${id}/answers`, {
+                  method: "POST",
+                  key: crypto.randomUUID(),
+                  body: { answers },
+                }),
+              )
+            }
+            onResult={showResult}
+            onArtifact={(request) => {
+              showResult("");
+              setArtifactRequest(request);
+            }}
+            onReconnect={resume}
+            onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
+          />
+          <PaneDivider
+            value={rightWidth || (legacyLayout ? 38 : 34)}
+            onChange={(value) => {
+              setRightWidth(value);
+              try {
+                localStorage.setItem("codex-right-width", String(value));
+              } catch {
+                /* Optional preference. */
+              }
             }}
           />
-        </div>
-      </main>
-      {project && !project.unassigned && (
-        <>
-          {(["files", "git"] as const).map((mode) => (
-            <ProjectFiles
-              key={`${mode}:${projectId}`}
-              projectId={projectId}
-              threadId={threadId || undefined}
-              projectName={project.name}
-              mode={mode}
-              visible={projectTool === mode}
-              focus={fileFocus}
-              onBack={() => setProjectTool(null)}
-              onOpenFiles={(path) => {
-                setFileFocus((v) => ({ path, projectId, version: v.version + 1 }));
+          <div className="support-pane" id="support-panel">
+            <div className="support-tabs">
+              {tab("results", "Результаты", "results")}
+              {tab("activity", "Активность", "activity")}
+            </div>
+            <ResultFeed
+              onCount={setResultCount}
+              onSaveLink={(r) =>
+                setNotebook({
+                  scope: project
+                    ? { client: "codex", projectId: project.id, name: project.name }
+                    : null,
+                  target: {
+                    client: "codex",
+                    kind: "result",
+                    id: r.id,
+                    title: r.title,
+                    threadId: r.threadId ?? threadId,
+                    projectId,
+                    turnId: r.turnId ?? undefined,
+                  },
+                })
+              }
+              onFile={(raw) => {
+                const root = (project?.workingDirectory ?? "")
+                  .replaceAll("\\", "/")
+                  .replace(/\/$/, "");
+                let path = raw.replaceAll("\\", "/");
+                const matches = /^[A-Za-z]:/.test(root)
+                  ? path.toLowerCase().startsWith(root.toLowerCase() + "/")
+                  : path.startsWith(root + "/");
+                if (matches) path = path.slice(root.length + 1);
+                if (/^(?:\/|[A-Za-z]:)/.test(path)) {
+                  setNotice("Файл находится вне выбранного проекта.");
+                  return;
+                }
+                setFileFocus((v) => ({ path, version: v.version + 1, projectId }));
                 setProjectTool("files");
               }}
+              key={`project-results:${projectId}`}
+              endpoint={projectId ? "/projects/" + encodeURIComponent(projectId) + "/results" : ""}
+              revision={
+                String(state.revision) +
+                ":" +
+                libraryRevision +
+                ":" +
+                results.map((r) => r.id).join(",")
+              }
+              toolbar={
+                project && (
+                  <div className="result-project-label">
+                    <Icon name="folder" size={15} />
+                    <span>{project.name}</span>
+                  </div>
+                )
+              }
+              onOverlayChange={setResultOverlay}
+              visible={view === "results" || view === "chat"}
+              focusId={focusResult}
+              reveal={artifactRequest?.scope === threadId ? artifactRequest : null}
+              focusCategory={resultCategory}
+              focusVersion={resultFocusVersion}
+              onTurn={(id, source) => {
+                if (source && source !== threadId) {
+                  threadRequest.current++;
+                  setThreadId(source);
+                  setView("chat");
+                  setPendingResultTurn({ threadId: source, turnId: id });
+                } else void showTurn(id).catch((e) => setNotice(messageOf(e)));
+              }}
             />
-          ))}
-        </>
-      )}
-      <nav className="mobile-tabs" aria-label="Разделы рабочего пространства">
-        {tab("chat", "Чат", "chat")}
-        {tab("results", "Результаты", "results")}
-      </nav>
-      <ProjectDialog
-        open={createProject}
-        machines={machines}
-        onClose={() => setCreateProject(false)}
-        onCreated={async (p) => {
-          const data = await api<{ projects: Project[] }>("/projects?refresh=1");
-          setProjects(data.projects);
-          setProjectId(p.id);
-          setThreads([]);
-          setThreadId("");
-          setView("chat");
-          await loadThreads(p.id);
-        }}
-      />
-      <dialog
-        className="project-sheet"
-        aria-label="Проекты и диалоги"
-        ref={drawerDialog}
-        onCancel={(event) => {
-          event.preventDefault();
-          setDrawer(false);
-        }}
-      >
-        <div className="sheet-content">{navigation}</div>
-      </dialog>
-      <dialog
-        className="settings-dialog settings-browser"
-        aria-label="Настройки"
-        ref={settingsDialog}
-        onCancel={() => setSettings(false)}
-      >
-        <UsageLimitsProvider machines={machines} open={settings}>
-          <SettingsSections
-            open={settings}
-            client="Codex"
-            overview={(visible) => <UsageLimits machines={machines} open={visible} />}
-            onClose={() => setSettings(false)}
-            sections={{
-              appearance: () => <AppearanceSettings theme={theme} onTheme={setTheme} />,
-              sound: (visible) => (
-                <>
-                  <SpeechSettings />
-                  <Notifications visible={visible} />
-                </>
-              ),
-              connections: (visible) => (
-                <>
-                  <UsageLimits machines={machines} open={visible} />
-                  <NativeInventory projectId={projectId} visible={visible} />
-                  <DesktopControl
-                    machines={machines}
-                    open={visible}
-                    threadId={threadId}
-                    machineId={project?.machineId}
-                  />
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      setSettings(false);
-                      setMachinePanel(true);
-                    }}
-                  >
-                    <Icon name="remote" />
-                    Компьютеры
-                  </button>
-                </>
-              ),
-              library: () => (
-                <>
-                  <section className="settings-navigation-actions" aria-label="Навигация">
-                    <button
-                      type="button"
-                      onClick={() => void refreshCatalog(true)}
-                      disabled={syncing}
-                    >
-                      <Icon name="refresh" />
-                      Обновить проекты
-                    </button>
-                    <EntityArchive client="codex" />
-                  </section>
-                  <button
-                    type="button"
-                    className="secondary settings-activity"
-                    onClick={() => {
-                      setRightHidden(false);
-                      setView("activity");
-                      setSettings(false);
-                    }}
-                  >
-                    <Icon name="activity" />
-                    Активность диалога
-                  </button>
-                </>
-              ),
-              maintenance: (visible) => (
-                <>
-                  <DeploymentStatus open={visible} />
-                  <BridgeDoctorPanel
-                    open={visible}
-                    onTarget={(target) => {
-                      setSettings(false);
-                      openNotebookTarget(target);
-                    }}
-                  />
-                  <StorageUsage visible={visible} />
-                </>
-              ),
-              access: () => (
-                <>
-                  <AccountControls onSession={onSession} onLogout={onLogout} />
-                  <p className="small muted">
-                    Для установки на iPhone: Поделиться → На экран «Домой».
-                  </p>
-                </>
-              ),
-            }}
+            <ActivityPane
+              threadId={threadId}
+              items={activity}
+              visible={view === "activity"}
+              hasMore={!!activityCursor}
+              onOlder={() =>
+                void action(async () => {
+                  const data = await api<{ items: Activity[]; nextBefore: number | null }>(
+                    `/threads/${threadId}/activity?before=${activityCursor}`,
+                  );
+                  setActivity((old) => [...old, ...data.items]);
+                  setActivityCursor(data.nextBefore);
+                })
+              }
+            />
+            <Remote
+              projectId={projectId}
+              threadId={threadId}
+              visible={view === "remote" && (!wide || !rightHidden)}
+              available={!!project?.remoteAvailable}
+              onImmersiveChange={setRemoteImmersive}
+              onBack={() => setView("chat")}
+              onSnapshot={() => {
+                setNotice("Снимок сохранён в результатах");
+                void loadResults();
+              }}
+            />
+          </div>
+        </main>
+        {project && !project.unassigned && (
+          <>
+            {(["files", "git"] as const).map((mode) => (
+              <ProjectFiles
+                key={`${mode}:${projectId}`}
+                projectId={projectId}
+                threadId={threadId || undefined}
+                projectName={project.name}
+                mode={mode}
+                visible={projectTool === mode}
+                focus={fileFocus}
+                onBack={() => setProjectTool(null)}
+                onOpenFiles={(path) => {
+                  setFileFocus((v) => ({ path, projectId, version: v.version + 1 }));
+                  setProjectTool("files");
+                }}
+              />
+            ))}
+          </>
+        )}
+        <nav className="mobile-tabs" aria-label="Разделы рабочего пространства">
+          {tab("chat", "Чат", "chat")}
+          {tab("results", "Результаты", "results")}
+        </nav>
+        <ProjectDialog
+          open={createProject}
+          machines={machines}
+          onClose={() => setCreateProject(false)}
+          onCreated={async (p) => {
+            const data = await api<{ projects: Project[] }>("/projects?refresh=1");
+            setProjects(data.projects);
+            setProjectId(p.id);
+            setThreads([]);
+            setThreadId("");
+            setView("chat");
+            await loadThreads(p.id);
+          }}
+        />
+        <dialog
+          className="project-sheet"
+          aria-label="Проекты и диалоги"
+          ref={drawerDialog}
+          onCancel={(event) => {
+            event.preventDefault();
+            setDrawer(false);
+          }}
+        >
+          <div className="sheet-content">{navigation}</div>
+        </dialog>
+        {notebookPanel}
+        {contentSearch && (
+          <ContentSearch
+            request={contentSearch}
+            onClose={() => setContentSearch(null)}
+            onTarget={openNotebookTarget}
           />
-        </UsageLimitsProvider>
-      </dialog>
-      {notebookPanel}
-      {contentSearch && (
-        <ContentSearch
-          request={contentSearch}
-          onClose={() => setContentSearch(null)}
-          onTarget={openNotebookTarget}
+        )}
+      </div>
+    );
+  return (
+    <>
+      {workspace}
+      <WorkspaceSettings
+        open={settings}
+        onClose={() => setSettings(false)}
+        machines={machines}
+        project={project}
+        threadId={threadId}
+        theme={theme}
+        onTheme={setTheme}
+        onSession={onSession}
+        onLogout={onLogout}
+        onMachines={() => {
+          setSettings(false);
+          setMachinePanel(true);
+        }}
+        onActivity={() => {
+          setSettings(false);
+          setClient("codex");
+          setRightHidden(false);
+          setView("activity");
+        }}
+        onTarget={(target) => {
+          setSettings(false);
+          openNotebookTarget(target);
+        }}
+        onRefreshCodex={() => refreshCatalog(true)}
+      />
+      {pcRemote && (
+        <PcRemote
+          projects={projects}
+          machines={machines}
+          projectId={projectId}
+          threadId={client === "codex" ? threadId : ""}
+          onClose={() => setPcRemote(false)}
+          onSettings={() => {
+            setPcRemote(false);
+            setSettings(true);
+          }}
+          onSnapshot={() => {
+            void loadResults();
+          }}
         />
       )}
       <MachineHealthPanel
@@ -1657,6 +1592,6 @@ function Workspace({
         }}
         onProject={openMachineProject}
       />
-    </div>
+    </>
   );
 }

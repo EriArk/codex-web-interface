@@ -193,7 +193,13 @@ for (const [engine, type] of [
     const settings = page
       .getByRole("button", { name: "Настройки", exact: true })
       .filter({ visible: true });
-    await settings.click();
+    const openSettings = async () => {
+      await expect(page.locator('dialog[data-closing="true"][open]')).toHaveCount(0);
+      if (!(await settings.isVisible()))
+        await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
+      await settings.click();
+    };
+    await openSettings();
     await page.locator('.settings-browser[open] [data-category="sound"]').click();
     const mode = page
       .getByRole("combobox", { name: "Режим озвучивания" })
@@ -236,7 +242,7 @@ for (const [engine, type] of [
       Object.defineProperty(document, "hidden", { configurable: true, value: false });
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    await settings.click();
+    await openSettings();
     await page.locator('.settings-browser[open] [data-category="sound"]').click();
     await mode.selectOption("system");
     await page.getByRole("button", { name: "Закрыть настройки", exact: true }).click();
@@ -256,7 +262,7 @@ for (const [engine, type] of [
     );
     await page.reload();
     await expect(editor).toHaveValue("Сохранённый черновик");
-    await settings.click();
+    await openSettings();
     await page.locator('.settings-browser[open] [data-category="sound"]').click();
     await expect(mode).toHaveValue("system");
     await mode.selectOption("background");
@@ -288,9 +294,11 @@ for (const [engine, type] of [
       assert.equal(await shortcut.innerText(), "");
       await page.screenshot({ path: `.local/qa-background-media/${engine}-sidebar-${width}.png` });
       await shortcut.click();
-      await expect(page.locator(".remote-pane")).toHaveClass(/remote-expanded.*remote-session/);
+      await expect(page.locator(".pc-remote-dialog .remote-pane")).toHaveClass(
+        /remote-expanded.*remote-session/,
+      );
       await expect(page.getByText("Подключено", { exact: true })).toBeVisible();
-      const pane = await page.locator(".remote-pane").boundingBox();
+      const pane = await page.locator(".pc-remote-dialog .remote-pane").boundingBox();
       assert(pane.width >= width - 2);
       assert(pane.height >= (width === 390 ? 844 : 1024) - 2);
       await page.screenshot({ path: `.local/qa-background-media/${engine}-remote-${width}.png` });
@@ -320,11 +328,21 @@ for (const [engine, type] of [
     await expect(page.locator(".mobile-tabs > a")).toHaveCount(0);
     await page.getByRole("button", { name: "Открыть проекты", exact: true }).tap();
     const gptRemote = page
-      .getByRole("link", { name: "Открыть Remote", exact: true })
+      .getByRole("button", { name: "Открыть Remote", exact: true })
       .filter({ visible: true });
-    await expect(gptRemote).toHaveAttribute("href", "/gpt-connect?immersive=1");
     assert.equal(await gptRemote.innerText(), "");
     await page.screenshot({ path: `.local/qa-background-media/${engine}-gpt-sidebar.png` });
+    await gptRemote.click();
+    await expect(page.getByRole("dialog", { name: "Remote ПК", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Назад к чату", exact: true }).click();
+    await openSettings();
+    await page.locator('.settings-browser[open] [data-category="connections"]').click();
+    const serverBrowser = page.getByRole("link", {
+      name: "Браузер ChatGPT на сервере",
+      exact: true,
+    });
+    await expect(serverBrowser).toHaveAttribute("href", "/gpt-connect?immersive=1");
+    await expect(serverBrowser).toHaveAttribute("target", "_blank");
     await page.route("**/gpt-connect**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith("vendor.js"))
@@ -346,7 +364,8 @@ for (const [engine, type] of [
         body: await readFile("ops/gpt/" + file),
       });
     });
-    await gptRemote.click();
+    // Standalone browser controls remain supported through the Settings link.
+    await page.goto(origin + "/gpt-connect?immersive=1");
     await expect(page.locator("body")).toHaveClass("immersive");
     await expect.poll(() => page.evaluate(() => remoteConnections)).toBe(1);
     await expect(page.locator("footer")).toBeHidden();

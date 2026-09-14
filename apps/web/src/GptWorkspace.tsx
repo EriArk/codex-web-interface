@@ -12,8 +12,6 @@ import type {
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AccountControls } from "./AccountControls";
-import { AppearanceSettings } from "./AppearanceSettings";
 import { type ArtifactRequest, artifactComponents, artifactSource } from "./ArtifactMarkdown";
 import {
   accountLocalStorage as localStorage,
@@ -21,41 +19,28 @@ import {
   workspaceMediaUrl,
 } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
-import { BridgeDoctorPanel } from "./BridgeDoctorPanel";
 import CanvasPanel from "./CanvasPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { openContentSearch } from "./ContentSearch";
 import { CopyButton } from "./CopyButton";
-import { DeploymentStatus } from "./DeploymentStatus";
 import { useDictation } from "./Dictation";
 import { DownloadLink } from "./DownloadLink";
-import {
-  EntityArchive,
-  EntityMenu,
-  type LibraryChange,
-  type LibraryEntity,
-  libraryEvent,
-} from "./EntityMenu";
+import { EntityMenu, type LibraryChange, type LibraryEntity, libraryEvent } from "./EntityMenu";
 import { useGptNativeOperations } from "./GptNativeOperations";
 import { GptProgress } from "./GptProgress";
 import { GptProjectPending } from "./GptProjectContent";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob } from "./gptState";
 import { Icon } from "./icons";
-import { MachineHealthPanel } from "./MachineHealth";
 import { MarkdownTable } from "./MarkdownTable";
-import { SpeechButton, SpeechSettings, useSpeechScope } from "./MessageSpeech";
+import { SpeechButton, useSpeechScope } from "./MessageSpeech";
 import { NavigationFooter } from "./NavigationFooter";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
-import { Notifications, type NotificationTarget, useNotificationPresence } from "./Notifications";
+import { type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
 import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
-import { SettingsSections } from "./SettingsSections";
-import { StorageUsage } from "./StorageUsage";
-import type { Theme } from "./theme";
-import type { Session } from "./types";
 import { useCompletionPosition } from "./useCompletionPosition";
 import { useGptHistory } from "./useGptHistory";
 import { useGrowingComposer } from "./useGrowingComposer";
@@ -63,6 +48,7 @@ import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
 import { useThreadReviews, WorkReviewLink } from "./WorkReviewLink";
 import { WorkspaceLinks } from "./WorkspaceLinks";
+import { gptSettingsChanged } from "./WorkspaceSettings";
 import "./gpt.css";
 
 const isActive = (job: GptJob) => ["queued", "preparing", "running"].includes(job.status);
@@ -160,10 +146,10 @@ export function GptWorkspace({
   onNotebook,
   notebookOpen = false,
   workspaceDestination,
-  theme,
-  onTheme,
-  onSession,
-  onLogout,
+  settings,
+  overlayOpen,
+  onSettings,
+  onRemote,
 }: {
   onCodex: () => void;
   onCodexProject?: (id: string, remote: boolean) => void;
@@ -171,15 +157,14 @@ export function GptWorkspace({
   onNotebook?: (request: NotebookRequest) => void;
   notebookOpen?: boolean;
   workspaceDestination?: WorkspaceDestination;
-  theme: Theme;
-  onTheme: (theme: Theme) => void;
+  settings: boolean;
+  overlayOpen: boolean;
+  onSettings: (open?: boolean) => void;
+  onRemote: () => void;
   notificationTarget?: NotificationTarget;
   onNotificationHandled: (id: string) => void;
-  onSession: (session: Session) => void;
-  onLogout: () => void;
 }) {
   const [overviewProject, setOverviewProject] = useState<GptProject | null>(null);
-  const [machinePanel, setMachinePanel] = useState(false);
   const connectionRequest = useRef(0);
   const [connection, setConnection] = useState<GptConnection | null>(null);
   const [checkingConnection, setCheckingConnection] = useState(false);
@@ -232,7 +217,6 @@ export function GptWorkspace({
   const [loadNotice, setLoadNotice] = useState("");
   const [notice, setNotice] = useState(""),
     [drawer, setDrawer] = useState(false),
-    [settings, setSettings] = useState(false),
     [view, setView] = useState<"chat" | "results" | "overview">("chat");
   const [search, setSearch] = useState(""),
     [ready, setReady] = useState(false),
@@ -241,7 +225,6 @@ export function GptWorkspace({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const root = useRef<HTMLDivElement>(null),
     drawerRef = useProjectDrawer(drawer),
-    settingsRef = useRef<HTMLDialogElement>(null),
     input = useRef<HTMLInputElement>(null),
     messageList = useRef<HTMLDivElement>(null),
     userScrollUntil = useRef(0);
@@ -283,8 +266,7 @@ export function GptWorkspace({
   );
   selectedRef.current = selected;
   useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
-  useProjectSwipe(settingsRef, settings, () => setSettings(false), "close");
-  useProjectSwipe(root, !drawer && !settings && !machinePanel && !notebookOpen, () =>
+  useProjectSwipe(root, !drawer && !settings && !overlayOpen && !notebookOpen, () =>
     setDrawer(true),
   );
   const action = useCallback(async (fn: () => Promise<void>) => {
@@ -365,10 +347,12 @@ export function GptWorkspace({
       if (!document.hidden) void refresh().catch(() => {});
     };
     window.addEventListener(libraryEvent, changed);
+    window.addEventListener(gptSettingsChanged, visible);
     document.addEventListener("visibilitychange", visible);
     const timer = setInterval(visible, 30000);
     return () => {
       window.removeEventListener(libraryEvent, changed);
+      window.removeEventListener(gptSettingsChanged, visible);
       document.removeEventListener("visibilitychange", visible);
       clearInterval(timer);
     };
@@ -518,16 +502,6 @@ export function GptWorkspace({
     Object.assign(gptCache, { jobs, items, projects, models, model, effort, offset });
     saveGptCache();
   }, [jobs, items, projects, models, model, effort, offset]);
-  useEffect(() => {
-    if (settings) {
-      const panel = settingsRef.current;
-      if (panel) {
-        panel.tabIndex = -1;
-        panel.showModal();
-        panel.focus({ preventScroll: true });
-      }
-    } else settingsRef.current?.close();
-  }, [settings]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll refs returned by the history hook are stable.
   useEffect(() => {
     if (!messageList.current) return;
@@ -547,16 +521,33 @@ export function GptWorkspace({
         if (!disposed && request === connectionRequest.current) {
           setConnection(next);
           setReady(next.canSend);
+          return next;
         }
       } catch {
         /* Current drafts remain editable through a transient Hub outage. */
       }
     };
+    const changed = async () => {
+      const next = await refresh();
+      if (!next?.canSend || disposed) return;
+      try {
+        const value = await api<GptModels>("/gpt/models");
+        if (disposed) return;
+        setModels(value);
+        gptCache.models = value;
+        setModel((old) => (value.models.some((m) => m.id === old) ? old : value.currentModel));
+        setEffort((old) => (value.efforts.some((e) => e.id === old) ? old : value.currentEffort));
+      } catch {
+        /* A later explicit check can refresh model availability. */
+      }
+    };
     const interval = setInterval(() => void refresh(), 10000);
+    window.addEventListener(gptSettingsChanged, changed);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       disposed = true;
       clearInterval(interval);
+      window.removeEventListener(gptSettingsChanged, changed);
       document.removeEventListener("visibilitychange", refresh);
     };
   }, []);
@@ -658,7 +649,7 @@ export function GptWorkspace({
   };
   const openNotebook = (mode: "notes" | "tasks" | "plans" | "reports" = "notes") => {
     setDrawer(false);
-    setSettings(false);
+    onSettings(false);
     onNotebook?.({ ...notebookContext(), mode, allProjects: true });
   };
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -781,7 +772,7 @@ export function GptWorkspace({
       !overviewProject &&
       !drawer &&
       !settings &&
-      !machinePanel &&
+      !overlayOpen &&
       !notebookOpen &&
       !contextMessage,
   );
@@ -807,10 +798,10 @@ export function GptWorkspace({
     setCreatedJob(notificationTarget.nativeId ? "" : notificationTarget.jobId || "");
     setSelected(notificationTarget.nativeId || "");
     setDrawer(false);
-    setSettings(false);
+    onSettings(false);
     setView("chat");
     setNotice("");
-  }, [notificationTarget, rememberScroll, onNotificationHandled]);
+  }, [notificationTarget, rememberScroll, onNotificationHandled, onSettings]);
   const pendingNew = jobs.find((job) => !selected && job.nativeId && job.id === createdJob);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Carry the current draft only when this job acquires its native chat.
   useEffect(() => {
@@ -832,7 +823,7 @@ export function GptWorkspace({
       !notebookOpen &&
       !settings &&
       !drawer &&
-      !machinePanel &&
+      !overlayOpen &&
       !resultOverlay &&
       !busy &&
       (!selected || historyReady),
@@ -848,7 +839,7 @@ export function GptWorkspace({
       !notebookOpen &&
       !settings &&
       !drawer &&
-      !machinePanel &&
+      !overlayOpen &&
       !resultOverlay,
   );
   const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
@@ -893,7 +884,7 @@ export function GptWorkspace({
       !settings &&
       !overviewProject &&
       !notebookOpen &&
-      !machinePanel &&
+      !overlayOpen &&
       !contextMessage &&
       !hasNewer,
     following: sticky,
@@ -1312,9 +1303,12 @@ export function GptWorkspace({
         }}
         onSettings={() => {
           setDrawer(false);
-          setSettings(true);
+          onSettings();
         }}
-        remoteHref="/gpt-connect?immersive=1"
+        onRemote={() => {
+          setDrawer(false);
+          onRemote();
+        }}
       />
     </div>
   );
@@ -1922,95 +1916,6 @@ export function GptWorkspace({
       >
         <div className="sheet-content">{navigation}</div>
       </dialog>
-      <dialog
-        className="gpt-settings settings-browser"
-        aria-label="Настройки"
-        ref={settingsRef}
-        onCancel={() => setSettings(false)}
-      >
-        <SettingsSections
-          open={settings}
-          client="GPT"
-          onClose={() => setSettings(false)}
-          sections={{
-            appearance: () => <AppearanceSettings theme={theme} onTheme={onTheme} />,
-            sound: (visible) => (
-              <>
-                <SpeechSettings />
-                <Notifications visible={visible} />
-              </>
-            ),
-            connections: () => (
-              <>
-                <section className="gpt-connection-settings" aria-label="Состояние GPT">
-                  <p role="status">{connection?.message ?? "Проверяем подключение GPT…"}</p>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={checkingConnection}
-                    onClick={() => void checkConnection()}
-                  >
-                    <Icon name="refresh" />
-                    {checkingConnection ? "Проверяем…" : "Перепроверить подключение"}
-                  </button>
-                  <a className="primary" href="/gpt-connect">
-                    {connection?.state === "login_required"
-                      ? "Войти в ChatGPT"
-                      : "Подключение ChatGPT"}
-                  </a>
-                </section>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setSettings(false);
-                    setMachinePanel(true);
-                  }}
-                >
-                  <Icon name="remote" />
-                  Компьютеры
-                </button>
-              </>
-            ),
-            library: () => (
-              <section className="settings-navigation-actions" aria-label="Навигация">
-                <button type="button" onClick={() => void action(() => catalog())}>
-                  <Icon name="refresh" />
-                  Обновить чаты
-                </button>
-                <EntityArchive client="gpt" />
-              </section>
-            ),
-            maintenance: (visible) => (
-              <>
-                <DeploymentStatus open={visible} />
-                <BridgeDoctorPanel
-                  open={visible}
-                  onTarget={
-                    onWorkspaceTarget
-                      ? (target) => {
-                          setSettings(false);
-                          onWorkspaceTarget(target);
-                        }
-                      : undefined
-                  }
-                />
-                <StorageUsage visible={visible} />
-              </>
-            ),
-            access: () => <AccountControls onSession={onSession} onLogout={onLogout} />,
-          }}
-        />
-      </dialog>
-      <MachineHealthPanel
-        open={machinePanel}
-        onClose={() => setMachinePanel(false)}
-        onProject={(id, remote) => {
-          setMachinePanel(false);
-          if (onCodexProject) onCodexProject(id, remote);
-          else onCodex();
-        }}
-      />
     </div>
   );
 }

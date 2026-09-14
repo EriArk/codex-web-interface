@@ -155,6 +155,7 @@ for (const [engine, type] of [
         await page.getByRole("textbox", { name: "Сообщение GPT" }).fill("Черновик GPT");
       }
       await openSettings();
+      await expect(settings.locator(".settings-usage-summary .usage-limits")).toBeVisible();
       for (const width of [320, 1366]) {
         await page.setViewportSize({ width, height: width === 320 ? 852 : 1024 });
         for (const theme of ["organizer", "classic-dark", "crt-green", "hitech-2000s"]) {
@@ -185,10 +186,17 @@ for (const [engine, type] of [
                 close.height >= 44 &&
                 close.x + close.width <= rect.x + rect.width,
             );
-            if (category === "connections")
+            if (category === "connections") {
               await expect(
                 section.getByRole("button", { name: "Компьютеры", exact: true }),
               ).toBeVisible();
+              await expect(
+                section.getByRole("region", { name: "Подключение Codex", exact: true }),
+              ).toBeVisible();
+              await expect(
+                section.getByRole("region", { name: "Подключение GPT", exact: true }),
+              ).toBeVisible();
+            }
             await page.screenshot({
               path: `.local/qa-settings/${engine}/${client}-${theme}-${width}-${category}.png`,
               animations: "disabled",

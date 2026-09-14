@@ -8,14 +8,12 @@ export function NavigationFooter({
   onClient,
   onSettings,
   onRemote,
-  remoteHref,
   captureScope,
 }: {
   client: "codex" | "gpt";
   onClient?: (value: "codex" | "gpt") => void;
   onSettings: () => void;
   onRemote?: () => void;
-  remoteHref?: string;
   captureScope: NotebookScope;
 }) {
   return (
@@ -41,27 +39,16 @@ export function NavigationFooter({
         >
           <Icon name="terminal" />
         </button>
-        {remoteHref ? (
-          <a
+        {onRemote && (
+          <button
+            type="button"
             className="icon-button nav-remote"
-            href={remoteHref}
+            onClick={onRemote}
             aria-label="Открыть Remote"
-            title="Remote"
+            title="Remote ПК"
           >
             <Icon name="remote" />
-          </a>
-        ) : (
-          onRemote && (
-            <button
-              type="button"
-              className="icon-button nav-remote"
-              onClick={onRemote}
-              aria-label="Открыть Remote"
-              title="Remote"
-            >
-              <Icon name="remote" />
-            </button>
-          )
+          </button>
         )}
         {onClient && <ClientPicker value={client} onChange={onClient} />}
       </div>

@@ -186,6 +186,52 @@
 .settings-content:focus {
   outline: none;
 }
+.settings-service + .settings-service {
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.settings-service > h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+.settings-service > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.settings-service .usage-limits:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+:root dialog.pc-remote-dialog {
+  inset: 0;
+  top: var(--app-top);
+  margin: 0;
+  width: 100%;
+  max-width: none;
+  height: var(--app-height);
+  max-height: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+}
+:root .pc-remote-dialog > .remote-pane {
+  position: absolute;
+  display: flex;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
 :root:is([data-theme="crt-green"], [data-theme="hitech-2000s"])
   .settings-browser
   .settings-heading {

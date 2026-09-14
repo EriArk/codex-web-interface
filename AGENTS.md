@@ -607,3 +607,9 @@ Before mobile support is considered complete, the same core workflow must also w
 ## Owner-requested everyday usage summary (#171, 2026-09-14)
 
 - Show Codex usage and earned reset availability below the main Settings category list as well as in Connections. Reuse one settings-scoped canonical snapshot/poller per authorized machine and the existing confirmed, durable reset operation; category changes never spend a second reset or run hidden connection checks. Keep machine labels and zero/count-only/unsupported/unknown states distinct.
+
+## Owner-requested unified Settings and PC Remote (2026-09-14)
+
+- Codex and GPT open one shared Settings host, preserving form state across client switches. Appearance, sound/notifications, maintenance and access are common; Connections and project/history controls clearly separate Codex, GPT and machine-specific actions. Codex limits and earned resets are visible from the Settings overview in either client, using the same authorized machine data and confirmed reset flow.
+- Both sidebar Remote shortcuts open the authorized Windows PC above the mounted current workspace. Prefer the selected Codex project's PC, use the sole available PC otherwise, and offer a machine choice when ambiguous. Preserve the current client, conversation, composer and draft; closing releases remote input and returns to that workspace. An unavailable PC must not silently connect to the server browser.
+- The protected server ChatGPT browser lives in the GPT Connections zone as an explicit new-tab action. This supersedes the GPT sidebar's former `/gpt-connect?immersive=1` shortcut; retain recovery links and the existing private browser/session boundary.

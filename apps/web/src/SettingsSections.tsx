@@ -1,8 +1,5 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { pageWorkspace } from "./accountStorage.ts";
 import { Icon } from "./icons";
-import { TeamGpt } from "./TeamGpt";
-import { TeamMachines } from "./TeamMachines";
 import "./settings-sections.css";
 
 export type SettingsCategory =
@@ -29,13 +26,11 @@ const categories = [
 /** One settings hierarchy for both clients. Hidden sections keep forms and operation state. */
 export function SettingsSections({
   open,
-  client,
   onClose,
   sections,
   overview,
 }: {
   open: boolean;
-  client: "Codex" | "GPT";
   onClose: () => void;
   sections: Record<SettingsCategory, (visible: boolean) => ReactNode>;
   overview?: (visible: boolean) => ReactNode;
@@ -82,7 +77,6 @@ export function SettingsSections({
             {categories.find((c) => c.id === active)?.title}
           </span>
         </h2>
-        <small className="settings-client">{client}</small>
         <button
           type="button"
           className="icon-button panel-close"
@@ -109,13 +103,7 @@ export function SettingsSections({
                 </span>
                 <span>
                   <strong>{category.title}</strong>
-                  <small>
-                    {category.id === "connections"
-                      ? client === "Codex"
-                        ? "Лимиты, инструменты и компьютеры"
-                        : "ChatGPT и компьютеры"
-                      : category.hint}
-                  </small>
+                  <small>{category.hint}</small>
                 </span>
                 <Icon name="chevron" size={16} />
               </button>
@@ -141,12 +129,6 @@ export function SettingsSections({
               </h3>
               {sections[category.id](
                 open && active === category.id && (!compact || selected !== null),
-              )}
-              {pageWorkspace && category.id === "connections" && (
-                <>
-                  <TeamGpt visible={open && active === category.id} />
-                  <TeamMachines visible={open && active === category.id} />
-                </>
               )}
             </section>
           ))}

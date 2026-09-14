@@ -4,6 +4,10 @@
 
 The Codex header has separate folder and branch buttons for Files and Git. Each opens a native modal bound to the selected private project/checkout. The former combined support-pane tab is removed. Settings remains in the sidebar footer in both Codex and GPT; it no longer occupies the top bar.
 
+Settings now has one persistent host shared by Codex and GPT. Its six categories and common controls are identical in both modes. The overview always includes Codex usage/reset availability; Connections separates Codex, GPT and computers, and Projects/history includes both catalogs and archives with clear client labels. Merely opening Settings never reconnects GPT or performs desktop maintenance.
+
+The sidebar Remote button always opens a configured Windows PC in a full-viewport modal above the current client. Returning preserves the mounted chat/composer and its draft; while Remote covers it, the chat is not considered read. The selected Codex project's PC takes precedence; otherwise choose the sole available PC or show a machine chooser. The protected server ChatGPT browser is an explicit new-tab link in Settings → Connections → GPT. Missing PC configuration never falls back to that browser.
+
 On wide screens Files uses a folder/file list beside a content preview. Automatic previews are limited to 2 MiB and use authenticated project-root reads with cancellation; larger files retain the explicit Open action. Phones keep file actions at the selected row and open content in the existing preview window. Files still explicitly reports read-only; the writable lock is deferred until typed server operations and the #158 upgrade prerequisite are ready.
 
 Git has its own broad window, with repository identity/status, README beside commits/branches/tags, changes/diff and releases. Close preserves the underlying chat draft and view; project changes discard old window context. Late responses cannot populate a different project's window.
