@@ -29,7 +29,8 @@ export async function prepareProjectSession({activePage,health,projectId,clearOv
  const target=paths.map(h=>{try{return new URL(h,'https://chatgpt.com');}catch{return null;}}).find(u=>u?.origin==='https://chatgpt.com'&&projectPath(u.pathname,projectId));
  if(!target)throw Error('GPT_PROJECT_NOT_VISIBLE');
  // One navigation; retry is only allowed before a prompt has been sent.
- await page.goto(target.href,{waitUntil:'domcontentloaded',timeout:15000}).catch(()=>{});
+ if(now()>=until)throw Error('GPT_SESSION_NOT_READY');
+ await page.goto(target.href,{waitUntil:'domcontentloaded',timeout:Math.max(1,Math.min(15000,until-now()))}).catch(()=>{});
  while(now()<until){try{const current=await probe();if(current&&await projectComposer(current,projectId))return {ok:true};}catch(e){if(['GPT_BUSY','GPT_UI_ATTENTION'].includes(e?.message))throw e;}await sleep(150);}
  throw Error('GPT_SESSION_NOT_READY');
 }

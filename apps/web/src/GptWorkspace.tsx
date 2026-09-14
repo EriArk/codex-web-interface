@@ -967,7 +967,12 @@ export function GptWorkspace({
           )}
           {job.error && (
             <div className="gpt-job-error" role="status">
-              <p>{job.error}</p>
+              <p>
+                {job.files.length === 0 &&
+                job.error === "Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены."
+                  ? "Не удалось подготовить поле ввода ChatGPT. Сообщение сохранено."
+                  : job.error}
+              </p>
               {job.status === "unknown" ? (
                 <button
                   type="button"

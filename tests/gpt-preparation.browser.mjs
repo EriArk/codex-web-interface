@@ -4,6 +4,7 @@ import { inspectComposer, readConnectorHealth } from "../ops/gpt/browser-health.
 import { selectModels } from "../ops/gpt/browser-models.mjs";
 import { dismissPromotions, inspectObstructions } from "../ops/gpt/browser-obstructions.mjs";
 import { prepareProjectSession, projectComposer } from "../ops/gpt/browser-projects.mjs";
+import { idleDocument } from "../ops/gpt/browser-recovery.mjs";
 import { sessionReady } from "../ops/gpt/browser-session.mjs";
 
 const html = `<!doctype html><meta charset="utf-8"><form>
@@ -41,7 +42,36 @@ for (const [name, type] of [
     );
     await page.goto("https://chatgpt.com/");
     assert(await sessionReady(page, null));
+    assert(await idleDocument(page));
+    await page.locator("#prompt-textarea").fill("Unsaved native draft");
+    assert.equal(await idleDocument(page), false);
+    await page.locator("#prompt-textarea").fill("");
+    for (const node of [
+      '<button data-testid="stop-button">Stop</button>',
+      '<div role="dialog">Attention</div>',
+      '<div role="group" aria-label="attachment.txt">File</div>',
+      '<div aria-busy="true"></div>',
+    ]) {
+      await page
+        .locator("form")
+        .evaluate((form, html) => form.insertAdjacentHTML("beforeend", html), node);
+      assert.equal(await idleDocument(page), false);
+      await page.locator("form > :last-child").evaluate((n) => n.remove());
+    }
+    assert(await idleDocument(page));
     let authenticated = false;
+    await page
+      .locator("body")
+      .evaluate((body) =>
+        body.insertAdjacentHTML(
+          "beforeend",
+          '<div id="writing" data-message-author-role="assistant"><div class="writing-block-editor"><div contenteditable="true">Native document</div></div></div>',
+        ),
+      );
+    assert(await idleDocument(page));
+    await page.locator("#writing [contenteditable]").focus();
+    assert.equal(await idleDocument(page), false);
+    await page.locator("#writing").evaluate((n) => n.remove());
     await page.route("https://chatgpt.com/api/auth/session", (route) =>
       route.fulfill({ json: authenticated ? { accessToken: "fixture-token" } : {} }),
     );

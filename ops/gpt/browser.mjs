@@ -14,6 +14,7 @@ import {mutateLibrary} from './browser-library.mjs';
 import {readModels,selectModels} from './browser-models.mjs';
 import {prepareProjectSession,projectComposer} from './browser-projects.mjs';
 import {prepareSession} from './browser-session.mjs';
+import {createTabRecovery} from './browser-recovery.mjs';
 import {activeConversation} from './conversation-binding.mjs';
 import {readJson,proxyBridge} from './bridge-proxy.mjs';
 import {timingSafeEqual} from 'node:crypto';
@@ -63,6 +64,11 @@ async function activePage(){
 }
 function authorized(req){const v=Buffer.from(req.headers.authorization??''),expected=Buffer.from('Bearer '+token);return v.length===expected.length&&timingSafeEqual(v,expected)}
 const storageState=privateState();
+const recoverIdleTab=createTabRecovery({context,health:async()=>{
+ const response=await fetch('http://127.0.0.1:8080/health',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(5000)});
+ if(!response.ok)throw Error('GPT_BRIDGE_UNAVAILABLE');
+ return response.json();
+}});
 server=createServer(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!authorized(req)){res.writeHead(401).end();return}
@@ -73,10 +79,15 @@ server=createServer(async(req,res)=>{
  if(req.method==='POST'&&['/bridge/sessions/new','/bridge/sessions/select'].includes(url.pathname)){
   try{
    const body=await readJson(req,4096),sessionId=url.pathname.endsWith('/new')?null:(body.sessionId??'');
+   const deadline=Date.now()+26000;
+   if((await recoverIdleTab()).recovered)console.info('GPT preparation: idle-tab-recovered');
+   const timeoutMs=Math.min(22000,deadline-Date.now());
+   if(timeoutMs<1000)throw Error('GPT_SESSION_NOT_READY');
    const headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
    const health=async()=>{const r=await fetch('http://127.0.0.1:8080/health',{headers,signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error('GPT_BRIDGE_UNAVAILABLE');return r.json()};
-   const result=body.projectId && sessionId===null ? await prepareProjectSession({activePage,health,projectId:body.projectId}) : await prepareSession({activePage,health,sessionId,command:async id=>{
-    const r=await fetch('http://127.0.0.1:8080/sessions/'+(id?'select':'new'),{method:'POST',headers,body:JSON.stringify(id?{sessionId:id}:{}),signal:AbortSignal.timeout(15000)});
+   const result=body.projectId && sessionId===null ? await prepareProjectSession({activePage,health,timeoutMs,projectId:body.projectId}) : await prepareSession({activePage,health,timeoutMs,sessionId,command:async id=>{
+    if(Date.now()>=deadline)throw Error('GPT_SESSION_NOT_READY');
+    const r=await fetch('http://127.0.0.1:8080/sessions/'+(id?'select':'new'),{method:'POST',headers,body:JSON.stringify(id?{sessionId:id}:{}),signal:AbortSignal.timeout(Math.min(15000,deadline-Date.now()))});
     await r.body?.cancel();return r.ok;
    }});
    res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(result));
