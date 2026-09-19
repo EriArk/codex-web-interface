@@ -4,6 +4,7 @@ import {nativeSettings} from './renderer-settings.mjs';
 import {nativeComposer} from './renderer-composer.mjs';
 import {nativeArtifacts} from './renderer-artifacts.mjs';
 import {nativeDispatch} from './renderer-dispatch.mjs';
+import {nativeUpload} from './renderer-upload.mjs';
 
 const endpoint = 'http://127.0.0.1:9222';
 const maxBytes = 2 * 1024 * 1024;
@@ -45,6 +46,7 @@ async function evaluate(url, expression, signal) {
 /** Loopback-only lab transport. No HTTP server, generic action or send API. */
 export class NativeRendererReader {
  constructor({transport}={}) { this.transport=transport; }
+ async uploadFile(request,options){return this.#read(request,options,'upload');}
  async dispatchText(request,options){return this.#read({...request,operation:'dispatchText'},options,'dispatch');}
  async prepareDispatch(request,options){return this.#read({...request,operation:'prepareDispatch'},options,'dispatch');}
  async readSubmission(request,options){return this.#read({...request,operation:'readSubmission'},options);}
@@ -80,7 +82,7 @@ export class NativeRendererReader {
   const deadline = AbortSignal.timeout(20000);
   const signal = callerSignal ? AbortSignal.any([callerSignal, deadline]) : deadline;
   try {
-   const call = control === 'dispatch' ? `(${nativeDispatch.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
+   const call = control === 'upload' ? `(${nativeUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'dispatch' ? `(${nativeDispatch.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
    const expression = `(async()=>{try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
    const unwrap=result=>{if(result?.ok!==true)throw Error(/^NATIVE_[A-Z_]+$/.test(result?.code??'')?result.code:'NATIVE_INVALID_RESPONSE');return result.value;};
    if(this.transport)return unwrap(await this.transport.evaluateMain(expression,guard,signal));

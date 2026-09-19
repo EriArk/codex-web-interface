@@ -181,6 +181,7 @@ export class NativeGptReadClient {
       model: string;
       effort: string | null;
       intentPersisted: true;
+      attachments?: NativeUploadedFile[];
     },
   ) {
     nativeDispatchInput
@@ -189,6 +190,7 @@ export class NativeGptReadClient {
         model: z.string().max(128),
         effort: z.string().max(128).nullable(),
         intentPersisted: z.literal(true),
+        attachments: nativeUploadedFile.array().max(4).optional(),
       })
       .parse(input);
     const result = z
@@ -196,6 +198,64 @@ export class NativeGptReadClient {
       .strict()
       .parse(await this.call({ operation: "dispatchText", ...input }));
     if (result.userMessageId !== input.userMessageId) fail("SUBMISSION_MISMATCH");
+    return result;
+  }
+  async uploadFile(input: {
+    key: string;
+    conversationId: string | null;
+    file: {
+      id: string;
+      name: string;
+      mime: string;
+      bytes: number;
+      sha256: string;
+      base64: string;
+    };
+  }) {
+    uuid.parse(input.key);
+    uuid.nullable().parse(input.conversationId);
+    const file = z
+      .object({
+        id: uuid,
+        name: z
+          .string()
+          .min(1)
+          .max(255)
+          .refine(
+            (value) =>
+              !value.includes("/") &&
+              !value.includes("\\") &&
+              [...value].every((c) => c.charCodeAt(0) >= 32),
+          ),
+        mime: z.enum(["text/plain", "image/png"]),
+        bytes: z
+          .number()
+          .int()
+          .min(1)
+          .max(1024 * 1024),
+        sha256: digest,
+        base64: z.string().max(1398104),
+      })
+      .strict()
+      .parse(input.file);
+    const bytes = Buffer.from(file.base64, "base64");
+    if (
+      bytes.length !== file.bytes ||
+      bytes.toString("base64") !== file.base64 ||
+      hash(bytes) !== file.sha256
+    )
+      fail("UPLOAD_CHANGED");
+    const result = nativeUploadedFile.parse(
+      await this.call({ operation: "uploadFile", ...input, file }),
+    );
+    if (
+      result.id !== file.id ||
+      result.sha256 !== file.sha256 ||
+      result.native.name !== file.name ||
+      result.native.size !== file.bytes ||
+      result.native.mimeType !== file.mime
+    )
+      fail("UPLOAD_MISMATCH");
     return result;
   }
   async reconcileDispatch(key: string, conversationId: string | null) {
@@ -337,3 +397,25 @@ const nativeDispatchInput = z
   })
   .strict();
 export type NativeDispatchInput = z.infer<typeof nativeDispatchInput>;
+const nativeUploadedFile = z
+  .object({
+    id: uuid,
+    sha256: digest,
+    native: z
+      .object({
+        id: z.string().regex(/^file[-_][a-zA-Z0-9_-]{1,150}$/),
+        name: z.string().min(1).max(255),
+        mimeType: z.enum(["text/plain", "image/png"]),
+        size: z
+          .number()
+          .int()
+          .min(1)
+          .max(1024 * 1024),
+        source: z.literal("local"),
+        width: z.number().int().min(1).max(4096).optional(),
+        height: z.number().int().min(1).max(4096).optional(),
+      })
+      .strict(),
+  })
+  .strict();
+export type NativeUploadedFile = z.infer<typeof nativeUploadedFile>;

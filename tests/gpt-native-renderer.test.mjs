@@ -72,6 +72,57 @@ test("submission readback requires exact ID, parent, unchanged text and a public
   assert.equal((await f.read(request)).state, "unknown");
 });
 
+test("canonical attachment identity survives JSON key order, rejecting substituted files and image pointers", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  const native = {
+    id: "file-image",
+    name: "image.png",
+    mimeType: "image/png",
+    size: 100,
+    width: 32,
+    height: 16,
+    source: "local",
+  };
+  const content = {
+    parts: [
+      {
+        width: 32,
+        height: 16,
+        size_bytes: 100,
+        content_type: "image_asset_pointer",
+        asset_pointer: "file-service://file-image",
+      },
+      "prompt",
+    ],
+    content_type: "multimodal_text",
+  };
+  f.node(2, "prompt", {
+    id: id(90),
+    author: { role: "user" },
+    content,
+    metadata: {
+      attachments: [{ id: native.id, name: native.name, mime_type: native.mimeType, size: 100 }],
+    },
+  });
+  f.node(3, "answer", { end_turn: true });
+  const input = {
+    operation: "readSubmission",
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "prompt",
+    attachments: [{ id: id(99), sha256: "a".repeat(64), native }],
+  };
+  assert.equal((await f.read(input)).state, "completed");
+  content.parts[0].asset_pointer = "file-service://different";
+  await assert.rejects(f.read(input), /SUBMISSION_MISMATCH/);
+  content.parts[0].asset_pointer = "file-service://file-image";
+  f.conversation.mapping[id(2)].message.metadata.attachments[0].id = "different";
+  await assert.rejects(f.read(input), /SUBMISSION_MISMATCH/);
+});
+
 test("new Chat proof rejects previous user history and project/Work association", async () => {
   const f = fixture(),
     accountFingerprint = await f.binding();

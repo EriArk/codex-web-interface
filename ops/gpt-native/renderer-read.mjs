@@ -148,8 +148,17 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   const index=chain.findIndex(n=>n.message?.id===request.userMessageId);
   const node=chain[index];
   if(index<0)return {state:'unknown',messages:[]};
+  const attachments=(request.attachments??[]).map(f=>f.native);
+  const expectedContent={content_type:attachments.some(f=>f.mimeType==='image/png')?'multimodal_text':'text',parts:[
+   ...attachments.filter(f=>f.mimeType==='image/png').map(f=>({asset_pointer:(f.id.startsWith('file_')?'sediment://':'file-service://')+f.id,content_type:'image_asset_pointer',height:f.height,size_bytes:f.size,width:f.width})),request.text]};
+  const actual=node.message.metadata?.attachments??[];
+  if(actual.length!==attachments.length||attachments.some((f,i)=>actual[i].id!==f.id||actual[i].name!==f.name||actual[i].size!==f.size||actual[i].mime_type!==f.mimeType))fail('SUBMISSION_MISMATCH');
+  const content=node.message.content;
+  const sameContent=content?.content_type===expectedContent.content_type&&Array.isArray(content.parts)&&content.parts.length===expectedContent.parts.length&&
+   expectedContent.parts.every((p,i)=>typeof p==='string'?content.parts[i]===p:
+    content.parts[i]&&Object.keys(p).every(k=>content.parts[i][k]===p[k]));
   if(chain.filter(n=>n.message?.id===request.userMessageId).length!==1||node.parent!==request.parentId||node.message.author?.role!=='user'||
-     node.message.content?.content_type!=='text'||JSON.stringify(node.message.content.parts)!==JSON.stringify([request.text])||
+     !sameContent||
      node.message.metadata?.is_visually_hidden_from_conversation===true)fail('SUBMISSION_MISMATCH');
   if(request.newChat===true&&(chain.slice(index+1).some(n=>n.message?.author?.role==='user')||conversation.gizmo_id!=null||conversation.conversation_origin==='tpp'))fail('SUBMISSION_MISMATCH');
   // A later user turn or more than one public page is not guessed into this receipt.

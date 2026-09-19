@@ -9,6 +9,14 @@ export async function nativeDispatch(request, read, control,
      typeof request.text !== 'string' || !request.text.trim() || new TextEncoder().encode(request.text).length > 32768 ||
      typeof request.model !== 'string' || request.model.length > 128 ||
      (request.effort !== null && (typeof request.effort !== 'string' || request.effort.length > 128))) fail('INVALID_REQUEST');
+ const attachments=(request.attachments??[]).map(f=>f.native);
+ if(!Array.isArray(request.attachments??[])||attachments.length>4)fail('INVALID_UPLOAD');
+ const expectedContent={content_type:attachments.some(f=>f.mimeType==='image/png')?'multimodal_text':'text',parts:[
+  ...attachments.filter(f=>f.mimeType==='image/png').map(f=>({asset_pointer:(f.id.startsWith('file_')?'sediment://':'file-service://')+f.id,content_type:'image_asset_pointer',height:f.height,size_bytes:f.size,width:f.width})),request.text]};
+ const matchesAttachments=message=>{
+  const actual=message.metadata?.attachments??[];
+  return actual.length===attachments.length&&attachments.every((f,i)=>actual[i].id===f.id&&actual[i].name===f.name&&actual[i].size===f.size&&actual[i].mime_type===f.mimeType);
+ };
  const binding = {conversationId:request.conversationId,accountFingerprint:request.accountFingerprint};
  const creating=request.conversationId===null;
  if ((await read({operation:'inspectAccount'})).accountFingerprint !== request.accountFingerprint) fail('ACCOUNT_MISMATCH');
@@ -18,7 +26,7 @@ export async function nativeDispatch(request, read, control,
  if (runtime[lockKey]) fail('BUSY');
  runtime[lockKey] = true;
  try {
-  const signature = JSON.stringify([request.key,request.conversationId,request.userMessageId,request.text,request.model,request.effort,request.accountFingerprint]);
+  const signature = JSON.stringify([request.key,request.conversationId,request.userMessageId,request.text,request.model,request.effort,request.accountFingerprint,request.attachments??[]]);
   const previous = runtime[stateKey];
   if (request.operation === 'inspectDispatch') {
    if (previous?.signature !== signature) fail('DISPATCH_NOT_FOUND');
@@ -81,7 +89,7 @@ export async function nativeDispatch(request, read, control,
     if((creating?body?.conversation_id!=null:body?.conversation_id!==request.conversationId)||
        (creating&&(body?.gizmo_id!=null||body?.conversation_origin!=null||body?.conversation_mode!=null||body?.history_and_training_disabled===true))||body?.parent_message_id!==request.parentId||body?.model!==request.model||
        (body?.thinking_effort??null)!==request.effort||user?.length!==1||user[0].id!==request.userMessageId||
-       JSON.stringify(user[0].content)!==JSON.stringify({content_type:'text',parts:[request.text]}))fail('DISPATCH_CONTEXT_CHANGED');
+       JSON.stringify(user[0].content)!==JSON.stringify(expectedContent)||!matchesAttachments(user[0]))fail('DISPATCH_CONTEXT_CHANGED');
     return Reflect.apply(target.startCompletionStream,guarded,[{...args,
      expectedIdentity:{accountId:principal.accountId,userId:principal.userId},
      assertRequestCurrent:()=>{
@@ -98,10 +106,10 @@ export async function nativeDispatch(request, read, control,
    if(key==='get')return (atom,...args)=>atom===m.CUt?guarded:target.get(atom,...args);
    const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
   }});
-  const messages=m.lDt({prompt:request.text,systemHints:scope.get(m.UNt,id)});
+  const messages=m.lDt({attachments,prompt:request.text,systemHints:scope.get(m.UNt,id)});
   messages.message.id=request.userMessageId;
   // Preserve the exact submitted string, including intentional leading/trailing whitespace.
-  messages.message.content={content_type:'text',parts:[request.text]};
+  messages.message.content=expectedContent;
   const startupSignal=AbortSignal.timeout(15000);
   try {
    const result=await m.mDt(boundScope,{conversationId:id,parentMessageId:request.parentId,

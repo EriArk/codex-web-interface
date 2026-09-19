@@ -17,6 +17,7 @@ export class NativeDispatchReceipts {
   this.db.exec("PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS binding(id INTEGER PRIMARY KEY, hash TEXT NOT NULL); CREATE TABLE IF NOT EXISTS receipts(key TEXT PRIMARY KEY, hash TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL);");
   this.db.exec('CREATE TABLE IF NOT EXISTS creations(key TEXT PRIMARY KEY REFERENCES receipts(key),candidate TEXT,confirmed TEXT)');
   if(!this.db.prepare('PRAGMA table_info(creations)').all().some(x=>x.name==='createdAfter'))this.db.exec('ALTER TABLE creations ADD COLUMN createdAfter INTEGER');
+  this.db.exec('CREATE TABLE IF NOT EXISTS uploads(key TEXT NOT NULL,id TEXT NOT NULL,hash TEXT NOT NULL,result TEXT,PRIMARY KEY(key,id))');
   const hash=this.hash([userId,accountFingerprint]);
   this.db.prepare('INSERT OR IGNORE INTO binding VALUES(1,?)').run(hash);
   if(this.db.prepare('SELECT hash FROM binding WHERE id=1').get().hash!==hash){this.db.close();fail('INVALID_BINDING');}
@@ -27,6 +28,26 @@ export class NativeDispatchReceipts {
  validate(r){
   if(!(r.conversationId===null?this.creationKeys.has(r.key):this.allowed.has(r.conversationId))||!uuid(r.key)||!uuid(r.userMessageId)||typeof r.text!=='string'||!r.text.trim()||Buffer.byteLength(r.text)>32768||
      typeof r.versionId!=='string'||r.versionId.length>128||!Number.isSafeInteger(r.presetId))fail('INVALID_CANARY');
+ }
+ async upload(r,reader){
+  if(!(r.conversationId===null?this.creationKeys.has(r.key):this.allowed.has(r.conversationId))||!uuid(r.key))fail('INVALID_CANARY');
+  const f=r.file;
+  if(!f||!uuid(f.id)||typeof f.base64!=='string'||f.base64.length>1398104||!Number.isSafeInteger(f.bytes)||f.bytes<1||f.bytes>1024*1024||
+     !['text/plain','image/png'].includes(f.mime)||typeof f.name!=='string'||!f.name||f.name.length>255||/[\\/\x00-\x1f]/.test(f.name)||!/^[a-f0-9]{64}$/.test(f.sha256??''))fail('INVALID_UPLOAD');
+  const bytes=Buffer.from(f.base64,'base64');
+  if(bytes.length!==f.bytes||bytes.toString('base64')!==f.base64||createHash('sha256').update(bytes).digest('hex')!==f.sha256)fail('UPLOAD_CHANGED');
+  const hash=this.hash([r.conversationId,f.id,f.name,f.mime,f.bytes,f.sha256]);
+  const old=this.db.prepare('SELECT hash,result FROM uploads WHERE key=? AND id=?').get(r.key,f.id);
+  if(old){if(old.hash!==hash)fail('UPLOAD_CHANGED');if(!old.result)fail('UPLOAD_UNKNOWN');return JSON.parse(old.result);}
+  if(this.pending()||this.db.prepare('SELECT 1 FROM receipts WHERE key=?').get(r.key))fail('PENDING_DISPATCH');
+  if(this.db.prepare('SELECT count(*) AS n FROM uploads WHERE key=?').get(r.key).n>=4)fail('TOO_MANY_UPLOADS');
+  this.db.prepare('INSERT INTO uploads(key,id,hash) VALUES(?,?,?)').run(r.key,f.id,hash);
+  const native=await reader.uploadFile(r);
+  if(!native||typeof native.id!=='string'||!/^file[-_][a-zA-Z0-9_-]{1,150}$/.test(native.id)||native.name!==f.name||native.mimeType!==f.mime||native.size!==f.bytes||native.source!=='local'||
+     (f.mime==='image/png'&&(!Number.isSafeInteger(native.width)||!Number.isSafeInteger(native.height)||native.width<1||native.height<1||native.width>4096||native.height>4096)))fail('INVALID_UPLOAD_RESPONSE');
+  const result={id:f.id,sha256:f.sha256,native:{id:native.id,name:f.name,mimeType:f.mime,size:f.bytes,source:'local',...(f.mime==='image/png'?{width:native.width,height:native.height}:{})}};
+  this.db.prepare('UPDATE uploads SET result=? WHERE key=? AND id=?').run(JSON.stringify(result),r.key,f.id);
+  return result;
  }
  async prepare(r,reader){
   this.validate(r);
@@ -53,6 +74,15 @@ export class NativeDispatchReceipts {
  async dispatch(r,reader){
   this.validate(r);
   if(!uuid(r.parentId)||typeof r.model!=='string'||r.model.length>128||(r.effort!==null&&typeof r.effort!=='string')||r.intentPersisted!==true)fail('INVALID_REQUEST');
+  if(r.attachments!=null){
+   if(!Array.isArray(r.attachments)||r.attachments.length>4||new Set(r.attachments.map(f=>f.id)).size!==r.attachments.length)fail('INVALID_UPLOAD');
+   for(const f of r.attachments){
+    const saved=this.db.prepare('SELECT hash,result FROM uploads WHERE key=? AND id=?').get(r.key,f.id);
+    if(!saved?.result||this.hash(JSON.parse(saved.result))!==this.hash(f)||saved.hash!==this.hash([r.conversationId,f.id,f.native.name,f.native.mimeType,f.native.size,f.sha256]))fail('UPLOAD_MISMATCH');
+   }
+  }
+  const uploaded=this.db.prepare('SELECT id,result FROM uploads WHERE key=?').all(r.key);
+  if(uploaded.length!==(r.attachments??[]).length||uploaded.some(x=>!x.result))fail('UPLOAD_MISMATCH');
   const hash=this.hash(r),old=this.db.prepare('SELECT * FROM receipts WHERE key=?').get(r.key);
   if(old){if(old.hash!==hash)fail('KEY_CONFLICT');return {state:old.state==='completed'?'completed':'unknown',userMessageId:r.userMessageId};}
   if(this.pending())fail('PENDING_DISPATCH');

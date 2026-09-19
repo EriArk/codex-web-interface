@@ -1,10 +1,12 @@
-import { randomUUID } from "node:crypto";
-import type { NativeGptReadClient } from "./gpt-native.js";
+import { createHash, randomUUID } from "node:crypto";
+import type { GptFile } from "@codex-web/shared";
+import { z } from "zod";
+import type { NativeGptReadClient, NativeUploadedFile } from "./gpt-native.js";
 import type { Store } from "./store.js";
 
 type NativeJobsClient = Pick<
   NativeGptReadClient,
-  "prepareDispatch" | "dispatchText" | "reconcileDispatch"
+  "prepareDispatch" | "dispatchText" | "reconcileDispatch" | "uploadFile"
 >;
 function fail(code: string): never {
   throw Error(`NATIVE_${code}`);
@@ -19,12 +21,22 @@ export class NativeGptJobs {
     private readonly authorize: () => void,
     private readonly allowed: Set<string>,
     private readonly creationKeys: Set<string> = new Set(),
+    private readonly readUpload?: (file: GptFile) => Promise<Buffer>,
   ) {
     store.db.exec(
       "PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS gpt_native_receipts(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id),payload TEXT NOT NULL,messages TEXT NOT NULL DEFAULT '[]')",
     );
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS gpt_native_creations(jobId TEXT PRIMARY KEY REFERENCES gpt_native_receipts(jobId),conversationId TEXT NOT NULL)",
+    );
+    store.db.exec(
+      "CREATE TABLE IF NOT EXISTS gpt_native_files(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id),files TEXT NOT NULL,hashes TEXT NOT NULL)",
+    );
+    store.db.exec(
+      "CREATE TABLE IF NOT EXISTS gpt_native_preparations(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id))",
+    );
+    store.db.exec(
+      "UPDATE gpt_jobs SET status='failed',error='NATIVE_PREPARATION_INTERRUPTED' WHERE status='preparing' AND id IN (SELECT jobId FROM gpt_native_preparations) AND id NOT IN (SELECT jobId FROM gpt_native_receipts)",
     );
     store.db
       .prepare(
@@ -53,7 +65,32 @@ export class NativeGptJobs {
         row.nativeId == null ? !this.creationKeys.has(id) : !this.allowed.has(String(row.nativeId))
       )
         fail("INVALID_CANARY");
-      if (row.files !== "[]") fail("ATTACHMENTS_NOT_SUPPORTED");
+      const files = z
+        .array(
+          z
+            .object({
+              id: z.string().uuid(),
+              name: z.string().min(1).max(255),
+              mime: z.enum(["text/plain", "image/png"]),
+              bytes: z
+                .number()
+                .int()
+                .min(1)
+                .max(1024 * 1024),
+              url: z.string(),
+              image: z.boolean(),
+            })
+            .strict(),
+        )
+        .max(4)
+        .safeParse(JSON.parse(String(row.files)));
+      if (!files.success) fail("INVALID_ATTACHMENTS");
+      const selectedFiles = files.data;
+      if (
+        selectedFiles.length &&
+        (!this.readUpload || new Set(selectedFiles.map((f) => f.id)).size !== selectedFiles.length)
+      )
+        fail("INVALID_UPLOAD");
       if (
         this.store.db
           .prepare(
@@ -71,6 +108,7 @@ export class NativeGptJobs {
         presetId: Number(row.effort),
       };
       if (!/^\d+$/.test(String(row.effort))) fail("INVALID_SETTINGS");
+      this.store.db.prepare("INSERT OR IGNORE INTO gpt_native_preparations VALUES(?)").run(id);
       if (
         this.store.db
           .prepare(
@@ -80,11 +118,54 @@ export class NativeGptJobs {
       )
         fail("JOB_CHANGED");
       let prepared: Awaited<ReturnType<NativeJobsClient["prepareDispatch"]>>;
+      const attachments: NativeUploadedFile[] = [];
       try {
         prepared = await this.client.prepareDispatch(input);
         this.authorize();
         if (prepared.versionId !== input.versionId || prepared.presetId !== input.presetId)
           fail("INVALID_SETTINGS");
+        const snapshots = [];
+        let total = 0;
+        for (const file of selectedFiles) {
+          this.authorize();
+          // The caller resolves only an already-authorized Hub upload ID. No URL or
+          // arbitrary filesystem path is passed to the native app.
+          if (!this.readUpload) fail("INVALID_UPLOAD");
+          const bytes = await this.readUpload(file);
+          this.authorize();
+          total += bytes.length;
+          if (bytes.length !== file.bytes || total > 1024 * 1024) fail("UPLOAD_CHANGED");
+          snapshots.push({
+            ...file,
+            sha256: createHash("sha256").update(bytes).digest("hex"),
+            base64: bytes.toString("base64"),
+          });
+        }
+        const hashes = JSON.stringify(snapshots.map((f) => ({ id: f.id, sha256: f.sha256 })));
+        this.store.db
+          .prepare("INSERT OR IGNORE INTO gpt_native_files VALUES(?,?,?)")
+          .run(id, String(row.files), hashes);
+        const saved = this.store.db
+          .prepare("SELECT files,hashes FROM gpt_native_files WHERE jobId=?")
+          .get(id);
+        if (saved?.files !== row.files || saved?.hashes !== hashes) fail("UPLOAD_CHANGED");
+        for (const f of snapshots) {
+          attachments.push(
+            await this.client.uploadFile({
+              key: id,
+              conversationId: input.conversationId,
+              file: {
+                id: f.id,
+                name: f.name,
+                mime: f.mime,
+                bytes: f.bytes,
+                sha256: f.sha256,
+                base64: f.base64,
+              },
+            }),
+          );
+          this.authorize();
+        }
       } catch (error) {
         this.store.db
           .prepare(
@@ -99,6 +180,7 @@ export class NativeGptJobs {
         model: prepared.model,
         effort: prepared.effort,
         intentPersisted: true as const,
+        ...(attachments.length ? { attachments } : {}),
       };
       // Atomic receipt + existing queue transition. A crash from this point means readback only.
       this.store.db.exec("BEGIN IMMEDIATE");
@@ -106,9 +188,18 @@ export class NativeGptJobs {
         if (
           this.store.db
             .prepare(
-              "UPDATE gpt_jobs SET status='running',requestId=?,submitted=1,updatedAt=? WHERE id=? AND status='preparing'",
+              "UPDATE gpt_jobs SET status='running',requestId=?,submitted=1,updatedAt=? WHERE id=? AND status='preparing' AND nativeId IS ? AND text=? AND files=? AND model=? AND effort=?",
             )
-            .run(input.userMessageId, Date.now(), id).changes !== 1
+            .run(
+              input.userMessageId,
+              Date.now(),
+              id,
+              row.nativeId == null ? null : String(row.nativeId),
+              String(row.text),
+              String(row.files),
+              String(row.model),
+              String(row.effort),
+            ).changes !== 1
         )
           fail("JOB_CHANGED");
         this.store.db
@@ -152,7 +243,10 @@ export class NativeGptJobs {
       row.text !== payload.text ||
       row.model !== payload.versionId ||
       Number(row.effort) !== payload.presetId ||
-      row.files !== "[]"
+      (payload.attachments?.length
+        ? this.store.db.prepare("SELECT files FROM gpt_native_files WHERE jobId=?").get(id)
+            ?.files !== row.files
+        : row.files !== "[]")
     )
       fail("SUBMISSION_MISMATCH");
     let result: Awaited<ReturnType<NativeJobsClient["reconcileDispatch"]>>;
