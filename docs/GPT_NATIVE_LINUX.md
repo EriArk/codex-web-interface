@@ -1,6 +1,6 @@
 # Linux ChatGPT evaluation — #193
 
-Date: 2026-09-19. **Isolated evaluation, not a production provider migration.** The owner has signed in. Consumer GPT catalog/history and an exact-once direct follow-up are proven; the full web provider and decision gate remain open.
+Date: 2026-09-19. **Isolated evaluation, not a production provider migration.** The owner has signed in. Consumer GPT catalog/history, direct follow-ups, live native UI observation and text/image input are proven; the full web provider and decision gate remain open.
 
 ## Package and runtime
 
@@ -24,17 +24,31 @@ Authenticated `list_threads` returned both `chatgpt` and `codex` entries. `read_
 
 A new **disposable consumer Chat** was created through the observed native UI, in Chat rather than Work mode. A unique diagnostic prompt was sent once and its exact user message and `nativegptok` answer were verified through native IPC. A second unique prompt was sent through `send_message_to_thread` directly. The app acknowledged in **1,087 ms**; canonical readback confirmed one exact prompt and one `nativeipcok` answer after **63,120 ms**, with no duplicate and no retry of the mutation. Receipts remain private in the lab. UI coordinates used for this one-off observation are not a proposed production adapter.
 
-The fresh answer appeared visually before the IPC read returned it. The exact cause of that cache/refresh delay is not yet established. A minute-long fresh-tail delay makes the current read-only tool contract insufficient as the sole live-chat transport.
+The fresh answer appeared visually before the IPC read returned it. Inspection of the pinned renderer identifies the cache: `read_thread` reaches `S0r(scope, id)` through `PHi -> pHi -> b0r`, using `query.getOrFetch(wj, id)`. The `wj` query calls `rjr`, whose `staleTime` is `ONE_MINUTE`. The send handler explicitly refetches before sending, but the read tool has no force-refresh input. A minute-long fresh-tail delay makes this tool contract insufficient as the sole live-chat transport.
+
+## Native UI/renderer follow-up
+
+A temporary inspector bound to loopback **inside the isolated container**, without a host port, was used for this research. It was removed after testing; a final connection probe verified it closed. The original startup was restored and the app restarted with its login intact. This is not a new production debug endpoint.
+
+The main window is an `app://-/index.html` renderer with an in-memory route, not a normal ChatGPT webpage URL. Its public DOM exposes accessible composer, send, model, file-input and preview controls, and public assistant Markdown. Sidebar entries have labels but no native thread-ID attribute was found in this bounded inspection. The preload exposes renderer/main messaging; inspecting arbitrary React internals or exporting credentials is not the proposed provider boundary.
+
+In the same disposable chat, another unique prompt was dispatched once via the native tool. A matching public response was observed in the live renderer after **4,370 ms**, with acknowledgement at **1,252 ms**. Later canonical readback confirmed one exact prompt and one answer. This proves the renderer can expose a fresh public reply before the tool's history cache refreshes; it is one observation, not a latency benchmark or a proven streaming adapter.
+
+Two synthetic fixtures were then attached through the native file input: a small text file with marker `cobalt-742` and a PNG containing red/blue halves. The typed prompt was checked in the empty composer, a private dispatch receipt was written before the single send click, and GPT correctly returned the marker and both colours in order. Canonical history confirmed the exact prompt plus the native one-file/one-image summary envelope once. This verifies text/image delivery without uploading the owner's private files.
+
+The answer also exposed native file preview/save controls. Opening the preview showed the **original fixture text**, so this is an attachment reference, not evidence of a newly generated downloadable file. `read_thread` reduced those references to `:chatgpt-content-reference{index=...}` placeholders; it does not alone provide the media contract needed by Results. Generated image/file download remains unproven. The model menu exposed selectable radio entries; changing model/effort and maintaining that selection through sends are not yet verified.
+
+After removing the inspector and restarting, readback confirmed **four exact test prompts and four answers**, with no duplicate/replayed send and an idle authenticated chat. All research writes stayed in that disposable consumer chat and the separate local diagnostic carrier.
 
 | Capability | Actual evidence | Remaining gap |
 | --- | --- | --- |
 | Consumer catalog / history | Real authenticated reads, native IDs, public user/agent messages | Larger history, branch fidelity and fresh live updates |
-| Existing Chat follow-up | Real direct IPC send and exact canonical prompt/answer, no replay | Native streaming, stop and durable provider integration |
+| Existing Chat follow-up | Real IPC send, 4.37-second live UI observation and exact canonical prompt/answer, no replay | Native streaming, stop and durable provider integration |
 | Ordinary Chat creation | Works in the native UI | `create_thread` only offers Codex/projectless/ChatGPT Work cloud targets |
-| Model / effort | Consumer UI exposes model control | Tool overrides are Codex-only; no direct ordinary-GPT picker contract here |
-| Attachments / generated media | Existing native app UI remains available | Send schema has no attachment input; advertised `attach_artifact` is PR-only, not a file upload API |
+| Model / effort | Native model menu and radio options observed | Tool overrides are Codex-only; native selection/effort persistence needs verification |
+| Attachments / generated media | Synthetic text and image read correctly through native UI; original file preview works | Tool send has no attachment input; `attach_artifact` is PR-only; generated media and Results reference resolution unproven |
 | Projects, branches, Canvas, schedules | Some related tool/UI surfaces exist | No complete parity proof; preserve current capabilities through migration |
-| Account / recovery | Owner login and protected view work; container restart preserves login and both exact test turns | Host reboot, reauthentication and sustained-use acceptance |
+| Account / recovery | Owner login and protected view work; container restart preserves login and all four exact test turns | Host reboot, reauthentication and sustained-use acceptance |
 | Team | Native lab denies other users | Per-member native provisioning, lifecycle and backup admission remain unimplemented |
 
 `ops/gpt-native/ipc.mjs` / `probe.mjs` are a build-gated **read-only research interface**, not an HTTP provider. Requests have bounded frames, exact response IDs, timeouts and no automatic retries. The disposable write proof was a one-off private receipt-guarded lab script; the web client cannot invoke arbitrary tools or send through this spike.
@@ -66,7 +80,13 @@ Only the user service `codex-web-gpt-login.service` was updated to a staged reco
 
 ## Next decision / migration gates
 
-The direct IPC path is real and useful, but does not yet cover the required live-chat contract. Next evaluate the native semantic renderer/main-process interfaces for fresh stream events, ordinary Chat creation, model/effort and media. Do not turn pixel clicking or arbitrary injected code into the normal provider architecture. Keep #193 open until the hybrid/direct choice has lifecycle, media and comparable resource evidence.
+The evidence favors continuing with a **native UI provider supplemented by direct IPC for canonical reconciliation**, rather than the current tool-only path. This is a working direction, not a completed Outcome B decision: no comparable long-chat benchmark, sustained-use pass or full typed adapter exists yet. Do not turn pixel clicking or arbitrary injected code into the normal provider architecture. Keep #193 open.
+
+The next bounded implementation gates are:
+
+1. Build a version/capability-gated private adapter with typed operations and exact account/chat identity checks. Resolve in-memory navigation identity before enabling web writes; sidebar titles alone are insufficient. Use native public state/accessible controls for fresh output while preserving native message IDs from canonical reconciliation.
+2. Prove creation, model/effort, stop, files/generated media and reference resolution; preserve partial public messages and unknown sends across reconnect. Expose no generic evaluation/UI-control API to the browser.
+3. Compare a long-chat workload and restart recovery with the existing connector; verify host boot supervision and per-member provisioning. Only then stage a reversible provider switch against the existing Hub projection and durable jobs.
 
 Reuse the existing Hub provider-facing types, durable serialized operations, source IDs and local history projection. A provider switch must retain draft associations, Results backlinks, projects and unknown receipts. Unknown old sends stay unknown until canonical reconciliation; migration never authorizes replay. Introduce no account-token extraction or native fallback across users.
 
