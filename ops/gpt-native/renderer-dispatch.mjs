@@ -4,12 +4,13 @@ export async function nativeDispatch(request, read, control,
  loadActions = () => import('app://-/assets/register-app-actions-a2e5974b9821.js')) {
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const uuid = x => typeof x === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
- if (!['prepareDispatch','dispatchText','inspectDispatch'].includes(request.operation) ||
-     !uuid(request.conversationId) || !uuid(request.key) || !uuid(request.userMessageId) ||
+ if (!['prepareDispatch','dispatchText','inspectDispatch','resolveCreation'].includes(request.operation) ||
+     (request.conversationId!==null&&!uuid(request.conversationId)) || !uuid(request.key) || !uuid(request.userMessageId) ||
      typeof request.text !== 'string' || !request.text.trim() || new TextEncoder().encode(request.text).length > 32768 ||
      typeof request.model !== 'string' || request.model.length > 128 ||
      (request.effort !== null && (typeof request.effort !== 'string' || request.effort.length > 128))) fail('INVALID_REQUEST');
  const binding = {conversationId:request.conversationId,accountFingerprint:request.accountFingerprint};
+ const creating=request.conversationId===null;
  if ((await read({operation:'inspectAccount'})).accountFingerprint !== request.accountFingerprint) fail('ACCOUNT_MISMATCH');
  const m = await load();
  const lockKey = Symbol.for('codex-web.native-dispatch-lock');
@@ -23,13 +24,15 @@ export async function nativeDispatch(request, read, control,
    if (previous?.signature !== signature) fail('DISPATCH_NOT_FOUND');
    return {key:request.key,state:previous.state,userMessageId:request.userMessageId};
   }
-  if (previous?.signature === signature && previous.dispatched) return {key:request.key,state:previous.state,userMessageId:request.userMessageId};
-  if (previous?.dispatched && previous.state === 'running') fail('BUSY');
-  const ui = await control({operation:'inspectConversation',...binding},read,load,runtime);
-  if (!ui.selected || !ui.composerReady || ui.hasDraft || ui.stopAvailable) fail('NOT_READY');
-  const history = await read({operation:'readConversation',...binding});
+  if (request.operation!=='resolveCreation'&&previous?.signature === signature && previous.dispatched) return {key:request.key,state:previous.state,userMessageId:request.userMessageId};
+  if (request.operation!=='resolveCreation'&&previous?.dispatched && previous.state === 'running') fail('BUSY');
+  if(request.operation!=='resolveCreation'){
+   const ui = await control({operation:'inspectConversation',...binding},read,load,runtime);
+   if (!ui.selected || !ui.composerReady || ui.hasDraft || ui.stopAvailable) fail('NOT_READY');
+  }else if(!creating)fail('INVALID_REQUEST');
+  const history = creating?{messages:[],currentNode:request.parentId}:await read({operation:'readConversation',...binding});
   if (history.messages.some(x=>x.id===request.userMessageId)) fail('MESSAGE_ALREADY_EXISTS');
-  if (request.operation === 'dispatchText' && (request.parentId !== history.currentNode || request.intentPersisted !== true)) fail('BRANCH_CHANGED');
+  if (request.operation === 'dispatchText' && (!uuid(request.parentId)||request.parentId !== history.currentNode || request.intentPersisted !== true)) fail('BRANCH_CHANGED');
   // Obtain only the native action's route scope. Restore its read handler immediately;
   // never inspect React internals or leave a custom action registered.
   const registry = (await loadActions()).appActionRegistry;
@@ -48,17 +51,24 @@ export async function nativeDispatch(request, read, control,
    principal?.accountId,principal?.userId,principal?.authenticatedUserId??null,
   ])));
   if (Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('') !== request.accountFingerprint) fail('ACCOUNT_CHANGED');
-  const id=m.eWt(request.conversationId);
-  const sameRoute=()=>scope.value.routeKind==='chatgpt-thread' &&
+  // A caller-owned local identity is committed with the Hub receipt before the
+  // native creation. It is never mistaken for a confirmed server conversation.
+  const id=creating?`local-chatgpt:${request.userMessageId}`:m.eWt(request.conversationId);
+  const sameRoute=()=>creating?scope.value.routeKind==='home':scope.value.routeKind==='chatgpt-thread' &&
    (scope.value.conversationId===request.conversationId || scope.get(m.lzt,scope.value.conversationId)===request.conversationId);
   const sameAccount=()=>{const p=scope.get(m.dWt);return p?.accountId===principal.accountId&&p?.userId===principal.userId;};
+  if(request.operation==='resolveCreation'){
+   if(!sameAccount())fail('ACCOUNT_CHANGED');
+   const candidate=scope.get(m.lzt,id)??(previous?.signature===signature?previous.conversationId:null);
+   return {conversationId:uuid(candidate)?candidate:null};
+  }
   const selected=scope.get(m.VNt,id);
-  if(!sameRoute()||!sameAccount()||scope.get(m.gzt,id)!==history.currentNode||
+  if(!sameRoute()||!sameAccount()||(creating?(scope.get(m.gzt,id)!=null||scope.get(m.lzt,id)!=null):scope.get(m.gzt,id)!==history.currentNode)||
      scope.get(m.Nzt,id)!=='idle'||scope.get(m.NNt,id)||scope.get(m.Pzt,id)||
      selected?.slug!==request.model||(selected?.thinkingEffort??null)!==request.effort) fail('DISPATCH_CONTEXT_CHANGED');
-  if (scope.get(m.hzt,id)==='tpp') fail('CHAT_REQUIRED');
+  if (scope.get(m.hzt,id)==='tpp'||(creating&&scope.get(m.Tzt,id)!=null)) fail('CHAT_REQUIRED');
   if(request.operation==='prepareDispatch')return {parentId:history.currentNode,model:request.model,effort:request.effort};
-  const state={signature,dispatched:true,state:'running'};
+  const state={signature,dispatched:true,state:'running',conversationId:request.conversationId};
   // Intent was committed by Hub. From here every exception is an uncertain send.
   runtime[stateKey]=state;
   const nativeService=scope.get(m.CUt);
@@ -68,7 +78,8 @@ export async function nativeDispatch(request, read, control,
    if(key==='startCompletionStream')return args=>{
     const body=args.request;
     const user=body?.messages?.filter(x=>x.author?.role==='user');
-    if(body?.conversation_id!==request.conversationId||body?.parent_message_id!==request.parentId||body?.model!==request.model||
+    if((creating?body?.conversation_id!=null:body?.conversation_id!==request.conversationId)||
+       (creating&&(body?.gizmo_id!=null||body?.conversation_origin!=null||body?.conversation_mode!=null||body?.history_and_training_disabled===true))||body?.parent_message_id!==request.parentId||body?.model!==request.model||
        (body?.thinking_effort??null)!==request.effort||user?.length!==1||user[0].id!==request.userMessageId||
        JSON.stringify(user[0].content)!==JSON.stringify({content_type:'text',parts:[request.text]}))fail('DISPATCH_CONTEXT_CHANGED');
     return Reflect.apply(target.startCompletionStream,guarded,[{...args,
@@ -98,9 +109,11 @@ export async function nativeDispatch(request, read, control,
     systemHints:scope.get(m.UNt,id),startupSignal,requireDispatchAcceptance:true,
     isSubmissionCurrent:()=>sameAccount()&&sameRoute(),
     onCompletion:status=>{state.state=status==='completed'?'finished':'unknown';},
+    ...(creating?{projectId:null,conversationOrigin:null,isTemporaryChat:false,onServerThreadIdChange:candidate=>{if(uuid(candidate))state.conversationId=candidate;}}:{}),
    });
-   if(result?.serverConversationId!==request.conversationId)fail('CONVERSATION_MISMATCH');
+   if(creating){if(uuid(result?.serverConversationId))state.conversationId=result.serverConversationId;}
+   else if(result?.serverConversationId!==request.conversationId)fail('CONVERSATION_MISMATCH');
   } catch {state.state='unknown';}
-  return {key:request.key,state:state.state,userMessageId:request.userMessageId};
+  return {key:request.key,state:state.state,userMessageId:request.userMessageId,...(creating?{conversationId:state.conversationId}: {})};
  } finally {runtime[lockKey]=false;}
 }

@@ -18,9 +18,13 @@ export class NativeGptJobs {
     private readonly client: NativeJobsClient,
     private readonly authorize: () => void,
     private readonly allowed: Set<string>,
+    private readonly creationKeys: Set<string> = new Set(),
   ) {
     store.db.exec(
       "PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS gpt_native_receipts(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id),payload TEXT NOT NULL,messages TEXT NOT NULL DEFAULT '[]')",
+    );
+    store.db.exec(
+      "CREATE TABLE IF NOT EXISTS gpt_native_creations(jobId TEXT PRIMARY KEY REFERENCES gpt_native_receipts(jobId),conversationId TEXT NOT NULL)",
     );
     store.db
       .prepare(
@@ -31,7 +35,8 @@ export class NativeGptJobs {
   private row(id: string) {
     this.authorize();
     const row = this.store.db.prepare("SELECT * FROM gpt_jobs WHERE id=?").get(id);
-    if (!row || !this.allowed.has(String(row.nativeId))) fail("INVALID_CANARY");
+    if (!row || !(this.allowed.has(String(row.nativeId)) || this.creationKeys.has(id)))
+      fail("INVALID_CANARY");
     return row;
   }
   async run(id: string) {
@@ -44,6 +49,10 @@ export class NativeGptJobs {
         .get(id);
       if (receipt) return await this.readReceipt(id);
       if (row.status !== "queued") fail("JOB_NOT_QUEUED");
+      if (
+        row.nativeId == null ? !this.creationKeys.has(id) : !this.allowed.has(String(row.nativeId))
+      )
+        fail("INVALID_CANARY");
       if (row.files !== "[]") fail("ATTACHMENTS_NOT_SUPPORTED");
       if (
         this.store.db
@@ -55,7 +64,7 @@ export class NativeGptJobs {
         fail("PENDING_DISPATCH");
       const input = {
         key: id,
-        conversationId: String(row.nativeId),
+        conversationId: row.nativeId == null ? null : String(row.nativeId),
         userMessageId: randomUUID(),
         text: String(row.text),
         versionId: String(row.model),
@@ -134,9 +143,12 @@ export class NativeGptJobs {
       .get(id);
     if (!saved) fail("RECEIPT_MISSING");
     const payload = JSON.parse(String(saved.payload));
+    const created = this.store.db
+      .prepare("SELECT conversationId FROM gpt_native_creations WHERE jobId=?")
+      .get(id);
     if (
       row.requestId !== payload.userMessageId ||
-      row.nativeId !== payload.conversationId ||
+      row.nativeId !== (payload.conversationId ?? created?.conversationId ?? null) ||
       row.text !== payload.text ||
       row.model !== payload.versionId ||
       Number(row.effort) !== payload.presetId ||
@@ -148,6 +160,12 @@ export class NativeGptJobs {
       result = await this.client.reconcileDispatch(id, payload.conversationId);
       this.authorize();
       if (result.userMessageId !== payload.userMessageId) fail("SUBMISSION_MISMATCH");
+      if (
+        payload.conversationId === null &&
+        result.state !== "unknown" &&
+        (!result.conversationId || (created && created.conversationId !== result.conversationId))
+      )
+        fail("SUBMISSION_MISMATCH");
     } catch (error) {
       this.store.db
         .prepare(
@@ -160,6 +178,15 @@ export class NativeGptJobs {
     if (result.state !== "unknown") {
       this.store.db.exec("BEGIN IMMEDIATE");
       try {
+        if (payload.conversationId === null) {
+          if (!result.conversationId) fail("SUBMISSION_MISMATCH");
+          this.store.db
+            .prepare("INSERT OR IGNORE INTO gpt_native_creations VALUES(?,?)")
+            .run(id, result.conversationId);
+          this.store.db
+            .prepare("UPDATE gpt_jobs SET nativeId=? WHERE id=?")
+            .run(result.conversationId, id);
+        }
         this.store.db
           .prepare("UPDATE gpt_native_receipts SET messages=? WHERE jobId=?")
           .run(JSON.stringify(result.messages), id);

@@ -19,6 +19,7 @@ export async function nativeControl(request, read, load = () => import('app://-/
  const summary = () => action({type:'app.get_summary'});
  const matches = state => {
   const w=state?.window,id=w?.thread?.id;
+  if(request.conversationId===null)return state?.schemaVersion===1&&w?.route?.kind==='home'&&w.route.pathname==='/'&&!w.thread;
   if(state?.schemaVersion!==1||w?.route?.kind!=='chatgpt-thread'||w.thread?.kind!=='chatgpt'||w.route.threadId!==id)return false;
   if(id===request.conversationId)return true;
   return typeof id==='string'&&/^local-chatgpt:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)&&w.route.pathname===`/c/${request.conversationId}`;
@@ -32,12 +33,12 @@ export async function nativeControl(request, read, load = () => import('app://-/
    editors,attachments};
  };
  if (request.operation === 'selectConversation') {
-  await read(historyRequest,load,runtime);
+  if(request.conversationId!==null)await read(historyRequest,load,runtime);
   deadline = Date.now() + 5000;
   // Do not navigate away from a nonempty native draft.
   const draft=controls();
-  if (draft.editors.some(e=>e.textContent?.trim())||draft.attachments.length) fail('DRAFT_PRESENT');
-  await action({type:'windows.show_thread',windowId:'current',kind:'chatgpt',threadId:request.conversationId});
+  if (draft.editors.some(e=>e.textContent?.trim())||draft.attachments.length||draft.stop.length) fail('DRAFT_PRESENT');
+  await action(request.conversationId===null?{type:'windows.show_home',windowId:'current'}:{type:'windows.show_thread',windowId:'current',kind:'chatgpt',threadId:request.conversationId});
   while (!matches(await summary())) {
    if (Date.now() >= deadline) fail('NAVIGATION_UNCONFIRMED');
    await new Promise(resolve=>setTimeout(resolve,100));
@@ -47,6 +48,11 @@ export async function nativeControl(request, read, load = () => import('app://-/
  // Recheck account identity after asynchronous native navigation/state requests.
  const identity = await read({operation:'inspectAccount'},load,runtime);
  if (identity.accountFingerprint !== request.accountFingerprint) fail('ACCOUNT_CHANGED');
+ if(request.conversationId===null){
+  if(request.operation==='stopResponse')fail('INVALID_REQUEST');
+  const choices=[...runtime.document.querySelectorAll('button[aria-pressed]')].filter(e=>e.getClientRects().length&&e.textContent.trim()==='Chat');
+  if(choices.length!==1||choices[0].getAttribute('aria-pressed')!=='true')fail('CHAT_MODE_REQUIRED');
+ }
  if (request.operation === 'stopResponse') {
   // One fresh canonical read guards a newer send. State polling does not load history.
   const current = await read(historyRequest,load,runtime);

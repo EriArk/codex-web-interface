@@ -47,7 +47,7 @@ export class NativeReadService {
     const fields = {
       ...canaryFields,
       status: [], beginManual: ['leaseId'], endManual: ['leaseId'], resumeManual: [],
-      readModels: [], readConversation: ['conversationId', 'before'],
+      readModels: [], readCatalog:['offset'], readConversation: ['conversationId', 'before'],
       listArtifacts: ['conversationId', 'before'], readArtifact: ['conversationId', 'messageId', 'artifactId'],
     }[input.operation];
     if (!Array.isArray(fields) || Object.keys(input).some(k => !['userId', 'operation', ...fields].includes(k))) fail('INVALID_REQUEST');

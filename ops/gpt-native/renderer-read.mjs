@@ -3,7 +3,10 @@
 export async function nativeRead(request, load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis) {
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
- if (!request || !['inspectAccount', 'readConversation', 'readModels', 'readSubmission'].includes(request.operation)) fail('READ_ONLY');
+ if (!request || !['inspectAccount', 'readConversation', 'readModels', 'readSubmission','readCatalog','findCreation'].includes(request.operation)) fail('READ_ONLY');
+ if(request.operation==='readCatalog'&&(!/^[a-f0-9]{64}$/.test(request.accountFingerprint??'')||!Number.isSafeInteger(request.offset??0)||(request.offset??0)<0||(request.offset??0)>10000))fail('INVALID_REQUEST');
+ if(request.operation==='findCreation'&&(!uuid(request.userMessageId)||!uuid(request.parentId)||typeof request.text!=='string'||
+   new TextEncoder().encode(request.text).length>32768||!Number.isSafeInteger(request.createdAfter)||request.createdAfter<0||!/^[a-f0-9]{64}$/.test(request.accountFingerprint??'')))fail('INVALID_REQUEST');
  if(request.operation==='readSubmission'&&(!uuid(request.conversationId)||!uuid(request.userMessageId)||!uuid(request.parentId)||
     typeof request.text!=='string'||new TextEncoder().encode(request.text).length>32768||!/^[a-f0-9]{64}$/.test(request.accountFingerprint??'')))fail('INVALID_REQUEST');
  if (request.operation === 'readModels' && !/^[a-f0-9]{64}$/.test(request.accountFingerprint ?? '')) fail('INVALID_REQUEST');
@@ -33,6 +36,38 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  // Inspection proposes a binding; the caller must explicitly persist/approve it.
  if (request.operation === 'inspectAccount') return {build:'26.915.31945', accountFingerprint:before.fingerprint, writesEnabled:false};
  if (before.fingerprint !== request.accountFingerprint) fail('ACCOUNT_MISMATCH');
+ if(request.operation==='readCatalog'||request.operation==='findCreation'){
+  const offset=request.operation==='readCatalog'?(request.offset??0):0;
+  let result;
+  try{result=await bounded(m.kWt.safeGet('/conversations',{parameters:{query:{offset,limit:20,order:'updated',is_archived:false,hide_snorlax:false}},expectedIdentity:before.principal,signal}));}
+  catch{fail(signal.aborted?'TIMEOUT':'READ_UNAVAILABLE');}
+  if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
+  if(!Array.isArray(result?.items)||result.items.length>20)fail('INVALID_CATALOG');
+  const time=x=>{const ms=typeof x==='string'?Date.parse(x):NaN;if(!Number.isFinite(ms)||ms<0)fail('INVALID_CATALOG');return ms;};
+  const items=result.items.map(x=>{
+   if(!uuid(x?.id)||typeof x.title!=='string'||x.title.length>4096||
+      x.gizmo_id!=null&&(typeof x.gizmo_id!=='string'||x.gizmo_id.length>128)||
+      x.conversation_origin!=null&&(typeof x.conversation_origin!=='string'||x.conversation_origin.length>128))fail('INVALID_CATALOG');
+   return {id:x.id,title:x.title,createdAt:time(x.create_time),updatedAt:time(x.update_time),projectId:x.gizmo_id??null,origin:x.conversation_origin??null};
+  });
+  if(new Set(items.map(x=>x.id)).size!==items.length)fail('INVALID_CATALOG');
+  if(request.operation==='readCatalog')return {items,nextOffset:items.length===20?offset+20:null};
+  // Recovery is read-only and bounded. Never identify a new chat by title/text
+  // alone, and never crawl the owner's entire history after a lost creation ID.
+  const candidates=items.filter(x=>x.createdAt>=request.createdAfter-60000&&x.projectId===null&&x.origin===null);
+  if(candidates.length>5)return {conversationId:null};
+  let found=null;
+  for(const candidate of candidates){
+   if(signal.aborted)fail('TIMEOUT');
+   const proof=await bounded(nativeRead({...request,operation:'readSubmission',conversationId:candidate.id,newChat:true},load,runtime));
+   if(proof.state!=='unknown'){
+    if(found!==null)fail('CREATION_AMBIGUOUS');
+    found=candidate.id;
+   }
+  }
+  if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
+  return {conversationId:found};
+ }
  if (request.operation === 'readModels') {
   let catalog;
   try { catalog = await bounded(m.kWt.safeGet('/models', {
@@ -116,6 +151,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   if(chain.filter(n=>n.message?.id===request.userMessageId).length!==1||node.parent!==request.parentId||node.message.author?.role!=='user'||
      node.message.content?.content_type!=='text'||JSON.stringify(node.message.content.parts)!==JSON.stringify([request.text])||
      node.message.metadata?.is_visually_hidden_from_conversation===true)fail('SUBMISSION_MISMATCH');
+  if(request.newChat===true&&(chain.slice(index+1).some(n=>n.message?.author?.role==='user')||conversation.gizmo_id!=null||conversation.conversation_origin==='tpp'))fail('SUBMISSION_MISMATCH');
   // A later user turn or more than one public page is not guessed into this receipt.
   const later=chain.slice(0,index);
   if(later.some(n=>n.message?.author?.role==='user')||!page.messages.some(m=>m.id===request.userMessageId))return {state:'unknown',messages:[]};

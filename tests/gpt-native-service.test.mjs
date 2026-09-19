@@ -91,6 +91,34 @@ test("private native service exposes typed read projection and checksum-verified
   assert.equal((await f.client.status()).writesEnabled, false);
 });
 
+test("native catalog stays behind private owner and manual-access boundaries", async (t) => {
+  const f = await fixture(t);
+  let calls = 0;
+  f.config.reader.readCatalog = async (r) => {
+    calls++;
+    assert.equal(r.accountFingerprint, accountFingerprint);
+    return {
+      items: [
+        {
+          id: conversationId,
+          title: "Chat",
+          createdAt: 1,
+          updatedAt: 2,
+          projectId: null,
+          origin: null,
+        },
+      ],
+      nextOffset: null,
+    };
+  };
+  assert.equal((await f.client.catalog()).items[0].id, conversationId);
+  await f.client.manual("beginManual", randomUUID());
+  await assert.rejects(f.client.catalog(), /MANUAL_RECOVERY/);
+  assert.equal(calls, 1);
+  f.state.revoked = true;
+  await assert.rejects(f.client.catalog(), /REVOKED/);
+});
+
 test("native service denies other owners, arbitrary methods, credentials and account rebinding", async (t) => {
   const f = await fixture(t);
   for (const input of [

@@ -72,6 +72,108 @@ test("submission readback requires exact ID, parent, unchanged text and a public
   assert.equal((await f.read(request)).state, "unknown");
 });
 
+test("new Chat proof rejects previous user history and project/Work association", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  f.node(2, "prompt", { id: id(90), author: { role: "user" } });
+  f.node(3, "answer", { end_turn: true });
+  const input = {
+    operation: "readSubmission",
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "prompt",
+    newChat: true,
+  };
+  assert.equal((await f.read(input)).state, "completed");
+  f.conversation.gizmo_id = "g-project";
+  await assert.rejects(f.read(input), /SUBMISSION_MISMATCH/);
+  delete f.conversation.gizmo_id;
+  f.conversation.conversation_origin = "tpp";
+  await assert.rejects(f.read(input), /SUBMISSION_MISMATCH/);
+  delete f.conversation.conversation_origin;
+  f.node(1, "earlier", { author: { role: "user" } });
+  f.conversation.current_node = id(3);
+  await assert.rejects(f.read(input), /SUBMISSION_MISMATCH/);
+});
+
+test("bounded native catalog binds principal, preserves page order and strips unrecognized data", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding(),
+    now = new Date().toISOString();
+  const items = Array.from({ length: 20 }, (_, n) => ({
+    id: id(n),
+    title: `Chat ${n}`,
+    create_time: now,
+    update_time: now,
+    secret: "private",
+  }));
+  f.service.kWt.safeGet = async (route, options) => {
+    assert.equal(route, "/conversations");
+    assert.deepEqual(options.expectedIdentity, { accountId: "account-a", userId: "user-a" });
+    assert.equal(options.parameters.query.limit, 20);
+    assert.equal(options.parameters.query.offset, 20);
+    return { items, secret: "private" };
+  };
+  const page = await f.read({ operation: "readCatalog", offset: 20, accountFingerprint });
+  assert.equal(page.nextOffset, 40);
+  assert.deepEqual(
+    page.items.map((x) => x.id),
+    items.map((x) => x.id),
+  );
+  assert.doesNotMatch(JSON.stringify(page), /private|secret/);
+  items[1].id = items[0].id;
+  await assert.rejects(
+    f.read({ operation: "readCatalog", offset: 20, accountFingerprint }),
+    /INVALID_CATALOG/,
+  );
+  await assert.rejects(
+    f.read({ operation: "readCatalog", offset: -1, accountFingerprint }),
+    /INVALID_REQUEST/,
+  );
+});
+
+test("creation lookup after renderer loss checks exact first user identity, never title or same prompt", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding(),
+    createdAfter = Date.now(),
+    now = new Date(createdAfter).toISOString();
+  f.node(2, "same prompt", { id: id(90), author: { role: "user" } });
+  f.node(3, "answer", { end_turn: true });
+  const items = [
+    { id: conversationId, title: "unrelated title", create_time: now, update_time: now },
+  ];
+  let reads = 0;
+  f.service.kWt.safeGet = async (route, options) => {
+    assert.deepEqual(options.expectedIdentity, { accountId: "account-a", userId: "user-a" });
+    if (route === "/conversations") return { items };
+    reads++;
+    return f.conversation;
+  };
+  const input = {
+    operation: "findCreation",
+    accountFingerprint,
+    createdAfter,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "same prompt",
+  };
+  assert.deepEqual(await f.read(input), { conversationId });
+  assert.deepEqual(await f.read({ ...input, userMessageId: id(91) }), { conversationId: null });
+  await assert.rejects(f.read({ ...input, text: "changed" }), /SUBMISSION_MISMATCH/);
+  const previous = reads;
+  for (let n = 1; n < 6; n++) items.push({ ...items[0], id: id(100 + n) });
+  assert.deepEqual(await f.read(input), { conversationId: null });
+  assert.equal(reads, previous);
+  items.splice(1);
+  f.service.kWt.safeGet = async () => {
+    f.account.userId = "other";
+    return { items };
+  };
+  await assert.rejects(f.read(input), /ACCOUNT_CHANGED/);
+});
+
 test("native reader uses fresh typed service with exact principal and no title navigation", async () => {
   const f = fixture(),
     accountFingerprint = await f.binding();

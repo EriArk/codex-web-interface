@@ -12,10 +12,11 @@ Implemented and verified in the native canary:
 - Native navigation, Stop and model/power selection; ordinary Chat creation with small TXT/PNG files has separate lab proof.
 - Generated sandbox files/images with existing Results IDs and checksum-verified downloads.
 - Existing-chat text dispatch through the Hub `gpt_jobs` schema in an isolated Store, exact native user-message UUIDs, durable intent and read-only reconciliation after lost acknowledgements/restart. No diagnostic text is appended. One real queue send and 119 native/recovery/isolation tests passed; the same message/answer and older file hashes survived native restart.
+- Ordinary new Chat now uses that same queue/receipt path and native model/power checks. One real creation confirmed the exact first user message once, its answer and canonical chat ID; reopening the Hub worker and replacing the native container preserved all three. The native catalog pages by 20. Bounded exact-message lookup handles lost creation candidates without replay; its failure cases are simulated. The expanded native/recovery/isolation suite passes 128 tests.
 
 Next coherent implementation block:
 
-1. Extend the same durable path to ordinary new-chat/project creation and uploads; finish catalog/Results/media parity rather than switching to a text-only main provider.
+1. Extend the durable path to uploads and project association/creation; finish project catalog/Results/media parity rather than switching to a text-only main provider. Ordinary unassigned new Chat and the conversation catalog are now covered by the canary.
 2. Wire the provider into the actual shared GPT workspace, including preserved public progress, explicit unknown-send recovery and manual control arbitration. Keep old-provider receipts bound to their original provider; never replay them during migration.
 3. Verify long-chat performance, host boot and per-member provisioning, then stage a reversible primary-provider switch. Main production remains unchanged until these admission gates pass.
 

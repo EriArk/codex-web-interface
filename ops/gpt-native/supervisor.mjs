@@ -17,7 +17,7 @@ const service = new NativeReadService({ reader: null, ...binding, statePath: `${
 try {
   privatePath(`${root}/canary.json`,'isFile');
   const canary=JSON.parse(readFileSync(`${root}/canary.json`,'utf8'));
-  if(Object.keys(canary).length!==1||!Array.isArray(canary.conversationIds))throw Error('NATIVE_INVALID_CANARY');
+  if(Object.keys(canary).some(k=>!['conversationIds','creationKeys'].includes(k))||!Array.isArray(canary.conversationIds))throw Error('NATIVE_INVALID_CANARY');
   service.canary=new NativeDispatchReceipts({...binding,...canary,path:`${root}/dispatch.sqlite`});
 }catch(error){if(error.code!=='ENOENT')throw error;}
 const log = openSync('/data/logs/app.log', 'a', 0o600);

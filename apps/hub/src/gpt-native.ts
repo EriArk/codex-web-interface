@@ -131,6 +131,29 @@ export class NativeGptReadClient {
       .strict()
       .parse(await this.call({ operation: "status" }));
   }
+  async catalog(offset = 0) {
+    z.number().int().min(0).max(10000).parse(offset);
+    return z
+      .object({
+        items: z
+          .array(
+            z
+              .object({
+                id: uuid,
+                title: z.string().max(4096),
+                createdAt: z.number().finite().nonnegative(),
+                updatedAt: z.number().finite().nonnegative(),
+                projectId: z.string().max(128).nullable(),
+                origin: z.string().max(128).nullable(),
+              })
+              .strict(),
+          )
+          .max(20),
+        nextOffset: z.number().int().nonnegative().nullable(),
+      })
+      .strict()
+      .parse(await this.call({ operation: "readCatalog", offset }));
+  }
   async manual(operation: "beginManual" | "endManual" | "resumeManual", leaseId?: string) {
     if (!["beginManual", "endManual", "resumeManual"].includes(operation)) fail("INVALID_REQUEST");
     if (operation !== "resumeManual") uuid.parse(leaseId);
@@ -175,14 +198,15 @@ export class NativeGptReadClient {
     if (result.userMessageId !== input.userMessageId) fail("SUBMISSION_MISMATCH");
     return result;
   }
-  async reconcileDispatch(key: string, conversationId: string) {
+  async reconcileDispatch(key: string, conversationId: string | null) {
     uuid.parse(key);
-    uuid.parse(conversationId);
+    uuid.nullable().parse(conversationId);
     return z
       .object({
         state: z.enum(["unknown", "running", "completed"]),
         userMessageId: uuid,
         messages: historySchema.shape.messages,
+        conversationId: uuid.nullable().optional(),
       })
       .strict()
       .parse(await this.call({ operation: "reconcileDispatch", key, conversationId }));
@@ -305,7 +329,7 @@ export class NativeGptReadClient {
 const nativeDispatchInput = z
   .object({
     key: uuid,
-    conversationId: uuid,
+    conversationId: uuid.nullable(),
     userMessageId: uuid,
     text: z.string().min(1).max(32768),
     versionId: z.string().min(1).max(128),

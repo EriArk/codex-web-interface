@@ -21,11 +21,11 @@ const principal = {
 const accountFingerprint = createHash("sha256")
   .update(JSON.stringify(Object.values(principal)))
   .digest("hex");
-function fixture() {
+function fixture(creating = false) {
   const input = {
     operation: "dispatchText",
     key: randomUUID(),
-    conversationId,
+    conversationId: creating ? null : conversationId,
     userMessageId: randomUUID(),
     text: "  exact text\n",
     model: "model",
@@ -38,13 +38,13 @@ function fixture() {
   const state = { send: 0, post: 0, change: false, retry: false, badBody: false };
   const values = new Map([
     ["account", principal],
-    ["node", parentId],
+    ["node", creating ? null : parentId],
     ["status", "idle"],
     ["selected", { slug: "model", thinkingEffort: "standard" }],
     ["hints", []],
   ]);
   const scope = {
-    value: { routeKind: "chatgpt-thread", conversationId },
+    value: creating ? { routeKind: "home" } : { routeKind: "chatgpt-thread", conversationId },
     get: (token) => (token === "service" ? service : values.get(token)),
   };
   const original = () => ({});
@@ -94,7 +94,7 @@ function fixture() {
       assert.equal(args.userCompletionMessages.message.id, input.userMessageId);
       assert.equal(args.isSubmissionCurrent(), true);
       const request = {
-        conversation_id: conversationId,
+        ...(creating ? {} : { conversation_id: conversationId }),
         parent_message_id: parentId,
         model: input.model,
         thinking_effort: input.effort,
@@ -102,6 +102,13 @@ function fixture() {
       };
       if (state.badBody) request.model = "other";
       await s.get("service").startCompletionStream({ request });
+      if (creating) {
+        assert.equal(args.conversationId, `local-chatgpt:${input.userMessageId}`);
+        assert.equal(args.projectId, null);
+        assert.equal(args.conversationOrigin, null);
+        args.onServerThreadIdChange(conversationId);
+        values.set("nativeId", conversationId);
+      }
       args.onCompletion("completed");
       return { serverConversationId: conversationId };
     },
@@ -130,6 +137,23 @@ test("native text dispatch preserves ID and exact text, uses principal-bound nat
   await f.run();
   assert.equal(f.state.send, 1);
   assert.equal(f.registry.get("app.get_summary"), f.original);
+});
+
+test("ordinary new Chat binds caller-owned local/user/parent IDs and resolves only a server candidate", async () => {
+  const f = fixture(true);
+  f.state.retry = true;
+  assert.equal((await f.run()).conversationId, conversationId);
+  assert.deepEqual(await f.run({ operation: "resolveCreation" }), { conversationId });
+  assert.equal(f.state.post, 1);
+  await f.run();
+  assert.equal(f.state.send, 1);
+  const replaced = fixture(true);
+  replaced.values.set("nativeId", conversationId);
+  await assert.rejects(replaced.run(), /CONTEXT_CHANGED/);
+  assert.equal(replaced.state.send, 0);
+  const wrongHome = fixture(true);
+  wrongHome.scope.value.routeKind = "chatgpt-thread";
+  await assert.rejects(wrongHome.run(), /CONTEXT_CHANGED/);
 });
 test("prepare is read-only; drafts, route, model, principal and branch changes fail before sending", async () => {
   for (const change of [
@@ -300,4 +324,110 @@ test("Hub worker refuses files, unknown other jobs and revoked owners without di
   f.state.revoked = true;
   await assert.rejects(worker.run(f.id), /revoked/);
   assert.equal(f.state.sends, 0);
+});
+
+test("new-chat native receipt is opt-in, survives unknown candidate and never recreates after restart", async (t) => {
+  const f = receipts(t),
+    key = randomUUID();
+  f.options.creationKeys = [key];
+  let ledger = f.open();
+  const input = { ...fixture(true).input, key, versionId: "latest", presetId: 1 };
+  delete input.operation;
+  let sends = 0,
+    candidate = null;
+  const reader = {
+    dispatchText: async () => {
+      sends++;
+      throw Error("lost");
+    },
+    resolveCreation: async () => ({ conversationId: candidate }),
+    findCreation: async () => ({ conversationId: null }),
+    readSubmission: async (r) => {
+      assert.equal(r.newChat, true);
+      assert.equal(r.conversationId, conversationId);
+      return { state: "completed", messages: [] };
+    },
+  };
+  await assert.rejects(ledger.dispatch({ ...input, key: randomUUID() }, reader), /INVALID_CANARY/);
+  await ledger.dispatch(input, reader);
+  ledger.close();
+  ledger = f.open();
+  t.after(() => ledger.close());
+  assert.equal((await ledger.reconcile(input, reader)).conversationId, null);
+  await ledger.dispatch(input, reader);
+  assert.equal(sends, 1);
+  assert.equal(ledger.pending(), true);
+  candidate = conversationId;
+  assert.equal((await ledger.reconcile(input, reader)).conversationId, conversationId);
+  candidate = null;
+  assert.equal((await ledger.reconcile(input, reader)).state, "completed");
+  assert.equal(ledger.pending(), false);
+  assert.equal(sends, 1);
+});
+
+test("native creation recovers missing renderer identity using a bounded canonical lookup", async (t) => {
+  const f = receipts(t),
+    key = randomUUID();
+  f.options.creationKeys = [key];
+  let ledger = f.open();
+  const input = { ...fixture(true).input, key, versionId: "latest", presetId: 1 };
+  delete input.operation;
+  let sends = 0,
+    lookups = 0;
+  const reader = {
+    dispatchText: async () => {
+      sends++;
+      throw Error("lost");
+    },
+    resolveCreation: async () => ({ conversationId: null }),
+    findCreation: async (r) => {
+      lookups++;
+      assert.ok(r.createdAfter > 0);
+      assert.equal(r.userMessageId, input.userMessageId);
+      return { conversationId };
+    },
+    readSubmission: async () => ({ state: "completed", messages: [] }),
+  };
+  await ledger.dispatch(input, reader);
+  ledger.close();
+  ledger = f.open();
+  t.after(() => ledger.close());
+  assert.equal((await ledger.reconcile(input, reader)).conversationId, conversationId);
+  await ledger.dispatch(input, reader);
+  assert.equal(sends, 1);
+  assert.equal(lookups, 1);
+});
+
+test("new Hub job adopts only canonically confirmed identity and cannot replay or substitute it", async (t) => {
+  const f = queue(t);
+  f.db.prepare("UPDATE gpt_jobs SET nativeId=NULL").run();
+  let input,
+    confirmed = null,
+    sends = 0;
+  f.client.dispatchText = async (r) => {
+    input = r;
+    sends++;
+    assert.equal(r.conversationId, null);
+    throw Error("lost");
+  };
+  f.client.reconcileDispatch = async () => ({
+    state: confirmed ? "completed" : "unknown",
+    conversationId: confirmed,
+    userMessageId: input.userMessageId,
+    messages: [],
+  });
+  const open = () =>
+    new NativeGptJobs({ db: f.db }, f.client, () => {}, new Set([conversationId]), new Set([f.id]));
+  let worker = open();
+  assert.equal((await worker.run(f.id)).status, "unknown");
+  assert.equal(f.db.prepare("SELECT nativeId FROM gpt_jobs").get().nativeId, null);
+  confirmed = conversationId;
+  worker = open();
+  assert.equal((await worker.run(f.id)).status, "completed");
+  assert.equal(f.db.prepare("SELECT nativeId FROM gpt_jobs").get().nativeId, conversationId);
+  assert.equal(sends, 1);
+  confirmed = randomUUID();
+  await assert.rejects(worker.reconcile(f.id), /SUBMISSION_MISMATCH/);
+  assert.equal(f.db.prepare("SELECT nativeId FROM gpt_jobs").get().nativeId, conversationId);
+  assert.equal(sends, 1);
 });

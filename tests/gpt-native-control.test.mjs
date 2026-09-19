@@ -65,6 +65,7 @@ test("native state projects only current chat and controls, not sidebar content"
 });
 test("selection uses native exact-ID navigation and preserves nonempty native drafts", async () => {
   const f = fixture();
+  f.elements['button[aria-label="Stop"]'] = [];
   await f.run({ operation: "selectConversation" });
   assert.deepEqual(f.actions[0], {
     type: "windows.show_thread",
@@ -76,6 +77,30 @@ test("selection uses native exact-ID navigation and preserves nonempty native dr
   f.editor.textContent = "unsent";
   await assert.rejects(f.run({ operation: "selectConversation" }), /DRAFT_PRESENT/);
   assert.equal(f.actions.length, 0);
+});
+
+test("new Chat preparation preserves active work, Work mode and native drafts", async () => {
+  const f = fixture();
+  await assert.rejects(
+    f.run({ operation: "selectConversation", conversationId: null }),
+    /DRAFT_PRESENT/,
+  );
+  f.elements['button[aria-label="Stop"]'] = [];
+  f.state.window = { route: { kind: "home", pathname: "/" } };
+  await assert.rejects(f.run({ conversationId: null }), /CHAT_MODE_REQUIRED/);
+  f.elements["button[aria-pressed]"] = [
+    { getClientRects: () => [1], textContent: "Chat", getAttribute: () => "true" },
+  ];
+  assert.equal(
+    (await f.run({ operation: "selectConversation", conversationId: null })).selected,
+    true,
+  );
+  assert.ok(f.actions.some((a) => a.type === "windows.show_home"));
+  f.editor.textContent = "preserved";
+  await assert.rejects(
+    f.run({ operation: "selectConversation", conversationId: null }),
+    /DRAFT_PRESENT/,
+  );
 });
 test("stop requires both matching route and thread identities", async () => {
   const f = fixture();

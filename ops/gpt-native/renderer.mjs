@@ -48,6 +48,9 @@ export class NativeRendererReader {
  async dispatchText(request,options){return this.#read({...request,operation:'dispatchText'},options,'dispatch');}
  async prepareDispatch(request,options){return this.#read({...request,operation:'prepareDispatch'},options,'dispatch');}
  async readSubmission(request,options){return this.#read({...request,operation:'readSubmission'},options);}
+ async resolveCreation(request,options){return this.#read({...request,operation:'resolveCreation'},options,'dispatch');}
+ async findCreation(request,options){return this.#read({...request,operation:'findCreation'},options);}
+ async readCatalog(request,options){return this.#read({...request,operation:'readCatalog'},options);}
  async listArtifacts({conversationId,accountFingerprint,before},options){return this.#read({operation:'listArtifacts',conversationId,accountFingerprint,before},options,'artifacts');}
  async readArtifact({conversationId,accountFingerprint,messageId,artifactId},options){return this.#read({operation:'readArtifact',conversationId,accountFingerprint,messageId,artifactId},options,'artifacts');}
  async disposableComposer({operation,key,accountFingerprint,disposable,text,files,intentPersisted},options){
