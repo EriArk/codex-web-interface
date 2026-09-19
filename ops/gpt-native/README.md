@@ -22,12 +22,22 @@ Fixture success does not replace account/media, restart or sustained-use accepta
 
 ### Fresh public-history reader
 
-`renderer.mjs` / `renderer-read.mjs` implement the next **lab-only, read-only** adapter. They call the pinned app's existing native request service, without copying tokens or relying on its one-minute tool cache. Only `inspectAccount()` and `readConversation({conversationId, accountFingerprint, before?})` are available. Account inspection proposes a binding; it must not automatically enroll or replace a production user's binding.
+`renderer.mjs` / `renderer-read.mjs` implement a **lab-only** adapter whose read operations are `inspectAccount()` and `readConversation({conversationId, accountFingerprint, before?})`. They call the pinned app's existing native request service, without copying tokens or relying on its one-minute tool cache. Account inspection proposes a binding; it must not automatically enroll or replace a production user's binding. The additional fixed lab controls are described below.
 
 The reader checks the actual app version, exactly one main window, account fingerprint before/after the request, native `expectedIdentity`, exact conversation ID and current-branch ancestry. It returns up to 20 public messages with native IDs; hidden reasoning, tool internals, account data and signed media URLs stay inside the app. Structured media is explicitly unresolved. It is **not yet a complete Hub history/media contract**.
 
-The transport requires a temporary debugger on container loopback `127.0.0.1:9222`; no host port, HTTP endpoint, generic evaluate API or write operation is provided. Normal `start.sh` deliberately does not enable it. Restore ordinary startup and verify the inspector is closed after lab work. Production supervision/transport admission remains a separate migration gate.
+The transport requires a temporary debugger on container loopback `127.0.0.1:9222`; no host port, HTTP endpoint or generic evaluate API is provided. Normal `start.sh` deliberately does not enable it. Restore ordinary startup and verify the inspector is closed after lab work. Production supervision/transport admission remains a separate migration gate.
 
 ```sh
 node --test tests/gpt-native-renderer*.test.mjs tests/gpt-native-ipc.test.mjs
+```
+
+### Disposable navigation/send/stop proof
+
+The reader additionally offers fixed `selectConversation`, `inspectConversation` and `stopResponse` controls through `renderer-control.mjs`. Selection uses native exact-ID navigation and verifies both route/thread. Stop requires the latest canonical user message ID, the selected chat and one visible enabled native Stop control. A returned `stopIssued` is not a completed-response receipt. State polling does not fetch canonical history.
+
+`NativeLabFollowup` is **only for an explicitly disposable chat**. Its private SQLite ledger binds the exact build/account/chat/caller, records intention before the native IPC send, rejects concurrent pending work and never replays unknown sends. Each diagnostic prompt must contain its operation UUID because this tool has no client-message-ID parameter. Reconciliation is bounded to 100 public messages and needs the exact prior baseline and one exact diagnostic user message. Do not use it for owner conversations or wire it to HTTP. Production must preserve/reuse the existing Hub queue and solve atomic account/turn admission, model/effort and attachment contracts first.
+
+```sh
+node --test tests/gpt-native-control.test.mjs tests/gpt-native-followup.test.mjs tests/gpt-native-renderer*.test.mjs tests/gpt-native-ipc.test.mjs
 ```
