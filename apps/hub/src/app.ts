@@ -38,6 +38,7 @@ import { registerDictation, type Transcribe } from "./dictation.js";
 import { ENGINE_PROTOCOL } from "./engine-client.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
+import type { NativeGptWorkspace } from "./gpt-native-provider.js";
 import { registerGuiPreviews } from "./gui-previews.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
@@ -93,6 +94,7 @@ export async function createApp(
     stagingProbe?: typeof inspectMachineStaging;
     devices?: DeviceDependencies;
     transcribe?: Transcribe;
+    nativeGpt?: NativeGptWorkspace;
     auth?: Auth;
     authorizeExecution?: () => void;
     projectActionPolicy?: ProjectActionPolicy;
@@ -205,7 +207,7 @@ export async function createApp(
       },
     });
   });
-  const gpt = registerGpt(app, config, store, options.authorizeExecution);
+  const gpt = registerGpt(app, config, store, options.authorizeExecution, options.nativeGpt);
   registerChunkUploads(app, config, store, sessions.attachments, gpt, options.authorizeExecution);
   registerContentSearch(app, sessions, gpt);
   const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);

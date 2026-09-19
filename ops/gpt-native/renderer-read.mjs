@@ -4,7 +4,8 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const projectId = value => typeof value==='string'&&/^g-p-[a-zA-Z0-9-]{1,80}$/.test(value);
  const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
- if (!request || !['inspectAccount', 'readConversation', 'readModels', 'readSubmission','readCatalog','findCreation','readProjects','readProject','readProjectConversations','readConversationGraph'].includes(request.operation)) fail('READ_ONLY');
+ if (!request || !['inspectAccount', 'readConversation', 'readModels', 'readPins', 'readSubmission','readCatalog','findCreation','readProjects','readProject','readProjectConversations','readConversationGraph'].includes(request.operation)) fail('READ_ONLY');
+ if(request.archived!=null&&typeof request.archived!=='boolean')fail('INVALID_REQUEST');
  if(request.operation==='readCatalog'&&(!/^[a-f0-9]{64}$/.test(request.accountFingerprint??'')||!Number.isSafeInteger(request.offset??0)||(request.offset??0)<0||(request.offset??0)>10000))fail('INVALID_REQUEST');
  if(request.operation==='findCreation'&&(!uuid(request.userMessageId)||!uuid(request.parentId)||typeof request.text!=='string'||
    new TextEncoder().encode(request.text).length>32768||!Number.isSafeInteger(request.createdAfter)||request.createdAfter<0||!/^[a-f0-9]{64}$/.test(request.accountFingerprint??'')))fail('INVALID_REQUEST');
@@ -65,10 +66,25 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   if(!Array.isArray(raw?.items)||raw.items.length>20||(raw.cursor!=null&&(typeof raw.cursor!=='string'||raw.cursor.length>4000)))fail('INVALID_PROJECT');
   return {items:request.operation==='readProjects'?raw.items.map(project):raw.items.map(c=>conversation(c,request.projectId)),cursor:raw.cursor??null};
  }
+ if(request.operation==='readPins'){
+  if(!/^[a-f0-9]{64}$/.test(request.accountFingerprint??''))fail('INVALID_REQUEST');
+  const raw=await bounded(m.kWt.safeGet('/pins',{expectedIdentity:before.principal,signal}));
+  if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
+  const rows=Array.isArray(raw)?raw:raw?.items;
+  if(!Array.isArray(rows)||rows.length>100)fail('INVALID_PINS');
+  const items=rows.filter(x=>['project','conversation'].includes(x?.item_type)).map(x=>{
+   const item=x.item,g=item?.gizmo?.gizmo??item?.gizmo??item;
+   const id=g?.id,title=x.item_type==='project'?g?.display?.name:item?.title;
+   if(!(x.item_type==='project'?projectId(id):uuid(id))||typeof title!=='string'||title.length>4096)fail('INVALID_PINS');
+   const date=typeof item.update_time==='number'?item.update_time*1000:Date.parse(item.update_time);
+   return {id,kind:x.item_type==='project'?'project':'thread',title,updatedAt:Number.isFinite(date)&&date>=0?date:0,projectId:projectId(item.gizmo_id)?item.gizmo_id:null};
+  });
+  return {items};
+ }
  if(request.operation==='readCatalog'||request.operation==='findCreation'){
   const offset=request.operation==='readCatalog'?(request.offset??0):0;
   let result;
-  try{result=await bounded(m.kWt.safeGet('/conversations',{parameters:{query:{offset,limit:20,order:'updated',is_archived:false,hide_snorlax:false}},expectedIdentity:before.principal,signal}));}
+  try{result=await bounded(m.kWt.safeGet('/conversations',{parameters:{query:{offset,limit:20,order:'updated',is_archived:request.operation==='readCatalog'&&request.archived===true,hide_snorlax:false}},expectedIdentity:before.principal,signal}));}
   catch{fail(signal.aborted?'TIMEOUT':'READ_UNAVAILABLE');}
   if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
   if(!Array.isArray(result?.items)||result.items.length>20)fail('INVALID_CATALOG');

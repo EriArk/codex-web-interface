@@ -48,11 +48,12 @@ export class NativeReadService {
       prepareDispatch: ['key','conversationId','userMessageId','text','versionId','presetId','projectId'],
       dispatchText: ['key','conversationId','userMessageId','text','versionId','presetId','parentId','model','effort','intentPersisted','attachments','projectId'],
       reconcileDispatch: ['key','conversationId'],
+      stopDispatch: ['key','conversationId'],
     } : {};
     const fields = {
       ...canaryFields,
       status: [], beginManual: ['leaseId'], endManual: ['leaseId'], resumeManual: [],
-      readModels: [], readConversationGraph:['conversationId'], readProjects:['cursor'], readProject:['projectId'], readProjectConversations:['projectId','cursor'], readCatalog:['offset'], readConversation: ['conversationId', 'before'],
+      readModels: [], readPins: [], readConversationGraph:['conversationId'], readProjects:['cursor'], readProject:['projectId'], readProjectConversations:['projectId','cursor'], readCatalog:['offset','archived'], readConversation: ['conversationId', 'before'],
       listArtifacts: ['conversationId', 'before'], readArtifact: ['conversationId', 'messageId', 'artifactId'],
     }[input.operation];
     if (!Array.isArray(fields) || Object.keys(input).some(k => !['userId', 'operation', ...fields].includes(k))) fail('INVALID_REQUEST');
@@ -85,6 +86,7 @@ export class NativeReadService {
         if(operation==='uploadFile')return await this.canary.upload(bound,this.reader);
         if(operation==='prepareDispatch')return await this.canary.prepare(bound,this.reader);
         if(operation==='dispatchText')return await this.canary.dispatch(bound,this.reader);
+        if(operation==='stopDispatch')return await this.canary.stop(bound,this.reader);
         return await this.canary.reconcile(bound,this.reader);
       }
       return await this.reader[operation]({ ...args, accountFingerprint: this.accountFingerprint });

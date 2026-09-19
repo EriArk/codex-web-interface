@@ -30,6 +30,8 @@ import {
 } from "./gpt-history.js";
 import { GptHistoryDisk } from "./gpt-history-disk.js";
 import { gptLinkedText } from "./gpt-links.js";
+import { NativeGptJobs } from "./gpt-native-jobs.js";
+import { NativeGptProvider, type NativeGptWorkspace } from "./gpt-native-provider.js";
 import { GptOperations, gptOperationInput } from "./gpt-operations.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
@@ -65,6 +67,9 @@ type Json = Record<string, any>;
 const active = ["queued", "preparing", "running"];
 const error = (code: string, message: string, status = 409) => new HubError(status, code, message);
 export class GptService {
+  private readonly native?: NativeGptProvider;
+  private readonly nativeJobs?: NativeGptJobs;
+  private nativeReadFailures = 0;
   private readonly historyBackoff = new GptReadBackoff();
   private readonly historyReads = new Map<string, Promise<Json>>();
   readonly historyCache: GptHistoryCache;
@@ -114,7 +119,7 @@ export class GptService {
     if (!this.working) void this.releaseCompletedUploads();
   }, 60000).unref();
   async releaseCompletedUploads() {
-    if (this.stopped || !this.available() || this.releasingUploads) return;
+    if (this.native || this.stopped || !this.available() || this.releasingUploads) return;
     this.releasingUploads = true;
     try {
       const rows = this.store.db
@@ -144,11 +149,16 @@ export class GptService {
       value = this.connectionCache.value;
     else {
       let raw: unknown = null;
-      if (this.available())
+      if (this.available() && !this.native)
         try {
           raw = await this.json("/status");
         } catch {}
-      value = normalizeGptConnection(raw, this.available());
+      value = this.native
+        ? await this.native.connection().catch(() => ({
+            ...normalizeGptConnection(null, true),
+            connectUrl: "/gpt-connect?runtime=native" as const,
+          }))
+        : normalizeGptConnection(raw, this.available());
       this.connectionCache = { value, until: Date.now() + 5000 };
     }
     const activeJobs = Number(
@@ -200,7 +210,25 @@ export class GptService {
     readonly config: HubConfig,
     readonly store: Store,
     readonly authorize: () => void = () => {},
+    nativeWorkspace?: NativeGptWorkspace,
   ) {
+    if (nativeWorkspace) this.native = new NativeGptProvider(nativeWorkspace);
+    store.db.exec(
+      "CREATE TABLE IF NOT EXISTS gpt_job_providers(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id) ON DELETE CASCADE,provider TEXT NOT NULL CHECK(provider IN ('browser','native')))",
+    );
+    // Existing outbox entries belong to the old transport unless there is a
+    // native receipt proving otherwise. A switch never migrates a queued prompt.
+    const hadNative = !!store.db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gpt_native_receipts'")
+      .get();
+    store.db.exec(
+      "INSERT OR IGNORE INTO gpt_job_providers SELECT id,'browser' FROM gpt_jobs" +
+        (hadNative ? " WHERE id NOT IN (SELECT jobId FROM gpt_native_receipts)" : ""),
+    );
+    if (hadNative)
+      store.db.exec(
+        "INSERT OR IGNORE INTO gpt_job_providers SELECT jobId,'native' FROM gpt_native_receipts",
+      );
     this.library = new Library(store, "gpt");
     this.operations = new GptOperations(
       store,
@@ -258,8 +286,25 @@ export class GptService {
     this.historyCache = new GptHistoryCache(
       async (id) => gptHistory(await this.readConversation(id), id),
       Date.now,
-      new GptHistoryDisk(join(this.root, "history")),
+      new GptHistoryDisk(join(this.root, this.native ? "native-history" : "history")),
     );
+    if (nativeWorkspace)
+      this.nativeJobs = new NativeGptJobs(
+        store,
+        nativeWorkspace.client,
+        () => {
+          authorize();
+          if (this.stopped) throw Error("NATIVE_STOPPED");
+        },
+        new Set(nativeWorkspace.conversations),
+        new Set(nativeWorkspace.creationKeys),
+        async (file) => {
+          const stored = this.upload(file.id);
+          if (stored.bytes !== file.bytes || stored.name !== file.name || stored.mime !== file.mime)
+            throw Error("NATIVE_UPLOAD_CHANGED");
+          return join(this.root, file.id);
+        },
+      );
     // Never replay an ambiguous native submission after a Hub restart.
     store.db
       .prepare(
@@ -268,10 +313,12 @@ export class GptService {
       .run("Соединение прервалось. Проверь ответ в чате перед повторной отправкой.");
   }
   available() {
-    return !!this.config.gpt && !!this.token;
+    return !!this.native || (!!this.config.gpt && !!this.token);
   }
   private async response(path: string, body?: unknown, timeout = 30000, signal?: AbortSignal) {
     this.authorize();
+    if (this.native)
+      throw error("GPT_NATIVE_NOT_READY", "Это действие ещё не подключено к новому клиенту GPT.");
     if (!this.available())
       throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
     const historyRead = body === undefined && path.startsWith("/conversation?");
@@ -371,6 +418,12 @@ export class GptService {
     return this.readJson(path, body);
   }
   private async readJson(path: string, body?: unknown): Promise<Json> {
+    this.authorize();
+    if (this.native) {
+      const result = await this.native.json(path, body);
+      this.authorize();
+      return result;
+    }
     return (
       await this.response(
         path,
@@ -389,6 +442,7 @@ export class GptService {
     ).json();
   }
   async doctorReport() {
+    if (this.native) return { ...(await this.connection(true)), provider: "native" };
     const raw = await this.json("/status");
     if (this.nativeCounts().active) return { ...raw, state: "busy" };
     return this.compatibilityFailure && raw.state === "healthy"
@@ -581,7 +635,8 @@ export class GptService {
     const value = z
       .object({
         models: z.array(option).min(1).max(50),
-        efforts: z.array(option).min(1).max(10),
+        efforts: z.array(option).min(1).max(16),
+        effortsByModel: z.record(z.string(), z.array(option).min(1).max(16)).optional(),
         currentModel: z.string(),
         currentEffort: z.string(),
       })
@@ -794,6 +849,12 @@ export class GptService {
     }
     if (!this.available())
       throw error("GPT_NOT_CONFIGURED", "Подключение GPT ещё не настроено.", 503);
+    this.native?.assertSubmission(jobId, value.nativeId);
+    if (this.native && Buffer.byteLength(value.text) > 32768)
+      throw error(
+        "GPT_NATIVE_INPUT",
+        "Сообщение превышает текущий предел нового подключения (32 КБ). Черновик сохранён.",
+      );
     if (this.nativeBlocked())
       throw error(
         "GPT_NATIVE_BUSY",
@@ -853,6 +914,9 @@ export class GptService {
           Date.now(),
           Date.now(),
         );
+      this.store.db
+        .prepare("INSERT INTO gpt_job_providers VALUES(?,?)")
+        .run(jobId, this.native ? "native" : "browser");
       if (value.projectId)
         this.store.db
           .prepare("INSERT INTO gpt_project_jobs(jobId,projectId) VALUES(?,?)")
@@ -888,6 +952,24 @@ export class GptService {
       return this.job(jobId);
     }
     if (!["preparing", "running"].includes(job.status)) return job;
+    const provider = this.store.db
+      .prepare("SELECT provider FROM gpt_job_providers WHERE jobId=?")
+      .get(jobId)?.provider;
+    if (provider !== (this.native ? "native" : "browser"))
+      throw error(
+        "GPT_OTHER_PROVIDER",
+        "Эта отправка принадлежит предыдущему подключению GPT. Проверь её в прежнем клиенте.",
+      );
+    if (this.native) {
+      if (job.status === "preparing") {
+        this.update(jobId, { status: "cancelled" });
+        return this.job(jobId);
+      }
+      await this.nativeJobs!.stop(jobId);
+      this.observedHistory = undefined;
+      if (job.nativeId) this.historyCache.invalidate(job.nativeId);
+      return this.job(jobId);
+    }
     await this.json("/bridge/browser/stop", { reason: "Owner requested stop" });
     this.update(jobId, { status: "cancelled" });
     return this.job(jobId);
@@ -895,11 +977,107 @@ export class GptService {
   resolve(jobId: string) {
     if (this.job(jobId).status !== "unknown")
       throw error("GPT_NOT_UNKNOWN", "Состояние уже определено.");
+    if (
+      this.store.db.prepare("SELECT provider FROM gpt_job_providers WHERE jobId=?").get(jobId)
+        ?.provider === "native"
+    )
+      throw error(
+        "GPT_NATIVE_RECONCILE",
+        "Сначала дождись проверки отправки новым клиентом. Сообщение не будет отправлено повторно.",
+      );
     this.update(jobId, { status: "cancelled", error: "" });
     void this.pump();
     return this.job(jobId);
   }
+  private async pumpNative() {
+    if (
+      !this.native ||
+      !this.nativeJobs ||
+      this.stopped ||
+      this.working ||
+      this.libraryBusy ||
+      this.nativeBlocked()
+    )
+      return;
+    this.working = true;
+    this.completion = new Promise((resolve) => {
+      this.releaseCompletion = resolve;
+    });
+    let retry = false;
+    try {
+      // Reconcile persisted native receipts before considering any new dispatch.
+      // Old-browser work is never handed to the native client, including queued work.
+      const pending = this.store.db
+        .prepare(
+          "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id JOIN gpt_native_receipts r ON r.jobId=j.id WHERE p.provider='native' AND j.status IN ('running','unknown') ORDER BY j.createdAt LIMIT 1",
+        )
+        .get();
+      if (pending) {
+        retry = true;
+        const result = await this.nativeJobs.reconcile(String(pending.id));
+        this.nativeReadFailures = result.status === "unknown" ? this.nativeReadFailures + 1 : 0;
+        this.invalidateNativeJob(String(pending.id));
+        return;
+      }
+      if (this.jobs().some((j) => ["preparing", "running", "unknown"].includes(j.status))) return;
+      const next = this.store.db
+        .prepare(
+          "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE p.provider='native' AND j.status='queued' ORDER BY j.createdAt LIMIT 1",
+        )
+        .get();
+      if (!next) return;
+      retry = true;
+      if ((await this.connection(true)).state !== "healthy" || this.stopped) {
+        this.nativeReadFailures++;
+        return;
+      }
+      this.nativeReadFailures = 0;
+      const jobId = String(next.id);
+      if (this.job(jobId).status !== "queued") return;
+      try {
+        await this.nativeJobs.run(jobId);
+      } catch {
+        const current = this.job(jobId);
+        const receipt = this.store.db
+          .prepare("SELECT 1 FROM gpt_native_receipts WHERE jobId=?")
+          .get(jobId);
+        if (["queued", "preparing", "running", "unknown", "failed"].includes(current.status))
+          this.update(jobId, {
+            status: receipt ? "unknown" : "failed",
+            error: receipt
+              ? "Проверяем, принял ли GPT сообщение. Повторной отправки не будет."
+              : "Новый клиент GPT не подготовил отправку. Текст и файлы сохранены.",
+          });
+      }
+      this.invalidateNativeJob(jobId);
+    } catch {
+      // A lost read never triggers a dispatch. Keep the last visible answer.
+      this.nativeReadFailures++;
+      retry = true;
+    } finally {
+      this.working = false;
+      this.releaseCompletion?.();
+      if (retry && !this.stopped) {
+        clearTimeout(this.recoveryTimer);
+        this.recoveryTimer = setTimeout(
+          () => void this.pump(),
+          Math.min(60000, 5000 * 2 ** Math.min(4, this.nativeReadFailures)),
+        );
+        this.recoveryTimer.unref();
+      }
+    }
+  }
+  private invalidateNativeJob(id: string) {
+    const job = this.job(id);
+    if (job.status === "unknown")
+      this.update(id, {
+        error: "Проверяем, принял ли GPT сообщение. Повторной отправки не будет.",
+      });
+    this.observedHistory = undefined;
+    if (job.nativeId) this.historyCache.invalidate(job.nativeId);
+  }
   async pump() {
+    if (this.native) return this.pumpNative();
     if (
       this.working ||
       this.libraryBusy ||
@@ -910,7 +1088,9 @@ export class GptService {
     )
       return;
     const next = this.store.db
-      .prepare("SELECT id FROM gpt_jobs WHERE status='queued' ORDER BY createdAt LIMIT 1")
+      .prepare(
+        "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE j.status='queued' AND p.provider='browser' ORDER BY j.createdAt LIMIT 1",
+      )
       .get();
     if (!next) {
       await this.releaseCompletedUploads();
@@ -1188,6 +1368,16 @@ export class GptService {
     await this.workspaceWork.close();
   }
   async sandboxFile(conversationId: string, messageId: string, key: string) {
+    if (this.native) {
+      this.authorize();
+      const { file, bytes } = await this.native.workspace.client.download(
+        conversationId,
+        messageId,
+        key,
+      );
+      this.authorize();
+      return { file, response: new Response(new Uint8Array(bytes)) };
+    }
     const raw = await this.json("/conversation?id=" + encodeURIComponent(conversationId));
     const message = gptHistory(raw, conversationId).find(
       (m) => m.id === messageId && m.role === "assistant",
@@ -1234,8 +1424,9 @@ export function registerGpt(
   config: HubConfig,
   store: Store,
   authorize?: () => void,
+  nativeWorkspace?: NativeGptWorkspace,
 ) {
-  const service = new GptService(config, store, authorize);
+  const service = new GptService(config, store, authorize, nativeWorkspace);
   app.addHook("preClose", async () => service.close());
   app.addHook("onReady", async () => {
     void service.pump();

@@ -78,6 +78,7 @@ export class NativeRendererReader {
  async readProject(request,options){return this.#read({...request,operation:'readProject'},options);}
  async readProjectConversations(request,options){return this.#read({...request,operation:'readProjectConversations'},options);}
  async readCatalog(request,options){return this.#read({...request,operation:'readCatalog'},options);}
+ async readPins(request,options){return this.#read({...request,operation:'readPins'},options);}
  async listArtifacts({conversationId,accountFingerprint,before},options){return this.#read({operation:'listArtifacts',conversationId,accountFingerprint,before},options,'artifacts');}
  async readArtifact({conversationId,accountFingerprint,messageId,artifactId},options){return this.#read({operation:'readArtifact',conversationId,accountFingerprint,messageId,artifactId},options,'artifacts');}
  async disposableComposer({operation,key,accountFingerprint,disposable,text,files,intentPersisted},options){

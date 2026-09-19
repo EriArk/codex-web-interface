@@ -9,7 +9,12 @@ import type { Store } from "./store.js";
 
 type NativeJobsClient = Pick<
   NativeGptReadClient,
-  "prepareDispatch" | "dispatchText" | "reconcileDispatch" | "uploadFile" | "uploadFilePath"
+  | "prepareDispatch"
+  | "dispatchText"
+  | "reconcileDispatch"
+  | "stopDispatch"
+  | "uploadFile"
+  | "uploadFilePath"
 >;
 function fail(code: string): never {
   throw Error(`NATIVE_${code}`);
@@ -144,6 +149,7 @@ export class NativeGptJobs {
       try {
         prepared = await this.client.prepareDispatch(input);
         this.authorize();
+        if (this.row(id).status !== "preparing") fail("JOB_CHANGED");
         if (prepared.versionId !== input.versionId || prepared.presetId !== input.presetId)
           fail("INVALID_SETTINGS");
         const snapshots = [];
@@ -176,6 +182,7 @@ export class NativeGptJobs {
           .get(id);
         if (saved?.files !== row.files || saved?.hashes !== hashes) fail("UPLOAD_CHANGED");
         for (const f of snapshots) {
+          if (this.row(id).status !== "preparing") fail("JOB_CHANGED");
           const file = { id: f.id, name: f.name, mime: f.mime, bytes: f.bytes, sha256: f.sha256 };
           const target = { key: id, conversationId: input.conversationId, file };
           if (typeof f.source === "string" && !f.mime.startsWith("image/"))
@@ -253,6 +260,16 @@ export class NativeGptJobs {
       this.busy = false;
     }
   }
+  async stop(id: string) {
+    this.row(id);
+    const saved = this.store.db
+      .prepare("SELECT payload FROM gpt_native_receipts WHERE jobId=?")
+      .get(id);
+    if (!saved) fail("RECEIPT_MISSING");
+    const payload = JSON.parse(String(saved.payload));
+    await this.client.stopDispatch(id, payload.conversationId);
+    if (!this.busy) return this.reconcile(id);
+  }
   private async readReceipt(id: string) {
     const row = this.row(id);
     const saved = this.store.db
@@ -311,6 +328,25 @@ export class NativeGptJobs {
         this.store.db
           .prepare("UPDATE gpt_native_receipts SET messages=? WHERE jobId=?")
           .run(JSON.stringify(result.messages), id);
+        if (
+          this.store.db
+            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gpt_job_progress'")
+            .get()
+        ) {
+          const progress = result.messages
+            .filter((m) => m.channel === "commentary" && m.text.trim())
+            .slice(-6)
+            .map((m) => ({
+              id: m.id,
+              text: m.text.slice(0, 500),
+              state: result.state === "running" && !m.complete ? "active" : "completed",
+            }));
+          this.store.db
+            .prepare(
+              "INSERT INTO gpt_job_progress VALUES(?,?) ON CONFLICT(jobId) DO UPDATE SET value=excluded.value",
+            )
+            .run(id, JSON.stringify(progress));
+        }
         this.store.db
           .prepare(
             "UPDATE gpt_jobs SET status=?,answer=?,error='',updatedAt=? WHERE id=? AND status!='completed'",

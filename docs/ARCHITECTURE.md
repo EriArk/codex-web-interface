@@ -418,3 +418,8 @@ The first release uses the proposed TypeScript workspace, Fastify, React, SQLite
 The owner-approved early Companion (D17) resolves the observed Windows Session 0 sandbox failure through local named-pipe IPC. The public and machine boundaries remain unchanged. HTTP file uploads terminate at the Hub and are staged on Windows through SSH only when a turn is sent.
 
 SQLite owns settings, messages aggregated from events, cursor-based history, thread mappings, sessions, idempotency keys and attachment metadata. Remote sessions are manual and independent from the Hub's long-lived Codex runtimes. The UI implements one mobile/wide component tree with shared theme tokens.
+
+
+### Native GPT integration boundary (2026-09-19)
+
+The shared GptService can receive a private NativeGptWorkspace dependency for isolated integration admission. Typed owner-bound Unix-socket operations supply public reads and the existing gpt_jobs worker; no browser-supplied socket, native method or account identity is accepted. Each durable outbox entry records its provider, and transport changes never migrate/replay queued or uncertain sends. Legacy and native cache/transport paths remain separate, with unsupported native features failing explicitly instead of falling back to the old account. The production runtime does not yet supply this dependency; parity, explicit unknown-send review and per-member binding are release gates tracked in GPT_NATIVE_LINUX.md.

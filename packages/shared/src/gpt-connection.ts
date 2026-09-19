@@ -50,7 +50,7 @@ export interface GptConnection {
   storage?: z.infer<typeof connectorStorage>;
   activeJobs: number;
   unknownJobs: number;
-  connectUrl: "/gpt-connect";
+  connectUrl: "/gpt-connect" | "/gpt-connect?runtime=native";
 }
 export const gptConnectionMessages: Record<GptConnectionState, string> = {
   disabled: "Подключение GPT ещё не настроено.",

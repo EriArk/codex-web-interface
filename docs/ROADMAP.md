@@ -6,7 +6,7 @@ The official isolated Linux client is installed and authenticated. The owner acc
 
 Implemented and verified in the native canary:
 
-- Durable uploads through Hub jobs: real 32 MiB PDF accepted/read once by native GPT and preserved after restart. Disk-streamed documents support the 512 MiB ceiling; images use a bounded 20 MiB path. Eight-file batch guard remains separate from native account quotas. Browser-to-Hub chunks and larger Codex SFTP transfer are implemented and tested but not installed in the main engine/UI. Main GPT integration remains pending; the old browser connector retains its buffer guard. See [upload evidence and limits](GPT_NATIVE_LINUX.md#large-file-transport-and-native-project-foundation-2026-09-19).
+- Durable uploads through Hub jobs: real 32 MiB PDF accepted/read once by native GPT and preserved after restart. Disk-streamed documents support the 512 MiB ceiling; images use a bounded 20 MiB path. Eight-file batch guard remains separate from native account quotas. Browser-to-Hub chunks and larger Codex SFTP transfer are implemented and tested but not installed in the main engine/UI. Core GptService/shared-UI integration is now implemented and verified with a real 32 MiB PDF; production admission remains pending and the old browser connector retains its buffer guard. See [upload evidence and limits](GPT_NATIVE_LINUX.md#large-file-transport-and-native-project-foundation-2026-09-19).
 - Phone trackpad/zoom, protected Remote and persistent manual-access leases.
 - Supervised private inherited-pipe adapter; no debugger TCP port or published native port.
 - Fresh account-bound public history, 20-message paging and exact branch/message identities.
@@ -17,8 +17,8 @@ Implemented and verified in the native canary:
 
 Next coherent implementation block:
 
-1. Add project catalog/association, further upload formats/size and explicit interrupted-upload recovery; finish Results/media parity before switching the main provider. Ordinary unassigned new Chat, the conversation catalog and small durable TXT/PNG uploads are covered by the canary.
-2. Wire the provider into the actual shared GPT workspace, including preserved public progress, explicit unknown-send recovery and manual control arbitration. Keep old-provider receipts bound to their original provider; never replay them during migration.
+1. Finish native project content/files and library mutations, edit/regenerate/fork, scheduled tasks/Canvas reads and dictation; complete generated-image and large downloadable-result parity. Project catalog/membership, native pins and archived catalog reads already reach the shared service.
+2. Complete explicit unknown-send review/manual recovery and production capability/admission controls. Core shared `GptService`, durable send/progress/Stop, per-model presets and provider-bound outbox entries are implemented. The real web composer uploaded and sent a 32 MiB PDF once, displayed its answer and survived reload/service reopening; the supervisor still restricts sends to disposable chats. Unknown native receipts remain blocked from blind dismissal/replay. Old queued jobs retain their provider rather than being silently migrated.
 3. Verify long-chat performance, host boot and per-member provisioning, then stage a reversible primary-provider switch. Main production remains unchanged until these admission gates pass.
 
 Details, actual installed state and rollback: [GPT_NATIVE_LINUX.md](GPT_NATIVE_LINUX.md). Earlier stage findings remain in that technical record.

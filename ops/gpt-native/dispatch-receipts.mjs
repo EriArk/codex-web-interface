@@ -18,16 +18,17 @@ export class NativeDispatchReceipts {
   this.db.exec('CREATE TABLE IF NOT EXISTS creations(key TEXT PRIMARY KEY REFERENCES receipts(key),candidate TEXT,confirmed TEXT)');
   if(!this.db.prepare('PRAGMA table_info(creations)').all().some(x=>x.name==='createdAfter'))this.db.exec('ALTER TABLE creations ADD COLUMN createdAfter INTEGER');
   this.db.exec('CREATE TABLE IF NOT EXISTS uploads(key TEXT NOT NULL,id TEXT NOT NULL,hash TEXT NOT NULL,result TEXT,PRIMARY KEY(key,id))');
+  this.db.exec('CREATE TABLE IF NOT EXISTS stops(key TEXT PRIMARY KEY REFERENCES receipts(key))');
   const hash=this.hash([userId,accountFingerprint]);
   this.db.prepare('INSERT OR IGNORE INTO binding VALUES(1,?)').run(hash);
   if(this.db.prepare('SELECT hash FROM binding WHERE id=1').get().hash!==hash){this.db.close();fail('INVALID_BINDING');}
  }
  hash(x){return createHash('sha256').update(JSON.stringify(x)).digest('hex');}
  close(){this.db.close();}
- pending(){return !!this.db.prepare("SELECT 1 FROM receipts WHERE state!='completed' LIMIT 1").get();}
+ pending(){return !!this.db.prepare("SELECT 1 FROM receipts WHERE state NOT IN ('completed','cancelled') LIMIT 1").get();}
  validate(r){
   if(r.projectId!=null&&!/^g-p-[a-zA-Z0-9-]{1,80}$/.test(r.projectId))fail('INVALID_PROJECT');
-  if(!(r.conversationId===null?this.creationKeys.has(r.key):this.allowed.has(r.conversationId))||!uuid(r.key)||!uuid(r.userMessageId)||typeof r.text!=='string'||!r.text.trim()||Buffer.byteLength(r.text)>32768||
+  if(!(r.conversationId===null?this.creationKeys.has(r.key):this.allowed.has(r.conversationId))||!uuid(r.key)||!uuid(r.userMessageId)||typeof r.text!=='string'||Buffer.byteLength(r.text)>32768||
      typeof r.versionId!=='string'||r.versionId.length>128||!Number.isSafeInteger(r.presetId))fail('INVALID_CANARY');
  }
  admitUpload(r){if(!(r.conversationId===null?this.creationKeys.has(r.key):this.allowed.has(r.conversationId))||!uuid(r.key)||!uuid(r.file?.id))fail('INVALID_CANARY');}
@@ -81,6 +82,7 @@ export class NativeDispatchReceipts {
  }
  async dispatch(r,reader){
   this.validate(r);
+  if(!r.text.trim()&&!r.attachments?.length)fail('EMPTY_MESSAGE');
   if(!uuid(r.parentId)||typeof r.model!=='string'||r.model.length>128||(r.effort!==null&&typeof r.effort!=='string')||r.intentPersisted!==true)fail('INVALID_REQUEST');
   if(r.attachments!=null){
    if(!Array.isArray(r.attachments)||r.attachments.length>8||new Set(r.attachments.map(f=>f.id)).size!==r.attachments.length)fail('INVALID_UPLOAD');
@@ -126,9 +128,30 @@ export class NativeDispatchReceipts {
    if(candidate==null)return {state:'unknown',messages:[],userMessageId:payload.userMessageId,conversationId:null};
   }
   const result=await reader.readSubmission({...payload,conversationId:candidate,...(conversationId===null?{newChat:true}:{})});
+  if(result.state==='running'&&this.db.prepare('SELECT 1 FROM stops WHERE key=?').get(key)){
+   const ui=await reader.inspectConversation({...payload,conversationId:candidate});
+   if(ui.selected&&ui.composerReady&&!ui.stopAvailable&&!ui.hasDraft){
+    // Inspect is only the idle proof; canonical exact-user read protects a newer turn.
+    const checked=await reader.readSubmission({...payload,conversationId:candidate,...(conversationId===null?{newChat:true}:{})});
+    if(checked.state==='running'){result.state='cancelled';result.messages=checked.messages;}
+    else {result.state=checked.state;result.messages=checked.messages;}
+   }
+  }
   if(conversationId===null&&result.state!=='unknown')this.db.prepare('UPDATE creations SET confirmed=? WHERE key=?').run(candidate,key);
-  if(result.state==='completed')this.db.prepare("UPDATE receipts SET state='completed' WHERE key=?").run(key);
+  if(['completed','cancelled'].includes(result.state))this.db.prepare("UPDATE receipts SET state=? WHERE key=?").run(result.state,key);
   return {...result,userMessageId:payload.userMessageId,...(conversationId===null?{conversationId:result.state==='unknown'?null:candidate}: {})};
+ }
+ async stop(r,reader){
+  const result=await this.reconcile(r,reader);
+  if(['completed','cancelled'].includes(result.state))return {stopIssued:false};
+  if(result.state!=='running')fail('TURN_UNCONFIRMED');
+  const payload=JSON.parse(this.db.prepare('SELECT payload FROM receipts WHERE key=?').get(r.key).payload);
+  const conversationId=result.conversationId??payload.conversationId;
+  if(!uuid(conversationId))fail('TURN_UNCONFIRMED');
+  if(this.db.prepare('SELECT 1 FROM stops WHERE key=?').get(r.key))return {stopIssued:true};
+  this.db.prepare('INSERT INTO stops VALUES(?)').run(r.key);
+  await reader.stopResponse({...payload,conversationId});
+  return {stopIssued:true};
  }
  candidate(key,id){
   const row=this.db.prepare('SELECT candidate FROM creations WHERE key=?').get(key);

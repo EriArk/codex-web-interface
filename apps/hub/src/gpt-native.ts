@@ -78,6 +78,8 @@ const historySchema = z
 /** Private typed native transport. Dispatch requires the host's disposable-chat
  * canary allowlist; this client never selects the main GptService provider. */
 export class NativeGptReadClient {
+  private tail: Promise<unknown> = Promise.resolve();
+  private waiting = 0;
   constructor(
     private readonly binding: { socketPath: string; userId: string },
     private readonly authorize: () => void,
@@ -87,6 +89,18 @@ export class NativeGptReadClient {
     if (!isAbsolute(binding.socketPath)) fail("INVALID_SOCKET");
   }
   private async call(input: Record<string, unknown>): Promise<unknown> {
+    this.authorize();
+    if (this.waiting >= 64) fail("BUSY");
+    this.waiting++;
+    const task = this.tail.then(() => this.request(input));
+    this.tail = task.catch(() => {});
+    try {
+      return await task;
+    } finally {
+      this.waiting--;
+    }
+  }
+  private async request(input: Record<string, unknown>): Promise<unknown> {
     this.authorize();
     // A configured same-UID private Unix socket, never a browser-supplied address.
     for (const [path, directory] of [
@@ -171,7 +185,7 @@ export class NativeGptReadClient {
       .strict()
       .parse(await this.call({ operation: "status" }));
   }
-  async catalog(offset = 0) {
+  async catalog(offset = 0, archived = false) {
     z.number().int().min(0).max(10000).parse(offset);
     return z
       .object({
@@ -192,7 +206,56 @@ export class NativeGptReadClient {
         nextOffset: z.number().int().nonnegative().nullable(),
       })
       .strict()
-      .parse(await this.call({ operation: "readCatalog", offset }));
+      .parse(await this.call({ operation: "readCatalog", offset, archived }));
+  }
+  async models() {
+    const preset = z
+      .object({
+        id: z.number().int().nonnegative(),
+        label: z.string().min(1).max(120),
+        model: z.string().max(128),
+        effort: z.string().max(128).nullable(),
+        available: z.boolean(),
+      })
+      .strict();
+    return z
+      .object({
+        versions: z
+          .array(
+            z
+              .object({
+                id: z.string().min(1).max(120),
+                label: z.string().min(1).max(120),
+                enabled: z.boolean(),
+                presets: preset.array().max(16),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(32),
+      })
+      .strict()
+      .parse(await this.call({ operation: "readModels" }));
+  }
+  async pins() {
+    return z
+      .object({
+        items: z
+          .array(
+            z
+              .object({
+                id: identity,
+                kind: z.enum(["thread", "project"]),
+                title: z.string().max(4096),
+                updatedAt: z.number().finite().nonnegative(),
+                projectId: projectId.nullable(),
+              })
+              .strict(),
+          )
+          .max(100),
+      })
+      .strict()
+      .parse(await this.call({ operation: "readPins" }));
   }
   async projects(cursor: string | null = null) {
     projectCursor.parse(cursor);
@@ -393,13 +456,21 @@ export class NativeGptReadClient {
     uuid.nullable().parse(conversationId);
     return z
       .object({
-        state: z.enum(["unknown", "running", "completed"]),
+        state: z.enum(["unknown", "running", "completed", "cancelled"]),
         userMessageId: uuid,
         messages: historySchema.shape.messages,
         conversationId: uuid.nullable().optional(),
       })
       .strict()
       .parse(await this.call({ operation: "reconcileDispatch", key, conversationId }));
+  }
+  async stopDispatch(key: string, conversationId: string | null) {
+    uuid.parse(key);
+    uuid.nullable().parse(conversationId);
+    return z
+      .object({ stopIssued: z.boolean() })
+      .strict()
+      .parse(await this.call({ operation: "stopDispatch", key, conversationId }));
   }
   async history(conversationId: string, before?: string): Promise<GptHistoryPage> {
     uuid.parse(conversationId);
@@ -522,7 +593,10 @@ const nativeDispatchInput = z
     conversationId: uuid.nullable(),
     userMessageId: uuid,
     projectId: projectId.optional(),
-    text: z.string().min(1).max(32768),
+    text: z
+      .string()
+      .max(32768)
+      .refine((value) => Buffer.byteLength(value) <= 32768),
     versionId: z.string().min(1).max(128),
     presetId: z.number().int().nonnegative(),
   })

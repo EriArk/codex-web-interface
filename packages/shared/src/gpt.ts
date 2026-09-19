@@ -34,6 +34,7 @@ export interface GptProject {
   name: string;
 }
 export interface GptModels {
+  effortsByModel?: Record<string, { id: string; label: string }[]>;
   models: { id: string; label: string }[];
   efforts: { id: string; label: string }[];
   currentModel: string;

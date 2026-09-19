@@ -211,6 +211,11 @@ export function GptWorkspace({
     [models, setModels] = useState<GptModels | null>(gptCache.models),
     [model, setModel] = useState(gptCache.model),
     [effort, setEffort] = useState(gptCache.effort);
+  const modelEfforts = models?.effortsByModel?.[model] ?? models?.efforts ?? [];
+  useEffect(() => {
+    const choices = models?.effortsByModel?.[model];
+    if (choices?.length && !choices.some((e) => e.id === effort)) setEffort(choices[0]!.id);
+  }, [models, model, effort]);
   const [text, setText] = useState(""),
     [files, setFiles] = useState<GptFile[]>([]),
     [busy, setBusy] = useState(false),
@@ -1718,7 +1723,7 @@ export function GptWorkspace({
               <div className="gpt-connection-notice" role="status">
                 <span>{connection.message}</span>
                 {["login_required", "attention"].includes(connection.state) ? (
-                  <a className="secondary" href="/gpt-connect">
+                  <a className="secondary" href={connection.connectUrl}>
                     {connection.state === "attention" ? "Открыть" : "Войти"}
                   </a>
                 ) : (
@@ -1763,7 +1768,13 @@ export function GptWorkspace({
                     aria-label="Модель GPT"
                     value={model}
                     disabled={!models}
-                    onChange={(event) => setModel(event.target.value)}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setModel(next);
+                      const choices = models?.effortsByModel?.[next];
+                      if (choices?.length && !choices.some((e) => e.id === effort))
+                        setEffort(choices[0]!.id);
+                    }}
                   >
                     {models?.models.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -1773,14 +1784,14 @@ export function GptWorkspace({
                   </select>
                 </label>
                 <label className="composer-option effort-option">
-                  <span>{models?.efforts.find((e) => e.id === effort)?.label ?? "Мощность"}</span>
+                  <span>{modelEfforts.find((e) => e.id === effort)?.label ?? "Мощность"}</span>
                   <select
                     aria-label="Мощность GPT"
                     value={effort}
                     disabled={!models}
                     onChange={(event) => setEffort(event.target.value)}
                   >
-                    {models?.efforts.map((e) => (
+                    {modelEfforts.map((e) => (
                       <option key={e.id} value={e.id}>
                         {e.label}
                       </option>

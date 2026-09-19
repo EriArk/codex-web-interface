@@ -73,6 +73,26 @@ test("native project pages keep exact scope, cursor and native principal", async
     /ACCOUNT_MISMATCH/,
   );
 });
+test("native pins expose only normalized public fields and archive reads retain their filter", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding(),
+    id = randomUUID();
+  f.set({
+    items: [
+      {
+        item_type: "conversation",
+        item: { id, title: "Pinned", update_time: "2026-09-19T00:00:00Z", private: "SECRET" },
+      },
+    ],
+  });
+  const pins = await f.read({ operation: "readPins", accountFingerprint });
+  assert.equal(pins.items[0].id, id);
+  assert.doesNotMatch(JSON.stringify(pins), /SECRET/);
+  assert.equal(f.calls.at(-1).route, "/pins");
+  f.set({ items: [] });
+  await f.read({ operation: "readCatalog", accountFingerprint, offset: 20, archived: true });
+  assert.equal(f.calls.at(-1).options.parameters.query.is_archived, true);
+});
 test("public graph preserves alternate branches and image results without hidden content or arbitrary metadata", async () => {
   const f = fixture(),
     accountFingerprint = await f.binding(),

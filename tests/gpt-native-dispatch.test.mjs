@@ -195,6 +195,42 @@ function receipts(t) {
   };
   return { root, options, open: () => new NativeDispatchReceipts(options) };
 }
+test("native Stop keeps receipt pending until exact-turn canonical read and idle composer agree", async (t) => {
+  const f = receipts(t),
+    ledger = f.open();
+  t.after(() => ledger.close());
+  const input = { ...fixture().input, versionId: "latest", presetId: 1 };
+  delete input.operation;
+  let stopped = 0,
+    idle = false,
+    newer = false;
+  const reader = {
+    dispatchText: async () => {},
+    readSubmission: async () => ({ state: newer ? "unknown" : "running", messages: [] }),
+    stopResponse: async (r) => {
+      assert.equal(r.userMessageId, input.userMessageId);
+      stopped++;
+    },
+    inspectConversation: async () => ({
+      selected: true,
+      composerReady: true,
+      stopAvailable: !idle,
+      hasDraft: false,
+    }),
+  };
+  await ledger.dispatch(input, reader);
+  await ledger.stop(input, reader);
+  assert.equal(ledger.pending(), true);
+  await ledger.stop(input, reader);
+  assert.equal(stopped, 1);
+  idle = true;
+  newer = true;
+  assert.equal((await ledger.reconcile(input, reader)).state, "unknown");
+  assert.equal(ledger.pending(), true);
+  newer = false;
+  assert.equal((await ledger.reconcile(input, reader)).state, "cancelled");
+  assert.equal(ledger.pending(), false);
+});
 test("native dispatch intention survives disconnect and restart without replay; changed keys/payloads and manual takeover are blocked", async (t) => {
   const f = receipts(t);
   let ledger = f.open();

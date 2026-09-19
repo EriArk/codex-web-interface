@@ -90,6 +90,27 @@ test("private native service exposes typed read projection and checksum-verified
   await assert.rejects(f.client.download(conversationId, "message", file.id), /ARTIFACT_CHECKSUM/);
   assert.equal((await f.client.status()).writesEnabled, false);
 });
+test("one Hub client serializes parallel reads and rechecks revoked authority when queued work starts", async (t) => {
+  const f = await fixture(t);
+  let release;
+  f.state.gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const first = f.client.history(conversationId);
+  for (let i = 0; i < 100 && !f.calls.length; i++)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(f.calls.length, 1);
+  const second = f.client.history(conversationId);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(f.calls.length, 1);
+  const settled = Promise.allSettled([first, second]);
+  f.state.revoked = true;
+  release();
+  assert.ok(
+    (await settled).every((r) => r.status === "rejected" && r.reason.message === "REVOKED"),
+  );
+  assert.equal(f.calls.length, 1);
+});
 
 test("native catalog stays behind private owner and manual-access boundaries", async (t) => {
   const f = await fixture(t);
