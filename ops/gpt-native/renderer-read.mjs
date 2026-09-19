@@ -7,7 +7,8 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  if (request.operation === 'readModels' && !/^[a-f0-9]{64}$/.test(request.accountFingerprint ?? '')) fail('INVALID_REQUEST');
  if (request.operation === 'readConversation' && (!uuid(request.conversationId) ||
      !/^[a-f0-9]{64}$/.test(request.accountFingerprint ?? '') ||
-     (request.before != null && !uuid(request.before)))) fail('INVALID_REQUEST');
+     (request.before != null && !uuid(request.before)) ||
+     (request.messageId != null && (typeof request.messageId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(request.messageId) || request.before != null)))) fail('INVALID_REQUEST');
  if (runtime.electronBridge?.getSentryInitOptions?.().appVersion !== '26.915.31945') fail('UNSUPPORTED_BUILD');
  const signal = AbortSignal.timeout(15000);
  const bounded = promise => new Promise((resolve, reject) => {
@@ -81,7 +82,9 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  }
  const messages = [];
  let hasMore = false, bytes = 0;
- for (const node of chain.slice(start)) {
+ const selected=request.messageId == null ? chain.slice(start) : chain.filter(n=>n.message?.id===request.messageId);
+ if(request.messageId != null && selected.length!==1)fail('MESSAGE_NOT_ON_BRANCH');
+ for (const node of selected) {
   const message = node.message, role = message?.author?.role;
   if (!['user','assistant'].includes(role) || message.metadata?.is_visually_hidden_from_conversation === true ||
       (message.channel != null && !['final','commentary'].includes(message.channel)) ||

@@ -134,6 +134,31 @@ test("twenty-message paging uses exact ancestor cursors and retains distinct mes
   await assert.rejects(f.read({ ...request, before: id(99) }), /CURSOR_NOT_ON_BRANCH/);
 });
 
+test("exact-message lookup can resolve older artifacts without exporting other history or hidden content", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  for (let n = 2; n <= 45; n++) f.node(n, `text-${n}`);
+  const request = {
+    operation: "readConversation",
+    conversationId,
+    accountFingerprint,
+    messageId: "message-1",
+  };
+  const result = await f.read(request);
+  assert.deepEqual(
+    result.messages.map((m) => m.text),
+    ["visible"],
+  );
+  assert.equal(result.before, null);
+  f.conversation.mapping[id(1)].message.channel = "analysis";
+  assert.deepEqual((await f.read(request)).messages, []);
+  await assert.rejects(f.read({ ...request, messageId: "missing" }), /MESSAGE_NOT_ON_BRANCH/);
+  await assert.rejects(f.read({ ...request, before: id(20) }), /INVALID_REQUEST/);
+  f.node(46, "off branch");
+  f.conversation.current_node = id(45);
+  await assert.rejects(f.read({ ...request, messageId: "message-46" }), /MESSAGE_NOT_ON_BRANCH/);
+});
+
 test("wrong conversation, cycles, missing parents and oversized text fail closed", async () => {
   const f = fixture(),
     accountFingerprint = await f.binding();
