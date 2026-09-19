@@ -18,6 +18,8 @@ export class NativeDispatchReceipts {
   this.db.exec("PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS binding(id INTEGER PRIMARY KEY, hash TEXT NOT NULL); CREATE TABLE IF NOT EXISTS receipts(key TEXT PRIMARY KEY, hash TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL);");
   this.db.exec("CREATE TABLE IF NOT EXISTS project_creations(key TEXT PRIMARY KEY,name TEXT NOT NULL,projectId TEXT,state TEXT NOT NULL DEFAULT 'unknown')");
   this.db.exec("CREATE TABLE IF NOT EXISTS project_receipts(key TEXT PRIMARY KEY,hash TEXT NOT NULL,payload TEXT NOT NULL,state TEXT NOT NULL,uploaded TEXT)");
+  this.db.exec("CREATE TABLE IF NOT EXISTS operation_receipts(key TEXT PRIMARY KEY,hash TEXT NOT NULL,payload TEXT NOT NULL,baseline TEXT NOT NULL,resultId TEXT,state TEXT NOT NULL)");
+  this.db.exec("CREATE TABLE IF NOT EXISTS workspace_receipts(key TEXT PRIMARY KEY,hash TEXT NOT NULL,payload TEXT NOT NULL,expected TEXT,state TEXT NOT NULL)");
   this.db.exec('CREATE TABLE IF NOT EXISTS creations(key TEXT PRIMARY KEY REFERENCES receipts(key),candidate TEXT,confirmed TEXT)');
   if(!this.db.prepare('PRAGMA table_info(creations)').all().some(x=>x.name==='createdAfter'))this.db.exec('ALTER TABLE creations ADD COLUMN createdAfter INTEGER');
   this.db.exec('CREATE TABLE IF NOT EXISTS uploads(key TEXT NOT NULL,id TEXT NOT NULL,hash TEXT NOT NULL,result TEXT,PRIMARY KEY(key,id))');
@@ -28,7 +30,11 @@ export class NativeDispatchReceipts {
  }
  hash(x){return createHash('sha256').update(JSON.stringify(x)).digest('hex');}
  close(){this.db.close();}
- pending(){return !!this.db.prepare("SELECT 1 FROM project_creations WHERE projectId IS NULL AND state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM project_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM library_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM receipts WHERE state NOT IN ('completed','cancelled') LIMIT 1").get();}
+ pending(){return !!this.db.prepare("SELECT 1 FROM operation_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM workspace_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM project_creations WHERE projectId IS NULL AND state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM project_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM library_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM receipts WHERE state NOT IN ('completed','cancelled','checked') LIMIT 1").get();}
+ blocksDispatch(conversationId){
+  if(this.db.prepare("SELECT 1 FROM operation_receipts WHERE state='unknown' LIMIT 1").get()||this.db.prepare("SELECT 1 FROM workspace_receipts WHERE state='unknown' LIMIT 1").get()||this.db.prepare("SELECT 1 FROM project_receipts WHERE state='unknown' LIMIT 1").get()||this.db.prepare("SELECT 1 FROM library_receipts WHERE state='unknown' LIMIT 1").get()||this.db.prepare("SELECT 1 FROM project_creations WHERE projectId IS NULL AND state='unknown' LIMIT 1").get())return true;
+  return this.db.prepare("SELECT payload,state FROM receipts WHERE state NOT IN ('completed','cancelled','checked')").all().some(x=>JSON.parse(x.payload).conversationId===conversationId);
+ }
  validate(r){
   if(r.projectId!=null&&!/^g-p-[a-zA-Z0-9-]{1,80}$/.test(r.projectId))fail('INVALID_PROJECT');
   if(!(r.conversationId===null?this.creationKeys.has(r.key):this.allowed.has(r.conversationId))||!uuid(r.key)||!uuid(r.userMessageId)||typeof r.text!=='string'||Buffer.byteLength(r.text)>32768||
@@ -51,7 +57,7 @@ export class NativeDispatchReceipts {
    if(bytes.length!==f.bytes||bytes.toString('base64')!==f.base64||createHash('sha256').update(bytes).digest('hex')!==f.sha256)fail('UPLOAD_CHANGED');
   }
 
-  if(this.pending()||this.db.prepare('SELECT 1 FROM receipts WHERE key=?').get(r.key))fail('PENDING_DISPATCH');
+  if(this.blocksDispatch(r.conversationId)||this.db.prepare('SELECT 1 FROM receipts WHERE key=?').get(r.key))fail('PENDING_DISPATCH');
   if(this.db.prepare('SELECT count(*) AS n FROM uploads WHERE key=?').get(r.key).n>=8)fail('TOO_MANY_UPLOADS');
   this.db.prepare('INSERT INTO uploads(key,id,hash) VALUES(?,?,?)').run(r.key,f.id,hash);
   const native=await (path?reader.uploadStoredFile(r,path):reader.uploadFile(r));
@@ -63,7 +69,7 @@ export class NativeDispatchReceipts {
  }
  async prepare(r,reader){
   this.validate(r);
-  if(this.pending())fail('PENDING_DISPATCH');
+  if(this.blocksDispatch(r.conversationId))fail('PENDING_DISPATCH');
   await reader.selectConversation(r);
   // Native navigation is asynchronous. Wait only for the exact idle composer;
   // never interpret a stale/home composer as the selected conversation.
@@ -98,7 +104,7 @@ export class NativeDispatchReceipts {
   if(uploaded.length!==(r.attachments??[]).length||uploaded.some(x=>!x.result))fail('UPLOAD_MISMATCH');
   const hash=this.hash(r),old=this.db.prepare('SELECT * FROM receipts WHERE key=?').get(r.key);
   if(old){if(old.hash!==hash)fail('KEY_CONFLICT');return {state:old.state==='completed'?'completed':'unknown',userMessageId:r.userMessageId};}
-  if(this.pending())fail('PENDING_DISPATCH');
+  if(this.blocksDispatch(r.conversationId))fail('PENDING_DISPATCH');
   // This commit survives renderer/supervisor/Hub loss. Never invoke the writer twice.
   this.db.exec('BEGIN IMMEDIATE');
   try{
@@ -141,8 +147,25 @@ export class NativeDispatchReceipts {
    }
   }
   if(conversationId===null&&result.state!=='unknown')this.db.prepare('UPDATE creations SET confirmed=? WHERE key=?').run(candidate,key);
-  if(['completed','cancelled'].includes(result.state))this.db.prepare("UPDATE receipts SET state=? WHERE key=?").run(result.state,key);
+  if(['running','completed','cancelled'].includes(result.state))this.db.prepare("UPDATE receipts SET state=? WHERE key=?").run(result.state,key);
   return {...result,userMessageId:payload.userMessageId,...(conversationId===null?{conversationId:result.state==='unknown'?null:candidate}: {})};
+ }
+ async review(r,reader){
+  const result=await this.reconcile(r,reader);
+  if(result.state!=='unknown')return {reviewed:false};
+  const payload=JSON.parse(this.db.prepare('SELECT payload FROM receipts WHERE key=?').get(r.key).payload);
+  if(payload.conversationId!==null){
+   await reader.selectConversation(payload);
+   for(let n=0;n<12;n++){
+    const ui=await reader.inspectConversation(payload);
+    if(ui.selected&&ui.composerReady&&!ui.hasDraft&&!ui.stopAvailable)break;
+    if(n===11||ui.hasDraft||ui.stopAvailable)fail('NOT_READY');
+    await new Promise(ok=>setTimeout(ok,125));
+   }
+  }else{const a=await reader.workspace({...payload,operation:'activity'});if(!a.ready||a.generating)fail('NOT_READY');}
+  const again=await this.reconcile(r,reader);if(again.state!=='unknown')return {reviewed:false};
+  const updated=this.db.prepare("UPDATE receipts SET state='checked' WHERE key=? AND state IN ('unknown','running')").run(r.key);
+  return {reviewed:updated.changes===1};
  }
  async stop(r,reader){
   const result=await this.reconcile(r,reader);
@@ -152,6 +175,13 @@ export class NativeDispatchReceipts {
   const conversationId=result.conversationId??payload.conversationId;
   if(!uuid(conversationId))fail('TURN_UNCONFIRMED');
   if(this.db.prepare('SELECT 1 FROM stops WHERE key=?').get(r.key))return {stopIssued:true};
+  await reader.selectConversation({...payload,conversationId});
+  for(let n=0;n<12;n++){
+   const ui=await reader.inspectConversation({...payload,conversationId});
+   if(ui.selected&&ui.composerReady&&ui.stopAvailable&&!ui.hasDraft)break;
+   if(n===11||ui.hasDraft)fail('NOT_READY');
+   await new Promise(ok=>setTimeout(ok,125));
+  }
   this.db.prepare('INSERT INTO stops VALUES(?)').run(r.key);
   await reader.stopResponse({...payload,conversationId});
   return {stopIssued:true};

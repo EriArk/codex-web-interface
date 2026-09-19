@@ -28,7 +28,23 @@ function fixture() {
   };
   const runtime = { document: { querySelectorAll: (s) => elements[s] ?? [] } };
   const read = async (r) =>
-    r.operation === "inspectAccount" ? { accountFingerprint: "bound" } : history;
+    r.operation === "inspectAccount"
+      ? { accountFingerprint: "bound" }
+      : r.operation === "readConversationGraph"
+        ? {
+            current_node: history.messages.at(-1)?.id,
+            mapping: Object.fromEntries(
+              history.messages.map((m, i) => [
+                m.id,
+                {
+                  id: m.id,
+                  parent: history.messages[i - 1]?.id ?? null,
+                  message: { ...m, author: { role: m.role } },
+                },
+              ]),
+            ),
+          }
+        : history;
   const load = async () => ({
     M9: {
       appActions: {
@@ -79,12 +95,8 @@ test("selection uses native exact-ID navigation and preserves nonempty native dr
   assert.equal(f.actions.length, 0);
 });
 
-test("new Chat preparation preserves active work, Work mode and native drafts", async () => {
+test("new Chat preparation preserves Work mode and native drafts", async () => {
   const f = fixture();
-  await assert.rejects(
-    f.run({ operation: "selectConversation", conversationId: null }),
-    /DRAFT_PRESENT/,
-  );
   f.elements['button[aria-label="Stop"]'] = [];
   f.state.window = { route: { kind: "home", pathname: "/" } };
   await assert.rejects(f.run({ conversationId: null }), /CHAT_MODE_REQUIRED/);
@@ -101,6 +113,20 @@ test("new Chat preparation preserves active work, Work mode and native drafts", 
     f.run({ operation: "selectConversation", conversationId: null }),
     /DRAFT_PRESENT/,
   );
+});
+
+test("navigation while another chat works never presses Stop", async () => {
+  const f = fixture();
+  await f.run({ operation: "selectConversation" });
+  assert(f.actions.some((a) => a.type === "windows.show_thread"));
+  assert.equal(f.clicks(), 0);
+});
+
+test("Stop validates a long turn beyond the latest visible page", async () => {
+  const f = fixture();
+  for (let i = 0; i < 45; i++) f.history.messages.push({ role: "assistant", id: `progress-${i}` });
+  assert.equal((await f.run({ operation: "stopResponse" })).stopIssued, true);
+  assert.equal(f.clicks(), 1);
 });
 test("stop requires both matching route and thread identities", async () => {
   const f = fixture();
@@ -182,7 +208,7 @@ test("a route change during the final history check blocks Stop", async () => {
       async (r) => {
         if (r.operation === "inspectAccount") return { accountFingerprint: "bound" };
         f.state.window.route.threadId = "new-chat";
-        return f.history;
+        return f.read(r);
       },
       f.load,
       f.runtime,

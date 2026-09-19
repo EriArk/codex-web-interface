@@ -207,6 +207,9 @@ test("native Stop keeps receipt pending until exact-turn canonical read and idle
   const reader = {
     dispatchText: async () => {},
     readSubmission: async () => ({ state: newer ? "unknown" : "running", messages: [] }),
+    selectConversation: async (r) => {
+      assert.equal(r.conversationId, input.conversationId);
+    },
     stopResponse: async (r) => {
       assert.equal(r.userMessageId, input.userMessageId);
       stopped++;
@@ -272,6 +275,39 @@ test("native dispatch intention survives disconnect and restart without replay; 
     (await service.request({ operation: "beginManual", userId, leaseId: randomUUID() })).manual,
     true,
   );
+});
+
+test("reviewing an old confirmed receipt checks the exact idle chat and persists its release", async (t) => {
+  const f = receipts(t),
+    ledger = f.open();
+  t.after(() => ledger.close());
+  const input = { ...fixture().input, versionId: "latest", presetId: 1 };
+  delete input.operation;
+  let state = "running",
+    active = true,
+    sends = 0;
+  const reader = {
+    dispatchText: async () => {
+      sends++;
+    },
+    readSubmission: async () => ({ state, messages: [] }),
+    selectConversation: async (r) => assert.equal(r.conversationId, input.conversationId),
+    inspectConversation: async () => ({
+      selected: true,
+      composerReady: true,
+      hasDraft: false,
+      stopAvailable: active,
+    }),
+  };
+  await ledger.dispatch(input, reader);
+  await ledger.reconcile(input, reader);
+  state = "unknown";
+  await assert.rejects(ledger.review(input, reader), /NOT_READY/);
+  assert.equal(ledger.pending(), true);
+  active = false;
+  assert.equal((await ledger.review(input, reader)).reviewed, true);
+  assert.equal(ledger.pending(), false);
+  assert.equal(sends, 1);
 });
 test("read-only service never admits canary operations without explicit host configuration", async (t) => {
   const f = receipts(t),

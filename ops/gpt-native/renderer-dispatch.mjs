@@ -35,7 +35,7 @@ export async function nativeDispatch(request, read, control,
    return {key:request.key,state:previous.state,userMessageId:request.userMessageId};
   }
   if (request.operation!=='resolveCreation'&&previous?.signature === signature && previous.dispatched) return {key:request.key,state:previous.state,userMessageId:request.userMessageId};
-  if (request.operation!=='resolveCreation'&&previous?.dispatched && previous.state === 'running') fail('BUSY');
+  if (request.operation!=='resolveCreation'&&previous?.dispatched && previous.state === 'running' && previous.conversationId===request.conversationId) fail('BUSY');
   if(request.operation!=='resolveCreation'){
    const ui = await control({operation:'inspectConversation',...binding},read,load,runtime);
    if (!ui.selected || !ui.composerReady || ui.hasDraft || ui.stopAvailable) fail('NOT_READY');
@@ -101,6 +101,7 @@ export async function nativeDispatch(request, read, control,
       if(attempts++!==0)fail('REPLAY_BLOCKED');
       if(!sameAccount()||!sameRoute())fail('DISPATCH_CONTEXT_CHANGED');
       args.assertRequestCurrent?.();
+      runtime[Symbol.for('codex-web.native-history')]?.delete(request.accountFingerprint+':'+request.conversationId);
      },
     }]);
    };

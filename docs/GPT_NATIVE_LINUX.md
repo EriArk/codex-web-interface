@@ -387,3 +387,65 @@ image. A stale Bridge Doctor association was rebound through its normal API to
 its same existing idle diagnostic thread; automatic diagnostics are temporarily
 paused across cutover, with original settings preserved for restoration. Actual
 Codex tasks remain maintenance blockers and must not be interrupted.
+
+## Prepared parity and concurrent-chat corrections (2026-09-20)
+
+**Prepared source, not installed.** The owner reported an active, long-running
+mail-cleanup task. The native client/profile and production engine were not
+restarted for this work. Production remains on `24eeb0f`; do not interpret the
+following fixture results as completed real-account admission.
+
+Read-only diagnostics found repeated upstream history HTTP 429 responses. Two
+independent implementation defects compounded the problem: a native send held
+the queue for every conversation until its entire response finished, and receipt
+reconciliation required the original prompt to remain in the latest 20-message
+page. The prepared implementation scopes send barriers to the conversation,
+serializes preparation/submission, and reconciles the exact user identity against
+the bounded canonical branch. UI history remains paged in twenties. Stop also
+checks the full public branch and selects the exact target conversation before
+issuing its native action.
+
+Canonical reads share a short renderer cache with a 64 MiB aggregate bound and a
+per-conversation cooldown after 429. They use one principal-bound native request
+without the transport's automatic history retries. Temporary read failures keep
+confirmed work running; native history errors now enter the existing saved-history
+fallback. Routine receipt checks have no warning banner. Persistent uncertainty
+still requires attention after 45 seconds and never permits automatic replay.
+Manual receipt review requires canonical checks plus an idle exact conversation.
+
+The prepared native adapter also connects the existing edit/regenerate/fork and
+scheduled-task/Canvas contracts, preserving durable provider-labelled receipts,
+model/effort verification, revision checks and explicit confirmations. These
+controls reuse the shared UI. Reply actions and workspace mutations retain their
+conservative mutation barriers; this is not a claim that every action can already
+run concurrently with every other action. Canvas authoring, project creation and
+member-native provisioning have not been added by this change.
+
+Native attachments, generated images, sandbox exports and project-source downloads
+use exact private source identities and checked 256 KiB chunks, with a 512 MiB
+ceiling and at most two active downloads. Signed URLs stay inside the renderer.
+The authenticated HTTP route streams files without creating a file-sized Hub or
+browser buffer. Account changes, cancellation, offset/hash/length failures and
+timeouts close the transfer. The retired connector keeps its prior 32 MiB bound.
+
+Validation was run in the isolated Linux `parity-source` checkout: Hub/web build,
+typecheck, targeted history/receipt/queue/media/action/workspace tests, legacy
+operation/workspace/download checks, and the shared native-provider phone flow in
+Chromium and WebKit. Tests include a long turn exceeding 20 public messages, two
+independent chats, same-chat ordering, 429 with cached history, exact Stop identity,
+lost acknowledgements, account replacement and streamed checksums. They do not
+constitute live native-feature or physical-device acceptance.
+
+Remaining installation/admission work after the owner's task finishes:
+
+1. Confirm all native work is idle; preserve the current profile and all receipts
+   with a stopped, verified checkpoint. Do not clone a live authenticated profile
+   into a second runtime or dismiss an uncertain receipt merely to update.
+2. Exercise a disposable native parallel-chat scenario and the new media,
+   edit/regenerate/fork, scheduled-task and Canvas paths against the pinned client.
+   The latter routes are implemented but still lack real-account acceptance.
+3. Build the exact committed release and complete its image/Team/Codex recovery
+   admission. Apply through guarded maintenance, retaining a compatible rollback
+   with the new receipts. Record installed versus pending functionality explicitly.
+
+Issue #193 remains open. No update is silently scheduled by this source change.

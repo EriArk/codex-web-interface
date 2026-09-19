@@ -6,7 +6,7 @@ export async function nativeArtifacts(request, read, load = () => import('app://
  if(request.operation==='readArtifact'&&(!/^sandbox-[a-f0-9]{64}$/.test(request.artifactId??'')||typeof request.messageId!=='string'))fail('INVALID_REQUEST');
  const digest=async bytes=>Array.from(new Uint8Array(await runtime.crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
  const history=await read({operation:'readConversation',conversationId:request.conversationId,accountFingerprint:request.accountFingerprint,
-  ...(request.operation==='readArtifact'?{messageId:request.messageId}:{before:request.before})},load,runtime);
+  ...(request.operation==='readArtifact'?{messageId:request.messageId}:{before:request.before,...(request.messageId?{messageId:request.messageId}:{})})},load,runtime);
  const artifacts=[];
  const mimeTypes={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif',txt:'text/plain',md:'text/markdown',csv:'text/csv',json:'application/json',pdf:'application/pdf',zip:'application/zip',html:'text/html'};
  for(const message of history.messages){

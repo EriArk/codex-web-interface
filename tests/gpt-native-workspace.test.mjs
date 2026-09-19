@@ -23,6 +23,25 @@ function fixture() {
       },
     },
   };
+  let parameters;
+  m.kWt.getRequestTarget = (url, options) => {
+    parameters = options.parameters;
+    return { url, headers: {} };
+  };
+  m.$rn = {
+    getInstance: () => ({
+      fetch: async (route, options) =>
+        new Response(
+          JSON.stringify(
+            await m.kWt.safeGet(route, {
+              parameters,
+              expectedIdentity: options.expectedIdentity,
+              signal: options.signal,
+            }),
+          ),
+        ),
+    }),
+  };
   const read = (r) => nativeRead(r, async () => m, runtime);
   return {
     read,
@@ -30,6 +49,7 @@ function fixture() {
     calls,
     set: (value) => {
       raw = value;
+      runtime[Symbol.for("codex-web.native-history")]?.clear();
     },
     binding: async () => (await read({ operation: "inspectAccount" })).accountFingerprint,
   };

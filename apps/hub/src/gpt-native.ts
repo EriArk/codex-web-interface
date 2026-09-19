@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { lstat } from "node:fs/promises";
 import { request } from "node:http";
@@ -126,7 +126,9 @@ export class NativeGptReadClient {
       const deadline = AbortSignal.timeout(
         ["uploadStoredFile", "projectMutation"].includes(String(input.operation))
           ? 16 * 60000
-          : ["uploadFile", "transcribe"].includes(String(input.operation))
+          : ["uploadFile", "transcribe", "executeOperation", "openMedia", "readMedia"].includes(
+                String(input.operation),
+              )
             ? 120000
             : 25000,
       );
@@ -634,6 +636,168 @@ export class NativeGptReadClient {
       notModified: false,
       retainOlder: false,
     };
+  }
+  async reviewDispatch(key: string, conversationId: string | null) {
+    uuid.parse(key);
+    uuid.nullable().parse(conversationId);
+    return z
+      .object({ reviewed: z.boolean() })
+      .strict()
+      .parse(await this.call({ operation: "reviewDispatch", key, conversationId }));
+  }
+  async operation(key: string, input: Record<string, unknown>, check = false, review = false) {
+    uuid.parse(key);
+    return z
+      .object({
+        state: z.enum(["unknown", "completed", "checked", "rejected"]),
+        dispatched: z.boolean(),
+        nativeId: uuid.nullable(),
+      })
+      .strict()
+      .parse(
+        await this.call({
+          operation: check ? "checkOperation" : "executeOperation",
+          key,
+          ...input,
+          ...(review ? { review: true } : {}),
+        }),
+      );
+  }
+  async workspace(action: string, input: Record<string, unknown> = {}) {
+    if (
+      !["scheduledList", "scheduledRead", "canvasList", "canvasVersion", "activity"].includes(
+        action,
+      )
+    )
+      fail("INVALID_REQUEST");
+    return (await this.call({ operation: "workspace", action, ...input })) as Record<string, any>;
+  }
+  async workspaceMutation(key: string, input: unknown, check = false, review = false) {
+    uuid.parse(key);
+    return z
+      .object({
+        state: z.enum(["unknown", "completed", "checked", "rejected"]),
+        dispatched: z.boolean(),
+      })
+      .strict()
+      .parse(
+        await this.call({
+          operation: check ? "checkWorkspace" : "executeWorkspace",
+          key,
+          input,
+          ...(review ? { review: true } : {}),
+        }),
+      );
+  }
+  private mediaActive = 0;
+  private mediaWaiting: Array<() => void> = [];
+  private async mediaSlot() {
+    if (this.mediaActive >= 2) {
+      if (this.mediaWaiting.length >= 32) fail("BUSY");
+      await new Promise<void>((resolve) => this.mediaWaiting.push(resolve));
+    } else this.mediaActive++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = this.mediaWaiting.shift();
+      if (next) next();
+      else this.mediaActive--;
+    };
+  }
+  async media(
+    input:
+      | { conversationId: string; messageId: string; fileId: string }
+      | { projectId: string; fileId: string },
+  ) {
+    const release = await this.mediaSlot(),
+      transferId = randomUUID();
+    let finished = false;
+    const close = async () => {
+      if (!finished) {
+        finished = true;
+        try {
+          await this.call({ operation: "closeMedia", transferId });
+        } catch {
+        } finally {
+          release();
+        }
+      }
+    };
+    try {
+      const opened = z
+        .object({
+          file: z
+            .object({
+              id: z.string().max(200),
+              name: z.string().max(2048),
+              mime: z.string().max(150),
+              image: z.boolean(),
+            })
+            .strict(),
+          bytes: z
+            .number()
+            .int()
+            .positive()
+            .max(512 * 1024 ** 2)
+            .nullable(),
+        })
+        .strict()
+        .parse(await this.call({ operation: "openMedia", transferId, ...input }));
+      if (opened.file.id !== input.fileId) fail("ARTIFACT_MISMATCH");
+      let offset = 0;
+      const response = new Response(
+        new ReadableStream<Uint8Array>({
+          pull: async (controller) => {
+            try {
+              const part = z
+                .object({
+                  offset: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .max(512 * 1024 ** 2),
+                  done: z.boolean(),
+                  base64: z.string().max(349528),
+                  sha256: digest,
+                })
+                .strict()
+                .parse(await this.call({ operation: "readMedia", transferId, offset }));
+              const bytes = Buffer.from(part.base64, "base64");
+              if (
+                bytes.toString("base64") !== part.base64 ||
+                part.offset !== offset + bytes.length ||
+                hash(bytes) !== part.sha256 ||
+                (!part.done && !bytes.length)
+              )
+                fail("ARTIFACT_CHECKSUM");
+              offset = part.offset;
+              if (bytes.length) controller.enqueue(new Uint8Array(bytes));
+              if (part.done) {
+                if (opened.bytes !== null && offset !== opened.bytes) fail("ASSET_TRUNCATED");
+                finished = true;
+                release();
+                controller.close();
+              }
+            } catch (e) {
+              await close();
+              controller.error(e);
+            }
+          },
+          cancel: close,
+        }),
+        {
+          headers: {
+            "content-type": opened.file.mime,
+            ...(opened.bytes === null ? {} : { "content-length": String(opened.bytes) }),
+          },
+        },
+      );
+      return { file: { ...opened.file, bytes: opened.bytes ?? 0, url: "" }, response };
+    } catch (e) {
+      await close();
+      throw e;
+    }
   }
   async download(
     conversationId: string,

@@ -154,7 +154,17 @@ export class GptOperations {
     private canStart: () => boolean,
     private changed: (id: string) => void,
     private signal: AbortSignal,
+    private native = false,
   ) {
+    if (
+      !store.db
+        .prepare("PRAGMA table_info(gpt_native_operations)")
+        .all()
+        .some((r) => r.name === "provider")
+    )
+      store.db.exec(
+        "ALTER TABLE gpt_native_operations ADD COLUMN provider TEXT NOT NULL DEFAULT 'browser'",
+      );
     store.db
       .prepare(
         "UPDATE gpt_native_operations SET state='unknown',error='Соединение прервалось. Проверь текущую ветку.' WHERE state IN ('preparing','running')",
@@ -226,6 +236,9 @@ export class GptOperations {
     if (existing) {
       if (existing.fingerprint !== print)
         throw fail("IDEMPOTENCY_CONFLICT", "Это действие уже сохранено с другим текстом.");
+      const row = this.get(operationId);
+      if (row.provider !== (this.native ? "native" : "browser"))
+        throw fail("GPT_PROVIDER_CHANGED", "Действие принадлежит прежнему подключению GPT.");
       return { id: operationId };
     }
     if (!this.canStart() || this.blocked())
@@ -246,6 +259,9 @@ export class GptOperations {
         print,
         JSON.stringify(input),
       );
+    this.store.db
+      .prepare("UPDATE gpt_native_operations SET provider=? WHERE id=?")
+      .run(this.native ? "native" : "browser", operationId);
     this.runningId = operationId;
     this.work = this.run(operationId, input);
     return { id: operationId };
@@ -263,8 +279,8 @@ export class GptOperations {
       this.store.db
         .prepare("UPDATE gpt_native_operations SET baseline=? WHERE id=?")
         .run(JSON.stringify(baseline), operationId);
-      await this.json("/bridge/sessions/select", { sessionId: input.nativeId });
-      if (input.action === "edit") {
+      if (!this.native) await this.json("/bridge/sessions/select", { sessionId: input.nativeId });
+      if (!this.native && input.action === "edit") {
         const selected = await this.json("/settings", { model: input.model, effort: input.effort });
         if (selected.model !== input.model || String(selected.effort) !== input.effort)
           throw fail(
@@ -273,10 +289,11 @@ export class GptOperations {
           );
       }
       // Persist uncertainty before entering the connector. A lost reply must never replay a click.
-      this.set(operationId, "unknown", "Проверяем подтверждение ChatGPT.");
+      this.set(operationId, "unknown");
       dispatched = true;
       const result = await this.json("/native-operation", {
         ...input,
+        ...(this.native ? { key: operationId } : {}),
         conversationId: input.nativeId,
       });
       if (result.dispatched === false) {
@@ -333,6 +350,26 @@ export class GptOperations {
     const row = this.get(operationId);
     if (row.state === "completed") return true;
     if (!row.baseline || !["unknown", "running"].includes(row.state)) return false;
+    if (row.provider !== (this.native ? "native" : "browser"))
+      throw fail("GPT_PROVIDER_CHANGED", "Действие принадлежит прежнему подключению GPT.");
+    if (this.native) {
+      const result = await this.json("/native-operation/check", {
+        ...JSON.parse(row.input),
+        key: operationId,
+        conversationId: row.nativeId,
+      });
+      if (result.nativeId && result.nativeId !== row.nativeId) {
+        row.resultNativeId = result.nativeId;
+        this.store.db
+          .prepare("UPDATE gpt_native_operations SET resultNativeId=? WHERE id=?")
+          .run(result.nativeId, operationId);
+      }
+      if (result.state === "rejected") {
+        this.set(operationId, "failed", "Действие не отправлено. Текст сохранён.");
+        return false;
+      }
+      if (row.action === "fork" && !row.resultNativeId) return false;
+    }
     let nativeId = row.resultNativeId || row.nativeId;
     if (row.action === "fork" && !row.resultNativeId) {
       const active = await this.json("/active");
@@ -359,6 +396,13 @@ export class GptOperations {
       features = await this.json("/native-features");
     if (active.generating || active.requestId || features.generating || !features.ready)
       throw fail("GPT_BUSY", "ChatGPT ещё работает или его состояние недоступно.");
+    if (this.native)
+      await this.json("/native-operation/check", {
+        ...JSON.parse(row.input),
+        key: operationId,
+        conversationId: row.nativeId,
+        review: true,
+      });
     this.set(operationId, "checked", "Проверено вручную. Повторной отправки не было.");
   }
   async close() {

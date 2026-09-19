@@ -104,7 +104,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   let found=null;
   for(const candidate of candidates){
    if(signal.aborted)fail('TIMEOUT');
-   const proof=await bounded(nativeRead({...request,operation:'readSubmission',conversationId:candidate.id,newChat:true},load,runtime));
+   const proof=await bounded(nativeRead({...request,operation:'readSubmission',conversationId:candidate.id,newChat:request.fork!==true},load,runtime));
    if(proof.state!=='unknown'){
     if(found!==null)fail('CREATION_AMBIGUOUS');
     found=candidate.id;
@@ -135,14 +135,34 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   if (new Set(versions.map(v=>v.id)).size !== versions.length || new Set(versions.map(v=>v.label)).size !== versions.length) fail('INVALID_MODELS');
   return {versions};
  }
- let conversation;
- try {
-  // Do not pass retry:false: this build's alternate request path drops expectedIdentity.
-  conversation = await bounded(m.kWt.safeGet('/conversation/{conversation_id}', {
-   parameters:{path:{conversation_id:request.conversationId}},
-   expectedIdentity:before.principal, signal,
-  }));
- } catch { fail(signal.aborted ? 'TIMEOUT' : 'READ_UNAVAILABLE'); }
+ // Share canonical history between visible paging and receipt reconciliation.
+ // In particular, a rate-limited read must not be repeated by each web poller.
+ const cacheKey=Symbol.for('codex-web.native-history'),cache=runtime[cacheKey]??=new Map();
+ const key=before.fingerprint+':'+request.conversationId,now=Date.now();
+ for(const [k,v] of cache)if(now-v.at>300000)cache.delete(k);
+ if(cache.size>=20&&!cache.has(key))cache.delete(cache.keys().next().value);
+ let saved=cache.get(key),conversation;
+ if(saved?.retryAt>now)fail('RATE_LIMITED');
+ if(saved?.value&&now-saved.at<15000)conversation=saved.value;
+ else try {
+  const principal=before.principal;
+  // The default safeGet retries history failures internally; use the pinned,
+  // principal-bound native transport once and respect its rate-limit response.
+  const {url,headers}=m.kWt.getRequestTarget('/conversation/{conversation_id}',{parameters:{path:{conversation_id:request.conversationId}}});
+  const response=await bounded(m.$rn.getInstance().fetch(url,{headers,expectedIdentity:principal,signal,retry:false}));
+  if(!response.ok){const status=response.status;await response.body?.cancel();throw {status,responseStatus:status};}
+  let bytes=0,text='';const decoder=new TextDecoder();
+  for await(const part of response.body){if(signal.aborted)fail('TIMEOUT');bytes+=part.length;if(bytes>16*1024**2)fail('HISTORY_TOO_LARGE');text+=decoder.decode(part,{stream:true});}
+  text+=decoder.decode();conversation=JSON.parse(text);
+  if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
+  cache.set(key,{value:conversation,bytes,at:Date.now(),retryAt:0});
+  let total=0;for(const v of cache.values())total+=v.bytes??0;
+  for(const [k,v] of cache){if(total<=64*1024**2)break;if(k!==key){cache.delete(k);total-=v.bytes??0;}}
+ } catch(e) {
+  if(e?.responseStatus===429&&e.status===429){cache.set(key,{at:Date.now(),retryAt:Date.now()+60000});fail('RATE_LIMITED');}
+  if(/^NATIVE_[A-Z_]+$/.test(e?.message??''))throw e;
+  fail(signal.aborted ? 'TIMEOUT' : 'READ_UNAVAILABLE');
+ }
  if ((await account()).fingerprint !== before.fingerprint) fail('ACCOUNT_CHANGED');
  if (conversation?.conversation_id !== request.conversationId) fail('CONVERSATION_MISMATCH');
  const mapping = conversation.mapping;
@@ -170,7 +190,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
    if(publicMessage){
     const parts=Array.isArray(content?.parts)?content.parts.flatMap(p=>{
      if(typeof p==='string')return generated?[]:[p];
-     if(p?.content_type==='image_asset_pointer'&&typeof p.asset_pointer==='string'&&/^(sediment|file-service):\/\/file[-_][a-zA-Z0-9_-]{1,150}$/.test(p.asset_pointer))return [{content_type:'image_asset_pointer',asset_pointer:p.asset_pointer,size_bytes:Number.isSafeInteger(p.size_bytes)?p.size_bytes:0}];
+     if(p?.content_type==='image_asset_pointer'&&typeof p.asset_pointer==='string'&&/^(sediment|file-service):\/\/file[-_][a-zA-Z0-9_-]{1,150}$/.test(p.asset_pointer))return [{content_type:'image_asset_pointer',asset_pointer:p.asset_pointer,size_bytes:Number.isSafeInteger(p.size_bytes)?p.size_bytes:0,...(Number.isSafeInteger(p.width)&&p.width>0?{width:p.width}:{}),...(Number.isSafeInteger(p.height)&&p.height>0?{height:p.height}:{})}];
      return [{content_type:/audio/.test(p?.content_type)?'audio':/video/.test(p?.content_type)?'video':/canvas|widget|interactive/.test(p?.content_type)?'interactive':'other'}];
     }):[];
     const attachments=Array.isArray(meta.attachments)?meta.attachments.slice(0,100).flatMap(f=>/^file[-_][a-zA-Z0-9_-]{1,150}$/.test(f?.id??'')?[{id:f.id,name:scalar(f.name,500)??'File',mime_type:scalar(f.mime_type,150)??'application/octet-stream',size:Number.isSafeInteger(f.size)&&f.size>=0?f.size:0}]:[]):[];
@@ -243,9 +263,10 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
      !sameContent||
      node.message.metadata?.is_visually_hidden_from_conversation===true)fail('SUBMISSION_MISMATCH');
   if(request.newChat===true&&(chain.slice(index+1).some(n=>n.message?.author?.role==='user')||(conversation.gizmo_id??null)!==(request.projectId??null)||conversation.conversation_origin==='tpp'))fail('SUBMISSION_MISMATCH');
-  // A later user turn or more than one public page is not guessed into this receipt.
+  // Receipt identity is checked against the bounded canonical branch, not its
+  // latest UI page: long-running turns can have far more than 20 public updates.
   const later=chain.slice(0,index);
-  if(later.some(n=>n.message?.author?.role==='user')||!page.messages.some(m=>m.id===request.userMessageId))return {state:'unknown',messages:[]};
+  if(later.some(n=>n.message?.author?.role==='user'))return {state:'unknown',messages:[]};
   const ids=new Set(later.map(n=>n.message?.id));
   const visible=page.messages.filter(m=>ids.has(m.id)&&m.role==='assistant');
   const latest=visible.at(-1);

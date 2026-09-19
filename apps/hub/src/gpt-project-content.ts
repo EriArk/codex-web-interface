@@ -62,7 +62,7 @@ export class GptProjectContent {
       .run();
   }
   capabilities() {
-    return { manualReview: !this.native, download: !this.native };
+    return { manualReview: !this.native, download: true };
   }
   blocked() {
     return (

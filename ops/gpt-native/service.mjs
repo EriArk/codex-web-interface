@@ -43,6 +43,8 @@ export class NativeReadService {
     if (!input || typeof input !== 'object' || Array.isArray(input) || input.userId !== this.userId) fail('WRONG_OWNER');
     const canaryFields = this.canary ? {
       createProject: ['key','name'],
+      executeOperation:['key','conversationId','messageId','currentNode','action','text','targetMessageId','model','effort'], checkOperation:['key','conversationId','messageId','currentNode','action','text','targetMessageId','model','effort','review'],
+      executeWorkspace:['key','input'], checkWorkspace:['key','input','review'],
       transcribe: ['audio','mime','sha256'],
       abandonProjectCreation: ['key','acceptPossibleOrphan'],
       projectMutation: ['key','projectId','revision','action','text','fileId','confirm','file'],
@@ -56,10 +58,13 @@ export class NativeReadService {
       prepareDispatch: ['key','conversationId','userMessageId','text','versionId','presetId','projectId'],
       dispatchText: ['key','conversationId','userMessageId','text','versionId','presetId','parentId','model','effort','intentPersisted','attachments','projectId'],
       reconcileDispatch: ['key','conversationId'],
+      reviewDispatch: ['key','conversationId'],
       stopDispatch: ['key','conversationId'],
     } : {};
     const fields = {
       ...canaryFields,
+      openMedia:['transferId','conversationId','messageId','fileId','projectId'], readMedia:['transferId','offset'], closeMedia:['transferId'],
+      workspace:['action','id','conversationId','version','cursor'],
       status: [], beginManual: ['leaseId'], endManual: ['leaseId'], resumeManual: [],
       inspectProject: ['projectId'], readModels: [], readPins: [], readConversationGraph:['conversationId'], readProjects:['cursor'], readProject:['projectId'], readProjectConversations:['projectId','cursor'], readCatalog:['offset','archived'], readConversation: ['conversationId', 'before'],
       listArtifacts: ['conversationId', 'before'], readArtifact: ['conversationId', 'messageId', 'artifactId'],
@@ -85,6 +90,8 @@ export class NativeReadService {
       const { operation, userId: ignored, ...args } = input;
       const bound={...args,accountFingerprint:this.accountFingerprint};
       if(Object.hasOwn(canaryFields,operation)){
+        if(['executeOperation','checkOperation'].includes(operation))return await this.operations.run(bound,this.reader,operation==='checkOperation');
+        if(['executeWorkspace','checkWorkspace'].includes(operation))return await this.workspace.run(bound,this.reader,operation==='checkWorkspace');
         if(operation==='transcribe')return await this.reader.transcribe(bound);
         if(operation==='abandonProjectCreation')return await this.projects.abandon(bound,this.reader);
         if(operation==='createProject'){const v=await this.projects.create(bound,this.reader);if(v.projectId)this.library.projects.add(v.projectId);return v;}
@@ -92,7 +99,7 @@ export class NativeReadService {
         if(operation==='projectMutation'){const v=await this.projects.execute(bound,this.reader,this.uploads,transferStoredUpload);if(v.state!=='unknown'&&bound.action==='upload')await this.uploads.clear(bound);return v;}
         if(operation==='reconcileProject')return await this.projects.check(bound,this.reader);
         if(['libraryMutation','reconcileLibrary'].includes(operation)){if(!this.library)fail('INVALID_CANARY');return await this.library.run(bound,this.reader,operation==='reconcileLibrary');}
-        if(operation==='stageUpload'){this.canary.admitUpload(bound);if(this.canary.pending())fail('PENDING_DISPATCH');return await this.uploads.append(bound);}
+        if(operation==='stageUpload'){this.canary.admitUpload(bound);if(this.canary.blocksDispatch(bound.conversationId))fail('PENDING_DISPATCH');return await this.uploads.append(bound);}
         if(operation==='uploadStoredFile'){
           this.canary.admitUpload(bound);
           const reader={uploadStoredFile:(r,path)=>transferStoredUpload(this.reader,r,path)};
@@ -101,9 +108,11 @@ export class NativeReadService {
         if(operation==='uploadFile')return await this.canary.upload(bound,this.reader);
         if(operation==='prepareDispatch')return await this.canary.prepare(bound,this.reader);
         if(operation==='dispatchText')return await this.canary.dispatch(bound,this.reader);
+        if(operation==='reviewDispatch')return await this.canary.review(bound,this.reader);
         if(operation==='stopDispatch')return await this.canary.stop(bound,this.reader);
         return await this.canary.reconcile(bound,this.reader);
       }
+      if(operation==='workspace')return await this.reader.workspace({...bound,operation:args.action});
       return await this.reader[operation]({ ...args, accountFingerprint: this.accountFingerprint });
     } finally { this.busy = false; }
   }

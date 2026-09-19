@@ -37,7 +37,7 @@ export async function nativeControl(request, read, load = () => import('app://-/
   deadline = Date.now() + 5000;
   // Do not navigate away from a nonempty native draft.
   const draft=controls();
-  if (draft.editors.some(e=>e.textContent?.trim())||draft.attachments.length||draft.stop.length) fail('DRAFT_PRESENT');
+  if (draft.editors.some(e=>e.textContent?.trim())||draft.attachments.length) fail('DRAFT_PRESENT');
   await action(request.conversationId===null?{type:'windows.show_home',windowId:'current'}:{type:'windows.show_thread',windowId:'current',kind:'chatgpt',threadId:request.conversationId});
   while (!matches(await summary())) {
    if (Date.now() >= deadline) fail('NAVIGATION_UNCONFIRMED');
@@ -55,8 +55,16 @@ export async function nativeControl(request, read, load = () => import('app://-/
  }
  if (request.operation === 'stopResponse') {
   // One fresh canonical read guards a newer send. State polling does not load history.
-  const current = await read(historyRequest,load,runtime);
-  if (current.messages.filter(message=>message.role === 'user').at(-1)?.id !== request.userMessageId) fail('TURN_MISMATCH');
+  const cache=runtime[Symbol.for('codex-web.native-history')],cacheKey=request.accountFingerprint+':'+request.conversationId;
+  if(!(cache?.get(cacheKey)?.retryAt>Date.now()))cache?.delete(cacheKey);
+  const current = await read({...historyRequest,operation:'readConversationGraph'},load,runtime);
+  let node=current.current_node,latestUser=null;const seen=new Set();
+  while(node&&!seen.has(node)){
+   seen.add(node);const item=current.mapping?.[node];if(!item)fail('TURN_MISMATCH');
+   if(item.message?.author?.role==='user'){latestUser=item.message.id;break;}
+   node=item.parent;
+  }
+  if(latestUser!==request.userMessageId)fail('TURN_MISMATCH');
   deadline = Date.now() + 5000;
   if (!matches(await summary())) fail('SELECTED_CHAT_MISMATCH');
   const ui = controls();

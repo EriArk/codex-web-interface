@@ -24,8 +24,29 @@ function fixture() {
       },
     },
   };
+  let parameters;
+  service.kWt.getRequestTarget = (route, options) => {
+    parameters = options.parameters;
+    return { url: route, headers: {} };
+  };
+  service.$rn = {
+    getInstance: () => ({
+      fetch: async (route, options) => {
+        assert.equal(options.retry, false);
+        const value = await service.kWt.safeGet(route, {
+          parameters,
+          expectedIdentity: options.expectedIdentity,
+          signal: options.signal,
+        });
+        return new Response(JSON.stringify(value));
+      },
+    }),
+  };
   const load = async () => service;
-  const read = (request) => nativeRead(request, load, runtime);
+  const read = (request, cached = false) => {
+    if (!cached) runtime[Symbol.for("codex-web.native-history")]?.clear();
+    return nativeRead(request, load, runtime);
+  };
   const node = (n, text, extra = {}) => {
     const message = {
       id: `message-${n}`,
@@ -69,6 +90,30 @@ test("submission readback requires exact ID, parent, unchanged text and a public
   await assert.rejects(f.read({ ...request, parentId: id(5) }), /SUBMISSION_MISMATCH/);
   await assert.rejects(f.read({ ...request, text: "different" }), /SUBMISSION_MISMATCH/);
   f.node(6, "same prompt", { author: { role: "user" } });
+  assert.equal((await f.read(request)).state, "unknown");
+});
+
+test("long-running receipts remain confirmed beyond a twenty-message page", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  f.node(2, "long task", { id: id(90), author: { role: "user" } });
+  for (let n = 3; n <= 42; n++)
+    f.node(n, `progress-${n}`, { channel: "commentary", end_turn: false });
+  const request = {
+    operation: "readSubmission",
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "long task",
+  };
+  const running = await f.read(request);
+  assert.equal(running.state, "running");
+  assert.equal(running.messages.length, 20);
+  f.node(43, "done", { end_turn: true });
+  assert.equal((await f.read(request)).state, "completed");
+  await assert.rejects(f.read({ ...request, text: "different" }), /SUBMISSION_MISMATCH/);
+  f.node(44, "next task", { author: { role: "user" } });
   assert.equal((await f.read(request)).state, "unknown");
 });
 
@@ -474,4 +519,22 @@ test("history projects only explicit canonical model/effort strings", async () =
   });
   assert.equal(invalid.messages.at(-1).model, null);
   assert.equal(invalid.messages.at(-1).effort, null);
+});
+
+test("native history shares canonical snapshots and backs off all readers after 429", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding(),
+    request = { operation: "readConversationGraph", conversationId, accountFingerprint };
+  await f.read(request, true);
+  await f.read({ ...request, operation: "readConversation" }, true);
+  assert.equal(f.calls.length, 1);
+  f.runtime[Symbol.for("codex-web.native-history")].clear();
+  let attempts = 0;
+  f.service.kWt.safeGet = async () => {
+    attempts++;
+    throw { status: 429, responseStatus: 429 };
+  };
+  await assert.rejects(f.read(request, true), /RATE_LIMITED/);
+  await assert.rejects(f.read({ ...request, operation: "readConversation" }, true), /RATE_LIMITED/);
+  assert.equal(attempts, 1);
 });

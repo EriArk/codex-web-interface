@@ -1,3 +1,5 @@
+import {NativeOperationReceipts} from './operation-receipts.mjs';
+import {NativeWorkspaceReceipts} from './workspace-receipts.mjs';
 import {NativeProjectReceipts} from './project-receipts.mjs';
 import {NativeLibraryReceipts} from './library-receipts.mjs';
 import { spawn } from 'node:child_process';
@@ -21,6 +23,8 @@ try {
   const canary=JSON.parse(readFileSync(`${root}/canary.json`,'utf8'));
   if(Object.keys(canary).some(k=>!['conversationIds','creationKeys','projectIds','projectCreationKeys','ownerMode'].includes(k))||!Array.isArray(canary.conversationIds))throw Error('NATIVE_INVALID_CANARY');
   service.canary=new NativeDispatchReceipts({...binding,...canary,path:`${root}/dispatch.sqlite`});
+  service.operations=new NativeOperationReceipts(service.canary);
+  service.workspace=new NativeWorkspaceReceipts(service.canary);
   service.library=new NativeLibraryReceipts(service.canary,canary.projectIds??[]);
   service.projects=new NativeProjectReceipts(service.canary,canary.projectIds??[],canary.projectCreationKeys??[]);
   for(const id of service.projects.allowed)service.library.projects.add(id);

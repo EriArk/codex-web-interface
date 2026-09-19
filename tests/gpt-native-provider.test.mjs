@@ -101,23 +101,24 @@ test("switching providers never dispatches a queued browser message through nati
   );
 });
 
-test("unsupported native branch mutations fail before creating a blocking receipt", (t) => {
+test("native reply actions are admitted, and missing canonical source fails without sending", async (t) => {
   const f = setup(t),
-    service = f.open();
-  assert.throws(
-    () =>
-      service.operations.start(randomUUID(), {
-        nativeId: f.conversationId,
-        messageId: randomUUID(),
-        currentNode: randomUUID(),
-        action: "regenerate",
-        text: "",
-        model: "latest",
-        effort: "1",
-      }),
-    /доступно в клиенте/,
-  );
-  assert.equal(f.store.db.prepare("SELECT count(*) n FROM gpt_native_operations").get().n, 0);
+    service = f.open(),
+    key = randomUUID();
+  f.client.workspace = async () => ({ ready: true, generating: false });
+  service.operations.start(key, {
+    nativeId: f.conversationId,
+    messageId: randomUUID(),
+    currentNode: randomUUID(),
+    action: "regenerate",
+    text: "",
+    model: "latest",
+    effort: "1",
+  });
+  await service.operations.close();
+  assert.equal(service.operations.get(key).state, "failed");
+  assert.equal(service.operations.get(key).provider, "native");
+  assert.equal(f.state.sends, 0);
   assert.equal(service.operations.blocked(), false);
 });
 
@@ -191,4 +192,102 @@ test("attachment-only native send preserves an empty prompt without inventing us
   assert.equal(f.state.input.text, "");
   assert.equal(f.state.input.attachments.length, 1);
   assert.equal(f.state.uploads, 1);
+});
+
+test("native chats generate independently while messages in one chat retain their order", async (t) => {
+  const f = setup(t),
+    other = nativeWorkspaceFixture();
+  f.workspace.conversations.add(other.conversationId);
+  for (const method of ["prepareDispatch", "dispatchText"]) {
+    const original = f.client[method];
+    f.client[method] = (r) =>
+      r.conversationId === other.conversationId ? other.client[method](r) : original(r);
+  }
+  const original = f.client.reconcileDispatch;
+  let firstReads = 0;
+  f.client.reconcileDispatch = (key, id) => {
+    if (id === other.conversationId) return other.client.reconcileDispatch(key, id);
+    firstReads++;
+    return original(key, id);
+  };
+  const service = f.open(),
+    first = randomUUID(),
+    second = randomUUID(),
+    queued = randomUUID();
+  service.enqueue(first, f.input);
+  await until(() => service.job(first).status === "running" && f.state.sends === 1);
+  await service.pump();
+  const beforeSecond = firstReads;
+  service.enqueue(second, other.input);
+  await until(() => service.job(second).status === "running" && other.state.sends === 1);
+  assert.equal(
+    firstReads,
+    beforeSecond,
+    "an independent send does not wait for the other chat's history",
+  );
+  assert.equal(service.job(first).status, "running");
+  service.enqueue(queued, { ...f.input, text: "Next message in first chat" });
+  await service.pump();
+  assert.equal(service.job(queued).status, "queued");
+  assert.equal(f.state.sends, 1);
+  await until(() => !service.working);
+  f.state.finished = true;
+  await service.pump();
+  await until(() => f.state.sends === 2);
+  assert.equal(service.job(second).status, "running");
+});
+test("routine native delivery reconciliation is silent; prolonged uncertainty remains actionable", async (t) => {
+  const f = setup(t),
+    service = f.open(),
+    key = randomUUID();
+  const original = f.client.reconcileDispatch;
+  f.client.reconcileDispatch = async () => ({
+    state: "unknown",
+    messages: [],
+    userMessageId: f.state.input.userMessageId,
+  });
+  service.enqueue(key, f.input);
+  await until(() => service.job(key).status === "unknown");
+  await service.pump();
+  assert.equal(service.job(key).error, "");
+  f.store.db
+    .prepare("UPDATE gpt_native_receipts SET uncertainSince=? WHERE jobId=?")
+    .run(Date.now() - 60000, key);
+  await service.pump();
+  assert.match(service.job(key).error, /доставку/);
+  assert.equal(f.state.sends, 1);
+  f.client.reconcileDispatch = original;
+  await service.pump();
+  assert.equal(service.job(key).error, "");
+  assert.equal(service.job(key).status, "running");
+});
+
+test("a history outage keeps confirmed work running and cached messages readable", async (t) => {
+  const f = setup(t),
+    service = f.open(),
+    key = randomUUID();
+  service.enqueue(key, f.input);
+  await until(() => service.job(key).status === "running");
+  await until(() => !service.working);
+  await service.historyCache.page(f.conversationId, {}, 0);
+  f.client.reconcileDispatch = async () => {
+    throw Error("NATIVE_RATE_LIMITED");
+  };
+  f.client.conversationGraph = async () => {
+    throw Error("NATIVE_RATE_LIMITED");
+  };
+  await service.pump();
+  assert.equal(service.job(key).status, "running");
+  assert.equal(service.job(key).error, "");
+  const page = await service.historyCache.page(f.conversationId, {}, 0);
+  assert.equal(page.stale, true);
+  assert(page.items.length > 0);
+  assert.equal(f.state.sends, 1);
+  f.client.conversationGraph = async () => {
+    throw Error("NATIVE_ACCOUNT_CHANGED");
+  };
+  await assert.rejects(
+    service.historyCache.page(f.conversationId, {}, 0),
+    /NATIVE_ACCOUNT_CHANGED/,
+  );
 });

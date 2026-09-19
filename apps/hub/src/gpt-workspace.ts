@@ -80,26 +80,30 @@ type Data = {
   error: string;
 };
 type Row = { key: string; digest: string; state: string; response: string };
-const scope = "gpt-workspace";
+
 const failure = (code: string, message: string) => new HubError(409, code, message);
 export class GptWorkspaceWork {
+  private get scope() {
+    return this.native ? "gpt-native-workspace" : "gpt-workspace";
+  }
   private running: string | null = null;
   private work = Promise.resolve();
   constructor(
     private store: Store,
     private json: (path: string, body?: unknown) => Promise<unknown>,
     private canStart: () => boolean,
+    private native = false,
   ) {
     store.db
       .prepare("UPDATE commands SET state='unknown' WHERE scope=? AND state='pending'")
-      .run(scope);
+      .run(this.scope);
   }
   counts() {
     const r = this.store.db
       .prepare(
         "SELECT COALESCE(SUM(state='pending'),0) active, COALESCE(SUM(state='unknown'),0) unknown FROM commands WHERE scope=?",
       )
-      .get(scope)!;
+      .get(this.scope)!;
     return {
       active: Number(r.active) + (this.running && Number(r.active) === 0 ? 1 : 0),
       unknown: Number(r.unknown) - (this.running && Number(r.unknown) > 0 ? 1 : 0),
@@ -110,13 +114,13 @@ export class GptWorkspaceWork {
       !!this.running ||
       !!this.store.db
         .prepare("SELECT 1 FROM commands WHERE scope=? AND state IN ('pending','unknown') LIMIT 1")
-        .get(scope)
+        .get(this.scope)
     );
   }
   private row(id: string) {
     const row = this.store.db
       .prepare("SELECT * FROM commands WHERE scope=? AND key=?")
-      .get(scope, id) as Row | undefined;
+      .get(this.scope, id) as Row | undefined;
     if (!row) throw new HubError(404, "GPT_WORKSPACE_RECEIPT", "Действие не найдено.");
     return row;
   }
@@ -144,13 +148,13 @@ export class GptWorkspaceWork {
         .prepare(
           "SELECT * FROM commands WHERE scope=? ORDER BY CASE WHEN state IN ('pending','unknown') THEN 0 ELSE 1 END, createdAt DESC LIMIT 30",
         )
-        .all(scope) as Row[]
+        .all(this.scope) as Row[]
     ).map((r) => this.view(r));
   }
   private set(id: string, state: string, data: Data) {
     this.store.db
       .prepare("UPDATE commands SET state=?,response=? WHERE scope=? AND key=?")
-      .run(state, JSON.stringify(data), scope, id);
+      .run(state, JSON.stringify(data), this.scope, id);
   }
   async schedules(cursor?: string) {
     return z
@@ -200,7 +204,7 @@ export class GptWorkspaceWork {
       digest = createHash("sha256").update(JSON.stringify(input)).digest("hex");
     const previous = this.store.db
       .prepare("SELECT digest FROM commands WHERE scope=? AND key=?")
-      .get(scope, id);
+      .get(this.scope, id);
     if (previous) {
       if (previous.digest !== digest)
         throw failure("IDEMPOTENCY_CONFLICT", "Этот запрос уже сохранён с другими данными.");
@@ -213,7 +217,7 @@ export class GptWorkspaceWork {
       .prepare(
         "INSERT INTO commands(scope,key,digest,state,response,createdAt) VALUES(?,?,?,'pending',?,?)",
       )
-      .run(scope, id, digest, JSON.stringify(data), new Date().toISOString());
+      .run(this.scope, id, digest, JSON.stringify(data), new Date().toISOString());
     this.running = id;
     this.work = this.run(id, data);
     return { id };
@@ -259,7 +263,12 @@ export class GptWorkspaceWork {
       dispatched = true;
       const result = z
         .object({ dispatched: z.boolean(), code: z.string().nullable().optional() })
-        .parse(await this.json("/workspace-mutation", data.input));
+        .parse(
+          await this.json("/workspace-mutation", {
+            ...data.input,
+            ...(this.native ? { key: id } : {}),
+          }),
+        );
       if (!result.dispatched) {
         dispatched = false;
         throw failure(
@@ -294,6 +303,7 @@ export class GptWorkspaceWork {
       this.set(id, "failed", { ...data, error: "Изменение не было отправлено." });
       return false;
     }
+    if (this.native) await this.json("/workspace-check", { ...data.input, key: id });
     const now = await this.read(data.input),
       input = data.input;
     const matches =
@@ -324,6 +334,7 @@ export class GptWorkspaceWork {
     if (await this.check(id)) return;
     const data = JSON.parse(this.row(id).response) as Data;
     await this.read(data.input);
+    if (this.native) await this.json("/workspace-check", { ...data.input, key: id, review: true });
     if (this.row(id).state === "unknown")
       this.set(id, "failed", {
         ...data,

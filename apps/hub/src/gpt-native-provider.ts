@@ -24,10 +24,15 @@ export interface NativeGptWorkspace {
     | "project"
     | "conversationGraph"
     | "download"
+    | "media"
+    | "workspace"
+    | "workspaceMutation"
     | "prepareDispatch"
     | "dispatchText"
     | "reconcileDispatch"
     | "stopDispatch"
+    | "reviewDispatch"
+    | "operation"
     | "uploadFile"
     | "uploadFilePath"
   >;
@@ -88,11 +93,37 @@ export class NativeGptProvider {
     };
   }
   async json(path: string, body?: unknown): Promise<Record<string, any>> {
-    if (body !== undefined) throw unavailable();
     const url = new URL(path, "http://native.invalid"),
       q = url.searchParams,
       client = this.workspace.client;
-    if (url.pathname === "/conversation") return client.conversationGraph(q.get("id") ?? "");
+    if (url.pathname === "/workspace-mutation" && body) {
+      const { key, ...input } = body as Record<string, any>;
+      return client.workspaceMutation(key, input);
+    }
+    if (url.pathname === "/workspace-check" && body) {
+      const { key, review, ...input } = body as Record<string, any>;
+      return client.workspaceMutation(key, input, true, review === true);
+    }
+    if (["/native-operation", "/native-operation/check"].includes(url.pathname) && body) {
+      const { key, review, nativeId: unused, ...input } = body as Record<string, any>;
+      return client.operation(key, input, url.pathname.endsWith("/check"), review === true);
+    }
+    if (body !== undefined) throw unavailable();
+    if (["/active", "/native-features"].includes(url.pathname)) return client.workspace("activity");
+    if (url.pathname === "/scheduled")
+      return client.workspace("scheduledList", { cursor: q.get("cursor") });
+    if (url.pathname === "/scheduled/item")
+      return client.workspace("scheduledRead", { id: q.get("id") });
+    if (url.pathname === "/canvas")
+      return client.workspace("canvasList", { conversationId: q.get("conversationId") });
+    if (url.pathname === "/canvas/version")
+      return client.workspace("canvasVersion", {
+        conversationId: q.get("conversationId"),
+        id: q.get("id"),
+        version: Number(q.get("version")),
+      });
+    if (url.pathname === "/conversation")
+      return { ...(await client.conversationGraph(q.get("id") ?? "")), codex_native_assets: true };
     if (url.pathname === "/models") return this.models();
     if (url.pathname === "/pins") {
       const { items } = await client.pins();

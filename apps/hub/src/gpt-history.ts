@@ -127,7 +127,10 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
         mime,
         bytes: Number(file.size) || 0,
         image: mime.startsWith("image/"),
-        url: "/api/gpt/assets/" + encodeURIComponent(file.id),
+        url:
+          data.codex_native_assets && conversationId
+            ? `/api/gpt/native-assets/${encodeURIComponent(conversationId)}/${encodeURIComponent(text(message.id) || text(node.id))}/${encodeURIComponent(file.id)}`
+            : "/api/gpt/assets/" + encodeURIComponent(file.id),
       });
     };
     for (const file of Array.isArray(metadata.attachments) ? metadata.attachments : [])

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { copyFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import {
   type GptConnection,
   type GptFile,
@@ -242,7 +243,6 @@ export class GptService {
       store,
       (path, body) => this.json(path, body),
       () =>
-        this.requireBrowserFeature() &&
         !this.projectContent?.blocked() &&
         !this.workspaceWork?.blocked() &&
         !this.stopped &&
@@ -256,6 +256,7 @@ export class GptService {
         this.historyCache.invalidate(id);
       },
       this.lifetime.signal,
+      !!this.native,
     );
     this.projectContent = new GptProjectContent(
       store,
@@ -291,7 +292,6 @@ export class GptService {
       store,
       (path, body) => this.json(path, body),
       () =>
-        this.requireBrowserFeature() &&
         !this.stopped &&
         !this.working &&
         !this.libraryBusy &&
@@ -300,6 +300,7 @@ export class GptService {
         !this.operations.blocked() &&
         !this.projectContent.blocked() &&
         !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
+      !!this.native,
     );
     this.token = config.gpt ? (process.env[config.gpt.tokenSecret] ?? "") : "";
     this.root = join(config.hub.resultsPath, "gpt");
@@ -426,6 +427,11 @@ export class GptService {
     const project = await this.projectContent.read(projectId),
       file = project.files.find((f) => f.id === fileId);
     if (!file) throw error("GPT_PROJECT_FILE_MISSING", "Файл больше не находится в проекте.", 404);
+    if (this.native)
+      return {
+        file,
+        response: (await this.native.workspace.client.media({ projectId, fileId })).response,
+      };
     return {
       file,
       response: await this.response(
@@ -452,9 +458,29 @@ export class GptService {
   private async readJson(path: string, body?: unknown): Promise<Json> {
     this.authorize();
     if (this.native) {
-      const result = await this.native.json(path, body);
-      this.authorize();
-      return result;
+      try {
+        const result = await this.native.json(path, body);
+        this.authorize();
+        return result;
+      } catch (cause) {
+        // Preserve the existing cached-history recovery path in native mode.
+        // Identity/branch errors deliberately do not qualify for this fallback.
+        if (path.startsWith("/conversation?") && cause instanceof Error) {
+          if (cause.message === "NATIVE_RATE_LIMITED")
+            throw error(
+              "GPT_HISTORY_RATE_LIMITED",
+              "ChatGPT временно ограничил обновление истории. Повторим автоматически после паузы.",
+              429,
+            );
+          if (["NATIVE_READ_UNAVAILABLE", "NATIVE_TIMEOUT"].includes(cause.message))
+            throw error(
+              "GPT_HISTORY_UNAVAILABLE",
+              "Не удалось обновить историю ChatGPT. Повторим автоматически.",
+              503,
+            );
+        }
+        throw cause;
+      }
     }
     return (
       await this.response(
@@ -770,7 +796,12 @@ export class GptService {
       assets: JSON.parse(row.assets),
       createdAt: Number(row.createdAt),
       updatedAt: Number(row.updatedAt),
-      error: row.error,
+      error:
+        typeof row.error === "string" && row.error.startsWith("NATIVE_")
+          ? row.status === "unknown"
+            ? ""
+            : "Отправка не подготовлена. Текст и файлы сохранены."
+          : row.error,
     };
   }
   job(jobId: string) {
@@ -952,7 +983,11 @@ export class GptService {
       throw error("GPT_FILES_TOO_LARGE", "Вложения превышают доступное хранилище GPT.", 413);
     if (this.jobs().filter((job) => active.includes(job.status)).length >= 20)
       throw error("GPT_QUEUE_FULL", "Очередь заполнена.");
-    if (this.jobs().some((job) => job.status === "unknown"))
+    if (
+      this.jobs().some(
+        (job) => job.status === "unknown" && (!this.native || job.nativeId === value.nativeId),
+      )
+    )
       throw error(
         "GPT_CHECK_PREVIOUS",
         "Сначала проверь предыдущую отправку с неизвестным состоянием.",
@@ -1040,17 +1075,18 @@ export class GptService {
     this.update(jobId, { status: "cancelled" });
     return this.job(jobId);
   }
-  resolve(jobId: string) {
+  async resolve(jobId: string) {
     if (this.job(jobId).status !== "unknown")
       throw error("GPT_NOT_UNKNOWN", "Состояние уже определено.");
     if (
       this.store.db.prepare("SELECT provider FROM gpt_job_providers WHERE jobId=?").get(jobId)
         ?.provider === "native"
-    )
-      throw error(
-        "GPT_NATIVE_RECONCILE",
-        "Сначала дождись проверки отправки новым клиентом. Сообщение не будет отправлено повторно.",
-      );
+    ) {
+      await this.nativeJobs!.review(jobId);
+      this.invalidateNativeJob(jobId);
+      void this.pump();
+      return this.job(jobId);
+    }
     this.update(jobId, { status: "cancelled", error: "" });
     void this.pump();
     return this.job(jobId);
@@ -1071,26 +1107,30 @@ export class GptService {
     });
     let retry = false;
     try {
-      // Reconcile persisted native receipts before considering any new dispatch.
-      // Old-browser work is never handed to the native client, including queued work.
+      // Give a ready independent chat priority over background history checks.
+      // Its own persisted receipt still blocks it; old-provider jobs never migrate.
+      const eligible = this.store.db.prepare(
+        "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE p.provider='native' AND j.status='queued' AND NOT EXISTS(SELECT 1 FROM gpt_jobs busy WHERE busy.status IN ('running','unknown') AND busy.nativeId IS j.nativeId) ORDER BY j.createdAt LIMIT 1",
+      );
+      let next = eligible.get();
       const pending = this.store.db
         .prepare(
-          "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id JOIN gpt_native_receipts r ON r.jobId=j.id WHERE p.provider='native' AND j.status IN ('running','unknown') ORDER BY j.createdAt LIMIT 1",
+          "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id JOIN gpt_native_receipts r ON r.jobId=j.id WHERE p.provider='native' AND j.status IN ('running','unknown') ORDER BY j.updatedAt LIMIT 2",
         )
-        .get();
-      if (pending) {
+        .all();
+      if (pending.length) retry = true;
+      for (const row of next ? [] : pending) {
         retry = true;
-        const result = await this.nativeJobs.reconcile(String(pending.id));
-        this.nativeReadFailures = result.status === "unknown" ? this.nativeReadFailures + 1 : 0;
-        this.invalidateNativeJob(String(pending.id));
-        return;
+        try {
+          const result = await this.nativeJobs.reconcile(String(row.id));
+          this.nativeReadFailures = result.status === "unknown" ? this.nativeReadFailures + 1 : 0;
+        } catch {
+          this.nativeReadFailures++;
+        }
+        this.invalidateNativeJob(String(row.id));
       }
-      if (this.jobs().some((j) => ["preparing", "running", "unknown"].includes(j.status))) return;
-      const next = this.store.db
-        .prepare(
-          "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE p.provider='native' AND j.status='queued' ORDER BY j.createdAt LIMIT 1",
-        )
-        .get();
+      if (this.jobs().some((j) => j.status === "preparing")) return;
+      next = eligible.get();
       if (!next) return;
       retry = true;
       if ((await this.connection(true)).state !== "healthy" || this.stopped) {
@@ -1111,7 +1151,7 @@ export class GptService {
           this.update(jobId, {
             status: receipt ? "unknown" : "failed",
             error: receipt
-              ? "Проверяем, принял ли GPT сообщение. Повторной отправки не будет."
+              ? ""
               : "Новый клиент GPT не подготовил отправку. Текст и файлы сохранены.",
           });
       }
@@ -1135,10 +1175,21 @@ export class GptService {
   }
   private invalidateNativeJob(id: string) {
     const job = this.job(id);
-    if (job.status === "unknown")
-      this.update(id, {
-        error: "Проверяем, принял ли GPT сообщение. Повторной отправки не будет.",
-      });
+    if (job.status === "unknown") {
+      const since = Number(
+        this.store.db
+          .prepare("SELECT uncertainSince FROM gpt_native_receipts WHERE jobId=?")
+          .get(id)?.uncertainSince ?? Date.now(),
+      );
+      this.store.db
+        .prepare("UPDATE gpt_jobs SET error=? WHERE id=?")
+        .run(
+          Date.now() - since >= 45000
+            ? "Не удалось подтвердить доставку сообщения. Проверь историю перед новой отправкой."
+            : "",
+          id,
+        );
+    }
     this.observedHistory = undefined;
     if (job.nativeId) this.historyCache.invalidate(job.nativeId);
   }
@@ -1436,13 +1487,7 @@ export class GptService {
   async sandboxFile(conversationId: string, messageId: string, key: string) {
     if (this.native) {
       this.authorize();
-      const { file, bytes } = await this.native.workspace.client.download(
-        conversationId,
-        messageId,
-        key,
-      );
-      this.authorize();
-      return { file, response: new Response(new Uint8Array(bytes)) };
+      return this.native.workspace.client.media({ conversationId, messageId, fileId: key });
     }
     const raw = await this.json("/conversation?id=" + encodeURIComponent(conversationId));
     const message = gptHistory(raw, conversationId).find(
@@ -1463,6 +1508,26 @@ export class GptService {
       60000,
     );
     return { file, response };
+  }
+  async nativeAsset(conversationId: string, messageId: string, fileId: string) {
+    this.authorize();
+    if (!this.native || this.library.get("thread", conversationId)?.deleted)
+      throw error("GPT_RESULT_NOT_FOUND", "Файл недоступен.", 404);
+    return this.native.workspace.client.media({ conversationId, messageId, fileId });
+  }
+  async downloadBody(response: Response) {
+    if (!response.body) throw error("GPT_EMPTY_ASSET", "Файл недоступен.", 503);
+    if (this.native) return Readable.fromWeb(response.body as never);
+    // Keep the legacy connector's existing bound; native downloads are checked
+    // chunk by chunk by the private transfer protocol up to 512 MiB.
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.length;
+      if (size > 32 * 1024 ** 2) throw error("GPT_RESULT_TOO_LARGE", "Файл слишком большой.", 413);
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
   async asset(fileId: string) {
     return this.response("/asset?id=" + encodeURIComponent(fileId), undefined, 60000);
@@ -1574,14 +1639,6 @@ export function registerGpt(
     const p = z.object({ id, fileId: id }).parse(req.params),
       { file, response } = await service.projectFile(p.id, p.fileId);
     if (!response.body) throw error("GPT_PROJECT_FILE_MISSING", "Файл недоступен.", 404);
-    const chunks: Buffer[] = [];
-    let bytes = 0;
-    for await (const chunk of response.body) {
-      bytes += chunk.length;
-      if (bytes > 32 * 1024 * 1024)
-        throw error("GPT_RESULT_TOO_LARGE", "Файл слишком большой.", 413);
-      chunks.push(Buffer.from(chunk));
-    }
     return reply
       .header(
         "Content-Disposition",
@@ -1589,7 +1646,7 @@ export function registerGpt(
       )
       .header("X-Content-Type-Options", "nosniff")
       .type("application/octet-stream")
-      .send(Buffer.concat(chunks));
+      .send(await service.downloadBody(response));
   });
   app.get("/api/gpt/projects/:id/content", async (req) => {
     const p = z.object({ id }).parse(req.params);
@@ -1806,7 +1863,7 @@ export function registerGpt(
     job: await service.cancel(z.object({ id: uuid }).parse(req.params).id),
   }));
   app.post("/api/gpt/jobs/:id/resolve", async (req) => ({
-    job: service.resolve(z.object({ id: uuid }).parse(req.params).id),
+    job: await service.resolve(z.object({ id: uuid }).parse(req.params).id),
   }));
   app.post("/api/gpt/uploads", { bodyLimit: 25 * 1024 * 1024 }, async (req, reply) => {
     const { name } = z.object({ name: z.string() }).parse(req.query);
@@ -1840,21 +1897,35 @@ export function registerGpt(
       params.key,
     );
     if (!response.body) throw error("GPT_EMPTY_ASSET", "Файл недоступен. Попробуй ещё раз.", 503);
-    const chunks: Buffer[] = [];
-    let size = 0;
-    for await (const chunk of response.body) {
-      size += chunk.length;
-      if (size > 32 * 1024 * 1024)
-        throw error("GPT_RESULT_TOO_LARGE", "Результат слишком большой.", 413);
-      chunks.push(Buffer.from(chunk));
-    }
     return reply
       .header(
         "Content-Disposition",
         "attachment; filename*=UTF-8''" + encodeURIComponent(file.name),
       )
-      .type(file.mime)
-      .send(Buffer.concat(chunks));
+      .header("X-Content-Type-Options", "nosniff")
+      .type("application/octet-stream")
+      .send(await service.downloadBody(response));
+  });
+  app.get("/api/gpt/native-assets/:conversationId/:messageId/:fileId", async (req, reply) => {
+    const p = z
+      .object({
+        conversationId: uuid,
+        messageId: id,
+        fileId: id.refine((v) => /^file[-_]/.test(v)),
+      })
+      .parse(req.params);
+    const { file, response } = await service.nativeAsset(p.conversationId, p.messageId, p.fileId);
+    if (!response.body) throw error("GPT_EMPTY_ASSET", "Файл недоступен.", 503);
+    reply.header(
+      "Content-Disposition",
+      (file.image ? "inline" : "attachment") +
+        "; filename*=UTF-8''" +
+        encodeURIComponent(file.name),
+    );
+    return reply
+      .header("X-Content-Type-Options", "nosniff")
+      .type(file.image ? file.mime : "application/octet-stream")
+      .send(await service.downloadBody(response));
   });
   app.get("/api/gpt/assets/:id", async (req, reply) => {
     const fileId = z

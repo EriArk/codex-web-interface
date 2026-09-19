@@ -13,6 +13,7 @@ type NativeJobsClient = Pick<
   | "dispatchText"
   | "reconcileDispatch"
   | "stopDispatch"
+  | "reviewDispatch"
   | "uploadFile"
   | "uploadFilePath"
 >;
@@ -34,6 +35,13 @@ export class NativeGptJobs {
     store.db.exec(
       "PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS gpt_native_receipts(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id),payload TEXT NOT NULL,messages TEXT NOT NULL DEFAULT '[]')",
     );
+    if (
+      !store.db
+        .prepare("PRAGMA table_info(gpt_native_receipts)")
+        .all()
+        .some((r) => r.name === "uncertainSince")
+    )
+      store.db.exec("ALTER TABLE gpt_native_receipts ADD COLUMN uncertainSince INTEGER");
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS gpt_native_creations(jobId TEXT PRIMARY KEY REFERENCES gpt_native_receipts(jobId),conversationId TEXT NOT NULL)",
     );
@@ -120,9 +128,9 @@ export class NativeGptJobs {
       if (
         this.store.db
           .prepare(
-            "SELECT 1 FROM gpt_jobs WHERE id!=? AND status IN ('preparing','running','unknown') LIMIT 1",
+            "SELECT 1 FROM gpt_jobs WHERE id!=? AND (status='preparing' OR status IN ('running','unknown') AND nativeId IS ?) LIMIT 1",
           )
-          .get(id)
+          .get(id, row.nativeId == null ? null : String(row.nativeId))
       )
         fail("PENDING_DISPATCH");
       const input = {
@@ -260,6 +268,29 @@ export class NativeGptJobs {
       this.busy = false;
     }
   }
+  async review(id: string) {
+    if (this.busy) fail("BUSY");
+    this.busy = true;
+    try {
+      this.row(id);
+      const saved = this.store.db
+        .prepare("SELECT payload FROM gpt_native_receipts WHERE jobId=?")
+        .get(id);
+      if (!saved) fail("RECEIPT_MISSING");
+      const payload = JSON.parse(String(saved.payload));
+      const result = await this.client.reviewDispatch(id, payload.conversationId);
+      this.authorize();
+      if (result.reviewed)
+        this.store.db
+          .prepare(
+            "UPDATE gpt_jobs SET status='cancelled',error='',updatedAt=? WHERE id=? AND status='unknown'",
+          )
+          .run(Date.now(), id);
+      else await this.readReceipt(id);
+    } finally {
+      this.busy = false;
+    }
+  }
   async stop(id: string) {
     this.row(id);
     const saved = this.store.db
@@ -293,6 +324,12 @@ export class NativeGptJobs {
         : row.files !== "[]")
     )
       fail("SUBMISSION_MISMATCH");
+    const markUncertain = () =>
+      this.store.db
+        .prepare(
+          "UPDATE gpt_native_receipts SET uncertainSince=COALESCE(uncertainSince,?) WHERE jobId=?",
+        )
+        .run(Date.now(), id);
     let result: Awaited<ReturnType<NativeJobsClient["reconcileDispatch"]>>;
     try {
       result = await this.client.reconcileDispatch(id, payload.conversationId);
@@ -305,6 +342,17 @@ export class NativeGptJobs {
       )
         fail("SUBMISSION_MISMATCH");
     } catch (error) {
+      // Delivery was already proved. A temporary history outage does not undo
+      // that proof or turn an ongoing long task into an uncertain submission.
+      if (
+        row.status === "running" &&
+        error instanceof Error &&
+        /^(NATIVE_RATE_LIMITED|NATIVE_READ_UNAVAILABLE|NATIVE_TIMEOUT)$/.test(error.message)
+      ) {
+        this.store.db.prepare("UPDATE gpt_jobs SET updatedAt=? WHERE id=?").run(Date.now(), id);
+        throw error;
+      }
+      markUncertain();
       this.store.db
         .prepare(
           "UPDATE gpt_jobs SET status='unknown',error='NATIVE_RECONCILE_REQUIRED',updatedAt=? WHERE id=? AND status!='completed'",
@@ -314,6 +362,9 @@ export class NativeGptJobs {
     }
     // A temporary missing page must not erase already observed public output.
     if (result.state !== "unknown") {
+      this.store.db
+        .prepare("UPDATE gpt_native_receipts SET uncertainSince=NULL WHERE jobId=?")
+        .run(id);
       this.store.db.exec("BEGIN IMMEDIATE");
       try {
         if (payload.conversationId === null) {
@@ -357,12 +408,14 @@ export class NativeGptJobs {
         this.store.db.exec("ROLLBACK");
         throw error;
       }
-    } else
+    } else {
+      markUncertain();
       this.store.db
         .prepare(
           "UPDATE gpt_jobs SET status='unknown',error='NATIVE_RECONCILE_REQUIRED',updatedAt=? WHERE id=? AND status!='completed'",
         )
         .run(Date.now(), id);
+    }
     return { status: String(this.row(id).status), userMessageId: payload.userMessageId as string };
   }
 }

@@ -944,7 +944,9 @@ export function GptWorkspace({
               <div className="message-header">
                 <span className="avatar">Я</span>
                 <b>Вы</b>
-                <small>{titles[job.status]}</small>
+                <small>
+                  {job.status === "unknown" && !job.error ? "Отправляется" : titles[job.status]}
+                </small>
                 <CopyButton text={job.text} />
               </div>
               <div className="message-body">
@@ -1109,7 +1111,9 @@ export function GptWorkspace({
           <Icon name="chat" />
           <span>
             {job.text.slice(0, 60) || "Новая отправка"}
-            <small>{titles[job.status]}</small>
+            <small>
+              {job.status === "unknown" && !job.error ? "Отправляется" : titles[job.status]}
+            </small>
           </span>
           {isActive(job) && <span className="spinner" aria-hidden="true" />}
         </button>
@@ -1596,8 +1600,7 @@ export function GptWorkspace({
                     <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
                     <b>{message.role === "user" ? "Вы" : "GPT"}</b>
                     <span className="message-actions">
-                      {connection?.connectUrl !== "/gpt-connect?runtime=native" &&
-                        nativeOperations.button(message, !!active || busy)}
+                      {nativeOperations.button(message, !!active || busy)}
                       {message.role === "assistant" && (
                         <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
                       )}
