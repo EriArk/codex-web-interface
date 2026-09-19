@@ -19,3 +19,15 @@ node tests/gpt-native-remote.browser.mjs
 ```
 
 Fixture success does not replace account/media, restart or sustained-use acceptance.
+
+### Fresh public-history reader
+
+`renderer.mjs` / `renderer-read.mjs` implement the next **lab-only, read-only** adapter. They call the pinned app's existing native request service, without copying tokens or relying on its one-minute tool cache. Only `inspectAccount()` and `readConversation({conversationId, accountFingerprint, before?})` are available. Account inspection proposes a binding; it must not automatically enroll or replace a production user's binding.
+
+The reader checks the actual app version, exactly one main window, account fingerprint before/after the request, native `expectedIdentity`, exact conversation ID and current-branch ancestry. It returns up to 20 public messages with native IDs; hidden reasoning, tool internals, account data and signed media URLs stay inside the app. Structured media is explicitly unresolved. It is **not yet a complete Hub history/media contract**.
+
+The transport requires a temporary debugger on container loopback `127.0.0.1:9222`; no host port, HTTP endpoint, generic evaluate API or write operation is provided. Normal `start.sh` deliberately does not enable it. Restore ordinary startup and verify the inspector is closed after lab work. Production supervision/transport admission remains a separate migration gate.
+
+```sh
+node --test tests/gpt-native-renderer*.test.mjs tests/gpt-native-ipc.test.mjs
+```

@@ -53,6 +53,18 @@ After removing the inspector and restarting, readback confirmed **four exact tes
 
 `ops/gpt-native/ipc.mjs` / `probe.mjs` are a build-gated **read-only research interface**, not an HTTP provider. Requests have bounded frames, exact response IDs, timeouts and no automatic retries. The disposable write proof was a one-off private receipt-guarded lab script; the web client cannot invoke arbitrary tools or send through this spike.
 
+## Fresh canonical reader implementation (2026-09-19)
+
+The pinned renderer exports its existing native request service as `kWt` from `app-initial-430deae5a13a.js`. Calling its fixed `safeGet('/conversation/{conversation_id}', ...)` reads fresh canonical history without the `read_thread` query's one-minute cache. Authentication remains inside the native host HTTP service; no token or browser credential is extracted. This is an internal, version-specific contract, not a supported public OpenAI API.
+
+`ops/gpt-native/renderer.mjs` and `renderer-read.mjs` now implement a limited lab reader. Account metadata comes from the native `accessInputs.readAccountInfo()` service and is reduced to a SHA-256 fingerprint. History requests require a previously selected fingerprint, check it before/after the request and pass native `{accountId,userId}` as `expectedIdentity`. The app's host checks this principal at request dispatch. The reader deliberately avoids the pinned service's `retry:false` shortcut because that implementation drops `expectedIdentity`; bounded native read recovery is not a mutation/replay mechanism.
+
+The reader selects exactly one main app renderer, checks actual app version, exact conversation ID and the complete current-node ancestor chain, then returns a page of 20 public messages with native node/message IDs and explicit ancestor cursor. Cycles, missing ancestors, oversized responses, changed accounts and off-branch cursors fail closed. Analysis, system/tool messages, non-public recipients, hidden metadata and arbitrary structured content are excluded **inside the renderer**, before transport. Unknown media is reported as unresolved, never silently claimed supported. This projection is not yet the full existing Hub history/media contract.
+
+The existing disposable consumer chat passed a real run of this implementation: four exact user messages, four assistant answers and all four expected markers; a wrong account fingerprint was rejected and cancellation passed. No additional prompt was sent. Nineteen focused Linux tests cover the reader, bounded transport and existing native IPC, including account changes, branch paging, public-content filtering, ambiguous windows, external target rejection, disconnect, cancellation and response bounds. Test data/receipts and the lab-only account binding remain private under `/data`; no production user binding was created.
+
+This stage used a temporary container-loopback inspector only. Ordinary startup was restored afterward. There is no new HTTP endpoint, production polling, web write route or automatic migration. The production engine/browser and their durable jobs are unchanged. Resolve native navigation/send/stop, media and model/effort contracts, then supervised private transport and per-user provisioning before enabling a reversible Hub provider switch.
+
 ## Phone recovery fixes
 
 `/gpt-connect?runtime=native` opens the protected original-owner lab. Plain `/gpt-connect` remains the old browser. This does not switch the main GPT provider, replay pending work or change a chat's identity.
@@ -80,11 +92,11 @@ Only the user service `codex-web-gpt-login.service` was updated to a staged reco
 
 ## Next decision / migration gates
 
-The evidence favors continuing with a **native UI provider supplemented by direct IPC for canonical reconciliation**, rather than the current tool-only path. This is a working direction, not a completed Outcome B decision: no comparable long-chat benchmark, sustained-use pass or full typed adapter exists yet. Do not turn pixel clicking or arbitrary injected code into the normal provider architecture. Keep #193 open.
+The evidence favors a **typed native service/UI provider with canonical reconciliation**, rather than the current tool-only path. The limited fresh reader above is implemented; native controls remain necessary for the unimplemented operations. This is a working direction, not a completed Outcome B decision: no comparable long-chat benchmark, sustained-use pass or complete provider exists yet. Do not turn pixel clicking or a generic injected-code endpoint into the normal provider architecture. Keep #193 open.
 
 The next bounded implementation gates are:
 
-1. Build a version/capability-gated private adapter with typed operations and exact account/chat identity checks. Resolve in-memory navigation identity before enabling web writes; sidebar titles alone are insufficient. Use native public state/accessible controls for fresh output while preserving native message IDs from canonical reconciliation.
+1. Extend the implemented version/account/chat-gated lab reader into a supervised private adapter. Resolve in-memory navigation identity before enabling web writes; sidebar titles alone are insufficient. Preserve native message IDs through fresh output and canonical reconciliation.
 2. Prove creation, model/effort, stop, files/generated media and reference resolution; preserve partial public messages and unknown sends across reconnect. Expose no generic evaluation/UI-control API to the browser.
 3. Compare a long-chat workload and restart recovery with the existing connector; verify host boot supervision and per-member provisioning. Only then stage a reversible provider switch against the existing Hub projection and durable jobs.
 
