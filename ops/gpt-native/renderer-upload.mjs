@@ -1,22 +1,33 @@
 // Fixed native upload contract. Bytes enter the app; auth and signed URLs never leave it.
 export async function nativeUpload(request, read, load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis) {
  const fail=code=>{throw Error(`NATIVE_${code}`);};
- const signal=AbortSignal.timeout(15000);
+ const signal=AbortSignal.timeout(60000);
  const f=request.file;
- if(!f||!['text/plain','image/png'].includes(f.mime)||typeof f.name!=='string'||!f.name||f.name.length>255||/[\\/\x00-\x1f]/.test(f.name)||
-    !Number.isSafeInteger(f.bytes)||f.bytes<1||f.bytes>1024*1024||typeof f.base64!=='string'||f.base64.length>1398104||!/^[a-f0-9]{64}$/.test(f.sha256??''))fail('INVALID_UPLOAD');
- const bytes=Uint8Array.from(runtime.atob(f.base64),x=>x.charCodeAt(0));
+ if(!f||!['text/plain','text/markdown','text/csv','application/json','application/pdf','application/zip','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.openxmlformats-officedocument.presentationml.presentation','image/png','image/jpeg','image/webp','image/gif'].includes(f.mime)||typeof f.name!=='string'||!f.name||f.name.length>255||/[\\/\x00-\x1f]/.test(f.name)||
+    !Number.isSafeInteger(f.bytes)||f.bytes<1||f.bytes>20*1024*1024||(!f.stageId&&(typeof f.base64!=='string'||f.base64.length>1398104))||!/^[a-f0-9]{64}$/.test(f.sha256??''))fail('INVALID_UPLOAD');
+ let bytes;
+ if(f.stageId){
+  const key=Symbol.for('codex-web.native-upload-bytes'),state=runtime[key];
+  if(!state||state.stageId!==f.stageId||state.offset!==f.bytes||state.bytes.length!==f.bytes||state.sha256!==f.sha256||state.accountFingerprint!==request.accountFingerprint)fail('UPLOAD_CHANGED');
+  runtime.clearTimeout(state.timer);delete runtime[key];bytes=state.bytes;
+ }else bytes=Uint8Array.from(runtime.atob(f.base64),x=>x.charCodeAt(0));
  const digest=async b=>Array.from(new Uint8Array(await runtime.crypto.subtle.digest('SHA-256',b)),x=>x.toString(16).padStart(2,'0')).join('');
  if(bytes.length!==f.bytes||await digest(bytes)!==f.sha256)fail('UPLOAD_CHANGED');
  if((await read({operation:'inspectAccount'})).accountFingerprint!==request.accountFingerprint)fail('ACCOUNT_MISMATCH');
  let dimensions={};
- if(f.mime==='image/png'){
-  if(bytes.length<24||![137,80,78,71,13,10,26,10].every((n,i)=>bytes[i]===n))fail('INVALID_IMAGE');
-  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),width=view.getUint32(16),height=view.getUint32(20);
-  if(width<1||height<1||width>4096||height>4096)fail('INVALID_IMAGE');
+ if(f.mime.startsWith('image/')){
+  // Uploaded images are bounded again in the renderer; a file cannot masquerade as another MIME.
+  if(f.mime==='image/png'&&(bytes.length<24||![137,80,78,71,13,10,26,10].every((n,i)=>bytes[i]===n)))fail('INVALID_IMAGE');
+  if(f.mime==='image/png'){const d=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),w=d.getUint32(16),h=d.getUint32(20);if(!w||!h||w>8192||h>8192||w*h>32000000)fail('INVALID_IMAGE');}
+  if(f.mime==='image/jpeg'&&(bytes[0]!==255||bytes[1]!==216||bytes[2]!==255))fail('INVALID_IMAGE');
+  if(f.mime==='image/gif'&&!['GIF87a','GIF89a'].includes(new TextDecoder().decode(bytes.subarray(0,6))))fail('INVALID_IMAGE');
+  if(f.mime==='image/webp'&&(new TextDecoder().decode(bytes.subarray(0,4))!=='RIFF'||new TextDecoder().decode(bytes.subarray(8,12))!=='WEBP'))fail('INVALID_IMAGE');
   const bitmap=await runtime.createImageBitmap(new Blob([bytes],{type:f.mime}));
-  try{if(bitmap.width!==width||bitmap.height!==height)fail('INVALID_IMAGE');dimensions={width,height};}
-  finally{bitmap.close();}
+  try{
+   const {width,height}=bitmap;
+   if(width<1||height<1||width>8192||height>8192||width*height>32000000)fail('INVALID_IMAGE');
+   dimensions={width,height};
+  }finally{bitmap.close();}
  }
  const m=await load();
  if(signal.aborted)fail('UPLOAD_TIMEOUT');
@@ -46,7 +57,7 @@ export async function nativeUpload(request, read, load = () => import('app://-/a
   const result=new Uint8Array(size);let offset=0;for(const c of chunks){result.set(c,offset);offset+=c.length;}return result;
  };
  try{
-  const useCase=f.mime==='image/png'?'multimodal':'my_files';
+  const useCase=f.mime.startsWith('image/')?'multimodal':'my_files';
   const created=JSON.parse(new TextDecoder().decode(await responseBytes(await bounded(m.kWt.postResponse('/files',{
    ...options(),requestBody:{entry_surface:'chat_composer',file_name:f.name,file_size:f.bytes,mime_type:f.mime,
     reset_rate_limits:false,timezone_offset_min:0,use_case:useCase},

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type GptConnection,
@@ -7,10 +8,13 @@ import {
   type GptJob,
   type GptModels,
   gptConnectionMessages,
+  gptFileLimit,
   type HubConfig,
   HubError,
+  imageFilename,
   normalizeGptConnection,
   resultCategorySchema,
+  uploadMime,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
 import sharp from "sharp";
@@ -228,6 +232,7 @@ export class GptService {
         !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
       (id) => {
         const file = this.upload(id);
+        this.assertLegacyUpload(file);
         return { ...file, base64: readFileSync(join(this.root, id)).toString("base64") };
       },
       this.lifetime.signal,
@@ -695,7 +700,25 @@ export class GptService {
       url: "/api/gpt/uploads/" + row.id,
     };
   }
+  private assertLegacyUpload(file: GptFile) {
+    // The old browser bridge still buffers JSON/base64. Never let a future UI
+    // publication turn a 512 MiB upload into a multi-gigabyte legacy request.
+    if (file.bytes > 25 * 1024 ** 2)
+      throw error(
+        "GPT_NATIVE_UPLOAD_REQUIRED",
+        "Для такого файла нужно новое нативное подключение GPT. Файл сохранён; старое браузерное подключение его не передаст.",
+        413,
+      );
+  }
   async put(name: string, bytes: Buffer): Promise<GptFile> {
+    return this.putFile(name, bytes);
+  }
+  async putFile(name: string, source: Buffer | string, uploadId?: string): Promise<GptFile> {
+    this.authorize();
+    if (uploadId && this.store.db.prepare("SELECT 1 FROM gpt_uploads WHERE id=?").get(uploadId))
+      return this.upload(uploadId);
+    const size = Buffer.isBuffer(source) ? source.length : (await stat(source)).size;
+    let bytes: Buffer | undefined = Buffer.isBuffer(source) ? source : undefined;
     if (
       !name.trim() ||
       name.length > 240 ||
@@ -703,13 +726,17 @@ export class GptService {
       Array.from(name).some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)
     )
       throw error("GPT_INVALID_FILENAME", "Проверь имя файла.", 400);
-    if (!bytes.length || bytes.length > 25 * 1024 * 1024)
-      throw error("GPT_FILE_TOO_LARGE", "Файл должен быть меньше 25 МБ.", 413);
-    let mime = "application/octet-stream",
+    if (!size || size > gptFileLimit(name))
+      throw error(
+        "GPT_FILE_TOO_LARGE",
+        `Для этого типа файла предел ChatGPT — ${gptFileLimit(name) / 1024 ** 2} МБ.`,
+        413,
+      );
+    let mime = uploadMime(name),
       image = false;
-    if (/\.(png|jpe?g|webp|gif|avif|heic|heif|tiff?)$/i.test(name)) {
+    if (imageFilename(name)) {
       try {
-        bytes = await sharp(bytes, { limitInputPixels: 50_000_000, pages: 1 })
+        bytes = await sharp(source, { limitInputPixels: 50_000_000, pages: 1 })
           .autoOrient()
           .resize({ width: 2560, height: 2560, fit: "inside", withoutEnlargement: true })
           .jpeg({ quality: 92 })
@@ -729,13 +756,30 @@ export class GptService {
     const total = Number(
       this.store.db.prepare("SELECT COALESCE(SUM(bytes),0) AS total FROM gpt_uploads").get()?.total,
     );
-    if (total + bytes.length > this.config.hub.storage.gptUploadBytes)
+    if (total + (bytes?.length ?? size) > this.config.hub.storage.gptUploadBytes)
       throw error("GPT_STORAGE_FULL", "Хранилище вложений GPT заполнено.", 507);
-    const fileId = randomUUID();
-    writeFileSync(join(this.root, fileId), bytes, { mode: 0o600, flag: "wx" });
-    this.store.db
-      .prepare("INSERT INTO gpt_uploads VALUES(?,?,?,?,?,?)")
-      .run(fileId, name, mime, bytes.length, Number(image), Date.now());
+    const fileId = uploadId ?? randomUUID();
+    this.authorize();
+    if (uploadId)
+      await unlink(join(this.root, fileId)).catch((e) => {
+        if (e.code !== "ENOENT") throw e;
+      });
+    try {
+      if (bytes) await writeFile(join(this.root, fileId), bytes, { mode: 0o600, flag: "wx" });
+      else await copyFile(source as string, join(this.root, fileId), 1);
+      this.authorize();
+      const used = Number(
+        this.store.db.prepare("SELECT COALESCE(SUM(bytes),0) total FROM gpt_uploads").get()?.total,
+      );
+      if (used + (bytes?.length ?? size) > this.config.hub.storage.gptUploadBytes)
+        throw error("GPT_STORAGE_FULL", "Хранилище вложений GPT заполнено.", 507);
+      this.store.db
+        .prepare("INSERT INTO gpt_uploads VALUES(?,?,?,?,?,?)")
+        .run(fileId, name, mime, bytes?.length ?? size, Number(image), Date.now());
+    } catch (e) {
+      await unlink(join(this.root, fileId)).catch(() => {});
+      throw e;
+    }
     return this.upload(fileId);
   }
   enqueue(jobId: string, value: Input) {
@@ -777,8 +821,8 @@ export class GptService {
     if (new Set(value.files).size !== value.files.length)
       throw error("GPT_DUPLICATE_FILE", "Вложение добавлено дважды.", 400);
     const files = value.files.map((fileId) => this.upload(fileId));
-    if (files.reduce((n, f) => n + f.bytes, 0) > 64 * 1024 * 1024)
-      throw error("GPT_FILES_TOO_LARGE", "До 64 МБ на сообщение.", 413);
+    if (files.reduce((n, f) => n + f.bytes, 0) > this.config.hub.storage.gptUploadBytes)
+      throw error("GPT_FILES_TOO_LARGE", "Вложения превышают доступное хранилище GPT.", 413);
     if (this.jobs().filter((job) => active.includes(job.status)).length >= 20)
       throw error("GPT_QUEUE_FULL", "Очередь заполнена.");
     if (this.jobs().some((job) => job.status === "unknown"))
@@ -918,6 +962,7 @@ export class GptService {
       await this.json("/bridge/composer/attachments/clear", {});
       const files: string[] = [];
       for (const file of job.files) {
+        this.assertLegacyUpload(file);
         const data = await this.json("/bridge/files", {
           name: file.name,
           mime: file.mime,

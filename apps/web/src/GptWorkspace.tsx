@@ -41,6 +41,7 @@ import { PinnedList } from "./PinnedList";
 import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
 import { ResultFeed } from "./ResultFeed";
+import { uploadFile } from "./uploadFile";
 import { useCompletionPosition } from "./useCompletionPosition";
 import { useGptHistory } from "./useGptHistory";
 import { useGrowingComposer } from "./useGrowingComposer";
@@ -213,7 +214,8 @@ export function GptWorkspace({
   const [text, setText] = useState(""),
     [files, setFiles] = useState<GptFile[]>([]),
     [busy, setBusy] = useState(false),
-    [uploading, setUploading] = useState(false);
+    [uploading, setUploading] = useState(false),
+    [uploadProgress, setUploadProgress] = useState("");
   const [loadNotice, setLoadNotice] = useState("");
   const [notice, setNotice] = useState(""),
     [drawer, setDrawer] = useState(false),
@@ -741,10 +743,10 @@ export function GptWorkspace({
     try {
       if (files.length + list.length > 8) throw Error("До 8 файлов на сообщение.");
       for (const file of Array.from(list)) {
-        const data = await api<{ file: GptFile }>(
-          "/gpt/uploads?name=" + encodeURIComponent(file.name),
-          { method: "POST", raw: file },
-        );
+        const data = await uploadFile<GptFile>(file, { kind: "gpt" }, (bytes, total) => {
+          if (navigationVersion.current === version)
+            setUploadProgress(`${file.name}: ${Math.floor((bytes / total) * 100)}%`);
+        });
         if (navigationVersion.current === version && draftScopeRef.current === sourceDraft)
           setFiles((old) => [...old, data.file]);
         else
@@ -761,6 +763,7 @@ export function GptWorkspace({
       setNotice(messageOf(e));
     } finally {
       setUploading(false);
+      setUploadProgress("");
       if (input.current) input.current.value = "";
     }
   };
@@ -1801,6 +1804,11 @@ export function GptWorkspace({
                       </button>
                     </div>
                   ))}
+                </div>
+              )}
+              {uploading && uploadProgress && (
+                <div className="muted" role="status">
+                  {uploadProgress}
                 </div>
               )}
               <div className="gpt-input-row">

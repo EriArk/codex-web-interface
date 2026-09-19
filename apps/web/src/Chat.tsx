@@ -848,7 +848,7 @@ export function Chat({
         />
         {(attachments.error || attachments.busy) && (
           <div className="composer-error" role="status">
-            {attachments.busy ? "Загружаем вложение…" : attachments.error}
+            {attachments.busy ? attachments.progress || "Загружаем вложение…" : attachments.error}
           </div>
         )}
         <div className="composer-input">

@@ -9,10 +9,11 @@ export async function nativeDispatch(request, read, control,
      typeof request.text !== 'string' || !request.text.trim() || new TextEncoder().encode(request.text).length > 32768 ||
      typeof request.model !== 'string' || request.model.length > 128 ||
      (request.effort !== null && (typeof request.effort !== 'string' || request.effort.length > 128))) fail('INVALID_REQUEST');
+ if(request.projectId!=null&&!/^g-p-[a-zA-Z0-9-]{1,80}$/.test(request.projectId))fail('INVALID_PROJECT');
  const attachments=(request.attachments??[]).map(f=>f.native);
- if(!Array.isArray(request.attachments??[])||attachments.length>4)fail('INVALID_UPLOAD');
- const expectedContent={content_type:attachments.some(f=>f.mimeType==='image/png')?'multimodal_text':'text',parts:[
-  ...attachments.filter(f=>f.mimeType==='image/png').map(f=>({asset_pointer:(f.id.startsWith('file_')?'sediment://':'file-service://')+f.id,content_type:'image_asset_pointer',height:f.height,size_bytes:f.size,width:f.width})),request.text]};
+ if(!Array.isArray(request.attachments??[])||attachments.length>8)fail('INVALID_UPLOAD');
+ const expectedContent={content_type:attachments.some(f=>f.mimeType.startsWith('image/'))?'multimodal_text':'text',parts:[
+  ...attachments.filter(f=>f.mimeType.startsWith('image/')).map(f=>({asset_pointer:(f.id.startsWith('file_')?'sediment://':'file-service://')+f.id,content_type:'image_asset_pointer',height:f.height,size_bytes:f.size,width:f.width})),request.text]};
  const matchesAttachments=message=>{
   const actual=message.metadata?.attachments??[];
   return actual.length===attachments.length&&attachments.every((f,i)=>actual[i].id===f.id&&actual[i].name===f.name&&actual[i].size===f.size&&actual[i].mime_type===f.mimeType);
@@ -26,7 +27,7 @@ export async function nativeDispatch(request, read, control,
  if (runtime[lockKey]) fail('BUSY');
  runtime[lockKey] = true;
  try {
-  const signature = JSON.stringify([request.key,request.conversationId,request.userMessageId,request.text,request.model,request.effort,request.accountFingerprint,request.attachments??[]]);
+  const signature = JSON.stringify([request.key,request.conversationId,request.userMessageId,request.text,request.model,request.effort,request.accountFingerprint,request.attachments??[],request.projectId??null]);
   const previous = runtime[stateKey];
   if (request.operation === 'inspectDispatch') {
    if (previous?.signature !== signature) fail('DISPATCH_NOT_FOUND');
@@ -38,7 +39,9 @@ export async function nativeDispatch(request, read, control,
    const ui = await control({operation:'inspectConversation',...binding},read,load,runtime);
    if (!ui.selected || !ui.composerReady || ui.hasDraft || ui.stopAvailable) fail('NOT_READY');
   }else if(!creating)fail('INVALID_REQUEST');
+  if(request.projectId)await read({operation:'readProject',projectId:request.projectId,accountFingerprint:request.accountFingerprint});
   const history = creating?{messages:[],currentNode:request.parentId}:await read({operation:'readConversation',...binding});
+  if(!creating&&request.projectId!=null&&history.projectId!==request.projectId)fail('PROJECT_MISMATCH');
   if (history.messages.some(x=>x.id===request.userMessageId)) fail('MESSAGE_ALREADY_EXISTS');
   if (request.operation === 'dispatchText' && (!uuid(request.parentId)||request.parentId !== history.currentNode || request.intentPersisted !== true)) fail('BRANCH_CHANGED');
   // Obtain only the native action's route scope. Restore its read handler immediately;
@@ -87,7 +90,7 @@ export async function nativeDispatch(request, read, control,
     const body=args.request;
     const user=body?.messages?.filter(x=>x.author?.role==='user');
     if((creating?body?.conversation_id!=null:body?.conversation_id!==request.conversationId)||
-       (creating&&(body?.gizmo_id!=null||body?.conversation_origin!=null||body?.conversation_mode!=null||body?.history_and_training_disabled===true))||body?.parent_message_id!==request.parentId||body?.model!==request.model||
+       (creating&&((body?.gizmo_id??null)!==(request.projectId??null)||body?.conversation_origin!=null||body?.conversation_mode!=null||body?.history_and_training_disabled===true))||body?.parent_message_id!==request.parentId||body?.model!==request.model||
        (body?.thinking_effort??null)!==request.effort||user?.length!==1||user[0].id!==request.userMessageId||
        JSON.stringify(user[0].content)!==JSON.stringify(expectedContent)||!matchesAttachments(user[0]))fail('DISPATCH_CONTEXT_CHANGED');
     return Reflect.apply(target.startCompletionStream,guarded,[{...args,
@@ -117,7 +120,7 @@ export async function nativeDispatch(request, read, control,
     systemHints:scope.get(m.UNt,id),startupSignal,requireDispatchAcceptance:true,
     isSubmissionCurrent:()=>sameAccount()&&sameRoute(),
     onCompletion:status=>{state.state=status==='completed'?'finished':'unknown';},
-    ...(creating?{projectId:null,conversationOrigin:null,isTemporaryChat:false,onServerThreadIdChange:candidate=>{if(uuid(candidate))state.conversationId=candidate;}}:{}),
+    ...(creating?{projectId:request.projectId??null,conversationOrigin:null,isTemporaryChat:false,onServerThreadIdChange:candidate=>{if(uuid(candidate))state.conversationId=candidate;}}:{}),
    });
    if(creating){if(uuid(result?.serverConversationId))state.conversationId=result.serverConversationId;}
    else if(result?.serverConversationId!==request.conversationId)fail('CONVERSATION_MISMATCH');

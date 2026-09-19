@@ -405,4 +405,6 @@ export interface NativePlanAction {
   state: "ready" | "starting" | "submitted" | "unknown" | "unavailable";
   message: string;
 }
+
+export * from "./file-limits.js";
 export * from "./github-work.js";

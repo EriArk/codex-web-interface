@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, mkdirSync, readFileSync } from "node:fs";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { copyFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stageAttachment } from "@codex-web/machines";
 import {
@@ -14,7 +14,7 @@ import sharp from "sharp";
 import type { Store } from "./store.js";
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 8;
-const MAX_BATCH_BYTES = 64 * 1024 * 1024;
+
 sharp.concurrency(1);
 sharp.cache({ memory: 32, files: 0, items: 20 });
 export class Attachments {
@@ -69,6 +69,26 @@ export class Attachments {
     return { file, stream: createReadStream(this.path(id, preview)) };
   }
   async put(threadId: string, name: string, bytes: Buffer): Promise<Attachment> {
+    return this.putFile(threadId, name, bytes);
+  }
+  /** Only the private chunk store supplies a path/ID; browsers cannot name a path. */
+  async putFile(
+    threadId: string,
+    name: string,
+    source: Buffer | string,
+    uploadId?: string,
+  ): Promise<Attachment> {
+    const size = Buffer.isBuffer(source) ? source.length : (await stat(source)).size;
+    if (uploadId) {
+      const old = this.store.db
+        .prepare("SELECT id,threadId,name,bytes FROM attachments WHERE id=?")
+        .get(uploadId);
+      if (old) {
+        if (old.threadId !== threadId || old.name !== name.normalize("NFC") || old.bytes !== size)
+          throw new HubError(409, "UPLOAD_CHANGED", "Вложение изменилось.");
+        return this.get(uploadId);
+      }
+    }
     if (this.processing)
       throw new HubError(409, "UPLOAD_BUSY", "Другой файл ещё загружается. Попробуй снова");
     this.processing = true;
@@ -81,30 +101,35 @@ export class Attachments {
         Array.from(name).some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)
       )
         throw new HubError(400, "INVALID_FILENAME", "Неподходящее имя файла");
-      if (bytes.length === 0 || bytes.length > MAX_FILE_BYTES)
-        throw new HubError(413, "FILE_TOO_LARGE", "Размер файла должен быть от 1 байта до 25 МБ");
+      if (size === 0 || size > this.maxBytes)
+        throw new HubError(
+          413,
+          "FILE_TOO_LARGE",
+          "Размер файла превышает доступное хранилище вложений",
+        );
       await this.cleanup();
       const pending = this.pending(threadId);
       if (
         pending.length >= MAX_ATTACHMENTS ||
-        pending.reduce((n, f) => n + f.bytes, bytes.length) > MAX_BATCH_BYTES
+        pending.reduce((n, f) => n + f.bytes, size) > this.maxBytes
       )
-        throw new HubError(413, "ATTACHMENT_LIMIT", "До 8 файлов и 64 МБ на сообщение");
+        throw new HubError(413, "ATTACHMENT_LIMIT", "До 8 файлов в пределах доступного хранилища");
       if (
         Number(
           this.store.db.prepare("SELECT COALESCE(SUM(bytes),0) AS total FROM attachments").get()
             ?.total,
         ) +
-          bytes.length >
+          size >
         this.maxBytes
       )
         throw new HubError(507, "ATTACHMENT_STORAGE_FULL", "Хранилище вложений заполнено");
-      const id = randomUUID();
+      const id = uploadId ?? randomUUID();
+      if (uploadId) await Promise.allSettled([unlink(this.path(id)), unlink(this.path(id, true))]);
       const raster = /\.(png|jpe?g|webp|gif|avif|tiff?|heic|heif)$/i.test(name);
       let preview: Buffer | undefined;
       if (raster) {
         try {
-          preview = await sharp(bytes, {
+          preview = await sharp(source, {
             limitInputPixels: 50_000_000,
             failOn: "warning",
             pages: 1,
@@ -123,7 +148,9 @@ export class Attachments {
         }
       }
       try {
-        await writeFile(this.path(id), bytes, { mode: 0o600, flag: "wx" });
+        if (Buffer.isBuffer(source))
+          await writeFile(this.path(id), source, { mode: 0o600, flag: "wx" });
+        else await copyFile(source, this.path(id), 1);
         if (preview) await writeFile(this.path(id, true), preview, { mode: 0o600, flag: "wx" });
         this.store.db
           .prepare("INSERT INTO attachments VALUES(?,?,?,?,?,?,NULL,?)")
@@ -132,7 +159,7 @@ export class Attachments {
             threadId,
             name.normalize("NFC"),
             "application/octet-stream",
-            bytes.length,
+            size,
             preview ? 1 : 0,
             new Date().toISOString(),
           );
@@ -161,7 +188,7 @@ export class Attachments {
     for (const file of files) this.protectedIds.add(file.id);
     try {
       for (const file of files) {
-        const copy = await this.put(targetId, file.name, await readFile(this.path(file.id)));
+        const copy = await this.putFile(targetId, file.name, this.path(file.id));
         copies.push(copy.id);
       }
     } catch (error) {
@@ -197,8 +224,8 @@ export class Attachments {
     const files = ids.map((id) => this.get(id));
     if (files.some((f) => f.threadId !== threadId || f.messageId !== null))
       throw new HubError(400, "INVALID_ATTACHMENTS", "Вложение относится к другому сообщению");
-    if (files.reduce((n, f) => n + f.bytes, 0) > MAX_BATCH_BYTES)
-      throw new HubError(413, "ATTACHMENT_LIMIT", "Суммарный размер вложений — до 64 МБ");
+    if (files.reduce((n, f) => n + f.bytes, 0) > this.maxBytes)
+      throw new HubError(413, "ATTACHMENT_LIMIT", "Вложения превышают доступное хранилище");
     if (!supportsImages && files.some((f) => f.image))
       throw new HubError(
         400,
@@ -213,7 +240,12 @@ export class Attachments {
     const release = () => {
       for (const file of files) this.protectedIds.delete(file.id);
     };
-    const deadline = Date.now() + 40_000;
+    const deadline =
+      Date.now() +
+      Math.max(
+        40_000,
+        Math.min(30 * 60_000, (files.reduce((n, f) => n + f.bytes, 0) / (256 * 1024)) * 1000),
+      );
     const input: Record<string, unknown>[] = [],
       references: { name: string; path: string }[] = [];
     try {

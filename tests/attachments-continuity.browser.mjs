@@ -35,15 +35,32 @@ for (const [engine, type] of [
       await gate;
       return route.fulfill({ json: { attachments: [] } });
     });
+    let lostAck = false,
+      retried = false;
+    f.app.server.prependListener("request", (req, res) => {
+      if (req.method !== "PUT" || !req.url.startsWith("/api/upload-transfers/")) return;
+      assert(Number(req.headers["content-length"]) <= 4 * 1024 ** 2);
+      if (new URL(req.url, origin).searchParams.get("offset") !== "0") return;
+      const end = res.end;
+      res.end = function (...args) {
+        if (res.statusCode === 200 && !lostAck) {
+          lostAck = true;
+          res.destroy();
+          return res;
+        }
+        if (res.statusCode === 200) retried = true;
+        return end.apply(this, args);
+      };
+    });
     await page.goto(origin);
     await expect(page.getByRole("textbox", { name: "Сообщение Codex" })).toBeVisible();
     await expect.poll(() => waiting).toBe(true);
     await page.getByLabel("Выбрать файлы или изображения", { exact: true }).setInputFiles({
-      name: "audit-draft.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("attachment race fixture"),
+      name: "audit-draft.zip",
+      mimeType: "application/zip",
+      buffer: Buffer.alloc(32 * 1024 ** 2, 41),
     });
-    const attachment = page.getByRole("button", { name: "Удалить audit-draft.txt", exact: true });
+    const attachment = page.getByRole("button", { name: "Удалить audit-draft.zip", exact: true });
     await expect(attachment).toBeVisible();
     const done = page.waitForResponse(
       (r) => r.request().method() === "GET" && r.url().endsWith("/attachments"),
@@ -54,8 +71,20 @@ for (const [engine, type] of [
       () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
     );
     await expect(attachment).toBeVisible();
+    assert(lostAck && retried);
+    assert.equal(
+      f.store.db.prepare("SELECT bytes FROM attachments WHERE name='audit-draft.zip'").get().bytes,
+      32 * 1024 ** 2,
+    );
+    assert.equal(
+      f.store.db.prepare("SELECT COUNT(*) n FROM attachments WHERE name='audit-draft.zip'").get().n,
+      1,
+    );
     assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 0);
-    console.log(engine + ": late attachment inventory preserves the newly uploaded draft file");
+    console.log(
+      engine +
+        ": 32 MiB upload retries a lost chunk acknowledgement without duplicates; late inventory preserves the draft",
+    );
   } finally {
     await context.close();
     await browser.close();

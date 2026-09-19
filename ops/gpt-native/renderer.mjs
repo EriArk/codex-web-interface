@@ -5,6 +5,9 @@ import {nativeComposer} from './renderer-composer.mjs';
 import {nativeArtifacts} from './renderer-artifacts.mjs';
 import {nativeDispatch} from './renderer-dispatch.mjs';
 import {nativeUpload} from './renderer-upload.mjs';
+import {nativeUploadStage} from './renderer-upload-stage.mjs';
+import {nativeStoredUpload} from './renderer-upload-session.mjs';
+import {randomUUID} from 'node:crypto';
 
 const endpoint = 'http://127.0.0.1:9222';
 const maxBytes = 2 * 1024 * 1024;
@@ -46,12 +49,34 @@ async function evaluate(url, expression, signal) {
 /** Loopback-only lab transport. No HTTP server, generic action or send API. */
 export class NativeRendererReader {
  constructor({transport}={}) { this.transport=transport; }
- async uploadFile(request,options){return this.#read(request,options,'upload');}
+ async prepareStoredUpload(request,options){return this.#read({...request,operation:'prepareStoredUpload'},options,'stored-upload');}
+ async finishStoredUpload(request,options){return this.#read({...request,operation:'finishStoredUpload'},options,'stored-upload');}
+ async uploadFile(request,options){
+  if(typeof request.file?.base64!=='string'||request.file.base64.length>34952536)throw Error('NATIVE_INVALID_UPLOAD');
+  if(request.file.base64.length<=65536)return this.#read(request,options,'upload');
+  const stageId=randomUUID(),file=request.file,signal=AbortSignal.any([AbortSignal.timeout(90000),...(options?.signal?[options.signal]:[])]);
+  const stage=input=>this.#read({...input,stageId,accountFingerprint:request.accountFingerprint},{signal},'upload-stage');
+  try{
+   await stage({operation:'beginUpload',bytes:file.bytes,sha256:file.sha256});
+   let offset=0;
+   for(let i=0;i<file.base64.length;i+=131072){
+    const base64=file.base64.slice(i,i+131072),next=await stage({operation:'appendUpload',offset,base64});
+    offset+=Buffer.from(base64,'base64').length;if(next.offset!==offset)throw Error('NATIVE_UPLOAD_CHANGED');
+   }
+   const {base64:unused,...metadata}=file;
+   return await this.#read({...request,file:{...metadata,stageId}},{signal},'upload');
+  }finally{await this.#read({operation:'clearUpload',stageId},{},'upload-stage').catch(()=>{});}
+ }
+
  async dispatchText(request,options){return this.#read({...request,operation:'dispatchText'},options,'dispatch');}
  async prepareDispatch(request,options){return this.#read({...request,operation:'prepareDispatch'},options,'dispatch');}
  async readSubmission(request,options){return this.#read({...request,operation:'readSubmission'},options);}
  async resolveCreation(request,options){return this.#read({...request,operation:'resolveCreation'},options,'dispatch');}
  async findCreation(request,options){return this.#read({...request,operation:'findCreation'},options);}
+ async readConversationGraph(request,options){return this.#read({...request,operation:'readConversationGraph'},options);}
+ async readProjects(request,options){return this.#read({...request,operation:'readProjects'},options);}
+ async readProject(request,options){return this.#read({...request,operation:'readProject'},options);}
+ async readProjectConversations(request,options){return this.#read({...request,operation:'readProjectConversations'},options);}
  async readCatalog(request,options){return this.#read({...request,operation:'readCatalog'},options);}
  async listArtifacts({conversationId,accountFingerprint,before},options){return this.#read({operation:'listArtifacts',conversationId,accountFingerprint,before},options,'artifacts');}
  async readArtifact({conversationId,accountFingerprint,messageId,artifactId},options){return this.#read({operation:'readArtifact',conversationId,accountFingerprint,messageId,artifactId},options,'artifacts');}
@@ -79,10 +104,10 @@ export class NativeRendererReader {
   return this.#read({operation:'stopResponse',conversationId,accountFingerprint,userMessageId}, options, true);
  }
  async #read(request, {signal:callerSignal} = {}, control = false) {
-  const deadline = AbortSignal.timeout(20000);
+  const deadline = AbortSignal.timeout(['upload','stored-upload'].includes(control)?65000:20000);
   const signal = callerSignal ? AbortSignal.any([callerSignal, deadline]) : deadline;
   try {
-   const call = control === 'upload' ? `(${nativeUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'dispatch' ? `(${nativeDispatch.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
+   const call = control === 'stored-upload' ? `(${nativeStoredUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'upload-stage' ? `(${nativeUploadStage.toString()})(${JSON.stringify(request)})` : control === 'upload' ? `(${nativeUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'dispatch' ? `(${nativeDispatch.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
    const expression = `(async()=>{try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
    const unwrap=result=>{if(result?.ok!==true)throw Error(/^NATIVE_[A-Z_]+$/.test(result?.code??'')?result.code:'NATIVE_INVALID_RESPONSE');return result.value;};
    if(this.transport)return unwrap(await this.transport.evaluateMain(expression,guard,signal));

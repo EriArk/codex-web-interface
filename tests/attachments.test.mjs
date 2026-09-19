@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -93,6 +93,51 @@ test("uploads and downloads require login and uploads require CSRF before accept
         .statusCode,
       403,
     );
+    const transfer = `/api/upload-transfers/${randomUUID()}`,
+      spec = { kind: "codex", threadId: thread.id, name: "chunk.txt", bytes: 5 };
+    assert.equal(
+      (await app.inject({ method: "POST", url: transfer, payload: spec })).statusCode,
+      401,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: transfer,
+          headers: { cookie, origin: config.hub.publicBaseUrl },
+          payload: spec,
+        })
+      ).statusCode,
+      403,
+    );
+    const headers = { cookie, origin: config.hub.publicBaseUrl, "x-csrf-token": csrf };
+    assert.equal(
+      (await app.inject({ method: "POST", url: transfer, headers, payload: spec })).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "PUT",
+          url: transfer + "?offset=0",
+          headers: { ...headers, "content-type": "application/octet-stream" },
+          payload,
+        })
+      ).statusCode,
+      200,
+    );
+    const complete = await app.inject({
+      method: "POST",
+      url: transfer + "/complete",
+      headers,
+      payload: {},
+    });
+    assert.equal(complete.statusCode, 200, complete.body);
+    assert.equal(
+      (await app.inject({ url: complete.json().file.url, headers: { cookie } })).body,
+      "hello",
+    );
+    assert.equal((await app.inject({ url: transfer })).statusCode, 401);
     const upload = await app.inject({
       method: "POST",
       url,

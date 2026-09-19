@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { lstat } from "node:fs/promises";
 import { request } from "node:http";
 import { dirname, isAbsolute } from "node:path";
@@ -7,6 +8,38 @@ import { z } from "zod";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 
 const uuid = z.string().uuid();
+const projectId = z.string().regex(/^g-p-[a-zA-Z0-9-]{1,80}$/);
+const projectConversation = z
+  .object({
+    id: uuid,
+    title: z.string().max(4096),
+    updatedAt: z.number().finite().nonnegative(),
+    projectId,
+  })
+  .strict();
+const projectSchema = z
+  .object({
+    id: projectId,
+    name: z.string().max(500),
+    instructions: z.string().max(100000),
+    canWrite: z.boolean(),
+    emoji: z.string().max(128).nullable(),
+    theme: z.string().max(128).nullable(),
+    files: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^file[-_][a-zA-Z0-9_-]{1,150}$/),
+            name: z.string().max(500),
+            bytes: z.number().int().nonnegative().nullable(),
+          })
+          .strict(),
+      )
+      .max(500),
+    conversations: z.array(projectConversation).max(20),
+  })
+  .strict();
+const projectCursor = z.string().max(4000).nullable();
 const identity = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const artifactId = z.string().regex(/^sandbox-[a-f0-9]{64}$/);
@@ -17,6 +50,7 @@ const fail = (code: string): never => {
 const historySchema = z
   .object({
     conversationId: uuid,
+    projectId: projectId.optional(),
     currentNode: identity,
     before: identity.nullable(),
     mediaResolved: z.literal(false),
@@ -69,7 +103,13 @@ export class NativeGptReadClient {
     }
     this.authorize();
     const result = await new Promise<unknown>((resolve, reject) => {
-      const signal = AbortSignal.timeout(25000);
+      const signal = AbortSignal.timeout(
+        input.operation === "uploadStoredFile"
+          ? 16 * 60000
+          : input.operation === "uploadFile"
+            ? 100000
+            : 25000,
+      );
       const req = request(
         {
           socketPath: this.binding.socketPath,
@@ -154,6 +194,51 @@ export class NativeGptReadClient {
       .strict()
       .parse(await this.call({ operation: "readCatalog", offset }));
   }
+  async projects(cursor: string | null = null) {
+    projectCursor.parse(cursor);
+    return z
+      .object({ items: projectSchema.array().max(20), cursor: projectCursor })
+      .strict()
+      .parse(await this.call({ operation: "readProjects", cursor }));
+  }
+  async project(id: string) {
+    projectId.parse(id);
+    const result = projectSchema.parse(
+      await this.call({ operation: "readProject", projectId: id }),
+    );
+    if (result.id !== id) fail("PROJECT_MISMATCH");
+    return result;
+  }
+  async projectConversations(id: string, cursor: string | null = null) {
+    projectId.parse(id);
+    projectCursor.parse(cursor);
+    const result = z
+      .object({ items: projectConversation.array().max(20), cursor: projectCursor })
+      .strict()
+      .parse(await this.call({ operation: "readProjectConversations", projectId: id, cursor }));
+    if (result.items.some((c) => c.projectId !== id)) fail("PROJECT_MISMATCH");
+    return result;
+  }
+  async conversationGraph(conversationId: string) {
+    uuid.parse(conversationId);
+    const result = z
+      .object({
+        conversation_id: uuid,
+        current_node: identity,
+        title: z.string().max(4096),
+        gizmo_id: projectId.nullable(),
+        mapping: z.record(z.string(), z.unknown()),
+      })
+      .strict()
+      .parse(await this.call({ operation: "readConversationGraph", conversationId }));
+    if (
+      result.conversation_id !== conversationId ||
+      !Object.hasOwn(result.mapping, result.current_node) ||
+      Object.keys(result.mapping).length > 10000
+    )
+      fail("INVALID_HISTORY");
+    return result;
+  }
   async manual(operation: "beginManual" | "endManual" | "resumeManual", leaseId?: string) {
     if (!["beginManual", "endManual", "resumeManual"].includes(operation)) fail("INVALID_REQUEST");
     if (operation !== "resumeManual") uuid.parse(leaseId);
@@ -190,7 +275,7 @@ export class NativeGptReadClient {
         model: z.string().max(128),
         effort: z.string().max(128).nullable(),
         intentPersisted: z.literal(true),
-        attachments: nativeUploadedFile.array().max(4).optional(),
+        attachments: nativeUploadedFile.array().max(8).optional(),
       })
       .parse(input);
     const result = z
@@ -227,14 +312,14 @@ export class NativeGptReadClient {
               !value.includes("\\") &&
               [...value].every((c) => c.charCodeAt(0) >= 32),
           ),
-        mime: z.enum(["text/plain", "image/png"]),
+        mime: z.string().regex(/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i),
         bytes: z
           .number()
           .int()
           .min(1)
-          .max(1024 * 1024),
+          .max(20 * 1024 * 1024),
         sha256: digest,
-        base64: z.string().max(1398104),
+        base64: z.string().max(27962028),
       })
       .strict()
       .parse(input.file);
@@ -254,6 +339,51 @@ export class NativeGptReadClient {
       result.native.name !== file.name ||
       result.native.size !== file.bytes ||
       result.native.mimeType !== file.mime
+    )
+      fail("UPLOAD_MISMATCH");
+    return result;
+  }
+  async uploadFilePath(
+    input: {
+      key: string;
+      conversationId: string | null;
+      file: { id: string; name: string; mime: string; bytes: number; sha256: string };
+    },
+    path: string,
+  ) {
+    uuid.parse(input.key);
+    uuid.nullable().parse(input.conversationId);
+    uuid.parse(input.file.id);
+    digest.parse(input.file.sha256);
+    if (!isAbsolute(path) || input.file.mime.startsWith("image/")) fail("INVALID_UPLOAD");
+    let offset = 0;
+    for await (const chunk of createReadStream(path, { highWaterMark: 1024 * 1024 })) {
+      this.authorize();
+      const bytes = chunk as Buffer;
+      const value = z
+        .object({ offset: z.number().int().nonnegative() })
+        .strict()
+        .parse(
+          await this.call({
+            operation: "stageUpload",
+            ...input,
+            offset,
+            base64: bytes.toString("base64"),
+          }),
+        );
+      offset += bytes.length;
+      if (value.offset < offset || value.offset > input.file.bytes) fail("UPLOAD_CHANGED");
+    }
+    if (offset !== input.file.bytes) fail("UPLOAD_CHANGED");
+    const result = nativeUploadedFile.parse(
+      await this.call({ operation: "uploadStoredFile", ...input }),
+    );
+    if (
+      result.id !== input.file.id ||
+      result.sha256 !== input.file.sha256 ||
+      result.native.name !== input.file.name ||
+      result.native.mimeType !== input.file.mime ||
+      result.native.size !== input.file.bytes
     )
       fail("UPLOAD_MISMATCH");
     return result;
@@ -391,6 +521,7 @@ const nativeDispatchInput = z
     key: uuid,
     conversationId: uuid.nullable(),
     userMessageId: uuid,
+    projectId: projectId.optional(),
     text: z.string().min(1).max(32768),
     versionId: z.string().min(1).max(128),
     presetId: z.number().int().nonnegative(),
@@ -405,15 +536,15 @@ const nativeUploadedFile = z
       .object({
         id: z.string().regex(/^file[-_][a-zA-Z0-9_-]{1,150}$/),
         name: z.string().min(1).max(255),
-        mimeType: z.enum(["text/plain", "image/png"]),
+        mimeType: z.string().regex(/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i),
         size: z
           .number()
           .int()
           .min(1)
-          .max(1024 * 1024),
+          .max(512 * 1024 * 1024),
         source: z.literal("local"),
-        width: z.number().int().min(1).max(4096).optional(),
-        height: z.number().int().min(1).max(4096).optional(),
+        width: z.number().int().min(1).max(8192).optional(),
+        height: z.number().int().min(1).max(8192).optional(),
       })
       .strict(),
   })

@@ -21,12 +21,14 @@ test("SFTP batch paths cannot inject commands and preserve special characters", 
 test("SSH upload uses SFTP, validates acknowledgement and cleans failed temporary transfers", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "codex-transfer-test-"));
   const source = join(root, 'local "quoted" фото.bin'),
-    bytes = Buffer.from("payload with real bytes \0\n");
+    initial = Buffer.from("payload with real bytes \0\n");
+  let bytes = initial;
   await writeFile(source, bytes);
   const original = childProcess.spawn;
   try {
     for (const outcome of [
       "success",
+      "large-success",
       "sftp-error",
       "timeout",
       "bad-ack",
@@ -35,6 +37,8 @@ test("SSH upload uses SFTP, validates acknowledgement and cleans failed temporar
       "oversized-response",
     ]) {
       await t.test(outcome, async () => {
+        bytes = outcome === "large-success" ? Buffer.alloc(26 * 1024 ** 2, 47) : initial;
+        await writeFile(source, bytes);
         const id = randomUUID(),
           directory = "C:\\Users\\QA\\AppData\\Local\\CodexWeb\\attachments\\test\\" + id + "\\";
         const destination = directory + "upload-Фото _.png",
@@ -119,7 +123,8 @@ test("SSH upload uses SFTP, validates acknowledgement and cleans failed temporar
           source,
           Date.now() + (outcome === "timeout" ? 100 : 3000),
         );
-        if (outcome === "success") assert.equal(await promise, destination);
+        if (outcome === "success" || outcome === "large-success")
+          assert.equal(await promise, destination);
         else
           await assert.rejects(promise, (error) => {
             assert.equal(error.statusCode, 503);

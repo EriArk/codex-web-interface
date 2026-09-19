@@ -4,6 +4,7 @@ import { api, messageOf } from "./api";
 import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
 import type { Attachment } from "./types";
+import { uploadFile } from "./uploadFile";
 export const fileSize = (bytes: number) =>
   bytes >= 1024 ** 2
     ? `${(bytes / 1024 ** 2).toFixed(1)} МБ`
@@ -11,6 +12,7 @@ export const fileSize = (bytes: number) =>
 export function useAttachments(threadId: string) {
   const [files, setFiles] = useState<Attachment[]>([]),
     [busy, setBusy] = useState(false),
+    [progress, setProgress] = useState(""),
     [error, setError] = useState("");
   const current = useRef(threadId);
   current.current = threadId;
@@ -56,7 +58,6 @@ export function useAttachments(threadId: string) {
     setError("");
     try {
       for (const original of Array.from(selected)) {
-        if (original.size > 25 * 1024 ** 2) throw new Error(`Файл «${original.name}» больше 25 МБ`);
         let file = original;
         // Safari can decode a photo selected from the iOS library before upload.
         if (/\.(heic|heif)$/i.test(file.name)) {
@@ -89,9 +90,13 @@ export function useAttachments(threadId: string) {
             URL.revokeObjectURL(url);
           }
         }
-        const added = await api<Attachment>(
-          `/threads/${id}/attachments?name=${encodeURIComponent(file.name)}`,
-          { method: "POST", raw: file },
+        const { file: added } = await uploadFile<Attachment>(
+          file,
+          { kind: "codex", threadId: id },
+          (bytes, total) => {
+            if (current.current === id)
+              setProgress(`${file.name}: ${Math.floor((bytes / total) * 100)}%`);
+          },
         );
         if (current.current === id) setFiles((old) => [...old, added]);
       }
@@ -100,6 +105,7 @@ export function useAttachments(threadId: string) {
     } finally {
       inFlight.current = false;
       setBusy(false);
+      setProgress("");
     }
   };
   const remove = async (id: string) => {
@@ -119,11 +125,13 @@ export function useAttachments(threadId: string) {
     } finally {
       inFlight.current = false;
       setBusy(false);
+      setProgress("");
     }
   };
   return {
     files,
     busy,
+    progress,
     error,
     add,
     remove,

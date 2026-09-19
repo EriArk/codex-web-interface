@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { chmodSync, closeSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {NativeStoredUploads,transferStoredUpload} from './stored-uploads.mjs';
 
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const fail = code => { throw Error(`NATIVE_${code}`); };
@@ -17,6 +18,7 @@ export class NativeReadService {
     this.userId = userId;
     this.accountFingerprint = accountFingerprint;
     this.statePath = statePath;
+    this.uploads=new NativeStoredUploads(dirname(statePath)+'/uploads');
     this.busy = false;
     this.instanceId = randomUUID();
     this.leases = new Set();
@@ -41,14 +43,16 @@ export class NativeReadService {
     if (!input || typeof input !== 'object' || Array.isArray(input) || input.userId !== this.userId) fail('WRONG_OWNER');
     const canaryFields = this.canary ? {
       uploadFile: ['key','conversationId','file'],
-      prepareDispatch: ['key','conversationId','userMessageId','text','versionId','presetId'],
-      dispatchText: ['key','conversationId','userMessageId','text','versionId','presetId','parentId','model','effort','intentPersisted','attachments'],
+      stageUpload: ['key','conversationId','file','offset','base64'],
+      uploadStoredFile: ['key','conversationId','file'],
+      prepareDispatch: ['key','conversationId','userMessageId','text','versionId','presetId','projectId'],
+      dispatchText: ['key','conversationId','userMessageId','text','versionId','presetId','parentId','model','effort','intentPersisted','attachments','projectId'],
       reconcileDispatch: ['key','conversationId'],
     } : {};
     const fields = {
       ...canaryFields,
       status: [], beginManual: ['leaseId'], endManual: ['leaseId'], resumeManual: [],
-      readModels: [], readCatalog:['offset'], readConversation: ['conversationId', 'before'],
+      readModels: [], readConversationGraph:['conversationId'], readProjects:['cursor'], readProject:['projectId'], readProjectConversations:['projectId','cursor'], readCatalog:['offset'], readConversation: ['conversationId', 'before'],
       listArtifacts: ['conversationId', 'before'], readArtifact: ['conversationId', 'messageId', 'artifactId'],
     }[input.operation];
     if (!Array.isArray(fields) || Object.keys(input).some(k => !['userId', 'operation', ...fields].includes(k))) fail('INVALID_REQUEST');
@@ -72,6 +76,12 @@ export class NativeReadService {
       const { operation, userId: ignored, ...args } = input;
       const bound={...args,accountFingerprint:this.accountFingerprint};
       if(Object.hasOwn(canaryFields,operation)){
+        if(operation==='stageUpload'){this.canary.admitUpload(bound);if(this.canary.pending())fail('PENDING_DISPATCH');return await this.uploads.append(bound);}
+        if(operation==='uploadStoredFile'){
+          this.canary.admitUpload(bound);
+          const reader={uploadStoredFile:(r,path)=>transferStoredUpload(this.reader,r,path)};
+          const value=await this.canary.upload(bound,reader,this.uploads);await this.uploads.clear(bound);return value;
+        }
         if(operation==='uploadFile')return await this.canary.upload(bound,this.reader);
         if(operation==='prepareDispatch')return await this.canary.prepare(bound,this.reader);
         if(operation==='dispatchText')return await this.canary.dispatch(bound,this.reader);
@@ -93,7 +103,7 @@ export async function listenNative(service, socketPath) {
     try {
       if (req.method !== 'POST' || req.url !== '/v1' || req.headers['content-type'] !== 'application/json') fail('INVALID_REQUEST');
       const chunks = []; let bytes = 0;
-      for await (const chunk of req) { bytes += chunk.length; if (bytes > (service.canary ? 1500000 : 4096)) fail('REQUEST_TOO_LARGE'); chunks.push(chunk); }
+      for await (const chunk of req) { bytes += chunk.length; if (bytes > (service.canary ? 35000000 : 4096)) fail('REQUEST_TOO_LARGE'); chunks.push(chunk); }
       const result = await service.request(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       const body = JSON.stringify({ ok: true, result });
       if (Buffer.byteLength(body) > 2 * 1024 * 1024) fail('RESPONSE_TOO_LARGE');
@@ -105,7 +115,7 @@ export async function listenNative(service, socketPath) {
   });
   server.requestTimeout = 5000;
   server.headersTimeout = 5000;
-  server.timeout = 25000;
+  server.timeout = 1000000;
   server.maxConnections = 16;
   server.on('timeout', socket => socket.destroy());
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });

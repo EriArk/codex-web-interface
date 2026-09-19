@@ -28,6 +28,7 @@ import { Artifacts } from "./artifacts.js";
 import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { registerBridgeDoctor } from "./bridge-doctor.js";
+import { registerChunkUploads } from "./chunk-uploads.js";
 import { registerCommandOutput } from "./command-output.js";
 import { registerContentSearch } from "./content-search.js";
 import { registerDeploymentStatus } from "./deployment-status.js";
@@ -205,6 +206,7 @@ export async function createApp(
     });
   });
   const gpt = registerGpt(app, config, store, options.authorizeExecution);
+  registerChunkUploads(app, config, store, sessions.attachments, gpt, options.authorizeExecution);
   registerContentSearch(app, sessions, gpt);
   const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);
   const push = registerPush(app, store, auth, config.hub.publicBaseUrl, {

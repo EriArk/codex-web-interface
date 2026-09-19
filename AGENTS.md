@@ -626,3 +626,11 @@ Before mobile support is considered complete, the same core workflow must also w
 - Group related implementation, integration and verification into a larger coherent work session. The owner finds individual small adapter proofs too short; finish a useful integrated stage before handing back, while preserving safe deployment boundaries and concise progress updates.
 - Prefer the lowest level adequate for the work: low for straightforward edits and routine operations, medium for ordinary implementation and focused fixes, high for difficult debugging, architecture, authentication and data migrations; reserve very high/maximal levels for demonstrated exceptional complexity. Recommend increasing or decreasing effort when the scope changes, rather than keeping an expensive level for every task. Keep this guidance short; do not start an unrelated audit merely to choose a level.
 - Name the exact web selector label and protocol value together. Its six-level order is Низкое (`low`), Среднее (`medium`), Высокое (`high`), Очень высокое (`xhigh`), Максимум (`max`), Ультра (`ultra`). `high` is the third option; do not conflate Extra High with Max or infer the current selection from an example screenshot of another chat.
+
+
+## Owner-requested actual upload limits (2026-09-19)
+
+- Remove the app's arbitrary 25 MiB per-file and 64 MiB per-message transfer restrictions from the new Codex/native-GPT path. Preserve user storage quotas, disk-space checks, attachment identity, checksums, private isolation and unknown-send receipts.
+- Consumer ChatGPT documents the 512 MB file and 20 MB image ceilings; spreadsheet processing is approximately 50 MB and text/document processing is limited to 2 million tokens. Do not confuse these with API Uploads limits or invent a native Codex arbitrary-file ceiling: Codex receives verified local paths through the existing machine transport.
+- Stream large files through bounded, acknowledged chunks and disk staging. A retry of an upload fragment must never authorize a second chat submission. Keep visible upload progress and stop private transfers on session termination.
+- Preserve the old GPT connector/profile until native provider admission is complete. Repository upload support and disposable native acceptance are not evidence that the primary GPT workspace has switched providers.

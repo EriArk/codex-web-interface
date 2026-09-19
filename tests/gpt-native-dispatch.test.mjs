@@ -431,3 +431,16 @@ test("new Hub job adopts only canonically confirmed identity and cannot replay o
   assert.equal(f.db.prepare("SELECT nativeId FROM gpt_jobs").get().nativeId, conversationId);
   assert.equal(sends, 1);
 });
+test("project association is part of the durable Hub dispatch and cannot change during preparation", async (t) => {
+  const f = queue(t);
+  f.db.exec("CREATE TABLE gpt_project_jobs(jobId TEXT PRIMARY KEY,projectId TEXT)");
+  f.db.prepare("INSERT INTO gpt_project_jobs VALUES(?,?)").run(f.id, "g-p-original");
+  const prepare = f.client.prepareDispatch;
+  f.client.prepareDispatch = async (input) => {
+    assert.equal(input.projectId, "g-p-original");
+    f.db.prepare("UPDATE gpt_project_jobs SET projectId=?").run("g-p-other");
+    return prepare(input);
+  };
+  await assert.rejects(f.open().run(f.id), /PROJECT_CHANGED/);
+  assert.equal(f.state.sends, 0);
+});

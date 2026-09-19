@@ -5,6 +5,7 @@ import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
+import { uploadFile } from "./uploadFile";
 import "./quick-capture.css";
 
 type Mutation = {
@@ -140,18 +141,11 @@ export function GptProjectContent({
   };
   const upload = async (file: File) => {
     if (!project || sending.current) return;
-    if (file.size > 25 * 1024 * 1024) {
-      setError("Размер файла — не более 25 МБ.");
-      return;
-    }
     sending.current = true;
     setBusy(true);
     setError("");
     try {
-      const result = await api<{ file: { id: string } }>(
-        "/gpt/uploads?name=" + encodeURIComponent(file.name),
-        { method: "POST", raw: file },
-      );
+      const result = await uploadFile<{ id: string }>(file, { kind: "gpt" });
       if (alive.current) {
         sending.current = false;
         await submit({

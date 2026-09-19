@@ -1,12 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { readFile } from "node:fs/promises";
 import type { GptFile } from "@codex-web/shared";
+import { gptFileLimit } from "@codex-web/shared";
 import { z } from "zod";
 import type { NativeGptReadClient, NativeUploadedFile } from "./gpt-native.js";
 import type { Store } from "./store.js";
 
 type NativeJobsClient = Pick<
   NativeGptReadClient,
-  "prepareDispatch" | "dispatchText" | "reconcileDispatch" | "uploadFile"
+  "prepareDispatch" | "dispatchText" | "reconcileDispatch" | "uploadFile" | "uploadFilePath"
 >;
 function fail(code: string): never {
   throw Error(`NATIVE_${code}`);
@@ -21,7 +24,7 @@ export class NativeGptJobs {
     private readonly authorize: () => void,
     private readonly allowed: Set<string>,
     private readonly creationKeys: Set<string> = new Set(),
-    private readonly readUpload?: (file: GptFile) => Promise<Buffer>,
+    private readonly readUpload?: (file: GptFile) => Promise<Buffer | string>,
   ) {
     store.db.exec(
       "PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS gpt_native_receipts(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id),payload TEXT NOT NULL,messages TEXT NOT NULL DEFAULT '[]')",
@@ -51,6 +54,24 @@ export class NativeGptJobs {
       fail("INVALID_CANARY");
     return row;
   }
+  private project(id: string): string | undefined {
+    // The normal Store owns this association. Minimal isolated test Stores can omit it.
+    if (
+      !this.store.db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gpt_project_jobs'")
+        .get()
+    )
+      return undefined;
+    const value = this.store.db
+      .prepare("SELECT projectId FROM gpt_project_jobs WHERE jobId=?")
+      .get(id)?.projectId;
+    return value == null
+      ? undefined
+      : z
+          .string()
+          .regex(/^g-p-[a-zA-Z0-9-]{1,80}$/)
+          .parse(value);
+  }
   async run(id: string) {
     if (this.busy) fail("BUSY");
     this.busy = true;
@@ -71,18 +92,18 @@ export class NativeGptJobs {
             .object({
               id: z.string().uuid(),
               name: z.string().min(1).max(255),
-              mime: z.enum(["text/plain", "image/png"]),
+              mime: z.string().regex(/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i),
               bytes: z
                 .number()
                 .int()
                 .min(1)
-                .max(1024 * 1024),
+                .max(512 * 1024 * 1024),
               url: z.string(),
               image: z.boolean(),
             })
             .strict(),
         )
-        .max(4)
+        .max(8)
         .safeParse(JSON.parse(String(row.files)));
       if (!files.success) fail("INVALID_ATTACHMENTS");
       const selectedFiles = files.data;
@@ -106,6 +127,7 @@ export class NativeGptJobs {
         text: String(row.text),
         versionId: String(row.model),
         presetId: Number(row.effort),
+        ...(this.project(id) ? { projectId: this.project(id) } : {}),
       };
       if (!/^\d+$/.test(String(row.effort))) fail("INVALID_SETTINGS");
       this.store.db.prepare("INSERT OR IGNORE INTO gpt_native_preparations VALUES(?)").run(id);
@@ -125,21 +147,25 @@ export class NativeGptJobs {
         if (prepared.versionId !== input.versionId || prepared.presetId !== input.presetId)
           fail("INVALID_SETTINGS");
         const snapshots = [];
-        let total = 0;
         for (const file of selectedFiles) {
           this.authorize();
-          // The caller resolves only an already-authorized Hub upload ID. No URL or
-          // arbitrary filesystem path is passed to the native app.
-          if (!this.readUpload) fail("INVALID_UPLOAD");
-          const bytes = await this.readUpload(file);
+          if (!this.readUpload || file.bytes > gptFileLimit(file.name)) fail("INVALID_UPLOAD");
+          const source = await this.readUpload(file);
           this.authorize();
-          total += bytes.length;
-          if (bytes.length !== file.bytes || total > 1024 * 1024) fail("UPLOAD_CHANGED");
-          snapshots.push({
-            ...file,
-            sha256: createHash("sha256").update(bytes).digest("hex"),
-            base64: bytes.toString("base64"),
-          });
+          const hash = createHash("sha256");
+          let count = 0;
+          if (typeof source === "string") {
+            for await (const part of createReadStream(source)) {
+              count += part.length;
+              if (count > file.bytes) fail("UPLOAD_CHANGED");
+              hash.update(part);
+            }
+          } else {
+            count = source.length;
+            hash.update(source);
+          }
+          if (count !== file.bytes) fail("UPLOAD_CHANGED");
+          snapshots.push({ ...file, sha256: hash.digest("hex"), source });
         }
         const hashes = JSON.stringify(snapshots.map((f) => ({ id: f.id, sha256: f.sha256 })));
         this.store.db
@@ -150,20 +176,19 @@ export class NativeGptJobs {
           .get(id);
         if (saved?.files !== row.files || saved?.hashes !== hashes) fail("UPLOAD_CHANGED");
         for (const f of snapshots) {
-          attachments.push(
-            await this.client.uploadFile({
-              key: id,
-              conversationId: input.conversationId,
-              file: {
-                id: f.id,
-                name: f.name,
-                mime: f.mime,
-                bytes: f.bytes,
-                sha256: f.sha256,
-                base64: f.base64,
-              },
-            }),
-          );
+          const file = { id: f.id, name: f.name, mime: f.mime, bytes: f.bytes, sha256: f.sha256 };
+          const target = { key: id, conversationId: input.conversationId, file };
+          if (typeof f.source === "string" && !f.mime.startsWith("image/"))
+            attachments.push(await this.client.uploadFilePath(target, f.source));
+          else {
+            const bytes = typeof f.source === "string" ? await readFile(f.source) : f.source;
+            attachments.push(
+              await this.client.uploadFile({
+                ...target,
+                file: { ...file, base64: bytes.toString("base64") },
+              }),
+            );
+          }
           this.authorize();
         }
       } catch (error) {
@@ -185,6 +210,7 @@ export class NativeGptJobs {
       // Atomic receipt + existing queue transition. A crash from this point means readback only.
       this.store.db.exec("BEGIN IMMEDIATE");
       try {
+        if (this.project(id) !== input.projectId) fail("PROJECT_CHANGED");
         if (
           this.store.db
             .prepare(
@@ -243,6 +269,7 @@ export class NativeGptJobs {
       row.text !== payload.text ||
       row.model !== payload.versionId ||
       Number(row.effort) !== payload.presetId ||
+      this.project(id) !== payload.projectId ||
       (payload.attachments?.length
         ? this.store.db.prepare("SELECT files FROM gpt_native_files WHERE jobId=?").get(id)
             ?.files !== row.files

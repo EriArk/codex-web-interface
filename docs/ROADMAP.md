@@ -6,7 +6,7 @@ The official isolated Linux client is installed and authenticated. The owner acc
 
 Implemented and verified in the native canary:
 
-- Durable small TXT/PNG uploads through Hub jobs: byte/hash snapshots, native upload receipts, exact attachment/message reconciliation and restart continuity. Canary limit: four files, 1 MiB total; 136 tests pass, no main-provider switch.
+- Durable uploads through Hub jobs: real 32 MiB PDF accepted/read once by native GPT and preserved after restart. Disk-streamed documents support the 512 MiB ceiling; images use a bounded 20 MiB path. Eight-file batch guard remains separate from native account quotas. Browser-to-Hub chunks and larger Codex SFTP transfer are implemented and tested but not installed in the main engine/UI. Main GPT integration remains pending; the old browser connector retains its buffer guard. See [upload evidence and limits](GPT_NATIVE_LINUX.md#large-file-transport-and-native-project-foundation-2026-09-19).
 - Phone trackpad/zoom, protected Remote and persistent manual-access leases.
 - Supervised private inherited-pipe adapter; no debugger TCP port or published native port.
 - Fresh account-bound public history, 20-message paging and exact branch/message identities.
