@@ -27,6 +27,7 @@ import { unzipSync } from "../apps/hub/node_modules/fflate/esm/index.mjs";
 import WebSocket from "../apps/hub/node_modules/ws/wrapper.mjs";
 import { gptSessionAllowed } from "../ops/gpt/session-watch.mjs";
 import { teamConnection } from "../ops/gpt/team-connection.mjs";
+import { listenNative, NativeReadService } from "../ops/gpt-native/service.mjs";
 import { configSchema } from "../packages/shared/dist/index.js";
 
 async function fixture(t, options = {}, ownerLogin) {
@@ -2237,6 +2238,43 @@ test("protected GPT connection page and live Remote bind one user and close on r
   await new Promise((resolve) => portProbe.close(resolve));
   const nativePasswordFile = join(f.root, "native-vnc-password");
   await writeFile(nativePasswordFile, "labpass1", { mode: 0o600 });
+  const nativeConversation = randomUUID(),
+    nativeSocket = join(f.root, "native.sock");
+  const nativeService = new NativeReadService({
+    userId: f.registry.ownerId,
+    accountFingerprint: "a".repeat(64),
+    statePath: join(f.root, "native-manual.json"),
+    reader: {
+      readConversation: async () => ({
+        conversationId: nativeConversation,
+        currentNode: "node",
+        before: null,
+        mediaResolved: false,
+        messages: [
+          {
+            nodeId: "node",
+            id: "message",
+            role: "assistant",
+            channel: "final",
+            text: "Private native reply",
+            hasAttachments: false,
+            createdAt: 1,
+            model: null,
+            effort: null,
+            complete: true,
+          },
+        ],
+      }),
+    },
+  });
+  const nativeServer = await listenNative(nativeService, nativeSocket);
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        nativeServer.closeAllConnections();
+        nativeServer.close(resolve);
+      }),
+  );
   const process = spawn(globalThis.process.execPath, ["ops/gpt/login-gateway.mjs"], {
     env: {
       ...globalThis.process.env,
@@ -2246,6 +2284,8 @@ test("protected GPT connection page and live Remote bind one user and close on r
       GPT_GATEWAY_PORT: String(port),
       GPT_NATIVE_USER_ID: f.registry.ownerId,
       GPT_NATIVE_VNC_PASSWORD_FILE: nativePasswordFile,
+      GPT_NATIVE_ADAPTER_SOCKET: nativeSocket,
+      GPT_NATIVE_GUACD_PORT: String(remotePort),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -2274,11 +2314,87 @@ test("protected GPT connection page and live Remote bind one user and close on r
   const nativeHtml = await nativePage.text();
   assert(nativeHtml.includes('name="codex-runtime" content="native"'));
   assert(!nativeHtml.includes("labpass1"));
+  assert(nativeHtml.includes('name="codex-native-adapter" content="read-only"'));
+  const nativeHistory = `http://127.0.0.1:${port}/gpt-connect/native/history/${nativeConversation}`;
+  assert.equal((await fetch(nativeHistory, { headers: { cookie: f.friend.cookie } })).status, 401);
+  assert.equal((await fetch(nativeHistory)).status, 401);
+  const readable = await fetch(nativeHistory, { headers: { cookie: f.owner.cookie } });
+  assert.equal(readable.status, 200);
+  assert.equal((await readable.json()).items[0].text, "Private native reply");
+  const nativeLive = new WebSocket(
+    `ws://127.0.0.1:${port}/gpt-connect/remote?runtime=native&workspace=${f.registry.ownerId}`,
+    {
+      headers: { Cookie: f.owner.cookie, Origin: f.config.hub.publicBaseUrl },
+    },
+  );
+  t.after(() => nativeLive.terminate());
+  await once(nativeLive, "message");
+  assert.deepEqual(connected, [["codex-web-gpt-native-lab", "5900", "labpass1"]]);
+  assert.equal((await fetch(nativeHistory, { headers: { cookie: f.owner.cookie } })).status, 503);
+  const resume = `http://127.0.0.1:${port}/gpt-connect/native/resume`;
+  assert.equal(
+    (
+      await fetch(resume, {
+        method: "POST",
+        headers: {
+          cookie: f.owner.cookie,
+          origin: "https://other.test",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await nativeService.request({ userId: f.registry.ownerId, operation: "status" })).manual,
+    true,
+  );
+  const nativeClosed = once(nativeLive, "close");
+  let resumeEntered, finishResume;
+  const entered = new Promise((resolve) => {
+    resumeEntered = resolve;
+  });
+  const holdResume = new Promise((resolve) => {
+    finishResume = resolve;
+  });
+  const nativeRequest = nativeService.request.bind(nativeService);
+  nativeService.request = async (input) => {
+    if (input.operation === "resumeManual") {
+      resumeEntered();
+      await holdResume;
+    }
+    return nativeRequest(input);
+  };
+  const resumeRequest = () =>
+    fetch(resume, {
+      method: "POST",
+      headers: {
+        cookie: f.owner.cookie,
+        origin: f.config.hub.publicBaseUrl,
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+  const returning = resumeRequest();
+  await entered;
+  assert.equal((await resumeRequest()).status, 409);
+  finishResume();
+  assert.equal((await returning).status, 200);
+  await nativeClosed;
+  assert.equal((await fetch(nativeHistory, { headers: { cookie: f.owner.cookie } })).status, 200);
+  assert.equal(
+    (await nativeService.request({ userId: f.registry.ownerId, operation: "status" })).manual,
+    false,
+  );
+  connected.length = 0;
   for (const suffix of ["runtime=native", "runtime=native&workspace=" + f.registry.ownerId]) {
     assert.equal(
-      (await fetch(`http://127.0.0.1:${port}/gpt-connect?${suffix}`, {
-        headers: { cookie: f.friend.cookie },
-      })).status,
+      (
+        await fetch(`http://127.0.0.1:${port}/gpt-connect?${suffix}`, {
+          headers: { cookie: f.friend.cookie },
+        })
+      ).status,
       401,
     );
   }

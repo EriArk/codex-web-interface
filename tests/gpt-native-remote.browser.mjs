@@ -18,7 +18,7 @@ const files = {
 const html = (await readFile("ops/gpt/connect.html", "utf8"))
   .replace(
     '<meta charset="utf-8">',
-    '<meta charset="utf-8"><meta name="codex-runtime" content="native">',
+    '<meta charset="utf-8"><meta name="codex-runtime" content="native"><meta name="codex-native-adapter" content="read-only">',
   )
   .replace(
     '<script src="/gpt-connect/client.js">',
@@ -37,9 +37,18 @@ for (const [name, type] of [
     });
     const errors = [],
       packets = [];
-    let connections = 0;
+    let connections = 0,
+      resumed = 0;
     page.on("pageerror", (error) => errors.push(error.message));
     await page.route(origin + "/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/gpt-connect/native/resume") {
+        assert.equal(route.request().method(), "POST");
+        resumed++;
+        return route.fulfill({ contentType: "application/json", body: '{"ok":true}' });
+      }
+      if (path === "/")
+        return route.fulfill({ contentType: "text/html", body: "<p>Workspace</p>" });
       const name = new URL(route.request().url()).pathname.split("/").at(-1),
         body = files[name] ?? html;
       return route.fulfill({
@@ -72,18 +81,16 @@ for (const [name, type] of [
     await page.waitForFunction(() => document.querySelector("#status").hidden);
     await page.evaluate(() => {
       window.pointer = (type, id, x, y) =>
-        document
-          .querySelector("#surface")
-          .dispatchEvent(
-            new PointerEvent(type, {
-              pointerId: id,
-              pointerType: "touch",
-              clientX: x,
-              clientY: y,
-              bubbles: true,
-              cancelable: true,
-            }),
-          );
+        document.querySelector("#surface").dispatchEvent(
+          new PointerEvent(type, {
+            pointerId: id,
+            pointerType: "touch",
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
     });
     async function gesture(action) {
       packets.length = 0;
@@ -143,6 +150,11 @@ for (const [name, type] of [
     });
     assert.equal(edge.at(-1)[1], "1279");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
+    await page
+      .getByRole("button", { name: "Закрыть Remote и вернуть управление сайту", exact: true })
+      .click();
+    await page.waitForURL(origin + "/");
+    assert.equal(resumed, 1);
     assert.deepEqual(errors, []);
     console.log(
       JSON.stringify({

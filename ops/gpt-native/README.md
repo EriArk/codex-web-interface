@@ -2,6 +2,8 @@
 
 This is the #193 research runtime, **not yet the production GPT provider**. See [the technical record](../../docs/GPT_NATIVE_LINUX.md) for real-account proof, current gaps and rollback.
 
+The supervised read stage below is installed in the original owner's separate runtime. It supersedes temporary debugger startup for ordinary adapter reads; the main GPT workspace still uses its existing provider.
+
 Build on Linux with the checksum-pinned official `chatgpt_amd64.deb` beside the Dockerfile and scripts. Keep the package and all runtime state outside Git. A changed latest package must fail the checksum gate until explicitly evaluated. Run as UID 1000 with a private `/data` mount, exclusive runtime lock, private display/VNC, dropped capabilities, no-new-privileges and bounded resources; publish no ports. **Mount `/tmp` as tmpfs** (`--tmpfs /tmp:rw,nosuid,nodev,mode=1777,size=512m`): X11 lock files and IPC sockets must not survive a container restart. The entry point creates the private runtime directory before DBus starts. Provision private VNC password/auth files before startup. Never reuse an existing browser or Windows account profile.
 
 `configure-browser.sh` runs as the profile owner before the app: HTTP/HTTPS use the private Chromium profile, while `codex://` remains assigned to ChatGPT. The browser runs headed with no automation/debugging port and no copied login. Authentication and any upstream verification remain manual owner actions.
@@ -69,3 +71,22 @@ New native Chat windows can retain a `local-chatgpt:<UUID>` client identity even
 `renderer-artifacts.mjs` calls the pinned native interpreter-download route with `expectedIdentity`. Its returned signed URL stays inside the renderer. Only the exact ChatGPT estuary content route and HTTPS `*.oaiusercontent.com` hosts are accepted. Estuary uses the app's host-authenticated binary transport and fixed native attach-auth marker, without reading a credential. CDN reads omit credentials and reject redirects. Native-host redirect handling remains the app's responsibility. Account changes discard the result; errors expose fixed codes. The bounded lab response contains base64 bytes, length and SHA-256, at most **1 MiB**. This does not change existing production limits or implement a large-file transport.
 
 Real proof generated and downloaded a TXT and a Python-created PNG, then downloaded identical IDs/bytes after a native restart. This covers sandbox image files, **not native image-generation/service pointers**, Canvas, expired-file regeneration or complete media parity. These methods are lab-only: no Hub Results UI/download route has switched providers. Continue to use the existing authenticated Hub storage/streaming contracts when the supervised provider is admitted; do not expose signed URLs, this inspector or a generic fetch endpoint.
+
+### Supervised private reads and manual recovery
+
+Provision `/data/native-adapter` mode 0700 and `binding.json` mode 0600 with exactly `build`, `userId` and the previously verified `accountFingerprint`. This is an explicit binding, never automatic enrollment. The pinned image starts `supervisor.mjs` only when that file exists. Without it, startup retains the ordinary app. The supervisor launches the same official app with `--remote-debugging-pipe` and inherited fd 3/4. `pipe.mjs` selects exactly one guarded main renderer, bounds frames, binds reply/session IDs, cancels pending reads and detaches sessions. **No debugger TCP port exists.** App exit ends the supervisor/container; Docker's existing restart policy restores the runtime/profile. The inherited pipe is local implementation detail, never a browser API.
+
+`service.mjs` exposes only status, public history/models/sandbox files, and fixed manual-recovery coordination on `/data/native-adapter/adapter.sock` (0600 in the private directory). It requires the configured user, injects the bound account fingerprint itself, rejects unknown fields/methods and serializes reads. Sending, navigation, selection changes, Stop, arbitrary URLs/scripts and account rebinding are not exposed. The ordinary owner Codex app and existing GPT jobs remain independent.
+
+The recovery gateway acquires a durable UUID lease **before** connecting native VNC. Reads cannot start while any manual lease exists, and manual admission refuses an in-flight read. A clean tunnel close destroys the VNC connection before releasing that lease. Abrupt gateway loss leaves the lease on disk across adapter/container restarts. The native page's **Готово** action closes its native tunnels and explicitly resumes website control; it can clear abandoned leases without restarting the app or sending anything. Admission is blocked while resuming. This controls the protected gateway, not arbitrary host-administrator VNC access.
+
+The Hub's `NativeGptReadClient` verifies a same-UID private Unix socket, checks authorization before/after reads, validates response shapes and preserves message IDs/phases/paging. Sandbox links project to authenticated download URLs with the existing Results IDs; download bytes are independently checked for size and SHA-256. No production GPT cache, job queue or provider selection is changed. With `GPT_NATIVE_ADAPTER_SOCKET` configured, the protected original-owner gateway offers read canaries at `/gpt-connect/native/status`, `/gpt-connect/native/history/:id` and `/gpt-connect/native/downloads/:conversationId/:messageId/:id`. History/download responses recheck the live session before delivery. These are admission endpoints, not a replacement workspace UI.
+
+```sh
+pnpm exec tsc -b apps/hub --pretty false
+node --test tests/gpt-native-*.test.mjs tests/gpt-recovery-tunnel.test.mjs tests/team-isolation.test.mjs
+# Run the browser check in the repository-pinned Playwright image:
+node tests/gpt-native-remote.browser.mjs
+```
+
+For rollback, retain the previous stopped container/image, stopped-profile archive and gateway drop-in. Never run two native containers on the same profile. Restore the prior recovery gateway first; stop the new native container before restoring the old image/startup. Binding removal disables the supervised reader on subsequent startup, so keep the gateway socket configuration and native startup in sync. No engine database restoration or send replay is part of this rollback.

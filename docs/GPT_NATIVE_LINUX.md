@@ -1,6 +1,6 @@
 # Linux ChatGPT evaluation — #193
 
-Date: 2026-09-19. **Isolated evaluation, not a production provider migration.** The owner has signed in. Consumer GPT catalog/history, direct follow-ups, live native UI observation and text/image input are proven; the full web provider and decision gate remain open.
+Date: 2026-09-19. **Supervised read canary installed; main GPT provider not migrated.** Native catalog/history, disposable writes/uploads and sandbox downloads are proven. The separate client now has a persistent private pipe adapter, protected Hub history/download projection and manual-Remote arbitration. Production send/queue admission and full provider parity remain open.
 
 ## Package and runtime
 
@@ -42,13 +42,13 @@ After removing the inspector and restarting, readback confirmed **four exact tes
 
 | Capability | Actual evidence | Remaining gap |
 | --- | --- | --- |
-| Consumer catalog / history | Real authenticated reads, native IDs, public user/agent messages | Larger history, branch fidelity and fresh live updates |
+| Consumer catalog / history | Real authenticated canonical reads, native IDs, public messages and bounded Hub projection | Long-chat benchmarking, complete media fidelity and live streaming |
 | Existing Chat follow-up | Real IPC send, 4.37-second live UI observation and exact canonical prompt/answer, no replay | Native streaming, stop and durable provider integration |
 | Ordinary Chat creation | Typed disposable composer creates a real consumer Chat, reconciles canonical ID and exact first prompt | Production receipt integration, project association and new-chat model selection remain |
 | Model / effort | Native catalog/picker adapter, one real send confirms model and effort, restart readback | Reapply version/preset at send time; atomic dispatch guard and full Hub integration remain |
-| Attachments / generated media | Typed lab composer sends hash-checked synthetic TXT/PNG; answer and restart readback confirm delivery | Lab files are bounded to 1 MiB; production upload lifecycle, generated media and Results resolution remain |
+| Attachments / generated media | Typed TXT/PNG upload; generated sandbox TXT/PNG download through native host and Hub with exact IDs/checksums | 1 MiB lab bound; native image-generation pointers, larger streams and primary Results integration remain |
 | Projects, branches, Canvas, schedules | Some related tool/UI surfaces exist | No complete parity proof; preserve current capabilities through migration |
-| Account / recovery | Owner login and protected view work; container restart preserves login and all four exact test turns | Host reboot, reauthentication and sustained-use acceptance |
+| Account / recovery | Owner login, private pipe, protected trackpad recovery and durable manual leases; restart preserves both disposable chats | Host reboot, reauthentication and sustained-use acceptance |
 | Team | Native lab denies other users | Per-member native provisioning, lifecycle and backup admission remain unimplemented |
 
 `ops/gpt-native/ipc.mjs` / `probe.mjs` are a build-gated **read-only research interface**, not an HTTP provider. Requests have bounded frames, exact response IDs, timeouts and no automatic retries. The disposable write proof was a one-off private receipt-guarded lab script; the web client cannot invoke arbitrary tools or send through this spike.
@@ -123,6 +123,24 @@ Sixty-eight focused Linux tests passed, including public-only link parsing, exac
 
 This is an implemented lab download slice, **not a deployed Results integration or provider cutover**. Native service image pointers, larger streaming downloads, project media, supervised private transport and the existing Hub's queue/storage/projection admission remain open. The next bounded stage should establish supervised private transport and serialize manual recovery against adapter operations, retaining the old provider and all uncertain receipts.
 
+## Supervised read adapter, Hub projection and Remote arbitration (2026-09-19)
+
+The separate native runtime now starts a supervised **read-only** adapter from the pinned `codex-web-gpt-native:26.915.31945-reader` image. Its manifest digest is `sha256:5a760a02ad0944f930d4f1472111d9f387033cedde947cc7ef5c76776db77adf`. The official application inherits fd 3/4 for Chromium's debugging pipe; there is no temporary inspector and no debugger TCP listener. `pipe.mjs` bounds frames, validates session/reply IDs, selects exactly one guarded main renderer, cancels reads and detaches sessions. Actual native canonical history and sandbox downloads passed through this transport. The container retains private display/VNC, no published ports, resource limits, profile isolation and the existing restart policy. `--no-sandbox` remains the previously documented container-spike limitation; this stage does not silently approve main-provider production admission.
+
+An explicit private `binding.json` pins the evaluated build, original owner ID and previously verified account fingerprint. The adapter never enrolls a user automatically or rebinds after an account change. `service.mjs` listens only on a mode-0600 Unix socket inside a mode-0700 directory shared through the existing private state mount. Its fixed request allowlist covers status, public read operations and manual-control coordination. Caller-supplied credentials, fingerprints, arbitrary URLs, scripts, tools and mutations are rejected. All native sends, Stop and UI selection changes remain outside this service. The production `GptService` and durable queues are unchanged.
+
+Opening the protected native Remote first acquires a durable lease; in-flight reads refuse takeover, and active leases block adapter reads. Multiple manual tabs hold separate leases. Closing a tunnel destroys its VNC transport before releasing that lease. A crashed gateway cannot make a timeout silently restore automated access: leases survive supervisor/container restart. The native page adds **Готово**, which closes native tunnels and explicitly returns control to the website. It also clears abandoned leases after a crash. New Remote admission is blocked during that operation, and the POST requires the active original-owner session and exact Origin. This is coordination of the protected gateway, not a claim to control arbitrary host-admin access to the private desktop.
+
+`apps/hub/src/gpt-native.ts` validates the same-UID private socket and typed responses, checks authorization before/after calls, and maps public native message IDs, phases, timestamps and page cursors into the existing Hub history shape. Sandbox files retain the existing Results IDs. Binary downloads independently verify exact conversation/message/artifact identity, byte length and SHA-256, before emitting a private response. There is no token/signed-URL export, automatic retry, cache replacement or job migration. Unresolved structured media remains explicitly unsupported.
+
+The staged recovery gateway imports this Hub client and exposes an original-owner-only read namespace: `/gpt-connect/native/status`, `/gpt-connect/native/history/:id` and `/gpt-connect/native/downloads/:conversationId/:messageId/:id`. History/download delivery rechecks the live session. The ordinary GPT workspace has **not** switched to these canary endpoints. This provides an authenticated integration boundary for the next provider stage without letting old queued/unknown sends reach a new writer.
+
+Verification passed **111 Linux tests**, including the native adapter suite and complete team-isolation suite. Tests cover pipe fragmentation/session binding/disconnect/cancellation, exact private ownership and socket permissions, read/manual exclusion, multi-tab leases, restart persistence, explicit recovery, revocation, checksum failures, denied methods, cross-user HTTP access and Origin rejection. Chromium and WebKit passed the shared phone trackpad/zoom/reconnect flow and the new Done/return action. Physical phone acceptance remains the owner's usage check.
+
+Real Hub reads returned 18 public messages from the original disposable chat and downloaded both generated fixtures with their previous IDs/hashes. A diagnostic manual lease was persisted, the native container restarted, and a new Hub process verified that reads stayed blocked until explicitly releasing that lease. History and identical bytes then read successfully again. No prompt or VNC input was sent during this stage; previous native receipts/chats remain intact.
+
+Installation saved a private stopped-profile archive `backups/native-before-reader.tar`, retained the old native container stopped with restart disabled, and retained the prior recovery-service drop-in at `gateway-backup/before-native-reader.conf`. The new native image and `gateway-native-reader` recovery service are installed. Original main engine/gateway/old-browser IDs and start times remain unchanged. Host-boot acceptance, sustained-use benchmarking and member provisioning are still unverified. Rollback must restore the prior recovery configuration and native startup together, with only one container allowed to own the profile; it never restores/replays production send jobs.
+
 ## Phone recovery fixes
 
 `/gpt-connect?runtime=native` opens the protected original-owner lab. Plain `/gpt-connect` remains the old browser. This does not switch the main GPT provider, replay pending work or change a chat's identity.
@@ -154,9 +172,9 @@ The evidence favors a **typed native service/UI provider with canonical reconcil
 
 The next bounded implementation gates are:
 
-1. Extend the implemented version/account/chat-gated lab reader into a supervised private adapter. Resolve in-memory navigation identity before enabling web writes; sidebar titles alone are insufficient. Preserve native message IDs through fresh output and canonical reconciliation.
-2. Prove creation, model/effort, stop, files/generated media and reference resolution; preserve partial public messages and unknown sends across reconnect. Expose no generic evaluation/UI-control API to the browser.
-3. Compare a long-chat workload and restart recovery with the existing connector; verify host boot supervision and per-member provisioning. Only then stage a reversible provider switch against the existing Hub projection and durable jobs.
+1. Extend the installed supervised read boundary into production send/creation admission using the existing Hub durable jobs. Bind account, exact chat, model/effort, attachments and dispatch intention atomically; retain manual-recovery exclusion and unknown outcomes without replay. Existing disposable writers are not a production queue.
+2. Complete public streaming/reconciliation, native image-generation pointers, project/catalog/reference parity and larger file transport, preserving partial public messages and source IDs. The proven sandbox read canary is not complete Results/media coverage.
+3. Compare a long-chat workload and restart recovery with the existing connector; verify host boot supervision and per-member provisioning. Only then stage a reversible primary provider switch. No generic evaluation/UI-control API may reach the browser.
 
 Reuse the existing Hub provider-facing types, durable serialized operations, source IDs and local history projection. A provider switch must retain draft associations, Results backlinks, projects and unknown receipts. Unknown old sends stay unknown until canonical reconciliation; migration never authorizes replay. Introduce no account-token extraction or native fallback across users.
 

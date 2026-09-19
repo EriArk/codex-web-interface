@@ -20,5 +20,9 @@ openbox >/data/logs/window-manager.log 2>&1 &
 x11vnc -display "$DISPLAY" -forever -shared -rfbport 5900 \
   -rfbauth /data/vnc-auth -noxdamage -quiet >/data/logs/vnc.log 2>&1 &
 # Container isolation is the sandbox boundary for this non-production spike.
-# Do not enable a debugger listener or reuse an authenticated browser profile.
-chatgpt --no-sandbox --disable-gpu >/data/logs/app.log 2>&1
+# An explicitly provisioned read adapter owns an inherited pipe, never a listener.
+if [ -f /data/native-adapter/binding.json ]; then
+  node /opt/native/adapter/supervisor.mjs >/data/logs/adapter.log 2>&1
+else
+  chatgpt --no-sandbox --disable-gpu >/data/logs/app.log 2>&1
+fi

@@ -7,6 +7,7 @@ RUN echo "${APP_SHA256}  /tmp/chatgpt.deb" | sha256sum -c - && \
       dbus-x11 x11vnc openbox x11-utils xterm && \
     rm /tmp/chatgpt.deb && rm -rf /var/lib/apt/lists/*
 COPY start.sh entrypoint.sh auth-browser.sh configure-browser.sh /opt/native/
+COPY *.mjs /opt/native/adapter/
 COPY auth-browser.desktop /usr/share/applications/auth-browser.desktop
 RUN chmod 755 /opt/native/*.sh
 ENV HOME=/data DISPLAY=:92 XDG_RUNTIME_DIR=/data/run

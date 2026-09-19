@@ -8,6 +8,15 @@ if(new URLSearchParams(location.search).get('immersive')==='1'){
 }
 const G=window.Guacamole,surface=document.querySelector('#surface'),host=document.querySelector('#display'),status=document.querySelector('#status'),sink=document.querySelector('#sink');
 const nativeRuntime=document.querySelector('meta[name="codex-runtime"]')?.content==='native';
+if(nativeRuntime&&document.querySelector('meta[name="codex-native-adapter"]')){
+ const done=document.createElement('button');done.type='button';done.textContent='Готово';done.setAttribute('aria-label','Закрыть Remote и вернуть управление сайту');
+ done.onclick=async()=>{
+  done.disabled=true;remoteInput?.dispose();keyboard?.reset();client?.disconnect();
+  try{const response=await fetch('/gpt-connect/native/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(!response.ok)throw Error();location.assign('/');}
+  catch{text('Не удалось вернуть управление. Подожди немного и нажми «Готово» ещё раз.');done.disabled=false;}
+ };
+ document.querySelector('footer').append(done);
+}
 let client,keyboard,mouse,touch,remoteInput;
 let nativeZoom=.8,nativePointer;
 if(nativeRuntime){

@@ -43,6 +43,7 @@ async function evaluate(url, expression, signal) {
 
 /** Loopback-only lab transport. No HTTP server, generic action or send API. */
 export class NativeRendererReader {
+ constructor({transport}={}) { this.transport=transport; }
  async listArtifacts({conversationId,accountFingerprint,before},options){return this.#read({operation:'listArtifacts',conversationId,accountFingerprint,before},options,'artifacts');}
  async readArtifact({conversationId,accountFingerprint,messageId,artifactId},options){return this.#read({operation:'readArtifact',conversationId,accountFingerprint,messageId,artifactId},options,'artifacts');}
  async disposableComposer({operation,key,accountFingerprint,disposable,text,files,intentPersisted},options){
@@ -72,6 +73,10 @@ export class NativeRendererReader {
   const deadline = AbortSignal.timeout(20000);
   const signal = callerSignal ? AbortSignal.any([callerSignal, deadline]) : deadline;
   try {
+   const call = control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
+   const expression = `(async()=>{try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
+   const unwrap=result=>{if(result?.ok!==true)throw Error(/^NATIVE_[A-Z_]+$/.test(result?.code??'')?result.code:'NATIVE_INVALID_RESPONSE');return result.value;};
+   if(this.transport)return unwrap(await this.transport.evaluateMain(expression,guard,signal));
    const response = await fetch(`${endpoint}/json/list`, {signal, redirect:'error'});
    if (!response.ok) throw Error('NATIVE_UNAVAILABLE');
    // Stream and bound discovery too; do not trust an unbounded response.json().
@@ -87,11 +92,8 @@ export class NativeRendererReader {
     if (await evaluate(page.webSocketDebuggerUrl, guard, signal) === true) matches.push(page);
    }
    if (matches.length !== 1) throw Error('NATIVE_WINDOW_AMBIGUOUS');
-   const call = control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
-   const expression = `(async()=>{try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
    const result = await evaluate(matches[0].webSocketDebuggerUrl, expression, signal);
-   if (result?.ok !== true) throw Error(/^NATIVE_[A-Z_]+$/.test(result?.code ?? '') ? result.code : 'NATIVE_INVALID_RESPONSE');
-   return result.value;
+   return unwrap(result);
   } catch (error) {
    if (signal.aborted) throw Error(callerSignal?.aborted ? 'NATIVE_CANCELLED' : 'NATIVE_TIMEOUT');
    throw Error(/^NATIVE_[A-Z_]+$/.test(error?.message ?? '') ? error.message : 'NATIVE_UNAVAILABLE');

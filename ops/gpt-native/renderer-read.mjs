@@ -100,6 +100,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   bytes += new TextEncoder().encode(text).length;
   if (bytes > 1024 * 1024) fail('HISTORY_TOO_LARGE');
   messages.push({nodeId:node.id, id:message.id, role, channel:message.channel ?? 'final', text, hasAttachments,
+   createdAt:typeof message.create_time==='number'&&Number.isFinite(message.create_time)&&message.create_time>=0 ? message.create_time : 0,
    model:typeof message.metadata?.model_slug === 'string' && message.metadata.model_slug.length <= 128 ? message.metadata.model_slug : null,
    effort:typeof message.metadata?.thinking_effort === 'string' && message.metadata.thinking_effort.length <= 128 ? message.metadata.thinking_effort : null,
    complete:message.status === 'finished_successfully'});
