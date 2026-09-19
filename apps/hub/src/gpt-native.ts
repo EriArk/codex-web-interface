@@ -118,7 +118,7 @@ export class NativeGptReadClient {
     this.authorize();
     const result = await new Promise<unknown>((resolve, reject) => {
       const signal = AbortSignal.timeout(
-        input.operation === "uploadStoredFile"
+        ["uploadStoredFile", "projectMutation"].includes(String(input.operation))
           ? 16 * 60000
           : input.operation === "uploadFile"
             ? 100000
@@ -173,6 +173,65 @@ export class NativeGptReadClient {
     });
     this.authorize();
     return result;
+  }
+  async createProject(key: string, name: string) {
+    uuid.parse(key);
+    z.string().trim().min(1).max(120).parse(name);
+    return z
+      .object({ projectId: projectId.nullable(), rejected: z.boolean().optional() })
+      .strict()
+      .parse(await this.call({ operation: "createProject", key, name }));
+  }
+  async projectContent(id: string) {
+    projectId.parse(id);
+    return projectSchema
+      .omit({ conversations: true })
+      .extend({ revision: digest })
+      .strict()
+      .parse(await this.call({ operation: "inspectProject", projectId: id }));
+  }
+  async projectMutation(input: NativeProjectMutation, path?: string) {
+    uuid.parse(input.key);
+    projectId.parse(input.projectId);
+    digest.parse(input.revision);
+    if (input.action === "upload") {
+      if (!path || !isAbsolute(path)) fail("INVALID_UPLOAD");
+      uuid.parse(input.file.id);
+      digest.parse(input.file.sha256);
+      let offset = 0;
+      for await (const chunk of createReadStream(path!, { highWaterMark: 1024 * 1024 })) {
+        this.authorize();
+        const bytes = chunk as Buffer;
+        const result = z
+          .object({ offset: z.number().int().nonnegative() })
+          .strict()
+          .parse(
+            await this.call({
+              operation: "stageProjectUpload",
+              key: input.key,
+              projectId: input.projectId,
+              file: input.file,
+              offset,
+              base64: bytes.toString("base64"),
+            }),
+          );
+        offset += bytes.length;
+        if (result.offset < offset || result.offset > input.file.bytes) fail("UPLOAD_CHANGED");
+      }
+      if (offset !== input.file.bytes) fail("UPLOAD_CHANGED");
+    }
+    return z
+      .object({ state: z.enum(["completed", "unknown", "rejected"]) })
+      .strict()
+      .parse(await this.call({ operation: "projectMutation", ...input }));
+  }
+  async reconcileProject(key: string, id: string) {
+    uuid.parse(key);
+    projectId.parse(id);
+    return z
+      .object({ state: z.enum(["completed", "unknown", "rejected"]) })
+      .strict()
+      .parse(await this.call({ operation: "reconcileProject", key, projectId: id }));
   }
   async libraryMutation(
     input: { key: string; kind: "thread" | "project"; id: string } & (
@@ -648,3 +707,12 @@ const nativeUploadedFile = z
   })
   .strict();
 export type NativeUploadedFile = z.infer<typeof nativeUploadedFile>;
+
+export type NativeProjectMutation = { key: string; projectId: string; revision: string } & (
+  | { action: "instructions"; text: string }
+  | { action: "remove"; fileId: string; confirm: true }
+  | {
+      action: "upload";
+      file: { id: string; name: string; mime: string; bytes: number; sha256: string };
+    }
+);

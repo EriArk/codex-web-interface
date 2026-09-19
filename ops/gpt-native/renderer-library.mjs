@@ -18,8 +18,16 @@ export async function nativeLibrary(r, read, load=()=>import('app://-/assets/app
  };
  const fetchFixed=async(method,route,options={})=>{
   const principal=await account(),{url,headers}=m.kWt.getRequestTarget(route,options);let attempts=0;
-  const response=await m.$rn.getInstance().fetch(url,{method,headers,body:method==='GET'?undefined:m.kWt.getRequestBody(options),signal,retry:false,
+  let response;try{response=await m.$rn.getInstance().fetch(url,{method,headers,body:method==='GET'?undefined:m.kWt.getRequestBody(options),signal,retry:false,
    expectedIdentity:principal,assertRequestCurrent:()=>{if(signal.aborted||attempts++!==0)fail('LIBRARY_REPLAY_BLOCKED');}});
+  }catch(error){
+   // The pinned native transport throws on non-2xx responses. Only an actual
+   // explicit HTTP rejection is terminal; timeouts/transport failures stay unknown.
+   if(!signal.aborted&&[400,403,404,409,422].includes(error?.responseStatus)&&error.status===error.responseStatus){
+    await account();return {ok:false,status:error.responseStatus,body:null};
+   }
+   throw error;
+  }
   await account();return response;
  };
  const metadata=async()=>{

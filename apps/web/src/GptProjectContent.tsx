@@ -40,6 +40,8 @@ export function GptProjectContent({
     }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [capabilities, setCapabilities] = useState({ manualReview: true, download: true });
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [baseRevision, setBaseRevision] = useState(
     () => localStorage.getItem(key + ":revision") ?? "",
   );
@@ -47,15 +49,19 @@ export function GptProjectContent({
     alive = useRef(true),
     editing = useRef(localStorage.getItem(key) !== null),
     sending = useRef(false),
+    nextPoll = useRef(0),
     input = useRef<HTMLInputElement>(null);
   const refresh = useCallback(
     async (rebase = false) => {
-      const result = await api<{ project: GptNativeProject; operations: GptProjectOperation[] }>(
-        `/gpt/projects/${encodeURIComponent(projectId)}/content`,
-      );
+      const result = await api<{
+        project: GptNativeProject;
+        operations: GptProjectOperation[];
+        capabilities?: { manualReview: boolean; download: boolean };
+      }>(`/gpt/projects/${encodeURIComponent(projectId)}/content`);
       if (!alive.current) return;
       setError("");
       setProject(result.project);
+      setCapabilities(result.capabilities ?? { manualReview: true, download: true });
       setOperations(result.operations);
       if (rebase) {
         setBaseRevision(result.project.revision);
@@ -81,7 +87,9 @@ export function GptProjectContent({
           setText(result.project.instructions);
         }
       }
-      return result.operations.some(pending);
+      const active = result.operations.some(pending);
+      nextPoll.current = Date.now() + (active ? 2500 : 30000);
+      return active;
     },
     [projectId, key, receiptKey],
   );
@@ -90,14 +98,13 @@ export function GptProjectContent({
     const focus = document.activeElement as HTMLElement | null;
     dialog.current?.showModal();
     dialog.current?.focus({ preventScroll: true });
-    let loading = false,
-      nextPoll = 0;
+    let loading = false;
+    nextPoll.current = 0;
     const poll = async () => {
-      if (loading || document.hidden || Date.now() < nextPoll) return;
+      if (loading || document.hidden || Date.now() < nextPoll.current) return;
       loading = true;
       try {
-        const active = await refresh();
-        nextPoll = Date.now() + (active ? 2500 : 30000);
+        await refresh();
       } catch (e) {
         if (alive.current) setError(messageOf(e));
       } finally {
@@ -136,7 +143,10 @@ export function GptProjectContent({
       await refresh().catch(() => {});
     } finally {
       sending.current = false;
-      if (alive.current) setBusy(false);
+      if (alive.current) {
+        setBusy(false);
+        setUploadProgress(null);
+      }
     }
   };
   const upload = async (file: File) => {
@@ -145,7 +155,9 @@ export function GptProjectContent({
     setBusy(true);
     setError("");
     try {
-      const result = await uploadFile<{ id: string }>(file, { kind: "gpt" });
+      const result = await uploadFile<{ id: string }>(file, { kind: "gpt" }, (bytes, total) => {
+        if (alive.current) setUploadProgress(Math.round((bytes / total) * 100));
+      });
       if (alive.current) {
         sending.current = false;
         await submit({
@@ -159,7 +171,10 @@ export function GptProjectContent({
       if (alive.current) setError(messageOf(e));
     } finally {
       sending.current = false;
-      if (alive.current) setBusy(false);
+      if (alive.current) {
+        setBusy(false);
+        setUploadProgress(null);
+      }
     }
   };
   const check = async (op: GptProjectOperation, checked = false) => {
@@ -259,15 +274,23 @@ export function GptProjectContent({
               </button>
             </div>
             <h3>Файлы · {project.files.length}</h3>
+            {uploadProgress !== null && <p role="status">Загрузка файла: {uploadProgress}%</p>}
+            {!capabilities.download && project.files.length > 0 && (
+              <p>Скачать источники пока можно в самом ChatGPT.</p>
+            )}
             {!project.files.length && <p>В проекте пока нет файлов.</p>}
             {project.files.map((file) => (
               <div className="gpt-project-file" key={file.id}>
-                <DownloadLink
-                  href={`/api/gpt/projects/${projectId}/files/${file.id}`}
-                  name={file.name}
-                >
-                  {file.name}
-                </DownloadLink>
+                {capabilities.download ? (
+                  <DownloadLink
+                    href={`/api/gpt/projects/${projectId}/files/${file.id}`}
+                    name={file.name}
+                  >
+                    {file.name}
+                  </DownloadLink>
+                ) : (
+                  <span>{file.name}</span>
+                )}
                 <small>
                   {file.bytes === null ? "Размер неизвестен" : `${Math.ceil(file.bytes / 1024)} КБ`}
                 </small>
@@ -344,21 +367,23 @@ export function GptProjectContent({
                   >
                     Проверить результат
                   </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Ты проверил проект в ChatGPT? Действие не будет отправлено повторно.",
+                  {capabilities.manualReview && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Ты проверил проект в ChatGPT? Действие не будет отправлено повторно.",
+                          )
                         )
-                      )
-                        void check(op, true);
-                    }}
-                  >
-                    Проверено вручную
-                  </button>
+                          void check(op, true);
+                      }}
+                    >
+                      Проверено вручную
+                    </button>
+                  )}
                 </>
               )}
             </div>

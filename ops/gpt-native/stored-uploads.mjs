@@ -10,8 +10,8 @@ export class NativeStoredUploads {
  path(r){if(!uuid(r.key)||!uuid(r.file?.id))fail('INVALID_UPLOAD');return join(this.root,r.key+'-'+r.file.id);}
  metadata(r){
   const f=r.file;
-  if(!f||typeof f.name!=='string'||!f.name||f.name.length>255||/[\\/\x00-\x1f]/.test(f.name)||!Number.isSafeInteger(f.bytes)||f.bytes<1||f.bytes>512*1024**2||!/^[a-f0-9]{64}$/.test(f.sha256??'')||!/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i.test(f.mime)||f.mime.startsWith('image/'))fail('INVALID_UPLOAD');
-  return {conversationId:r.conversationId,accountFingerprint:r.accountFingerprint,id:f.id,name:f.name,bytes:f.bytes,mime:f.mime,sha256:f.sha256};
+  if(!f||typeof f.name!=='string'||!f.name||f.name.length>255||/[\\/\x00-\x1f]/.test(f.name)||!Number.isSafeInteger(f.bytes)||f.bytes<1||f.bytes>512*1024**2||!/^[a-f0-9]{64}$/.test(f.sha256??'')||!/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i.test(f.mime)||(f.mime.startsWith('image/')&&(!r.projectId||f.bytes>20*1024**2)))fail('INVALID_UPLOAD');
+  return {...(r.projectId?{projectId:r.projectId}:{conversationId:r.conversationId}),accountFingerprint:r.accountFingerprint,id:f.id,name:f.name,bytes:f.bytes,mime:f.mime,sha256:f.sha256};
  }
  async append(r){
   const path=this.path(r),meta=this.metadata(r),signature=JSON.stringify(meta);

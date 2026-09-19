@@ -32,6 +32,7 @@ import { GptHistoryDisk } from "./gpt-history-disk.js";
 import { gptLinkedText } from "./gpt-links.js";
 import { NativeGptJobs } from "./gpt-native-jobs.js";
 import { NativeGptLibrary } from "./gpt-native-library.js";
+import { nativeProjectTransport } from "./gpt-native-project.js";
 import { NativeGptProvider, type NativeGptWorkspace } from "./gpt-native-provider.js";
 import { GptOperations, gptOperationInput } from "./gpt-operations.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
@@ -246,6 +247,7 @@ export class GptService {
         !this.stopped &&
         !this.working &&
         !this.libraryBusy &&
+        !this.nativeLibrary?.blocked() &&
         !this.modelsPending &&
         !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
       (id) => {
@@ -261,16 +263,28 @@ export class GptService {
         !this.stopped &&
         !this.working &&
         !this.libraryBusy &&
+        !this.nativeLibrary?.blocked() &&
         !this.modelsPending &&
         !this.operations.blocked() &&
         !this.workspaceWork?.blocked() &&
         !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
       (id) => {
         const file = this.upload(id);
+        if (this.native) return file;
         this.assertLegacyUpload(file);
         return { ...file, base64: readFileSync(join(this.root, id)).toString("base64") };
       },
       this.lifetime.signal,
+      nativeWorkspace
+        ? nativeProjectTransport(
+            nativeWorkspace,
+            (id) => ({ ...this.upload(id), path: join(this.root, id) }),
+            () => {
+              authorize();
+              if (this.stopped) throw Error("NATIVE_STOPPED");
+            },
+          )
+        : undefined,
     );
     this.workspaceWork = new GptWorkspaceWork(
       store,
@@ -279,6 +293,7 @@ export class GptService {
         !this.stopped &&
         !this.working &&
         !this.libraryBusy &&
+        !this.nativeLibrary?.blocked() &&
         !this.modelsPending &&
         !this.operations.blocked() &&
         !this.projectContent.blocked() &&
@@ -1572,6 +1587,7 @@ export function registerGpt(
     return {
       project: await service.projectContent.read(p.id),
       operations: service.projectContent.list(p.id),
+      capabilities: service.projectContent.capabilities(),
     };
   });
   app.get("/api/gpt/project-operations", async () => ({

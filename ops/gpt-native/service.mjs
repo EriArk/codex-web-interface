@@ -42,6 +42,10 @@ export class NativeReadService {
   async request(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || input.userId !== this.userId) fail('WRONG_OWNER');
     const canaryFields = this.canary ? {
+      createProject: ['key','name'],
+      projectMutation: ['key','projectId','revision','action','text','fileId','confirm','file'],
+      stageProjectUpload: ['key','projectId','file','offset','base64'],
+      reconcileProject: ['key','projectId'],
       libraryMutation: ['key','kind','id','action','name','value','confirm'],
       reconcileLibrary: ['key','kind','id','action','name','value','confirm'],
       uploadFile: ['key','conversationId','file'],
@@ -55,7 +59,7 @@ export class NativeReadService {
     const fields = {
       ...canaryFields,
       status: [], beginManual: ['leaseId'], endManual: ['leaseId'], resumeManual: [],
-      readModels: [], readPins: [], readConversationGraph:['conversationId'], readProjects:['cursor'], readProject:['projectId'], readProjectConversations:['projectId','cursor'], readCatalog:['offset','archived'], readConversation: ['conversationId', 'before'],
+      inspectProject: ['projectId'], readModels: [], readPins: [], readConversationGraph:['conversationId'], readProjects:['cursor'], readProject:['projectId'], readProjectConversations:['projectId','cursor'], readCatalog:['offset','archived'], readConversation: ['conversationId', 'before'],
       listArtifacts: ['conversationId', 'before'], readArtifact: ['conversationId', 'messageId', 'artifactId'],
     }[input.operation];
     if (!Array.isArray(fields) || Object.keys(input).some(k => !['userId', 'operation', ...fields].includes(k))) fail('INVALID_REQUEST');
@@ -79,6 +83,10 @@ export class NativeReadService {
       const { operation, userId: ignored, ...args } = input;
       const bound={...args,accountFingerprint:this.accountFingerprint};
       if(Object.hasOwn(canaryFields,operation)){
+        if(operation==='createProject'){const v=await this.projects.create(bound,this.reader);if(v.projectId)this.library.projects.add(v.projectId);return v;}
+        if(operation==='stageProjectUpload'){this.projects.admit(bound);if(this.canary.pending())fail('PENDING_DISPATCH');return await this.uploads.append(bound);}
+        if(operation==='projectMutation'){const v=await this.projects.execute(bound,this.reader,this.uploads,transferStoredUpload);if(v.state!=='unknown'&&bound.action==='upload')await this.uploads.clear(bound);return v;}
+        if(operation==='reconcileProject')return await this.projects.check(bound,this.reader);
         if(['libraryMutation','reconcileLibrary'].includes(operation)){if(!this.library)fail('INVALID_CANARY');return await this.library.run(bound,this.reader,operation==='reconcileLibrary');}
         if(operation==='stageUpload'){this.canary.admitUpload(bound);if(this.canary.pending())fail('PENDING_DISPATCH');return await this.uploads.append(bound);}
         if(operation==='uploadStoredFile'){

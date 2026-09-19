@@ -12,6 +12,9 @@ import type { NativeGptReadClient } from "./gpt-native.js";
 export interface NativeGptWorkspace {
   client: Pick<
     NativeGptReadClient,
+    | "projectContent"
+    | "projectMutation"
+    | "reconcileProject"
     | "libraryMutation"
     | "status"
     | "models"
@@ -28,6 +31,7 @@ export interface NativeGptWorkspace {
     | "uploadFile"
     | "uploadFilePath"
   >;
+  projects?: ReadonlySet<string>;
   conversations: ReadonlySet<string>;
   creationKeys: ReadonlySet<string>;
 }

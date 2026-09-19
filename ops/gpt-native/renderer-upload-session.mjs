@@ -1,8 +1,9 @@
 // Fixed native authenticated entry/processing. The private supervisor streams the
 // signed storage capability; it is never returned to the Hub/browser or logged.
 export async function nativeStoredUpload(request,read,load=()=>import('app://-/assets/app-initial-430deae5a13a.js'),runtime=globalThis){
- const fail=c=>{throw Error(`NATIVE_${c}`);},f=request.file;
- if(!['prepareStoredUpload','finishStoredUpload'].includes(request.operation)||!f||typeof f.name!=='string'||!f.name||f.name.length>255||/[\\/\x00-\x1f]/.test(f.name)||!Number.isSafeInteger(f.bytes)||f.bytes<1||f.bytes>512*1024**2||!/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i.test(f.mime)||f.mime.startsWith('image/'))fail('INVALID_UPLOAD');
+ const fail=c=>{throw Error(`NATIVE_${c}`);},f=request.file,rProject=request.projectId;
+ if(rProject!=null&&!/^g-p-[a-zA-Z0-9-]{1,80}$/.test(rProject))fail('INVALID_PROJECT');
+ if(!['prepareStoredUpload','finishStoredUpload'].includes(request.operation)||!f||typeof f.name!=='string'||!f.name||f.name.length>255||/[\\/\x00-\x1f]/.test(f.name)||!Number.isSafeInteger(f.bytes)||f.bytes<1||f.bytes>512*1024**2||!/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i.test(f.mime)||(f.mime.startsWith('image/')&&(!rProject||f.bytes>20*1024**2)))fail('INVALID_UPLOAD');
  if((await read({operation:'inspectAccount'})).accountFingerprint!==request.accountFingerprint)fail('ACCOUNT_MISMATCH');
  const m=await load(),signal=AbortSignal.timeout(60000);
  const account=async()=>{
@@ -14,10 +15,10 @@ export async function nativeStoredUpload(request,read,load=()=>import('app://-/a
  const principal=await account();let attempts=0;
  const options={expectedIdentity:principal,signal,retry:false,assertRequestCurrent:()=>{if(signal.aborted||attempts++!==0)fail('UPLOAD_REPLAY_BLOCKED');}};
  let response;
- if(request.operation==='prepareStoredUpload')response=await m.kWt.postResponse('/files',{...options,requestBody:{entry_surface:'chat_composer',file_name:f.name,file_size:f.bytes,mime_type:f.mime,reset_rate_limits:false,timezone_offset_min:0,use_case:'my_files'}});
+ if(request.operation==='prepareStoredUpload')response=await m.kWt.postResponse('/files',{...options,requestBody:{...(rProject?{gizmo_id:rProject}:{entry_surface:'chat_composer'}),file_name:f.name,file_size:f.bytes,mime_type:f.mime,reset_rate_limits:false,timezone_offset_min:0,use_case:rProject?'gizmo':'my_files'}});
  else {
   if(!/^file[-_][a-zA-Z0-9_-]{1,150}$/.test(request.nativeId??''))fail('INVALID_UPLOAD');
-  response=await m.kWt.postResponse('/files/process_upload_stream',{...options,requestBody:{entry_surface:'chat_composer',file_id:request.nativeId,file_name:f.name,mime_type:f.mime,use_case:'my_files',index_for_retrieval:true,library_persistence_mode:'opportunistic',metadata:{store_in_library:false}}});
+  response=await m.kWt.postResponse('/files/process_upload_stream',{...options,requestBody:{entry_surface:rProject?'project_sources':'chat_composer',file_id:request.nativeId,file_name:f.name,mime_type:f.mime,use_case:rProject?'gizmo':'my_files',index_for_retrieval:true,...(rProject?{gizmo_id:rProject}:{library_persistence_mode:'opportunistic',metadata:{store_in_library:false}})}});
  }
  if(!response.ok||!response.body)fail('UPLOAD_UNAVAILABLE');
  const reader=response.body.getReader();let bytes=0;const parts=[];
@@ -33,10 +34,12 @@ export async function nativeStoredUpload(request,read,load=()=>import('app://-/a
   if(Object.keys(headers).some(k=>!['content-type','x-ms-blob-type','x-ms-version','x-ms-blob-content-type'].includes(k.toLowerCase()))||Object.values(headers).some(v=>typeof v!=='string'||v.length>256||/[\r\n]/.test(v)))fail('UNSUPPORTED_UPLOAD_HEADERS');
   return {nativeId:v.file_id,url:u.href,headers};
  }
- let ready=false;for(const line of raw.split('\n').filter(l=>l.trim())){
+ let ready=false,libraryFileId=null,libraryFileName=null;for(const line of raw.split('\n').filter(l=>l.trim())){
   const e=JSON.parse(line);if(typeof e.event!=='string'||/\.(error|cancelled|failed|unknown)$/.test(e.event)||e.extra?.error_code)fail('UPLOAD_PROCESSING_FAILED');
   if(e.event==='file.processing.file_ready')ready=true;
+  if(rProject&&e.extra?.metadata_object_id!=null){if(!/^[a-zA-Z0-9_-]{1,150}$/.test(e.extra.metadata_object_id))fail('INVALID_UPLOAD_RESPONSE');libraryFileId=e.extra.metadata_object_id;}
+  if(rProject&&e.extra?.library_file_name!=null){if(typeof e.extra.library_file_name!=='string'||e.extra.library_file_name.length>255)fail('INVALID_UPLOAD_RESPONSE');libraryFileName=e.extra.library_file_name;}
  }
  if(!ready)fail('UPLOAD_NOT_READY');
- return {id:request.nativeId,name:f.name,mimeType:f.mime,size:f.bytes,source:'local'};
+ return {id:request.nativeId,name:libraryFileName??f.name,mimeType:f.mime,size:f.bytes,source:'local',...(rProject&&libraryFileId?{libraryFileId}:{})};
 }

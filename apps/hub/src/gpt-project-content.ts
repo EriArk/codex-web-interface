@@ -29,7 +29,13 @@ const projectSchema = z.object({
     )
     .max(500),
 });
-type Input = z.infer<typeof gptProjectInput>;
+export type GptProjectInput = z.infer<typeof gptProjectInput>;
+type Input = GptProjectInput;
+export interface NativeProjectTransport {
+  read(id: string): Promise<GptNativeProject>;
+  execute(key: string, input: Input): Promise<{ state: "completed" | "unknown" | "rejected" }>;
+  check(key: string, id: string): Promise<{ state: "completed" | "unknown" | "rejected" }>;
+}
 type Row = GptProjectOperation & { fingerprint: string; input: string; baseline: string | null };
 const fail = (code: string, text: string) => new HubError(409, code, text);
 export class GptProjectContent {
@@ -39,14 +45,24 @@ export class GptProjectContent {
     private store: Store,
     private json: (path: string, body?: unknown) => Promise<any>,
     private canStart: () => boolean,
-    private file: (id: string) => { id: string; name: string; bytes: number; base64: string },
+    private file: (id: string) => { id: string; name: string; bytes: number; base64?: string },
     private signal: AbortSignal,
+    private native?: NativeProjectTransport,
   ) {
+    store.db.exec(
+      "CREATE TABLE IF NOT EXISTS gpt_project_operation_providers(id TEXT PRIMARY KEY REFERENCES gpt_project_operations(id),provider TEXT NOT NULL)",
+    );
+    store.db.exec(
+      "INSERT OR IGNORE INTO gpt_project_operation_providers SELECT id,'browser' FROM gpt_project_operations",
+    );
     store.db
       .prepare(
         "UPDATE gpt_project_operations SET state='unknown',error='Подтверждение потеряно. Проверь проект.' WHERE state='pending'",
       )
       .run();
+  }
+  capabilities() {
+    return { manualReview: !this.native, download: !this.native };
   }
   blocked() {
     return (
@@ -79,6 +95,7 @@ export class GptProjectContent {
     );
   }
   async read(id: string): Promise<GptNativeProject> {
+    if (this.native) return projectSchema.parse(await this.native.read(projectId.parse(id)));
     return projectSchema.parse(
       await this.json("/project-content?id=" + encodeURIComponent(projectId.parse(id))),
     );
@@ -89,6 +106,17 @@ export class GptProjectContent {
       | undefined;
     if (!row) throw new HubError(404, "GPT_PROJECT_OPERATION_MISSING", "Действие не найдено.");
     return row;
+  }
+  private assertProvider(id: string) {
+    const provider =
+      this.store.db
+        .prepare("SELECT provider FROM gpt_project_operation_providers WHERE id=?")
+        .get(id)?.provider ?? "browser";
+    if (provider !== (this.native ? "native" : "browser"))
+      throw fail(
+        "GPT_OTHER_PROVIDER",
+        "Это действие относится к прежнему подключению. Проверь его там.",
+      );
   }
   private set(id: string, state: GptProjectOperation["state"], error = "") {
     this.store.db
@@ -101,6 +129,7 @@ export class GptProjectContent {
         .prepare("SELECT fingerprint FROM gpt_project_operations WHERE id=?")
         .get(id);
     if (old) {
+      this.assertProvider(id);
       if (old.fingerprint !== fingerprint)
         throw fail("IDEMPOTENCY_CONFLICT", "Это действие уже сохранено с другими данными.");
       return { id };
@@ -108,9 +137,19 @@ export class GptProjectContent {
     if (!this.canStart() || this.blocked())
       throw fail("GPT_BUSY", "Сначала заверши или проверь текущее действие GPT.");
     if (input.action === "upload") this.file(input.uploadId);
-    this.store.db
-      .prepare("INSERT INTO gpt_project_operations VALUES(?,?,?,'pending','',?,?,?,NULL)")
-      .run(id, input.projectId, input.action, Date.now(), fingerprint, JSON.stringify(input));
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.store.db
+        .prepare("INSERT INTO gpt_project_operations VALUES(?,?,?,'pending','',?,?,?,NULL)")
+        .run(id, input.projectId, input.action, Date.now(), fingerprint, JSON.stringify(input));
+      this.store.db
+        .prepare("INSERT INTO gpt_project_operation_providers VALUES(?,?)")
+        .run(id, this.native ? "native" : "browser");
+      this.store.db.exec("COMMIT");
+    } catch (e) {
+      this.store.db.exec("ROLLBACK");
+      throw e;
+    }
     this.runningId = id;
     this.work = this.run(id, input);
     return { id };
@@ -118,8 +157,10 @@ export class GptProjectContent {
   private async run(id: string, input: Input) {
     let dispatched = false;
     try {
-      const active = await this.json("/active");
-      if (active.generating || active.requestId) throw fail("GPT_BUSY", "ChatGPT сейчас занят.");
+      if (!this.native) {
+        const active = await this.json("/active");
+        if (active.generating || active.requestId) throw fail("GPT_BUSY", "ChatGPT сейчас занят.");
+      }
       const before = await this.read(input.projectId);
       if (!before.canWrite || before.revision !== input.revision)
         throw fail(
@@ -134,6 +175,19 @@ export class GptProjectContent {
       // Commit uncertainty before the connector can change native state. No mutation replay.
       this.set(id, "unknown", "Проверяем подтверждение ChatGPT.");
       dispatched = true;
+      if (this.native) {
+        const result = await this.native.execute(id, input);
+        this.set(
+          id,
+          result.state === "rejected" ? "failed" : result.state,
+          result.state === "unknown"
+            ? "Проверяем подтверждение ChatGPT; повторной загрузки не будет."
+            : result.state === "rejected"
+              ? "Проект изменился или действие отклонено. Обнови данные и попробуй снова."
+              : "",
+        );
+        return;
+      }
       const result = await this.json("/project-content", { ...input, ...(file ? { file } : {}) });
       if (result.dispatched === false) {
         dispatched = false;
@@ -178,6 +232,13 @@ export class GptProjectContent {
   async check(id: string, worker = false) {
     if (this.runningId === id && !worker) return false;
     const row = this.row(id);
+    this.assertProvider(id);
+    if (this.native && ["pending", "unknown"].includes(row.state)) {
+      const result = await this.native.check(id, row.projectId);
+      if (result.state === "completed") this.set(id, "completed");
+      else if (result.state === "rejected") this.set(id, "failed", "ChatGPT не применил действие.");
+      return result.state === "completed";
+    }
     if (row.state === "completed") return true;
     if (!["pending", "unknown"].includes(row.state) || !row.baseline) return false;
     const input = JSON.parse(row.input) as Input,
@@ -201,6 +262,11 @@ export class GptProjectContent {
     if (this.runningId === id) throw fail("GPT_PROJECT_PENDING", "Действие ещё выполняется.");
     if (await this.check(id)) return;
     const row = this.row(id);
+    if (this.native)
+      throw fail(
+        "GPT_NATIVE_RECONCILE",
+        "Новый клиент ещё не подтвердил результат. Нельзя сбросить неизвестную загрузку и повторить её.",
+      );
     if (row.state !== "unknown") throw fail("GPT_PROJECT_PENDING", "Действие ещё выполняется.");
     const active = await this.json("/active");
     if (active.generating || active.requestId) throw fail("GPT_BUSY", "ChatGPT сейчас занят.");
