@@ -3,6 +3,7 @@ import { closeSync, openSync, readFileSync } from 'node:fs';
 import { NativePipe } from './pipe.mjs';
 import { NativeRendererReader } from './renderer.mjs';
 import { listenNative, NativeReadService, privatePath } from './service.mjs';
+import { NativeDispatchReceipts } from './dispatch-receipts.mjs';
 
 process.umask(0o077);
 const root = '/data/native-adapter';
@@ -12,6 +13,13 @@ const binding = JSON.parse(readFileSync(`${root}/binding.json`, 'utf8'));
 if (binding.build !== '26.915.31945') throw Error('NATIVE_UNSUPPORTED_BUILD');
 if (Object.keys(binding).some(k => !['build', 'userId', 'accountFingerprint'].includes(k))) throw Error('NATIVE_INVALID_BINDING');
 const service = new NativeReadService({ reader: null, ...binding, statePath: `${root}/manual.json` });
+// Separate explicit allowlist, absent by default. Never enables a public send route.
+try {
+  privatePath(`${root}/canary.json`,'isFile');
+  const canary=JSON.parse(readFileSync(`${root}/canary.json`,'utf8'));
+  if(Object.keys(canary).length!==1||!Array.isArray(canary.conversationIds))throw Error('NATIVE_INVALID_CANARY');
+  service.canary=new NativeDispatchReceipts({...binding,...canary,path:`${root}/dispatch.sqlite`});
+}catch(error){if(error.code!=='ENOENT')throw error;}
 const log = openSync('/data/logs/app.log', 'a', 0o600);
 const child = spawn('/usr/bin/chatgpt', ['--no-sandbox', '--disable-gpu', '--remote-debugging-pipe'], {
   stdio: ['ignore', log, log, 'pipe', 'pipe'],

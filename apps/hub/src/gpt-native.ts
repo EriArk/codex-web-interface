@@ -41,7 +41,8 @@ const historySchema = z
   })
   .strict();
 
-/** Opt-in native read boundary. It never changes GptService jobs, cache or provider. */
+/** Private typed native transport. Dispatch requires the host's disposable-chat
+ * canary allowlist; this client never selects the main GptService provider. */
 export class NativeGptReadClient {
   constructor(
     private readonly binding: { socketPath: string; userId: string },
@@ -66,6 +67,7 @@ export class NativeGptReadClient {
       )
         fail("UNSAFE_SOCKET");
     }
+    this.authorize();
     const result = await new Promise<unknown>((resolve, reject) => {
       const signal = AbortSignal.timeout(25000);
       const req = request(
@@ -136,6 +138,54 @@ export class NativeGptReadClient {
       .object({ manual: z.boolean(), writesEnabled: z.literal(false) })
       .strict()
       .parse(await this.call({ operation, ...(leaseId ? { leaseId } : {}) }));
+  }
+  async prepareDispatch(input: NativeDispatchInput) {
+    nativeDispatchInput.parse(input);
+    return z
+      .object({
+        parentId: uuid,
+        model: z.string().max(128),
+        effort: z.string().max(128).nullable(),
+        versionId: z.string().max(128),
+        presetId: z.number().int(),
+      })
+      .strict()
+      .parse(await this.call({ operation: "prepareDispatch", ...input }));
+  }
+  async dispatchText(
+    input: NativeDispatchInput & {
+      parentId: string;
+      model: string;
+      effort: string | null;
+      intentPersisted: true;
+    },
+  ) {
+    nativeDispatchInput
+      .extend({
+        parentId: uuid,
+        model: z.string().max(128),
+        effort: z.string().max(128).nullable(),
+        intentPersisted: z.literal(true),
+      })
+      .parse(input);
+    const result = z
+      .object({ state: z.enum(["unknown", "completed"]), userMessageId: uuid })
+      .strict()
+      .parse(await this.call({ operation: "dispatchText", ...input }));
+    if (result.userMessageId !== input.userMessageId) fail("SUBMISSION_MISMATCH");
+    return result;
+  }
+  async reconcileDispatch(key: string, conversationId: string) {
+    uuid.parse(key);
+    uuid.parse(conversationId);
+    return z
+      .object({
+        state: z.enum(["unknown", "running", "completed"]),
+        userMessageId: uuid,
+        messages: historySchema.shape.messages,
+      })
+      .strict()
+      .parse(await this.call({ operation: "reconcileDispatch", key, conversationId }));
   }
   async history(conversationId: string, before?: string): Promise<GptHistoryPage> {
     uuid.parse(conversationId);
@@ -251,3 +301,15 @@ export class NativeGptReadClient {
     };
   }
 }
+
+const nativeDispatchInput = z
+  .object({
+    key: uuid,
+    conversationId: uuid,
+    userMessageId: uuid,
+    text: z.string().min(1).max(32768),
+    versionId: z.string().min(1).max(128),
+    presetId: z.number().int().nonnegative(),
+  })
+  .strict();
+export type NativeDispatchInput = z.infer<typeof nativeDispatchInput>;

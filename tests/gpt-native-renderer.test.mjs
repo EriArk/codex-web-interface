@@ -44,6 +44,34 @@ function fixture() {
   return { account, runtime, conversation, calls, service, read, node, binding };
 }
 
+test("submission readback requires exact ID, parent, unchanged text and a public final end-turn", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  f.node(2, "same prompt", { id: id(90), author: { role: "user" } });
+  f.node(3, "public commentary", { channel: "commentary", end_turn: false });
+  const request = {
+    operation: "readSubmission",
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "same prompt",
+  };
+  assert.equal((await f.read(request)).state, "running");
+  f.node(4, "hidden", { channel: "analysis", end_turn: true });
+  assert.deepEqual(
+    (await f.read(request)).messages.map((x) => x.text),
+    ["public commentary"],
+  );
+  f.node(5, "answer", { end_turn: true });
+  assert.equal((await f.read(request)).state, "completed");
+  assert.equal((await f.read({ ...request, userMessageId: id(91) })).state, "unknown");
+  await assert.rejects(f.read({ ...request, parentId: id(5) }), /SUBMISSION_MISMATCH/);
+  await assert.rejects(f.read({ ...request, text: "different" }), /SUBMISSION_MISMATCH/);
+  f.node(6, "same prompt", { author: { role: "user" } });
+  assert.equal((await f.read(request)).state, "unknown");
+});
+
 test("native reader uses fresh typed service with exact principal and no title navigation", async () => {
   const f = fixture(),
     accountFingerprint = await f.binding();

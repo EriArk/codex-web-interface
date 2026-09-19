@@ -2,17 +2,24 @@
 
 ## Immediate priority — Linux ChatGPT client (#193, 2026-09-19)
 
-The owner moved #193 ahead of the earlier short-pass list. The official isolated Linux client is installed and the owner has signed in through the protected phone recovery page. Native catalog/history and a direct IPC follow-up have been proven against a disposable consumer GPT chat, with one exact prompt and answer and no replay. Phone trackpad/zoom and external-browser association are installed.
+The official isolated Linux client is installed and authenticated. The owner accepts its combined Chat/Work UI. Keep #193 open: the main GPT workspace still uses its old provider. Preserve both profiles, existing/unknown jobs, and independent Windows Codex recovery.
 
-This is still an evaluation stage: the direct tool contract lacks ordinary Chat creation, attachment input and GPT model/effort controls, and its history query caches for one minute. A follow-up native UI probe observed a reply in 4.37 seconds, delivered a synthetic text file/image correctly and reconciled both turns exactly once. All four disposable test turns and login survived restart; the temporary inspector is closed. Continue toward a typed native UI provider with IPC reconciliation, exact navigation identity and complete media handling, then comparative long-chat/lifecycle checks before cutover. Keep #193 open and preserve the old engine/browser and durable jobs. Current evidence and migration gates: [GPT_NATIVE_LINUX.md](GPT_NATIVE_LINUX.md).
+Implemented and verified in the native canary:
 
-A first typed native **read** adapter now bypasses the tool cache through the app's own request service, with version/account/chat checks, public current-branch projection and 20-message pages. The real disposable chat and 19 focused Linux tests passed; no new prompt was sent. This remains lab-only: media is unresolved, web sends are not switched, and the temporary inspector was removed again. Next: exact native navigation/send/stop and model/effort/media contracts, then supervised transport and reversible Hub integration.
+- Phone trackpad/zoom, protected Remote and persistent manual-access leases.
+- Supervised private inherited-pipe adapter; no debugger TCP port or published native port.
+- Fresh account-bound public history, 20-message paging and exact branch/message identities.
+- Native navigation, Stop and model/power selection; ordinary Chat creation with small TXT/PNG files has separate lab proof.
+- Generated sandbox files/images with existing Results IDs and checksum-verified downloads.
+- Existing-chat text dispatch through the Hub `gpt_jobs` schema in an isolated Store, exact native user-message UUIDs, durable intent and read-only reconciliation after lost acknowledgements/restart. No diagnostic text is appended. One real queue send and 119 native/recovery/isolation tests passed; the same message/answer and older file hashes survived native restart.
 
-The next native lab stage also implements exact-ID navigation with native route verification, lightweight control state, user-message-bound Stop, and a disposable follow-up ledger that never replays uncertain sends. Real repeated-key/Stop checks and 36 focused tests passed; seven test requests are preserved once each. This is not the production send path: the tool lacks a client message ID, so the test ledger uses diagnostic nonces. Do not ship the test ledger or diagnostic prompts to ordinary users.
+Next coherent implementation block:
 
-Native model/power selection is now implemented and verified in the lab. The adapter reads the account's native catalog, selects a model version/preset through its own picker, and rejects inconsistent/locked/busy state. An eighth disposable request confirmed `gpt-5-6-thinking` plus `standard` in canonical history and remained single after a repeated key and restart. Forty-eight focused Linux tests pass. Restart preserves model/effort but can reset the version alias to Latest: reapply and verify the requested choice at send time. The inspector is closed and production unchanged. **Next:** ordinary Chat creation and attachments/generated Results, then atomic identity/dispatch admission and supervised transport wired to the existing Hub jobs; model UI checks alone do not authorize production cutover.
+1. Extend the same durable path to ordinary new-chat/project creation and uploads; finish catalog/Results/media parity rather than switching to a text-only main provider.
+2. Wire the provider into the actual shared GPT workspace, including preserved public progress, explicit unknown-send recovery and manual control arbitration. Keep old-provider receipts bound to their original provider; never replay them during migration.
+3. Verify long-chat performance, host boot and per-member provisioning, then stage a reversible primary-provider switch. Main production remains unchanged until these admission gates pass.
 
-Ordinary consumer Chat creation and bounded TXT/PNG staging are now implemented in the disposable lab adapter. A new test chat received exactly one prompt with both files and answered their contents correctly; canonical confirmation and inspector-closed restart readback passed. The adapter handles native temporary client IDs separately from server IDs and preserves attachment-only drafts. Fifty-nine focused Linux tests pass; the original eight-request chat and production remain intact. **Current next step:** generated files/images and Results resolution. Then complete production upload/creation receipts, project/model selection for new chats, atomic identity/dispatch admission and supervised Hub transport. No lab send API or diagnostic nonce is enabled for everyday web conversations.
+Details, actual installed state and rollback: [GPT_NATIVE_LINUX.md](GPT_NATIVE_LINUX.md). Earlier stage findings remain in that technical record.
 
 ## Next short passes — audit of 2026-09-13
 

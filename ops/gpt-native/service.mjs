@@ -10,9 +10,10 @@ export function privatePath(path, type) {
   if (stat.uid !== process.getuid() || (stat.mode & 0o077) || !stat[type]()) fail('UNSAFE_PRIVATE_PATH');
 }
 export class NativeReadService {
-  constructor({ reader, userId, accountFingerprint, statePath }) {
+  constructor({ reader, userId, accountFingerprint, statePath, canary }) {
     if (!uuid(userId) || !/^[a-f0-9]{64}$/.test(accountFingerprint)) fail('INVALID_BINDING');
     this.reader = reader;
+    this.canary = canary;
     this.userId = userId;
     this.accountFingerprint = accountFingerprint;
     this.statePath = statePath;
@@ -38,7 +39,13 @@ export class NativeReadService {
   }
   async request(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || input.userId !== this.userId) fail('WRONG_OWNER');
+    const canaryFields = this.canary ? {
+      prepareDispatch: ['key','conversationId','userMessageId','text','versionId','presetId'],
+      dispatchText: ['key','conversationId','userMessageId','text','versionId','presetId','parentId','model','effort','intentPersisted'],
+      reconcileDispatch: ['key','conversationId'],
+    } : {};
     const fields = {
+      ...canaryFields,
       status: [], beginManual: ['leaseId'], endManual: ['leaseId'], resumeManual: [],
       readModels: [], readConversation: ['conversationId', 'before'],
       listArtifacts: ['conversationId', 'before'], readArtifact: ['conversationId', 'messageId', 'artifactId'],
@@ -50,6 +57,7 @@ export class NativeReadService {
       if (input.operation !== 'resumeManual' && !uuid(input.leaseId)) fail('INVALID_REQUEST');
       const previous = new Set(this.leases);
       if (input.operation === 'beginManual') {
+        if(this.canary?.pending())fail('PENDING_DISPATCH');
         if (this.leases.size >= 8 && !this.leases.has(input.leaseId)) fail('BUSY');
         this.leases.add(input.leaseId);
       } else if (input.operation === 'endManual') this.leases.delete(input.leaseId);
@@ -61,6 +69,12 @@ export class NativeReadService {
     this.busy = true;
     try {
       const { operation, userId: ignored, ...args } = input;
+      const bound={...args,accountFingerprint:this.accountFingerprint};
+      if(Object.hasOwn(canaryFields,operation)){
+        if(operation==='prepareDispatch')return await this.canary.prepare(bound,this.reader);
+        if(operation==='dispatchText')return await this.canary.dispatch(bound,this.reader);
+        return await this.canary.reconcile(bound,this.reader);
+      }
       return await this.reader[operation]({ ...args, accountFingerprint: this.accountFingerprint });
     } finally { this.busy = false; }
   }
@@ -77,7 +91,7 @@ export async function listenNative(service, socketPath) {
     try {
       if (req.method !== 'POST' || req.url !== '/v1' || req.headers['content-type'] !== 'application/json') fail('INVALID_REQUEST');
       const chunks = []; let bytes = 0;
-      for await (const chunk of req) { bytes += chunk.length; if (bytes > 4096) fail('REQUEST_TOO_LARGE'); chunks.push(chunk); }
+      for await (const chunk of req) { bytes += chunk.length; if (bytes > (service.canary ? 40000 : 4096)) fail('REQUEST_TOO_LARGE'); chunks.push(chunk); }
       const result = await service.request(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       const body = JSON.stringify({ ok: true, result });
       if (Buffer.byteLength(body) > 2 * 1024 * 1024) fail('RESPONSE_TOO_LARGE');

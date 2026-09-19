@@ -3,7 +3,9 @@
 export async function nativeRead(request, load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis) {
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
- if (!request || !['inspectAccount', 'readConversation', 'readModels'].includes(request.operation)) fail('READ_ONLY');
+ if (!request || !['inspectAccount', 'readConversation', 'readModels', 'readSubmission'].includes(request.operation)) fail('READ_ONLY');
+ if(request.operation==='readSubmission'&&(!uuid(request.conversationId)||!uuid(request.userMessageId)||!uuid(request.parentId)||
+    typeof request.text!=='string'||new TextEncoder().encode(request.text).length>32768||!/^[a-f0-9]{64}$/.test(request.accountFingerprint??'')))fail('INVALID_REQUEST');
  if (request.operation === 'readModels' && !/^[a-f0-9]{64}$/.test(request.accountFingerprint ?? '')) fail('INVALID_REQUEST');
  if (request.operation === 'readConversation' && (!uuid(request.conversationId) ||
      !/^[a-f0-9]{64}$/.test(request.accountFingerprint ?? '') ||
@@ -105,6 +107,24 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
    effort:typeof message.metadata?.thinking_effort === 'string' && message.metadata.thinking_effort.length <= 128 ? message.metadata.thinking_effort : null,
    complete:message.status === 'finished_successfully'});
  }
- return {conversationId:request.conversationId, currentNode:conversation.current_node,
+ const page={conversationId:request.conversationId, currentNode:conversation.current_node,
   messages:messages.reverse(), before:hasMore ? messages[0].nodeId : null, mediaResolved:false};
+ if(request.operation==='readSubmission'){
+  const index=chain.findIndex(n=>n.message?.id===request.userMessageId);
+  const node=chain[index];
+  if(index<0)return {state:'unknown',messages:[]};
+  if(chain.filter(n=>n.message?.id===request.userMessageId).length!==1||node.parent!==request.parentId||node.message.author?.role!=='user'||
+     node.message.content?.content_type!=='text'||JSON.stringify(node.message.content.parts)!==JSON.stringify([request.text])||
+     node.message.metadata?.is_visually_hidden_from_conversation===true)fail('SUBMISSION_MISMATCH');
+  // A later user turn or more than one public page is not guessed into this receipt.
+  const later=chain.slice(0,index);
+  if(later.some(n=>n.message?.author?.role==='user')||!page.messages.some(m=>m.id===request.userMessageId))return {state:'unknown',messages:[]};
+  const ids=new Set(later.map(n=>n.message?.id));
+  const visible=page.messages.filter(m=>ids.has(m.id)&&m.role==='assistant');
+  const latest=visible.at(-1);
+  const finished=latest?.nodeId===conversation.current_node&&latest?.complete&&latest.channel==='final'&&
+   later.some(n=>n.message?.id===latest.id&&n.message.end_turn===true);
+  return {state:finished?'completed':'running',messages:visible};
+ }
+ return page;
 }
