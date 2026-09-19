@@ -42,6 +42,8 @@ export class NativeReadService {
   async request(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || input.userId !== this.userId) fail('WRONG_OWNER');
     const canaryFields = this.canary ? {
+      libraryMutation: ['key','kind','id','action','name','value','confirm'],
+      reconcileLibrary: ['key','kind','id','action','name','value','confirm'],
       uploadFile: ['key','conversationId','file'],
       stageUpload: ['key','conversationId','file','offset','base64'],
       uploadStoredFile: ['key','conversationId','file'],
@@ -77,6 +79,7 @@ export class NativeReadService {
       const { operation, userId: ignored, ...args } = input;
       const bound={...args,accountFingerprint:this.accountFingerprint};
       if(Object.hasOwn(canaryFields,operation)){
+        if(['libraryMutation','reconcileLibrary'].includes(operation)){if(!this.library)fail('INVALID_CANARY');return await this.library.run(bound,this.reader,operation==='reconcileLibrary');}
         if(operation==='stageUpload'){this.canary.admitUpload(bound);if(this.canary.pending())fail('PENDING_DISPATCH');return await this.uploads.append(bound);}
         if(operation==='uploadStoredFile'){
           this.canary.admitUpload(bound);

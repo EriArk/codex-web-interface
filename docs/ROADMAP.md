@@ -6,6 +6,8 @@ The official isolated Linux client is installed and authenticated. The owner acc
 
 Implemented and verified in the native canary:
 
+- Shared library actions and durable read-only recovery: real disposable-chat rename/restore, archive/unarchive and pin/unpin passed through the authenticated Hub; delete and project rename preservation have focused fixture coverage. Shared mobile menus recover the exact pending action across reload in Chromium/WebKit. Native lab only; explicit review of unrecoverable/deleted-object receipts remains a release gate.
+
 - Durable uploads through Hub jobs: real 32 MiB PDF accepted/read once by native GPT and preserved after restart. Disk-streamed documents support the 512 MiB ceiling; images use a bounded 20 MiB path. Eight-file batch guard remains separate from native account quotas. Browser-to-Hub chunks and larger Codex SFTP transfer are implemented and tested but not installed in the main engine/UI. Core GptService/shared-UI integration is now implemented and verified with a real 32 MiB PDF; production admission remains pending and the old browser connector retains its buffer guard. See [upload evidence and limits](GPT_NATIVE_LINUX.md#large-file-transport-and-native-project-foundation-2026-09-19).
 - Phone trackpad/zoom, protected Remote and persistent manual-access leases.
 - Supervised private inherited-pipe adapter; no debugger TCP port or published native port.
@@ -17,7 +19,7 @@ Implemented and verified in the native canary:
 
 Next coherent implementation block:
 
-1. Finish native project content/files and library mutations, edit/regenerate/fork, scheduled tasks/Canvas reads and dictation; complete generated-image and large downloadable-result parity. Project catalog/membership, native pins and archived catalog reads already reach the shared service.
+1. Finish native project content/files, real-project mutation acceptance, edit/regenerate/fork, scheduled tasks/Canvas reads and dictation; complete generated-image and large downloadable-result parity. Project catalog/membership, native pins and archived catalog reads already reach the shared service.
 2. Complete explicit unknown-send review/manual recovery and production capability/admission controls. Core shared `GptService`, durable send/progress/Stop, per-model presets and provider-bound outbox entries are implemented. The real web composer uploaded and sent a 32 MiB PDF once, displayed its answer and survived reload/service reopening; the supervisor still restricts sends to disposable chats. Unknown native receipts remain blocked from blind dismissal/replay. Old queued jobs retain their provider rather than being silently migrated.
 3. Verify long-chat performance, host boot and per-member provisioning, then stage a reversible primary-provider switch. Main production remains unchanged until these admission gates pass.
 

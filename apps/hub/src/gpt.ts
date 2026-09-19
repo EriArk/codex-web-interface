@@ -31,6 +31,7 @@ import {
 import { GptHistoryDisk } from "./gpt-history-disk.js";
 import { gptLinkedText } from "./gpt-links.js";
 import { NativeGptJobs } from "./gpt-native-jobs.js";
+import { NativeGptLibrary } from "./gpt-native-library.js";
 import { NativeGptProvider, type NativeGptWorkspace } from "./gpt-native-provider.js";
 import { GptOperations, gptOperationInput } from "./gpt-operations.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
@@ -69,6 +70,7 @@ const error = (code: string, message: string, status = 409) => new HubError(stat
 export class GptService {
   private readonly native?: NativeGptProvider;
   private readonly nativeJobs?: NativeGptJobs;
+  readonly nativeLibrary?: NativeGptLibrary;
   private nativeReadFailures = 0;
   private readonly historyBackoff = new GptReadBackoff();
   private readonly historyReads = new Map<string, Promise<Json>>();
@@ -98,7 +100,10 @@ export class GptService {
   readonly workspaceWork: GptWorkspaceWork;
   nativeBlocked() {
     return (
-      this.operations.blocked() || this.projectContent.blocked() || this.workspaceWork.blocked()
+      this.operations.blocked() ||
+      this.projectContent.blocked() ||
+      this.workspaceWork.blocked() ||
+      !!this.nativeLibrary?.blocked()
     );
   }
   nativeCounts() {
@@ -230,6 +235,8 @@ export class GptService {
         "INSERT OR IGNORE INTO gpt_job_providers SELECT jobId,'native' FROM gpt_native_receipts",
       );
     this.library = new Library(store, "gpt");
+    if (nativeWorkspace)
+      this.nativeLibrary = new NativeGptLibrary(store, nativeWorkspace, this.library);
     this.operations = new GptOperations(
       store,
       (path, body) => this.json(path, body),
@@ -558,6 +565,40 @@ export class GptService {
           pinned: pins.some((p) => p.kind === "thread" && p.id === row.id),
         })),
     };
+  }
+  async manageNativeEntity(key: string, kind: EntityKind, nativeId: string, action: EntityAction) {
+    if (!this.nativeLibrary) throw error("GPT_NATIVE_NOT_READY", "Новое подключение не включено.");
+    if (
+      this.working ||
+      this.libraryBusy ||
+      this.operations.blocked() ||
+      this.projectContent.blocked() ||
+      this.workspaceWork.blocked() ||
+      this.jobs().some((job) => active.includes(job.status) || job.status === "unknown")
+    )
+      throw error("GPT_BUSY", "Дождись завершения текущей работы GPT.");
+    this.libraryBusy = true;
+    try {
+      if (kind === "project" && action.action === "archive") {
+        return await this.store.once("library:gpt:project:" + nativeId, key, action, async () => {
+          this.library.assertExists(kind, nativeId);
+          const source = await this.native!.workspace.client.project(nativeId);
+          this.library.save(kind, nativeId, {
+            name: source.name,
+            archived: action.value,
+            changedAt: Date.now(),
+          });
+          return { ok: true };
+        });
+      }
+      const result = await this.nativeLibrary.run(key, kind, nativeId, action);
+      this.observedHistory = undefined;
+      if (kind === "thread") this.historyCache.invalidate(nativeId);
+      return result;
+    } finally {
+      this.libraryBusy = false;
+      if (!this.stopped) void this.pump();
+    }
   }
   async manageEntity(kind: EntityKind, nativeId: string, action: EntityAction) {
     this.library.assertExists(kind, nativeId);
@@ -1431,9 +1472,25 @@ export function registerGpt(
   app.addHook("onReady", async () => {
     void service.pump();
   });
+  app.get("/api/library/gpt/:kind/:id/pending", async (req) => {
+    const params = z.object({ kind: z.enum(["thread", "project"]), id }).parse(req.params);
+    return { pending: service.nativeLibrary?.pending(params.kind, params.id) ?? null };
+  });
   app.post("/api/library/gpt/:kind/:id", async (req) => {
     const params = z.object({ kind: z.enum(["thread", "project"]), id }).parse(req.params),
       action = entityAction.parse(req.body);
+    const key = uuid.parse(req.headers["idempotency-key"]);
+    if (service.nativeLibrary) {
+      const previous = store.db
+        .prepare("SELECT 1 FROM commands WHERE scope=? AND key=?")
+        .get("library:gpt:" + params.kind + ":" + params.id, key);
+      if (previous && !(params.kind === "project" && action.action === "archive"))
+        throw error(
+          "GPT_PROVIDER_CHANGED",
+          "Это действие принадлежит прежнему подключению. Проверь его результат.",
+        );
+      return service.manageNativeEntity(key, params.kind, params.id, action);
+    }
     return store.once(
       "library:gpt:" + params.kind + ":" + params.id,
       uuid.parse(req.headers["idempotency-key"]),

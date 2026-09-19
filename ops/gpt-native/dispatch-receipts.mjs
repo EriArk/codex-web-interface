@@ -18,14 +18,14 @@ export class NativeDispatchReceipts {
   this.db.exec('CREATE TABLE IF NOT EXISTS creations(key TEXT PRIMARY KEY REFERENCES receipts(key),candidate TEXT,confirmed TEXT)');
   if(!this.db.prepare('PRAGMA table_info(creations)').all().some(x=>x.name==='createdAfter'))this.db.exec('ALTER TABLE creations ADD COLUMN createdAfter INTEGER');
   this.db.exec('CREATE TABLE IF NOT EXISTS uploads(key TEXT NOT NULL,id TEXT NOT NULL,hash TEXT NOT NULL,result TEXT,PRIMARY KEY(key,id))');
-  this.db.exec('CREATE TABLE IF NOT EXISTS stops(key TEXT PRIMARY KEY REFERENCES receipts(key))');
+  this.db.exec('CREATE TABLE IF NOT EXISTS stops(key TEXT PRIMARY KEY REFERENCES receipts(key)); CREATE TABLE IF NOT EXISTS library_receipts(key TEXT PRIMARY KEY,hash TEXT NOT NULL,payload TEXT NOT NULL,baseline TEXT NOT NULL,state TEXT NOT NULL)');
   const hash=this.hash([userId,accountFingerprint]);
   this.db.prepare('INSERT OR IGNORE INTO binding VALUES(1,?)').run(hash);
   if(this.db.prepare('SELECT hash FROM binding WHERE id=1').get().hash!==hash){this.db.close();fail('INVALID_BINDING');}
  }
  hash(x){return createHash('sha256').update(JSON.stringify(x)).digest('hex');}
  close(){this.db.close();}
- pending(){return !!this.db.prepare("SELECT 1 FROM receipts WHERE state NOT IN ('completed','cancelled') LIMIT 1").get();}
+ pending(){return !!this.db.prepare("SELECT 1 FROM library_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM receipts WHERE state NOT IN ('completed','cancelled') LIMIT 1").get();}
  validate(r){
   if(r.projectId!=null&&!/^g-p-[a-zA-Z0-9-]{1,80}$/.test(r.projectId))fail('INVALID_PROJECT');
   if(!(r.conversationId===null?this.creationKeys.has(r.key):this.allowed.has(r.conversationId))||!uuid(r.key)||!uuid(r.userMessageId)||typeof r.text!=='string'||Buffer.byteLength(r.text)>32768||

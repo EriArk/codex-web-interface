@@ -174,6 +174,30 @@ export class NativeGptReadClient {
     this.authorize();
     return result;
   }
+  async libraryMutation(
+    input: { key: string; kind: "thread" | "project"; id: string } & (
+      | { action: "rename"; name: string }
+      | { action: "pin" | "archive"; value: boolean }
+      | { action: "delete"; confirm: true }
+    ),
+    checkOnly = false,
+  ) {
+    uuid.parse(input.key);
+    (input.kind === "thread" ? uuid : projectId).parse(input.id);
+    return z
+      .object({
+        state: z.enum(["completed", "unknown", "rejected"]),
+        name: z.string().max(4096),
+        projectId: projectId.nullable(),
+      })
+      .strict()
+      .parse(
+        await this.call({
+          operation: checkOnly ? "reconcileLibrary" : "libraryMutation",
+          ...input,
+        }),
+      );
+  }
   async status() {
     return z
       .object({

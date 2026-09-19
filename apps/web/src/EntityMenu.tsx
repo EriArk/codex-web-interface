@@ -48,6 +48,29 @@ export function EntityMenu({
     [name, setName] = useState(entity.name),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [recovery, setRecovery] = useState<{ key: string; action: Action } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const opened = !!page;
+  useEffect(() => {
+    if (!opened || client !== "gpt" || outbox) return;
+    let valid = true;
+    setChecking(true);
+    api<{ pending: { key: string; action: Action } | null }>(
+      "/library/gpt/" + entity.kind + "/" + encodeURIComponent(entity.id) + "/pending",
+    )
+      .then((value) => {
+        if (valid) setRecovery(value.pending);
+      })
+      .catch((e) => {
+        if (valid) setError(messageOf(e));
+      })
+      .finally(() => {
+        if (valid) setChecking(false);
+      });
+    return () => {
+      valid = false;
+    };
+  }, [opened, client, outbox, entity.kind, entity.id]);
   const dialog = useRef<HTMLDialogElement>(null),
     attempt = useRef({ body: "", key: "" }),
     titleId = useId();
@@ -63,7 +86,7 @@ export function EntityMenu({
     if (!busy) setPage(null);
   };
   const submit = async (action: Action) => {
-    if (busy) return;
+    if (busy || checking) return;
     const body = JSON.stringify(action);
     if (attempt.current.body !== body) attempt.current = { body, key: crypto.randomUUID() };
     setBusy(true);
@@ -92,8 +115,15 @@ export function EntityMenu({
         );
       setPage(null);
       attempt.current = { body: "", key: "" };
+      setRecovery(null);
       onDone?.();
     } catch (e) {
+      if (e instanceof ApiError && e.code === "GPT_LIBRARY_UNKNOWN")
+        setRecovery({ key: attempt.current.key, action });
+      if (e instanceof ApiError && e.code === "GPT_ACTION_REJECTED") {
+        attempt.current = { body: "", key: "" };
+        setRecovery(null);
+      }
       setError(
         e instanceof ApiError && (e.status >= 500 || e.code === "INVALID_RESPONSE")
           ? "Сервер не подтвердил действие. Обнови список и проверь результат."
@@ -149,7 +179,27 @@ export function EntityMenu({
                 <Icon name="close" />
               </button>
             </div>
-            {page === "menu" ? (
+            {checking ? (
+              <p className="entity-status" role="status">
+                Проверяем незавершённые действия…
+              </p>
+            ) : recovery ? (
+              <div className="entity-confirm">
+                <p>
+                  Результат предыдущего действия пока не подтверждён. Проверка не повторяет команду.
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    attempt.current = { body: JSON.stringify(recovery.action), key: recovery.key };
+                    void submit(recovery.action);
+                  }}
+                >
+                  <Icon name="refresh" /> Проверить результат
+                </button>
+              </div>
+            ) : page === "menu" ? (
               <div className="entity-actions">
                 {client === "codex" && entity.kind === "project" && onNewThread && (
                   <button

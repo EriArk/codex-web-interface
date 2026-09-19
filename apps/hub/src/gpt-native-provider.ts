@@ -12,6 +12,7 @@ import type { NativeGptReadClient } from "./gpt-native.js";
 export interface NativeGptWorkspace {
   client: Pick<
     NativeGptReadClient,
+    | "libraryMutation"
     | "status"
     | "models"
     | "pins"
