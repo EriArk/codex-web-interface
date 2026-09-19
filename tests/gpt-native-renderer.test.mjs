@@ -183,3 +183,89 @@ test("upstream errors do not expose content, URL or credentials", async () => {
     { message: "NATIVE_READ_UNAVAILABLE" },
   );
 });
+
+test("model catalog keeps native preset IDs and account-bound request, strips other fields", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  const catalog = {
+    versions: [
+      {
+        id: "latest",
+        display_text_for_intelligence: "Latest",
+        enabled: true,
+        secret: "private",
+        intelligence_presets: [
+          {
+            id: 6,
+            title: "Extra High",
+            model_slug: "thinking",
+            thinking_effort: "max",
+            preset_type: "available",
+            secret: "private",
+          },
+        ],
+      },
+    ],
+    internal_groups: ["private"],
+  };
+  f.service.kWt.safeGet = async (route, options) => {
+    assert.equal(route, "/models");
+    assert.deepEqual(options.expectedIdentity, { accountId: "account-a", userId: "user-a" });
+    return catalog;
+  };
+  const result = await f.read({ operation: "readModels", accountFingerprint });
+  assert.deepEqual(result.versions[0].presets, [
+    { id: 6, label: "Extra High", model: "thinking", effort: "max", available: true },
+  ]);
+  assert.doesNotMatch(JSON.stringify(result), /secret|private|internal_groups/);
+  catalog.versions.push({ ...catalog.versions[0] });
+  await assert.rejects(f.read({ operation: "readModels", accountFingerprint }), /INVALID_MODELS/);
+});
+test("catalog rejects account changes and unknown availability rather than guessing", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  const catalog = {
+    versions: [
+      {
+        id: "latest",
+        display_text_for_intelligence: "Latest",
+        enabled: true,
+        intelligence_presets: [
+          { id: 0, title: "Instant", model_slug: "instant", preset_type: "upgrade" },
+        ],
+      },
+    ],
+  };
+  f.service.kWt.safeGet = async () => catalog;
+  await assert.rejects(f.read({ operation: "readModels", accountFingerprint }), /INVALID_MODELS/);
+  f.service.kWt.safeGet = async () => {
+    f.account.userId = "another";
+    return catalog;
+  };
+  await assert.rejects(f.read({ operation: "readModels", accountFingerprint }), /ACCOUNT_CHANGED/);
+});
+test("history projects only explicit canonical model/effort strings", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  f.node(2, "answer", {
+    metadata: { model_slug: "thinking", thinking_effort: "standard", secret: "private" },
+  });
+  const result = await f.read({
+    operation: "readConversation",
+    conversationId,
+    accountFingerprint,
+  });
+  assert.equal(result.messages.at(-1).model, "thinking");
+  assert.equal(result.messages.at(-1).effort, "standard");
+  assert.doesNotMatch(JSON.stringify(result), /private|secret/);
+  f.node(3, "answer", {
+    metadata: { model_slug: { secret: "private" }, thinking_effort: "x".repeat(129) },
+  });
+  const invalid = await f.read({
+    operation: "readConversation",
+    conversationId,
+    accountFingerprint,
+  });
+  assert.equal(invalid.messages.at(-1).model, null);
+  assert.equal(invalid.messages.at(-1).effort, null);
+});

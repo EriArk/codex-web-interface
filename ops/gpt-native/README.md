@@ -41,3 +41,15 @@ The reader additionally offers fixed `selectConversation`, `inspectConversation`
 ```sh
 node --test tests/gpt-native-control.test.mjs tests/gpt-native-followup.test.mjs tests/gpt-native-renderer*.test.mjs tests/gpt-native-ipc.test.mjs
 ```
+
+### Native Chat model and power selection
+
+`readModels({accountFingerprint})` returns a bounded, account-bound projection of native model versions and intelligence presets. `inspectSettings(binding)` and `selectSettings({...binding, versionId, presetId})` operate the pinned native picker, verify its selected model and accessible slider announcement against that catalog, and close their own picker. These are serialized **lab controls**, not web endpoints. They refuse busy/manual pickers, text drafts, active responses, disabled/locked options, account/chat changes and ambiguous or unconfirmed UI state. They never submit a prompt or enter access/upgrade dialogs.
+
+Preset IDs are not slider indexes, and GPT powers are not Codex reasoning enums. For example, the observed native GPT preset ID `6` is the fourth slider item, titled Extra High, with `thinking_effort: max`. Read the current catalog instead of maintaining a translated positional mapping. Unsupported/localized picker contracts fail closed.
+
+Canonical public messages now include only bounded `model` and `effort` metadata strings for readback verification. A disposable real send confirmed both values. After restart, the selected model/effort survived but the version alias changed from `5.6` to `latest`; the eventual provider must reapply and verify the requested version/preset for every send. This does not solve atomic admission of sends versus manual account changes, attachment-only drafts, supervised transport or Hub queue integration.
+
+```sh
+node --test tests/gpt-native-*.test.mjs
+```

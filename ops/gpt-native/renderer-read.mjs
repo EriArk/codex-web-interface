@@ -3,7 +3,8 @@
 export async function nativeRead(request, load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis) {
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
- if (!request || !['inspectAccount', 'readConversation'].includes(request.operation)) fail('READ_ONLY');
+ if (!request || !['inspectAccount', 'readConversation', 'readModels'].includes(request.operation)) fail('READ_ONLY');
+ if (request.operation === 'readModels' && !/^[a-f0-9]{64}$/.test(request.accountFingerprint ?? '')) fail('INVALID_REQUEST');
  if (request.operation === 'readConversation' && (!uuid(request.conversationId) ||
      !/^[a-f0-9]{64}$/.test(request.accountFingerprint ?? '') ||
      (request.before != null && !uuid(request.before)))) fail('INVALID_REQUEST');
@@ -29,6 +30,28 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  // Inspection proposes a binding; the caller must explicitly persist/approve it.
  if (request.operation === 'inspectAccount') return {build:'26.915.31945', accountFingerprint:before.fingerprint, writesEnabled:false};
  if (before.fingerprint !== request.accountFingerprint) fail('ACCOUNT_MISMATCH');
+ if (request.operation === 'readModels') {
+  let catalog;
+  try { catalog = await bounded(m.kWt.safeGet('/models', {
+   parameters:{query:{iim:false,include_icons:false}}, expectedIdentity:before.principal, signal,
+  })); } catch { fail(signal.aborted ? 'TIMEOUT' : 'READ_UNAVAILABLE'); }
+  if ((await account()).fingerprint !== before.fingerprint) fail('ACCOUNT_CHANGED');
+  const text = value => typeof value === 'string' && value.length > 0 && value.length <= 128;
+  if (!Array.isArray(catalog?.versions) || !catalog.versions.length || catalog.versions.length > 32) fail('INVALID_MODELS');
+  const versions = catalog.versions.map(v => {
+   if (!text(v.id) || !text(v.display_text_for_intelligence) || typeof v.enabled !== 'boolean' ||
+       !Array.isArray(v.intelligence_presets) || !v.intelligence_presets.length || v.intelligence_presets.length > 16) fail('INVALID_MODELS');
+   const presets = v.intelligence_presets.map(p => {
+    if (!Number.isSafeInteger(p.id) || p.id < 0 || !text(p.title) || !text(p.model_slug) ||
+        (p.thinking_effort != null && !text(p.thinking_effort)) || !['available','locked'].includes(p.preset_type)) fail('INVALID_MODELS');
+    return {id:p.id,label:p.title,model:p.model_slug,effort:p.thinking_effort ?? null,available:p.preset_type === 'available'};
+   });
+   if (new Set(presets.map(p=>p.id)).size !== presets.length) fail('INVALID_MODELS');
+   return {id:v.id,label:v.display_text_for_intelligence,enabled:v.enabled,presets};
+  });
+  if (new Set(versions.map(v=>v.id)).size !== versions.length || new Set(versions.map(v=>v.label)).size !== versions.length) fail('INVALID_MODELS');
+  return {versions};
+ }
  let conversation;
  try {
   // Do not pass retry:false: this build's alternate request path drops expectedIdentity.
@@ -74,6 +97,8 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   bytes += new TextEncoder().encode(text).length;
   if (bytes > 1024 * 1024) fail('HISTORY_TOO_LARGE');
   messages.push({nodeId:node.id, id:message.id, role, channel:message.channel ?? 'final', text, hasAttachments,
+   model:typeof message.metadata?.model_slug === 'string' && message.metadata.model_slug.length <= 128 ? message.metadata.model_slug : null,
+   effort:typeof message.metadata?.thinking_effort === 'string' && message.metadata.thinking_effort.length <= 128 ? message.metadata.thinking_effort : null,
    complete:message.status === 'finished_successfully'});
  }
  return {conversationId:request.conversationId, currentNode:conversation.current_node,
