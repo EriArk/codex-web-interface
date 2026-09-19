@@ -17,18 +17,26 @@ export async function nativeControl(request, read, load = () => import('app://-/
   ]); } finally { clearTimeout(timer); }
  };
  const summary = () => action({type:'app.get_summary'});
- const matches = state => state?.schemaVersion === 1 && state.window?.route?.kind === 'chatgpt-thread' &&
-  state.window.route.threadId === request.conversationId && state.window.thread?.kind === 'chatgpt' && state.window.thread.id === request.conversationId;
+ const matches = state => {
+  const w=state?.window,id=w?.thread?.id;
+  if(state?.schemaVersion!==1||w?.route?.kind!=='chatgpt-thread'||w.thread?.kind!=='chatgpt'||w.route.threadId!==id)return false;
+  if(id===request.conversationId)return true;
+  return typeof id==='string'&&/^local-chatgpt:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)&&w.route.pathname===`/c/${request.conversationId}`;
+ };
  const controls = () => {
   const visible = selector => [...runtime.document.querySelectorAll(selector)].filter(e=>e.getClientRects().length && !e.disabled);
+  const editors=visible('[role="textbox"][contenteditable="true"]');
+  const attachments=editors.flatMap(e=>[...(e.closest?.('[data-composer-body]')?.querySelectorAll('button[aria-label]')??[])])
+   .filter(e=>/^Remove /.test(e.getAttribute('aria-label')??''));
   return {stop:visible('button[aria-label="Stop"]'), send:visible('button[aria-label="Send"]'),
-   editors:visible('[role="textbox"][contenteditable="true"]')};
+   editors,attachments};
  };
  if (request.operation === 'selectConversation') {
   await read(historyRequest,load,runtime);
   deadline = Date.now() + 5000;
   // Do not navigate away from a nonempty native draft.
-  if (controls().editors.some(e=>e.textContent?.trim())) fail('DRAFT_PRESENT');
+  const draft=controls();
+  if (draft.editors.some(e=>e.textContent?.trim())||draft.attachments.length) fail('DRAFT_PRESENT');
   await action({type:'windows.show_thread',windowId:'current',kind:'chatgpt',threadId:request.conversationId});
   while (!matches(await summary())) {
    if (Date.now() >= deadline) fail('NAVIGATION_UNCONFIRMED');
@@ -53,6 +61,6 @@ export async function nativeControl(request, read, load = () => import('app://-/
  }
  const ui = controls();
  return {conversationId:request.conversationId,selected:true,composerReady:ui.editors.length === 1,
-  hasDraft:ui.editors.some(e=>!!e.textContent?.trim()),stopAvailable:ui.stop.length === 1,
+  hasDraft:ui.editors.some(e=>!!e.textContent?.trim())||ui.attachments.length>0,attachmentCount:ui.attachments.length,stopAvailable:ui.stop.length === 1,
   sendAvailable:ui.send.length === 1};
 }

@@ -166,3 +166,31 @@ test("a route change during the final history check blocks Stop", async () => {
   );
   assert.equal(f.clicks(), 0);
 });
+
+test("attachment-only native draft blocks navigation and follow-up readiness", async () => {
+  const f = fixture();
+  f.editor.closest = () => ({
+    querySelectorAll: () => [{ getAttribute: () => "Remove fixture.png" }],
+  });
+  const state = await f.run();
+  assert.equal(state.hasDraft, true);
+  assert.equal(state.attachmentCount, 1);
+  await assert.rejects(f.run({ operation: "selectConversation" }), /DRAFT_PRESENT/);
+  assert.equal(
+    f.actions.some((a) => a.type === "windows.show_thread"),
+    false,
+  );
+});
+test("new Chat local alias requires the exact canonical route and matching native identities", async () => {
+  const f = fixture();
+  const local = "local-chatgpt:10000000-0000-4000-8000-000000000001";
+  f.state.window.thread.id = local;
+  f.state.window.route.threadId = local;
+  f.state.window.route.pathname = "/c/chat";
+  assert.equal((await f.run()).selected, true);
+  f.state.window.route.pathname = "/c/another";
+  await assert.rejects(f.run(), /SELECTED_CHAT_MISMATCH/);
+  f.state.window.route.pathname = "/c/chat";
+  f.state.window.route.threadId = "different";
+  await assert.rejects(f.run(), /SELECTED_CHAT_MISMATCH/);
+});

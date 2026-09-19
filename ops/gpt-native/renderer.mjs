@@ -1,6 +1,7 @@
 import {nativeRead} from './renderer-read.mjs';
 import {nativeControl} from './renderer-control.mjs';
 import {nativeSettings} from './renderer-settings.mjs';
+import {nativeComposer} from './renderer-composer.mjs';
 
 const endpoint = 'http://127.0.0.1:9222';
 const maxBytes = 2 * 1024 * 1024;
@@ -41,6 +42,9 @@ async function evaluate(url, expression, signal) {
 
 /** Loopback-only lab transport. No HTTP server, generic action or send API. */
 export class NativeRendererReader {
+ async disposableComposer({operation,key,accountFingerprint,disposable,text,files,intentPersisted},options){
+  return this.#read({operation,key,accountFingerprint,disposable,text,files,intentPersisted},options,'composer');
+ }
  async inspectAccount(options) { return this.#read({operation:'inspectAccount'}, options); }
  async readModels({accountFingerprint}, options) { return this.#read({operation:'readModels',accountFingerprint},options); }
  async inspectSettings({conversationId,accountFingerprint}, options) {
@@ -80,7 +84,7 @@ export class NativeRendererReader {
     if (await evaluate(page.webSocketDebuggerUrl, guard, signal) === true) matches.push(page);
    }
    if (matches.length !== 1) throw Error('NATIVE_WINDOW_AMBIGUOUS');
-   const call = control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
+   const call = control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
    const expression = `(async()=>{try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
    const result = await evaluate(matches[0].webSocketDebuggerUrl, expression, signal);
    if (result?.ok !== true) throw Error(/^NATIVE_[A-Z_]+$/.test(result?.code ?? '') ? result.code : 'NATIVE_INVALID_RESPONSE');

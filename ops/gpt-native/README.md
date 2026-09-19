@@ -53,3 +53,11 @@ Canonical public messages now include only bounded `model` and `effort` metadata
 ```sh
 node --test tests/gpt-native-*.test.mjs
 ```
+
+### Disposable new Chat and file-input proof
+
+`disposableComposer` wraps only the fixed operations in `renderer-composer.mjs`: `prepareNewChat`, `stageText`, `stageFiles`, `inspectDraft`, `submitDraft`, `inspectCreatedChat`, and `confirmCreatedChat`. All require `disposable: true`, an account fingerprint and diagnostic UUID. Preparation preserves any existing native text/file draft and refuses Work mode. The same account, home Chat, exact editor element, text and attachment names must remain bound through staging and submission. One renderer-local lease owns the draft; no generic selector/action or host file path is accepted.
+
+`stageFiles` is deliberately limited to up to four TXT/PNG fixtures, 1 MiB total, with simple names, matching MIME and SHA-256 verification. It returns **not ready** until native upload controls can be inspected. `submitDraft` requires the lab supervisor to persist its intent first; its boolean assertion is not itself a durable receipt store. The renderer marks dispatched before clicking once. On process loss, reconcile the private receipt without replaying creation/upload/send. Production must use the existing Hub jobs instead.
+
+New native Chat windows can retain a `local-chatgpt:<UUID>` client identity even after `/c/<server-UUID>` is assigned. Inspection returns only a candidate; confirmation reads fresh account-bound canonical history and checks the exact first diagnostic prompt and attachment presence. Real TXT/image contents and response completion were verified separately in the proof. Generated media, arbitrary uploads, home model/project selection, supervised transport and production creation admission are not complete.
