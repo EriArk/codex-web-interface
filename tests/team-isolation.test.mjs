@@ -2235,6 +2235,8 @@ test("protected GPT connection page and live Remote bind one user and close on r
   await new Promise((resolve) => portProbe.listen(0, "127.0.0.1", resolve));
   const port = portProbe.address().port;
   await new Promise((resolve) => portProbe.close(resolve));
+  const nativePasswordFile = join(f.root, "native-vnc-password");
+  await writeFile(nativePasswordFile, "labpass1", { mode: 0o600 });
   const process = spawn(globalThis.process.execPath, ["ops/gpt/login-gateway.mjs"], {
     env: {
       ...globalThis.process.env,
@@ -2242,6 +2244,8 @@ test("protected GPT connection page and live Remote bind one user and close on r
       GPT_HUB_URL: f.base,
       HUB_ENGINE_SOCKET: socketPath,
       GPT_GATEWAY_PORT: String(port),
+      GPT_NATIVE_USER_ID: f.registry.ownerId,
+      GPT_NATIVE_VNC_PASSWORD_FILE: nativePasswordFile,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -2263,6 +2267,21 @@ test("protected GPT connection page and live Remote bind one user and close on r
   const html = await page.text();
   assert(html.includes(`content="${f.friendId}"`));
   assert(!html.includes(row.vncPassword));
+  const nativePage = await fetch(`http://127.0.0.1:${port}/gpt-connect?runtime=native`, {
+    headers: { cookie: f.owner.cookie },
+  });
+  assert.equal(nativePage.status, 200);
+  const nativeHtml = await nativePage.text();
+  assert(nativeHtml.includes('name="codex-runtime" content="native"'));
+  assert(!nativeHtml.includes("labpass1"));
+  for (const suffix of ["runtime=native", "runtime=native&workspace=" + f.registry.ownerId]) {
+    assert.equal(
+      (await fetch(`http://127.0.0.1:${port}/gpt-connect?${suffix}`, {
+        headers: { cookie: f.friend.cookie },
+      })).status,
+      401,
+    );
+  }
   const denied = async (workspace) =>
     new Promise((resolve, reject) => {
       const socket = new WebSocket(

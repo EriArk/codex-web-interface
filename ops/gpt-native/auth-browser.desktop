@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Sign-in browser
+Type=Application
+Exec=/opt/native/auth-browser.sh %u
+Terminal=false
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;

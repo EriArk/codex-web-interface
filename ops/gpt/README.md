@@ -1,5 +1,7 @@
 # Optional ChatGPT backend
 
+The existing browser is still the main provider. The separate official Linux-client evaluation (#193), protected native recovery and phone trackpad are documented in [GPT_NATIVE_LINUX.md](../../docs/GPT_NATIVE_LINUX.md). Installing that recovery page does not migrate chats or submissions.
+
 This connects the owner's real consumer ChatGPT account using a private Linux Chromium profile. The existing Codex SSH/Companion backend is independent. It does not use an OpenAI API billing key.
 
 The owner signs in directly on the protected connection page. Browser credentials stay in the browser profile. Never copy Windows Codex/ChatGPT authentication data, print browser sessions, publish this state directory, or forward raw adapter diagnostics to the web client.

@@ -1,5 +1,11 @@
 # Roadmap
 
+## Immediate priority — Linux ChatGPT client (#193, 2026-09-19)
+
+The owner moved #193 ahead of the earlier short-pass list. The official isolated Linux client is installed and the owner has signed in through the protected phone recovery page. Native catalog/history and a direct IPC follow-up have been proven against a disposable consumer GPT chat, with one exact prompt and answer and no replay. Phone trackpad/zoom and external-browser association are installed.
+
+This is still an evaluation stage: the direct tool contract lacks ordinary Chat creation, attachment input and GPT model/effort controls, and one measured reply took about 63 seconds to appear in its history readback. Evaluate the native semantic renderer/live-state path, lifecycle and media before provider cutover. Keep #193 open and preserve the old engine/browser and durable jobs. Current evidence and migration gates: [GPT_NATIVE_LINUX.md](GPT_NATIVE_LINUX.md).
+
 ## Next short passes — audit of 2026-09-13
 
 **Current UI pass:** Files and Git now have separate direct header buttons and independent wide material windows. File browsing retains inline actions on phones and adds a bounded side preview on wide clients; Git separates README from repository references. Settings stays in the sidebar footer in both modes. Codex Results now always uses the existing authorized project feed, including precise source-chat navigation. GPT currently has only a conversation Results contract: its project aggregation still needs a bounded server-side index/contract after #158, without fetching every native conversation from the browser. Writable Files remains with #169 after the same engine prerequisite. Publication evidence is recorded in `TEAM_CHECKPOINT.md`.

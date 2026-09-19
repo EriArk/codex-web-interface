@@ -2,6 +2,12 @@
 
 This file records decisions that should be treated as fixed unless the owner explicitly changes them.
 
+## 2026-09-19 — Native Linux ChatGPT evaluation first
+
+The owner approved #193 as the immediate priority and completed sign-in to the official combined Linux ChatGPT/Codex application. That combined UI is acceptable if ordinary consumer GPT works. Evaluate a private Hub-local native runtime, preferring local IPC and considering a native renderer adapter where necessary. Keep the old connector/profile and all Codex recovery available during evaluation. A supported package and successful login do not alone prove a viable replacement; authenticated reads, exact-once disposable sends, media and lifecycle evidence are required. Findings and remaining gates: [GPT_NATIVE_LINUX.md](GPT_NATIVE_LINUX.md).
+
+The protected native connection page uses relative phone trackpad input shared with PC Remote. Browser-based native OAuth opens inside the same private desktop. The owner performs sign-in and any upstream verification; the integration does not bypass anti-bot checks.
+
 ## 2026-09-13 — Owner-approved team milestone and stable production
 
 The owner approved [Team Workspace](TEAM_WORKSPACE.md) after an explicit planning discussion. This supersedes the single-user-only product constraint and deferrals of #6/#37. The current Hub gains separate full personal workspaces, initially for the owner and a friend using their own Windows PC, Codex, consumer GPT and GitHub accounts. A complete separate-Hub installer remains deferred.
