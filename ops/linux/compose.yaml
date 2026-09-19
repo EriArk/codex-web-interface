@@ -55,6 +55,7 @@ services:
       - "${CODEX_WEB_STATE}/ssh:${CODEX_WEB_STATE}/ssh:ro"
       - "${CODEX_WEB_STATE}/data:${CODEX_WEB_STATE}/data"
       - "${CODEX_WEB_STATE}/speech:/run/codex-speech:ro"
+      - "${GPT_NATIVE_ADAPTER_PATH:-${CODEX_WEB_STATE}/native-gpt}:/run/codex-gpt-native:ro"
     depends_on: [guacd]
   guacd:
     image: guacamole/guacd:1.6.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f

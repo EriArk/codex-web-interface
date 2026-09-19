@@ -1,3 +1,4 @@
+import {nativeDictation} from './renderer-dictation.mjs';
 import {nativeProject} from './renderer-project.mjs';
 import {nativeLibrary} from './renderer-library.mjs';
 import {nativeRead} from './renderer-read.mjs';
@@ -70,6 +71,16 @@ export class NativeRendererReader {
   }finally{await this.#read({operation:'clearUpload',stageId},{},'upload-stage').catch(()=>{});}
  }
 
+ async transcribe(r,options){
+  if(typeof r.audio!=='string'||r.audio.length>8*1024**2||!/^[-a-z0-9.]+\/[-a-z0-9.]+$/i.test(r.mime??''))throw Error('NATIVE_INVALID_AUDIO');
+  const bytes=Buffer.from(r.audio,'base64');if(!bytes.length||bytes.length>6*1024**2||bytes.toString('base64')!==r.audio)throw Error('NATIVE_INVALID_AUDIO');
+  const stageId=randomUUID(),signal=AbortSignal.timeout(110000),stage=input=>this.#read({...input,stageId,accountFingerprint:r.accountFingerprint},{signal},'upload-stage');
+  try{
+   await stage({operation:'beginUpload',bytes:bytes.length,sha256:r.sha256});
+   let offset=0;for(let i=0;i<r.audio.length;i+=131072){const base64=r.audio.slice(i,i+131072),next=await stage({operation:'appendUpload',offset,base64});offset+=Buffer.from(base64,'base64').length;if(next.offset!==offset)throw Error('NATIVE_UPLOAD_CHANGED');}
+   return await this.#read({stageId,bytes:bytes.length,sha256:r.sha256,mime:r.mime,accountFingerprint:r.accountFingerprint},{signal},'dictation');
+  }finally{await this.#read({operation:'clearUpload',stageId},{},'upload-stage').catch(()=>{});}
+ }
  async createProject(r,o){return this.#read({...r,operation:'createProject'},o,'project');}
  async inspectProject(r,o){return this.#read({...r,operation:'inspectProject'},o,'project');}
  async mutateProject(r,o){return this.#read({...r,operation:'mutateProject'},o,'project');}
@@ -112,10 +123,10 @@ export class NativeRendererReader {
   return this.#read({operation:'stopResponse',conversationId,accountFingerprint,userMessageId}, options, true);
  }
  async #read(request, {signal:callerSignal} = {}, control = false) {
-  const deadline = AbortSignal.timeout(['upload','stored-upload'].includes(control)?65000:20000);
+  const deadline = AbortSignal.timeout(control==='dictation'?100000:['upload','stored-upload'].includes(control)?65000:20000);
   const signal = callerSignal ? AbortSignal.any([callerSignal, deadline]) : deadline;
   try {
-   const call = control === 'project' ? `(${nativeProject.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'library' ? `(${nativeLibrary.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'stored-upload' ? `(${nativeStoredUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'upload-stage' ? `(${nativeUploadStage.toString()})(${JSON.stringify(request)})` : control === 'upload' ? `(${nativeUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'dispatch' ? `(${nativeDispatch.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
+   const call = control === 'dictation' ? `(${nativeDictation.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'project' ? `(${nativeProject.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'library' ? `(${nativeLibrary.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'stored-upload' ? `(${nativeStoredUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'upload-stage' ? `(${nativeUploadStage.toString()})(${JSON.stringify(request)})` : control === 'upload' ? `(${nativeUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'dispatch' ? `(${nativeDispatch.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${nativeRead.toString()},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${nativeRead.toString()})(${JSON.stringify(request)})`;
    const expression = `(async()=>{try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
    const unwrap=result=>{if(result?.ok!==true)throw Error(/^NATIVE_[A-Z_]+$/.test(result?.code??'')?result.code:'NATIVE_INVALID_RESPONSE');return result.value;};
    if(this.transport)return unwrap(await this.transport.evaluateMain(expression,guard,signal));

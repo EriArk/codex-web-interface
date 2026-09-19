@@ -1,6 +1,6 @@
 # Linux ChatGPT evaluation — #193
 
-Date: 2026-09-19. **Supervised native canary installed; main GPT provider not migrated.** Existing-chat text sends and ordinary unassigned Chat creation now use the Hub job schema and durable native receipts, with exact canonical confirmation after restart. Native catalog/history and sandbox downloads are available through the private adapter. Uploads have an earlier separate fixture proof, but are not yet on the durable Hub path. Production provider admission and full feature parity remain open. The dated sections below retain earlier evidence; the last section records the current installation.
+Date: 2026-09-19. **Owner integration candidate verified; coordinated main-engine installation still waits for active Codex work.** The private native runtime now uses Chromium's sandbox. Main-site wiring, native dictation and account isolation are implemented; real ordinary-web new-chat/upload/reload and Russian transcription passed. Earlier dated sections are historical. See the final admission section for actual installed/pending scope; full native feature parity is not claimed.
 
 ## Package and runtime
 
@@ -321,3 +321,69 @@ Installed only in the native lab: image `codex-web-gpt-native:26.915.31945-proje
 Stopped pre-stage backup `backups/native-before-projects.tar`: 2,580,776,960 bytes, SHA-256 `6ba82ece689813632cacaae8d8c55e0c7f9d3afbea6843ddaf24d9480f410eef`; all four extracted SQLite databases passed integrity checks. Later unknown intent/configuration and proof files are separately preserved in `backups/native-project-unknown-receipts.tar`, 92,160 bytes, SHA-256 `060fd3b1bb7d532b5f712fc4db2f7d731f4b172361f0e834454f2e14c7651292`. Rollback must retain this receipt and compatible barrier, not just restore an older profile/configuration.
 
 After restart, the prior real 32 MiB chat-upload proof still reopens completed with one exact native user message. The protected gateway is healthy, anonymous native access returns 401, and no native port is published. Production engine/gateway/old-browser IDs and start times still match baseline. **The primary GPT workspace has not switched providers.** #193 remains open; this stage adds implementation and fixture acceptance, not a completed live project milestone.
+
+
+## Owner workspace admission and dictation (2026-09-19)
+
+The host-only `nativeGpt` configuration binds the original Team owner UUID, the
+already approved account fingerprint and one private Unix socket. The personal
+runtime creates a single queued native client for chat, project reads and
+dictation. Other members never inherit either the host binding or an injected
+owner adapter. Identity checks run lazily on every request: a missing socket,
+unsafe permissions, changed binding or unavailable account disables GPT without
+preventing Codex startup. There is no automatic old-provider fallback.
+
+Owner admission replaces disposable conversation UUID lists with validated native
+identities, retaining the same account checks, idempotent Hub jobs and native
+receipts. Existing `browser` jobs cannot be picked up by `native`, including after
+restart. The production inventory at admission had 153 completed, 10 failed and 5
+cancelled browser jobs, with no active or unknown GPT jobs. Their data and the old
+connector/profile are retained. Project **creation** remains separately restricted;
+ordinary new chats and chats in existing projects use the native durable path.
+
+The prior disposable project-create operation `7108395c-ff62-41d4-8e59-3b1e4644948c`
+had no confirmed native identity. Its exact receipt was explicitly abandoned with
+possible-orphan acknowledgement after checking the same native account. Evidence
+remains in SQLite; repeating its key cannot create again. This does not assert the
+project was never created and does not permit discarding unknown chat sends.
+
+Real ordinary-web acceptance used host configuration (not an injected test
+allowlist): a new unassigned chat, TXT upload, exact answer `ownerintegrationok`
+and reload passed through the shared phone UI. Receipt and screenshots are private
+in `owner-proof`. The previous real 32 MiB PDF receipt still reconciles to exactly
+one native user message after the runtime restart. These are browser automation
+checks, not physical iPhone acceptance.
+
+Dictation now uses the pinned client's native `/transcribe` transport and signed-in
+consumer identity. Audio is bounded at 6 MiB, staged with SHA-256 through the
+private pipe, checked against the account before/after transcription and cleared.
+No chat, model or conversation mutation is involved. Existing shared dictation
+jobs preserve cancellation and explicit retry. Real local synthetic Russian audio
+(181132 bytes) returned exactly «Проверка голосового ввода. Сегодня хорошая погода.».
+The same implementation serves both Codex and GPT. Actual phone microphone input
+remains the owner's usage check.
+
+Both the application and its sign-in browser now start **without `--no-sandbox`**.
+The pinned Playwright seccomp allowlist plus `chroot` permits Chromium's own
+unprivileged namespace sandbox; container capabilities remain empty,
+no-new-privileges stays enabled and AppArmor remains active. Real renderer processes
+have distinct user/PID/network namespaces and two seccomp filters. No privileged
+container, globally relaxed host policy or debugger listener is introduced. See
+[the seccomp provenance](../ops/gpt-native/SECCOMP.md).
+
+Native Settings recovery opens the native client, not the retired browser.
+Unsupported edit/regenerate/fork and scheduled/Canvas mutations reject before
+creating a blocking receipt; the unsupported message controls are not offered in
+native mode. Project files/instructions retain the existing verified native
+transport. These advanced operations, project creation, complete generated-media
+parity and member-native provisioning remain open under #193.
+
+The private profile checkpoint `backups/native-before-owner.tar` is 2590023680
+bytes, SHA-256 `865b743f478a51ea181b6eed33e25fad2c59af911f8059dc7343d4333201a332`;
+the extracted dispatch database passed integrity verification. A second receipt
+checkpoint precedes dictation installation. Main-engine cutover uses the existing
+coordinated Team checkpoint/admission/rollback guard and retains the old engine
+image. A stale Bridge Doctor association was rebound through its normal API to
+its same existing idle diagnostic thread; automatic diagnostics are temporarily
+paused across cutover, with original settings preserved for restoration. Actual
+Codex tasks remain maintenance blockers and must not be interrupted.

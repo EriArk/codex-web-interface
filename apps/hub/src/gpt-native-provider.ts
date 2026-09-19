@@ -31,9 +31,10 @@ export interface NativeGptWorkspace {
     | "uploadFile"
     | "uploadFilePath"
   >;
-  projects?: ReadonlySet<string>;
-  conversations: ReadonlySet<string>;
-  creationKeys: ReadonlySet<string>;
+  transcribe?: (bytes: Buffer, signal: AbortSignal, mime: string) => Promise<string>;
+  projects?: { has(id: string): boolean };
+  conversations: { has(id: string): boolean };
+  creationKeys: { has(id: string): boolean };
 }
 const unavailable = () =>
   new HubError(

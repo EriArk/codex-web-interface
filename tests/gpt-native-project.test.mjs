@@ -420,3 +420,38 @@ test("native HTTP rejection is terminal, but transport loss remains unknown and 
   );
   assert.equal(calls, 2);
 });
+
+test("explicit abandoned project creation retains unknown evidence and cannot replay the same key", async (t) => {
+  const f = fixture(t),
+    key = randomUUID(),
+    p = new NativeProjectReceipts(f.dispatch, [], [key]);
+  let calls = 0;
+  const reader = {
+    createProject: async () => {
+      calls++;
+      throw Error("lost");
+    },
+    inspectAccount: async () => ({ accountFingerprint }),
+  };
+  await assert.rejects(p.create({ key, name: "Disposable" }, reader), /lost/);
+  await assert.rejects(
+    p.abandon({ key, accountFingerprint, acceptPossibleOrphan: false }, reader),
+    /INVALID_REQUEST/,
+  );
+  assert.equal(f.dispatch.pending(), true);
+  await assert.rejects(
+    p.abandon({ key, accountFingerprint: "c".repeat(64), acceptPossibleOrphan: true }, reader),
+    /ACCOUNT_MISMATCH/,
+  );
+  assert.equal(
+    (await p.abandon({ key, accountFingerprint, acceptPossibleOrphan: true }, reader)).state,
+    "abandoned",
+  );
+  assert.equal(f.dispatch.pending(), false);
+  await p.create({ key, name: "Disposable" }, reader);
+  assert.equal(calls, 1);
+  assert.equal(
+    f.dispatch.db.prepare("SELECT state FROM project_creations WHERE key=?").get(key).state,
+    "abandoned",
+  );
+});

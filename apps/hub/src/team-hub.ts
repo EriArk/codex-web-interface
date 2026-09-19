@@ -78,6 +78,7 @@ export function privateConfig(config: HubConfig, registry: TeamStore, userId: st
   if (user.id === registry.ownerId && user.legacy)
     return {
       ...config,
+      nativeGpt: !blocked && config.nativeGpt?.userId === user.id ? config.nativeGpt : undefined,
       machines: blocked ? [] : [...structuredClone(config.machines), ...enrolled.machines],
       devices: blocked ? [] : [...structuredClone(config.devices), ...enrolled.devices],
       projects: blocked ? [] : structuredClone(config.projects),
@@ -189,6 +190,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
           await prepareEngineSocket(socket);
           runtime = await (options.personalFactory ?? createApp)(selected, {
             ...options,
+            nativeGpt: userId === registry.ownerId ? options.nativeGpt : undefined,
             webRoot: undefined,
             store,
             auth: scoped,

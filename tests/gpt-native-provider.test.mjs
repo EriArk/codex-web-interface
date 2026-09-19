@@ -100,6 +100,60 @@ test("switching providers never dispatches a queued browser message through nati
     /ещё не подключено/,
   );
 });
+
+test("unsupported native branch mutations fail before creating a blocking receipt", (t) => {
+  const f = setup(t),
+    service = f.open();
+  assert.throws(
+    () =>
+      service.operations.start(randomUUID(), {
+        nativeId: f.conversationId,
+        messageId: randomUUID(),
+        currentNode: randomUUID(),
+        action: "regenerate",
+        text: "",
+        model: "latest",
+        effort: "1",
+      }),
+    /доступно в клиенте/,
+  );
+  assert.equal(f.store.db.prepare("SELECT count(*) n FROM gpt_native_operations").get().n, 0);
+  assert.equal(service.operations.blocked(), false);
+});
+
+test("both workspaces use native dictation without the retired browser connector", async (t) => {
+  const native = nativeWorkspaceFixture();
+  let calls = 0;
+  native.workspace.transcribe = async (bytes, signal, mime) => {
+    calls++;
+    assert.equal(mime, "audio/wav");
+    assert.equal(bytes.toString(), "audio");
+    signal.throwIfAborted();
+    return "Проверка";
+  };
+  const f = await handoffFixture(undefined, undefined, { nativeGpt: native.workspace });
+  t.after(() => f.close());
+  assert.equal(
+    (await f.app.inject({ url: "/api/dictation/status", headers: f.headers })).json().available,
+    true,
+  );
+  const id = randomUUID();
+  assert.equal(
+    (
+      await f.app.inject({
+        method: "POST",
+        url: `/api/dictation/${id}?mime=audio/wav`,
+        headers: { ...f.headers, "content-type": "application/octet-stream" },
+        payload: Buffer.from("audio"),
+      })
+    ).statusCode,
+    202,
+  );
+  await until(() => calls === 1);
+  const result = await f.app.inject({ url: `/api/dictation/${id}`, headers: f.headers });
+  assert.equal(result.json().text, "Проверка");
+  assert.equal(native.state.sends, 0);
+});
 test("cancelling native preparation prevents dispatch after its delayed completion", async (t) => {
   const f = setup(t),
     service = f.open(),

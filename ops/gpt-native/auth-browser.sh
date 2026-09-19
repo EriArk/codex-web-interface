@@ -10,6 +10,6 @@ esac
 [ "$#" -eq 1 ] || exit 2
 mkdir -p /data/auth-browser /data/logs
 exec /ms-playwright/chromium-1234/chrome-linux64/chrome \
-  --no-sandbox --disable-dev-shm-usage --no-first-run --no-default-browser-check \
+  --disable-dev-shm-usage --no-first-run --no-default-browser-check \
   --user-data-dir=/data/auth-browser --start-maximized "$1" \
   >>/data/logs/auth-browser.log 2>&1

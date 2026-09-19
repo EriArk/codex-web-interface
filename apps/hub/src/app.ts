@@ -38,6 +38,7 @@ import { registerDictation, type Transcribe } from "./dictation.js";
 import { ENGINE_PROTOCOL } from "./engine-client.js";
 import { registerFilePreviews } from "./filePreviews.js";
 import { registerGpt } from "./gpt.js";
+import { configuredNativeGpt } from "./gpt-native-config.js";
 import type { NativeGptWorkspace } from "./gpt-native-provider.js";
 import { registerGuiPreviews } from "./gui-previews.js";
 import { entityAction, libraryMutation } from "./library.js";
@@ -163,7 +164,9 @@ export async function createApp(
     app.post("/internal/terminals/maintenance", () => devices.maintenance(true));
   }
   registerSpeech(app, config, auth);
-  registerDictation(app, config, auth, options.transcribe);
+  const nativeGpt =
+    options.nativeGpt ?? configuredNativeGpt(config, options.authorizeExecution ?? (() => {}));
+  registerDictation(app, config, auth, options.transcribe ?? nativeGpt?.transcribe);
   app.addContentTypeParser(
     "application/octet-stream",
     { parseAs: "buffer", bodyLimit: MAX_FILE_BYTES },
@@ -207,7 +210,7 @@ export async function createApp(
       },
     });
   });
-  const gpt = registerGpt(app, config, store, options.authorizeExecution, options.nativeGpt);
+  const gpt = registerGpt(app, config, store, options.authorizeExecution, nativeGpt);
   registerChunkUploads(app, config, store, sessions.attachments, gpt, options.authorizeExecution);
   registerContentSearch(app, sessions, gpt);
   const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);

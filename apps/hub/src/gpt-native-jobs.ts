@@ -27,8 +27,8 @@ export class NativeGptJobs {
     private readonly store: Pick<Store, "db">,
     private readonly client: NativeJobsClient,
     private readonly authorize: () => void,
-    private readonly allowed: Set<string>,
-    private readonly creationKeys: Set<string> = new Set(),
+    private readonly allowed: { has(id: string): boolean },
+    private readonly creationKeys: { has(id: string): boolean } = new Set(),
     private readonly readUpload?: (file: GptFile) => Promise<Buffer | string>,
   ) {
     store.db.exec(

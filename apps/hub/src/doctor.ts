@@ -11,6 +11,8 @@ import { probeCodex, spawnCodex, stopProcess } from "@codex-web/machines";
 import type { HubConfig, MachineConfig } from "@codex-web/shared";
 import { normalizeGptConnection } from "@codex-web/shared";
 import { loadConfig } from "./config.js";
+import { configuredNativeGpt } from "./gpt-native-config.js";
+import { NativeGptProvider } from "./gpt-native-provider.js";
 import { SCHEMA_VERSION, schemaVersion } from "./migrations.js";
 import { storageReport } from "./storage.js";
 
@@ -244,8 +246,13 @@ export async function collectDiagnostics(
         "PUBLIC_HEALTH",
       );
   }
-  let gpt = normalizeGptConnection(null, !!config.gpt);
-  if (config.gpt && !options.offline) {
+  let gpt = normalizeGptConnection(null, !!config.gpt || !!config.nativeGpt);
+  if (config.nativeGpt && !options.offline) {
+    try {
+      gpt = await new NativeGptProvider(configuredNativeGpt(config, () => {})!).connection();
+    } catch {}
+    add("gpt", gpt.state === "healthy" ? "ok" : "warning", "GPT_NATIVE_" + gpt.state.toUpperCase());
+  } else if (config.gpt && !options.offline) {
     let raw: unknown = null;
     try {
       if (dependencies.gpt) raw = await dependencies.gpt();

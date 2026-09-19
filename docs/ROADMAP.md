@@ -2,7 +2,9 @@
 
 ## Immediate priority — Linux ChatGPT client (#193, 2026-09-19)
 
-The official isolated Linux client is installed and authenticated. The owner accepts its combined Chat/Work UI. Keep #193 open: the main GPT workspace still uses its old provider. Preserve both profiles, existing/unknown jobs, and independent Windows Codex recovery.
+The official isolated Linux client is installed and authenticated. Owner integration, native dictation and sandboxed runtime are now verified; the coordinated main-engine release is being prepared for the next safe idle point. Keep #193 open for advanced-feature parity. Preserve both profiles, existing/unknown jobs, and independent Windows Codex recovery. Current proof and installation scope: [owner admission](GPT_NATIVE_LINUX.md#owner-workspace-admission-and-dictation-2026-09-19).
+
+Next native work after the integrated owner release: recoverable unknown-operation review, complete generated image/download support, edit/regenerate/fork, project creation, scheduled/Canvas contracts, then independent member-native provisioning. Do not call these completed merely because ordinary chat works.
 
 Implemented and verified in the native canary:
 

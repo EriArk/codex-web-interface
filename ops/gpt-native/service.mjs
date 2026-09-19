@@ -43,6 +43,8 @@ export class NativeReadService {
     if (!input || typeof input !== 'object' || Array.isArray(input) || input.userId !== this.userId) fail('WRONG_OWNER');
     const canaryFields = this.canary ? {
       createProject: ['key','name'],
+      transcribe: ['audio','mime','sha256'],
+      abandonProjectCreation: ['key','acceptPossibleOrphan'],
       projectMutation: ['key','projectId','revision','action','text','fileId','confirm','file'],
       stageProjectUpload: ['key','projectId','file','offset','base64'],
       reconcileProject: ['key','projectId'],
@@ -63,7 +65,7 @@ export class NativeReadService {
       listArtifacts: ['conversationId', 'before'], readArtifact: ['conversationId', 'messageId', 'artifactId'],
     }[input.operation];
     if (!Array.isArray(fields) || Object.keys(input).some(k => !['userId', 'operation', ...fields].includes(k))) fail('INVALID_REQUEST');
-    if (input.operation === 'status') return { instanceId: this.instanceId, manual: this.leases.size > 0, busy: this.busy, writesEnabled: false };
+    if (input.operation === 'status') return { instanceId: this.instanceId, manual: this.leases.size > 0, busy: this.busy, writesEnabled: this.canary?.ownerMode===true };
     if (this.busy) fail('BUSY');
     if (['beginManual', 'endManual', 'resumeManual'].includes(input.operation)) {
       if (input.operation !== 'resumeManual' && !uuid(input.leaseId)) fail('INVALID_REQUEST');
@@ -83,6 +85,8 @@ export class NativeReadService {
       const { operation, userId: ignored, ...args } = input;
       const bound={...args,accountFingerprint:this.accountFingerprint};
       if(Object.hasOwn(canaryFields,operation)){
+        if(operation==='transcribe')return await this.reader.transcribe(bound);
+        if(operation==='abandonProjectCreation')return await this.projects.abandon(bound,this.reader);
         if(operation==='createProject'){const v=await this.projects.create(bound,this.reader);if(v.projectId)this.library.projects.add(v.projectId);return v;}
         if(operation==='stageProjectUpload'){this.projects.admit(bound);if(this.canary.pending())fail('PENDING_DISPATCH');return await this.uploads.append(bound);}
         if(operation==='projectMutation'){const v=await this.projects.execute(bound,this.reader,this.uploads,transferStoredUpload);if(v.state!=='unknown'&&bound.action==='upload')await this.uploads.clear(bound);return v;}

@@ -21,7 +21,7 @@ import { Store } from "../apps/hub/dist/store.js";
 import { teamPasswordHash } from "../apps/hub/dist/team-auth.js";
 import { TeamGpt, teamGptName } from "../apps/hub/dist/team-gpt.js";
 import { reconcileGptProfiles } from "../apps/hub/dist/team-gpt-host.js";
-import { createTeamHub } from "../apps/hub/dist/team-hub.js";
+import { createTeamHub, privateConfig } from "../apps/hub/dist/team-hub.js";
 import { restoreTeamSnapshot, verifyTeamSnapshot } from "../apps/hub/dist/team-maintenance.js";
 import { unzipSync } from "../apps/hub/node_modules/fflate/esm/index.mjs";
 import WebSocket from "../apps/hub/node_modules/ws/wrapper.mjs";
@@ -2568,4 +2568,34 @@ test("Links reject admin bypass, unauthorized target, stale consent and disabled
     f.teamLinks.answer(f.friendId, next, randomUUID(), { revision: 1, accept: true, projectId: b }),
   );
   assert.equal((await f.request("/api/team/contacts")).body.items.length, 1);
+});
+
+test("native GPT owner admission never leaks through member configuration or injected client", async (t) => {
+  const marker = { client: {}, conversations: new Set(), creationKeys: new Set() },
+    seen = [];
+  const f = await fixture(t, {
+    nativeGpt: marker,
+    personalFactory: async (config, options) => {
+      seen.push(options.nativeGpt);
+      return createApp(config, options);
+    },
+  });
+  f.config.nativeGpt = {
+    userId: f.registry.ownerId,
+    accountFingerprint: "a".repeat(64),
+    socketPath: "/private/adapter.sock",
+  };
+  assert.equal(
+    privateConfig(f.config, f.registry, f.registry.ownerId).nativeGpt,
+    f.config.nativeGpt,
+  );
+  assert.equal(privateConfig(f.config, f.registry, f.friendId).nativeGpt, undefined);
+  await f.personal(f.registry.ownerId);
+  await f.personal(f.friendId);
+  assert.equal(seen[0], marker);
+  assert.equal(seen[1], undefined);
+  f.registry.db
+    .prepare("INSERT OR REPLACE INTO team_meta VALUES('nativeAdmission','blocked')")
+    .run();
+  assert.equal(privateConfig(f.config, f.registry, f.registry.ownerId).nativeGpt, undefined);
 });

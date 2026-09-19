@@ -242,6 +242,7 @@ export class GptService {
       store,
       (path, body) => this.json(path, body),
       () =>
+        this.requireBrowserFeature() &&
         !this.projectContent?.blocked() &&
         !this.workspaceWork?.blocked() &&
         !this.stopped &&
@@ -290,6 +291,7 @@ export class GptService {
       store,
       (path, body) => this.json(path, body),
       () =>
+        this.requireBrowserFeature() &&
         !this.stopped &&
         !this.working &&
         !this.libraryBusy &&
@@ -318,8 +320,8 @@ export class GptService {
           authorize();
           if (this.stopped) throw Error("NATIVE_STOPPED");
         },
-        new Set(nativeWorkspace.conversations),
-        new Set(nativeWorkspace.creationKeys),
+        nativeWorkspace.conversations,
+        nativeWorkspace.creationKeys,
         async (file) => {
           const stored = this.upload(file.id);
           if (stored.bytes !== file.bytes || stored.name !== file.name || stored.mime !== file.mime)
@@ -333,6 +335,14 @@ export class GptService {
         "UPDATE gpt_jobs SET status='unknown',error=? WHERE status IN ('preparing','running')",
       )
       .run("Соединение прервалось. Проверь ответ в чате перед повторной отправкой.");
+  }
+  private requireBrowserFeature() {
+    if (this.native)
+      throw error(
+        "GPT_NATIVE_NOT_READY",
+        "Это действие пока доступно в клиенте ChatGPT. Открой его в настройках подключения.",
+      );
+    return true;
   }
   available() {
     return !!this.native || (!!this.config.gpt && !!this.token);

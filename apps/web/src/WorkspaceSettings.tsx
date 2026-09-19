@@ -71,12 +71,18 @@ function GptConnectionSettings({ visible }: { visible: boolean }) {
       </button>
       <a
         className="primary"
-        href="/gpt-connect?immersive=1"
+        href={
+          status?.connectUrl === "/gpt-connect?runtime=native"
+            ? "/gpt-connect?runtime=native&immersive=1"
+            : "/gpt-connect?immersive=1"
+        }
         target="_blank"
         rel="noopener noreferrer"
       >
         <Icon name="remote" />
-        Браузер ChatGPT на сервере
+        {status?.connectUrl === "/gpt-connect?runtime=native"
+          ? "Открыть клиент ChatGPT"
+          : "Браузер ChatGPT на сервере"}
       </a>
     </section>
   );

@@ -104,6 +104,14 @@ export const configSchema = z
           .default("GPT_SERVICE_TOKEN"),
       })
       .optional(),
+    nativeGpt: z
+      .object({
+        userId: z.string().uuid(),
+        accountFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        socketPath: z.string().startsWith("/").max(200),
+      })
+      .strict()
+      .optional(),
     auth: z.object({
       username: z.string().min(1).max(80).default("owner"),
       // Public login chosen for the original owner's first team migration.

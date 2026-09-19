@@ -1,3 +1,5 @@
+> Current owner-integration admission is documented in [GPT_NATIVE_LINUX.md](../../docs/GPT_NATIVE_LINUX.md#owner-workspace-admission-and-dictation-2026-09-19). Earlier lab-only steps below retain their historical scope. The current runtime requires the [sandbox seccomp profile](SECCOMP.md); never restore `--no-sandbox` for an owner release.
+
 # Isolated Linux ChatGPT evaluation
 
 This is the #193 research runtime, **not yet the production GPT provider**. See [the technical record](../../docs/GPT_NATIVE_LINUX.md) for real-account proof, current gaps and rollback.

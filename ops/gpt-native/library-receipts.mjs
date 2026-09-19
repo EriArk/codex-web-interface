@@ -5,7 +5,7 @@ const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}
 export class NativeLibraryReceipts {
  constructor(dispatch,projectIds=[]){
   if(!Array.isArray(projectIds)||projectIds.length>4||!projectIds.every(x=>/^g-p-[a-zA-Z0-9-]{1,80}$/.test(x)))fail('INVALID_CANARY');
-  this.dispatch=dispatch;this.projects=new Set(projectIds);this.db=dispatch.db;
+  this.dispatch=dispatch;this.projects=dispatch.ownerMode?{has:id=>/^g-p-[a-zA-Z0-9-]{1,80}$/.test(id),add:()=>{}}:new Set(projectIds);this.db=dispatch.db;
   this.db.exec('CREATE TABLE IF NOT EXISTS library_receipts(key TEXT PRIMARY KEY,hash TEXT NOT NULL,payload TEXT NOT NULL,baseline TEXT NOT NULL,state TEXT NOT NULL)');
  }
  pending(){return !!this.db.prepare("SELECT 1 FROM library_receipts WHERE state='unknown' LIMIT 1").get();}

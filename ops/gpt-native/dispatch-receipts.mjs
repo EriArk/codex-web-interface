@@ -8,12 +8,13 @@ const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}
 const fail=code=>{throw Error(`NATIVE_${code}`);};
 /** At-most-once dispatch receipts, not a queue. Only Hub gpt_jobs can schedule work. */
 export class NativeDispatchReceipts {
- constructor({path,userId,accountFingerprint,conversationIds,creationKeys=[]}){
+ constructor({path,userId,accountFingerprint,conversationIds,creationKeys=[],ownerMode=false}){
   if(!uuid(userId)||!/^[a-f0-9]{64}$/.test(accountFingerprint)||!Array.isArray(conversationIds)||
-     !conversationIds.length||conversationIds.length>4||!conversationIds.every(uuid)||!Array.isArray(creationKeys)||creationKeys.length>4||!creationKeys.every(uuid))fail('INVALID_CANARY');
+     (!ownerMode&&!conversationIds.length)||conversationIds.length>4||!conversationIds.every(uuid)||!Array.isArray(creationKeys)||creationKeys.length>4||!creationKeys.every(uuid))fail('INVALID_CANARY');
   privatePath(dirname(path),'isDirectory');
   try{privatePath(path,'isFile');}catch(e){if(e.code!=='ENOENT')throw e;}
-  this.allowed=new Set(conversationIds);this.creationKeys=new Set(creationKeys);this.db=new DatabaseSync(path);chmodSync(path,0o600);
+  if(typeof ownerMode!=="boolean")fail("INVALID_ADMISSION");this.ownerMode=ownerMode;
+  this.allowed=ownerMode?{has:uuid}:new Set(conversationIds);this.creationKeys=ownerMode?{has:uuid}:new Set(creationKeys);this.db=new DatabaseSync(path);chmodSync(path,0o600);
   this.db.exec("PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS binding(id INTEGER PRIMARY KEY, hash TEXT NOT NULL); CREATE TABLE IF NOT EXISTS receipts(key TEXT PRIMARY KEY, hash TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL);");
   this.db.exec("CREATE TABLE IF NOT EXISTS project_creations(key TEXT PRIMARY KEY,name TEXT NOT NULL,projectId TEXT,state TEXT NOT NULL DEFAULT 'unknown')");
   this.db.exec("CREATE TABLE IF NOT EXISTS project_receipts(key TEXT PRIMARY KEY,hash TEXT NOT NULL,payload TEXT NOT NULL,state TEXT NOT NULL,uploaded TEXT)");

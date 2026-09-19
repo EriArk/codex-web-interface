@@ -1596,7 +1596,8 @@ export function GptWorkspace({
                     <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
                     <b>{message.role === "user" ? "Вы" : "GPT"}</b>
                     <span className="message-actions">
-                      {nativeOperations.button(message, !!active || busy)}
+                      {connection?.connectUrl !== "/gpt-connect?runtime=native" &&
+                        nativeOperations.button(message, !!active || busy)}
                       {message.role === "assistant" && (
                         <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
                       )}

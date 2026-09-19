@@ -21,7 +21,15 @@ export class NativeProjectReceipts {
   this.db.prepare('UPDATE project_creations SET projectId=? WHERE key=?').run(result.projectId,r.key);
   this.allowed.add(result.projectId);return result;
  }
- admit(r){if(!uuid(r.key)||!this.allowed.has(r.projectId))fail('INVALID_CANARY');}
+ async abandon(r,reader){
+  if(!uuid(r.key)||r.acceptPossibleOrphan!==true)fail('INVALID_REQUEST');
+  const row=this.db.prepare('SELECT * FROM project_creations WHERE key=?').get(r.key);
+  if(!row||row.projectId||!['unknown','abandoned'].includes(row.state))fail('INVALID_RECEIPT');
+  const account=await reader.inspectAccount(r);if(account.accountFingerprint!==r.accountFingerprint)fail('ACCOUNT_MISMATCH');
+  this.db.prepare("UPDATE project_creations SET state='abandoned' WHERE key=? AND state='unknown'").run(r.key);
+  return {state:'abandoned'};
+ }
+ admit(r){if(!uuid(r.key)||!(this.dispatch.ownerMode?/^g-p-[a-zA-Z0-9-]{1,80}$/.test(r.projectId):this.allowed.has(r.projectId)))fail('INVALID_CANARY');}
  async execute(r,reader,uploads,transfer){
   this.admit(r);
   if(!/^[a-f0-9]{64}$/.test(r.revision??'')||!['instructions','upload','remove'].includes(r.action)||r.action==='instructions'&&(typeof r.text!=='string'||r.text.length>100000)||r.action==='remove'&&(!/^file[-_][a-zA-Z0-9_-]{1,150}$/.test(r.fileId??'')||r.confirm!==true))fail('INVALID_PROJECT');

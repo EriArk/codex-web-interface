@@ -88,11 +88,14 @@ export class NativeGptReadClient {
     uuid.parse(binding.userId);
     if (!isAbsolute(binding.socketPath)) fail("INVALID_SOCKET");
   }
-  private async call(input: Record<string, unknown>): Promise<unknown> {
+  private async call(input: Record<string, unknown>, cancellation?: AbortSignal): Promise<unknown> {
     this.authorize();
     if (this.waiting >= 64) fail("BUSY");
     this.waiting++;
-    const task = this.tail.then(() => this.request(input));
+    const task = this.tail.then(() => {
+      cancellation?.throwIfAborted();
+      return this.request(input, cancellation);
+    });
     this.tail = task.catch(() => {});
     try {
       return await task;
@@ -100,7 +103,10 @@ export class NativeGptReadClient {
       this.waiting--;
     }
   }
-  private async request(input: Record<string, unknown>): Promise<unknown> {
+  private async request(
+    input: Record<string, unknown>,
+    cancellation?: AbortSignal,
+  ): Promise<unknown> {
     this.authorize();
     // A configured same-UID private Unix socket, never a browser-supplied address.
     for (const [path, directory] of [
@@ -117,13 +123,14 @@ export class NativeGptReadClient {
     }
     this.authorize();
     const result = await new Promise<unknown>((resolve, reject) => {
-      const signal = AbortSignal.timeout(
+      const deadline = AbortSignal.timeout(
         ["uploadStoredFile", "projectMutation"].includes(String(input.operation))
           ? 16 * 60000
-          : input.operation === "uploadFile"
-            ? 100000
+          : ["uploadFile", "transcribe"].includes(String(input.operation))
+            ? 120000
             : 25000,
       );
+      const signal = cancellation ? AbortSignal.any([deadline, cancellation]) : deadline;
       const req = request(
         {
           socketPath: this.binding.socketPath,
@@ -173,6 +180,31 @@ export class NativeGptReadClient {
     });
     this.authorize();
     return result;
+  }
+  async transcribe(bytes: Buffer, signal: AbortSignal, mime: string) {
+    signal.throwIfAborted();
+    if (
+      !bytes.length ||
+      bytes.length > 6 * 1024 ** 2 ||
+      !["audio/wav", "audio/webm", "audio/mp4", "audio/ogg"].includes(mime)
+    )
+      fail("INVALID_AUDIO");
+    const result = z
+      .object({ text: z.string().max(32000) })
+      .strict()
+      .parse(
+        await this.call(
+          {
+            operation: "transcribe",
+            audio: bytes.toString("base64"),
+            sha256: createHash("sha256").update(bytes).digest("hex"),
+            mime,
+          },
+          signal,
+        ),
+      );
+    signal.throwIfAborted();
+    return result.text;
   }
   async createProject(key: string, name: string) {
     uuid.parse(key);
@@ -263,7 +295,7 @@ export class NativeGptReadClient {
         instanceId: uuid,
         manual: z.boolean(),
         busy: z.boolean(),
-        writesEnabled: z.literal(false),
+        writesEnabled: z.boolean(),
       })
       .strict()
       .parse(await this.call({ operation: "status" }));
