@@ -52,7 +52,10 @@ try {
         releaseModels,
         reads = 0,
         sends = 0;
-      let releaseSend, job, live;
+      let releaseSend,
+        job,
+        live,
+        serverEffort = "0";
       const page = await context.newPage();
       await page.addInitScript(() => localStorage.setItem("gpt-conversation", "history-chat"));
       await page.clock.install();
@@ -80,7 +83,7 @@ try {
                 { id: "2", label: "Extended" },
               ],
               currentModel: "latest",
-              currentEffort: "0",
+              currentEffort: serverEffort,
             },
           });
         }
@@ -237,9 +240,39 @@ try {
       await expect(details).toContainText("More live output");
       await page.screenshot({ path: `.local/qa-gpt-send-ready/${name}.png` });
       assert.equal(sends, 1);
+      // Simulate PWA eviction: lose session state, retain only account-local choices.
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("pagehide"));
+        sessionStorage.clear();
+      });
+      let releaseStatus;
+      await page.route("https://outbox.test/api/gpt/status", async (route) => {
+        await new Promise((resolve) => {
+          releaseStatus = resolve;
+        });
+        return route.fulfill({ json: { configured: true, canSend: true, state: "healthy" } });
+      });
+      releaseModels = undefined;
+      serverEffort = "2";
+      await page.reload();
+      await expect(page.getByRole("combobox", { name: "Модель GPT" })).toBeEnabled();
+      await expect(effort).toBeEnabled();
+      await expect(effort).toHaveValue("2");
+      await expect.poll(() => typeof releaseModels).toBe("function");
+      await effort.selectOption("0");
+      await editor.fill("Still waiting for the connection");
+      await expect(page.locator(".send-button")).toBeDisabled();
+      releaseModels();
+      await page.waitForResponse("https://outbox.test/api/gpt/models");
+      await expect(effort).toHaveValue("0");
+      releaseStatus();
+      await expect(page.locator(".send-button")).toBeEnabled();
+      assert.equal(sends, 1, "metadata refresh never sends the draft");
+      await page.evaluate(() => window.dispatchEvent(new Event("private-session-ended")));
+      assert.equal(await page.evaluate(() => localStorage.getItem("gpt-models-cache-v1")), null);
       console.log(
         name +
-          ": tiny loading indicator above input; enqueue during history loading; model readiness retained; effort editable while running",
+          ": queue/loading controls; cached model choices survive tab eviction and stay editable before connection; refresh preserves selection; logout clears choices",
       );
     } finally {
       await context.close();

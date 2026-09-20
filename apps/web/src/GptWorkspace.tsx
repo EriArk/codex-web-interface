@@ -401,15 +401,6 @@ export function GptWorkspace({
         const catalogError = await catalogRead;
         if (catalogError) throw catalogError;
         if (disposed) return;
-        if (!status.canSend && !gptCache.models) {
-          retry = setTimeout(() => void load(), 5000);
-          return;
-        }
-        const result = gptCache.models ?? (await api<GptModels>("/gpt/models"));
-        if (disposed) return;
-        setModels(result);
-        setModel((old) => old || result.currentModel);
-        setEffort((old) => old || result.currentEffort);
         setLoadNotice("");
       } catch (error) {
         if (disposed) return;
@@ -581,23 +572,36 @@ export function GptWorkspace({
     };
   }, []);
   useEffect(() => {
-    if (!connection?.canSend || models) return;
     let disposed = false;
-    void api<GptModels>("/gpt/models")
-      .then((next) => {
-        if (disposed) return;
-        setModels(next);
-        gptCache.models = next;
-        setModel((old) => (next.models.some((item) => item.id === old) ? old : next.currentModel));
-        setEffort((old) =>
-          next.efforts.some((item) => item.id === old) ? old : next.currentEffort,
-        );
-      })
-      .catch(() => {});
+    let retry: ReturnType<typeof setTimeout>;
+    // Choices are independent of history, navigation and the slower connection probe.
+    // Refresh saved choices quietly without replacing a still-valid user selection.
+    const load = () =>
+      void api<GptModels>("/gpt/models")
+        .then((next) => {
+          if (disposed) return;
+          setModels(next);
+          gptCache.models = next;
+          setModel((old) =>
+            next.models.some((item) => item.id === old) ? old : next.currentModel,
+          );
+          setEffort((old) =>
+            [...next.efforts, ...Object.values(next.effortsByModel ?? {}).flat()].some(
+              (item) => item.id === old,
+            )
+              ? old
+              : next.currentEffort,
+          );
+        })
+        .catch(() => {
+          if (!disposed) retry = setTimeout(load, 5000);
+        });
+    load();
     return () => {
       disposed = true;
+      clearTimeout(retry);
     };
-  }, [connection?.canSend, models]);
+  }, []);
   const currentJobs = jobs
     .filter((job) => !job.dismissed)
     .filter((job) => (selected ? job.nativeId === selected : job.id === createdJob))

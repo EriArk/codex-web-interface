@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Owner-requested immediate GPT choices (2026-09-20)
+
+- Keep the last GPT model/power catalog and selection in bounded account-local storage so both pickers remain usable while the connection/history loads, including after PWA tab eviction. Fetch choices independently and refresh quietly without replacing a still-valid selection. Clear on logout; cached metadata never grants send readiness or bypasses native model/effort validation.
+
 ## Owner-requested compact navigation and queue controls (2026-09-20)
 
 - Put the search magnifier to the left of Projects/Dialogs, with the tabs and drawer close control in one row. Expand the title filter only on demand; preserve full content search.

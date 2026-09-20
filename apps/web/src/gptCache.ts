@@ -20,6 +20,37 @@ export interface GptCachedChat {
 }
 const key = "gpt-view-cache-v1";
 const navigationKey = "gpt-navigation-cache-v1";
+const modelsKey = "gpt-models-cache-v1";
+function restoreModels() {
+  try {
+    const raw = localStorage.getItem(modelsKey);
+    if (!raw || raw.length > 64000) return {};
+    const value = JSON.parse(raw);
+    const choices = (rows: unknown): boolean =>
+      Array.isArray(rows) &&
+      rows.length <= 100 &&
+      rows.every((row) => row && typeof row.id === "string" && typeof row.label === "string");
+    const models = value.models;
+    if (
+      value.version !== 1 ||
+      !models ||
+      !choices(models.models) ||
+      !models.models.length ||
+      !choices(models.efforts) ||
+      typeof models.currentModel !== "string" ||
+      typeof models.currentEffort !== "string" ||
+      typeof value.model !== "string" ||
+      typeof value.effort !== "string" ||
+      (models.effortsByModel &&
+        (typeof models.effortsByModel !== "object" ||
+          !Object.values(models.effortsByModel).every(choices)))
+    )
+      return {};
+    return { models: models as GptModels, model: value.model, effort: value.effort };
+  } catch {
+    return {};
+  }
+}
 type Cache = {
   chats: Record<string, GptCachedChat>;
   jobs: GptJob[];
@@ -50,9 +81,14 @@ function restore(): Cache {
   try {
     const value = JSON.parse(sessionStorage.getItem(key) ?? "null");
     if (value?.version === 1 && value.expires > Date.now() && value.data?.chats)
-      return { ...empty(), ...value.data, stamps: {} };
+      return {
+        ...empty(),
+        ...value.data,
+        ...(!value.data.models ? restoreModels() : {}),
+        stamps: {},
+      };
   } catch {}
-  const cache = empty();
+  const cache = { ...empty(), ...restoreModels() };
   try {
     const value = JSON.parse(localStorage.getItem(navigationKey) ?? "null");
     if (
@@ -95,6 +131,18 @@ export function saveGptCache() {
 }
 export function flushGptCache() {
   clearTimeout(timer);
+  // Only selectable metadata survives tab eviction; connection readiness is always live.
+  try {
+    if (gptCache.models) {
+      const data = JSON.stringify({
+        version: 1,
+        models: gptCache.models,
+        model: gptCache.model,
+        effort: gptCache.effort,
+      });
+      if (data.length <= 64000) localStorage.setItem(modelsKey, data);
+    }
+  } catch {}
   // Navigation survives PWA tab eviction; history, readiness and credentials do not.
   try {
     const data = JSON.stringify({
@@ -142,6 +190,7 @@ export function clearGptCache() {
   Object.assign(gptCache, empty());
   try {
     localStorage.removeItem(navigationKey);
+    localStorage.removeItem(modelsKey);
   } catch {}
   try {
     sessionStorage.removeItem(key);
