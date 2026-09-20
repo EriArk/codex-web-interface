@@ -39,7 +39,7 @@ export function deploymentBlockers(
   );
   add(
     "gpt_workspace",
-    "SELECT count(*) n FROM commands WHERE scope='gpt-workspace' AND state IN ('pending','unknown')",
+    "SELECT count(*) n FROM commands WHERE scope IN ('gpt-workspace','gpt-native-workspace') AND state IN ('pending','unknown')",
     "GPT: изменение расписания или Canvas ещё не подтверждено",
   );
   if (terminals) {

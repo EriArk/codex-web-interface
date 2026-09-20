@@ -41,6 +41,21 @@ const canvas = () => ({
   revision: rev,
 });
 const pause = { kind: "schedule", id: "task-1", action: "pause", revision: rev };
+
+test("maintenance retains unknown native workspace operations as blockers", () => {
+  const store = new Store(":memory:");
+  try {
+    store.db
+      .prepare(
+        "INSERT INTO commands(scope,key,digest,state,response,createdAt) VALUES('gpt-native-workspace',?,'digest','unknown','{}',1)",
+      )
+      .run(randomUUID());
+    assert.equal(deploymentBlockers(store).find((b) => b.kind === "gpt_workspace")?.count, 1);
+  } finally {
+    store.close();
+  }
+});
+
 function fixture(handler, canStart = () => true) {
   const store = new Store(":memory:");
   const service = new GptWorkspaceWork(store, handler, canStart);
