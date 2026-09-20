@@ -98,7 +98,7 @@ if (-not (Test-CwNativeLogin $codex.Source @('login', 'status') 'codex-login-sta
 $ghCommand = Get-Command gh.exe -ErrorAction Stop
 if (-not (Test-CwNativeLogin $ghCommand.Source @('auth', 'status', '--hostname', 'github.com') 'github-login-status.log')) {
     if (-not (Confirm-Cw 'Для работы с GitHub войдите в свой аккаунт. Сейчас откроется браузер; при необходимости GitHub покажет подтверждение доступа.')) { throw 'Вход в GitHub можно завершить при повторном запуске мастера.' }
-    # Native gh stores its own credential in this Windows profile; none is sent to the Hub.
+    # Native gh owns the visible interactive login and stores credentials in this Windows profile.
     Invoke-CwInstaller $ghCommand.Source @('auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web', '--clipboard') -GithubLogin
     if (-not (Test-CwNativeLogin $ghCommand.Source @('auth', 'status', '--hostname', 'github.com') 'github-login-status.log')) { throw 'Вход в GitHub ещё не завершён. Настройки сохранены; откройте Connect.cmd после входа.' }
 }

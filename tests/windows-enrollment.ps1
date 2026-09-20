@@ -89,18 +89,21 @@ try {
     [Windows.Forms.Application]::DoEvents()
     Write-CwStep 3 '3 / 5 - Applications and CodexWeb components'
     Invoke-CwInstaller $cmd @('/c', 'exit', '0')
-    $livePath = Join-Path $artifacts 'live-log-fixture.txt'
-    $writer = [IO.File]::Open($livePath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read)
+    # Hold every old shared file open as a failed prior login would.
+    $locks = @('installer-input.txt','installer-output.log','installer-error.log') | ForEach-Object {
+        [IO.File]::Open((Join-Path $artifacts $_), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    }
     try {
-        $bytes = [Text.Encoding]::UTF8.GetBytes('one-time code: ABCD-1234')
-        $writer.Write($bytes, 0, $bytes.Length); $writer.Flush()
-        if ((Read-CwLiveLog $livePath) -ne 'one-time code: ABCD-1234') { throw 'Cannot read device code during native write.' }
-    } finally { $writer.Dispose() }
-    $writer = [IO.File]::Open($livePath, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try { if ((Read-CwLiveLog $livePath) -ne '') { throw 'Exclusive lock must defer reading.' } } finally { $writer.Dispose() }
-    $liveCmd = Join-Path $artifacts 'live-stderr.cmd'
-    [IO.File]::WriteAllText($liveCmd, "@echo off`r`necho Waiting for login 1>&2`r`nping -n 3 127.0.0.1 >nul`r`nexit /b 0`r`n")
-    Invoke-CwInstaller $cmd @('/c', ('"' + $liveCmd + '"')) -GithubLogin
+        Invoke-CwInstaller $cmd @('/c', 'exit', '0')
+        # Inspect native login launch options; hide only the harmless test command.
+        function Start-Process {
+            param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
+            if ($WindowStyle -ne 'Normal' -or -not $PassThru) { throw 'Login must own its interactive window.' }
+            Microsoft.PowerShell.Management\Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WindowStyle Hidden -PassThru
+        }
+        try { Invoke-CwInstaller $cmd @('/c', 'exit', '0') -GithubLogin }
+        finally { Remove-Item Function:\Start-Process }
+    } finally { foreach ($handle in $locks) { $handle.Dispose() } }
     $failedExit = $false
     try { Invoke-CwInstaller $cmd @('/c', 'exit', '7') } catch { $failedExit = $_.Exception.Message -match '7' }
     if (-not $failedExit) { throw 'Installer must preserve actual failure exit code 7.' }
