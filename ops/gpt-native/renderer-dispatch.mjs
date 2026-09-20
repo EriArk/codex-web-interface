@@ -1,7 +1,7 @@
 // Pinned native consumer-Chat send canary. No credentials, HTTP bodies or raw events leave the renderer.
 export async function nativeDispatch(request, read, control,
  load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis,
- loadActions = () => import('app://-/assets/register-app-actions-a2e5974b9821.js')) {
+ loadActions = () => import('app://-/assets/register-app-actions-a2e5974b9821.js'), activity = () => null) {
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const uuid = x => typeof x === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
  if (!['prepareDispatch','dispatchText','inspectDispatch','resolveCreation'].includes(request.operation) ||
@@ -98,6 +98,14 @@ export async function nativeDispatch(request, read, control,
     if(update?.type!=='message'||!uuid(update.conversationId))return;
     if(live.conversationId!==null&&update.conversationId!==live.conversationId)return;
     const message=update.message;
+    const action=activity(message);
+    if(action&&uuid(message?.id)){
+     live.conversationId=update.conversationId;live.at=Date.now();
+     const item={id:message.id,text:action.text,state:action.state,activity:action.kind};
+     const index=live.items.findIndex(x=>x.id===item.id);
+     if(index<0)live.items.push(item);else live.items[index]=item;
+     while(live.items.length>48||live.items.reduce((n,x)=>n+x.text.length,0)>196608)live.items.shift();return;
+    }
     if(!uuid(message?.id)||message.author?.role!=='assistant'||
        (message.channel!=null&&!['final','commentary'].includes(message.channel))||
        (message.recipient!=null&&message.recipient!=='all')||
@@ -109,7 +117,8 @@ export async function nativeDispatch(request, read, control,
     live.conversationId=update.conversationId;live.at=Date.now();
     const item={id:message.id,text,state:message.status==='finished_successfully'?'completed':'active'};
     const index=live.items.findIndex(x=>x.id===item.id);
-    if(index<0){live.items.push(item);if(live.items.length>6)live.items.shift();}else live.items[index]=item;
+    if(index<0)live.items.push(item);else live.items[index]=item;
+    while(live.items.length>48||live.items.reduce((n,x)=>n+x.text.length,0)>196608)live.items.shift();
    }catch{/* Optional display must never affect native generation. */}
   };
   const nativeService=scope.get(m.CUt);

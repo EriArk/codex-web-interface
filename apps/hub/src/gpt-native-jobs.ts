@@ -402,7 +402,15 @@ export class NativeGptJobs {
           .prepare(
             "UPDATE gpt_jobs SET status=?,answer=?,error='',updatedAt=? WHERE id=? AND status!='completed'",
           )
-          .run(result.state, result.messages.map((m) => m.text).join("\n\n"), Date.now(), id);
+          .run(
+            result.state,
+            result.messages
+              .filter((m) => m.channel !== "commentary")
+              .map((m) => m.text)
+              .join("\n\n"),
+            Date.now(),
+            id,
+          );
         this.store.db.exec("COMMIT");
       } catch (error) {
         this.store.db.exec("ROLLBACK");

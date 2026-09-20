@@ -89,6 +89,24 @@ try {
           return route.fulfill({
             json: {
               items: [
+                {
+                  id: "step",
+                  role: "assistant",
+                  phase: "commentary",
+                  complete: true,
+                  text: "Intermediate stays in Results",
+                  createdAt: 1,
+                  files: [],
+                },
+                {
+                  id: "partial",
+                  role: "assistant",
+                  phase: "final",
+                  complete: false,
+                  text: "Partial final stays in progress",
+                  createdAt: 1,
+                  files: [],
+                },
                 { id: "reply", role: "assistant", text: "Saved reply", createdAt: 1, files: [] },
               ],
               nextBefore: null,
@@ -137,6 +155,10 @@ try {
       await expect.poll(() => !!releaseHistory && !!releaseModels).toBe(true);
       releaseHistory();
       await expect(page.getByText("Saved reply", { exact: true })).toBeVisible();
+      await expect(page.getByText("Intermediate stays in Results", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Partial final stays in progress", { exact: true })).toHaveCount(
+        0,
+      );
       await expect(button).toBeDisabled();
       releaseModels();
       await expect(button).toBeEnabled();
@@ -169,7 +191,8 @@ try {
         items: [{ id: "public-message", text: "Live first line", state: "active" }],
       };
       await page.clock.fastForward(1500);
-      await expect(progress).toContainText("Live first line");
+      await expect(progress).toContainText("GPT работает");
+      await expect(progress).not.toContainText("Live first line");
       await progress.click();
       const details = page.getByRole("region", { name: "Этапы GPT" });
       await expect(details).toContainText("Live first line");
@@ -177,7 +200,7 @@ try {
       await page.clock.fastForward(1500);
       await expect(details).toContainText("LATEST");
       await expect(details.locator("li")).toHaveCount(1);
-      assert.ok(await progress.locator(".gpt-live-ticker").evaluate((e) => e.scrollLeft > 0));
+      await expect(progress).not.toContainText("LATEST");
       await details.evaluate((e) => {
         e.scrollTop = 0;
         e.dispatchEvent(new Event("scroll"));
@@ -186,6 +209,15 @@ try {
       await page.clock.fastForward(1500);
       await expect(details).toContainText("More live output");
       assert.equal(await details.evaluate((e) => e.scrollTop), 0);
+      live.items.push({
+        id: "action",
+        text: "Просмотр материалов",
+        activity: "review",
+        state: "active",
+      });
+      await page.clock.fastForward(1500);
+      await expect(progress).toContainText("Просмотр материалов");
+      await expect(progress.locator("svg")).toHaveCount(2);
       // Missing optional live transport keeps the received text and ordinary job poll alive.
       live = null;
       await page.clock.fastForward(1500);

@@ -19,6 +19,7 @@ export class GptHistoryCache {
   private nextLineage = 0;
   private pending = new Map<string, Promise<Entry>>();
   private removed = new Map<string, number>();
+  private warming = new Map<string, number>();
   constructor(
     private load: (id: string) => Promise<GptMessage[]>,
     private now = Date.now,
@@ -53,16 +54,35 @@ export class GptHistoryCache {
     this.removed.set(id, (this.removed.get(id) ?? 0) + 1);
     this.entries.delete(id);
     this.disk?.remove(id);
+    this.warming.delete(id);
+  }
+  /** Active native jobs and returning viewers coalesce bounded background reads. */
+  warm(id: string, finished = false) {
+    if (!finished && this.now() - (this.warming.get(id) ?? -Infinity) < 10000) return;
+    this.warming.delete(id);
+    this.warming.set(id, this.now());
+    while (this.warming.size > 32) this.warming.delete(this.warming.keys().next().value!);
+    const pending = this.pending.get(id),
+      generation = this.removed.get(id);
+    const read =
+      finished && pending
+        ? pending
+            .catch(() => {})
+            .then(() => {
+              if (generation === this.removed.get(id)) return this.get(id, 0);
+            })
+        : this.get(id, 0);
+    void read.catch(() => {});
   }
   private async get(id: string, ttl: number) {
-    const pending = this.pending.get(id);
-    if (pending) return pending;
     let cached = this.entries.get(id);
     if (!cached) {
       const saved = this.disk?.read(id);
       if (saved) cached = this.seed(id, saved.items, saved.checkedAt, false);
     }
     if (cached && this.now() - cached.checkedAt < ttl) return cached;
+    const pending = this.pending.get(id);
+    if (pending) return pending;
     const generation = this.removed.get(id);
     const task = this.load(id).then((items) => {
       if (generation !== this.removed.get(id))
@@ -118,8 +138,16 @@ export class GptHistoryCache {
       messageId?: string;
     },
     ttl = 60000,
+    immediate = false,
   ): Promise<GptHistoryPage> {
-    const entry = await this.readable(id, ttl),
+    // A returning viewer may use a warm snapshot while its background read runs.
+    // Explicit refreshes, older pages and source navigation still await canonical data.
+    const cached =
+      immediate && !query.known && !query.before && !query.messageId
+        ? this.entries.get(id)
+        : undefined;
+    if (cached && this.now() - cached.checkedAt >= ttl) this.warm(id);
+    const entry = cached ?? (await this.readable(id, ttl)),
       list = entry.items;
     if (!query.messageId && !query.before && query.known === entry.revision)
       return {

@@ -1165,13 +1165,15 @@ export class GptService {
       if (pending.length) retry = true;
       for (const row of next ? [] : pending) {
         retry = true;
+        let refreshed = false;
         try {
           const result = await this.nativeJobs.reconcile(String(row.id));
+          refreshed = result.status !== "unknown";
           this.nativeReadFailures = result.status === "unknown" ? this.nativeReadFailures + 1 : 0;
         } catch {
           this.nativeReadFailures++;
         }
-        this.invalidateNativeJob(String(row.id));
+        this.invalidateNativeJob(String(row.id), refreshed);
       }
       if (this.jobs().some((j) => j.status === "preparing")) return;
       next = eligible.get();
@@ -1199,7 +1201,7 @@ export class GptService {
               : "Новый клиент GPT не подготовил отправку. Текст и файлы сохранены.",
           });
       }
-      this.invalidateNativeJob(jobId);
+      this.invalidateNativeJob(jobId, true);
     } catch {
       // A lost read never triggers a dispatch. Keep the last visible answer.
       this.nativeReadFailures++;
@@ -1217,7 +1219,7 @@ export class GptService {
       }
     }
   }
-  private invalidateNativeJob(id: string) {
+  private invalidateNativeJob(id: string, refresh = false) {
     const job = this.job(id);
     if (job.status === "unknown") {
       const since = Number(
@@ -1235,7 +1237,11 @@ export class GptService {
         );
     }
     this.observedHistory = undefined;
-    if (job.nativeId) this.historyCache.invalidate(job.nativeId);
+    if (job.nativeId) {
+      if (refresh && ["running", "completed", "cancelled"].includes(job.status))
+        this.historyCache.warm(job.nativeId, job.status !== "running");
+      else this.historyCache.invalidate(job.nativeId);
+    }
   }
   async pump() {
     if (this.native) return this.pumpNative();
@@ -1815,7 +1821,7 @@ export function registerGpt(
       )
       .get(p.id);
     service.library.assertExists("thread", p.id);
-    return service.historyCache.page(p.id, q, running ? 15000 : 60000);
+    return service.historyCache.page(p.id, q, running ? 15000 : 60000, true);
   });
   app.get("/api/gpt/conversations/:id/results", async (req) => {
     const p = z.object({ id }).parse(req.params);

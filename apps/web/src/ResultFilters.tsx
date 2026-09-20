@@ -8,6 +8,7 @@ export const resultLabels: Record<ResultCategory, string> = {
   files: "Файлы",
   links: "Ссылки",
   work: "Работа",
+  reasoning: "Рассуждения",
 };
 export function ResultFilters({
   category,
@@ -17,6 +18,7 @@ export function ResultFilters({
   onPreview,
   showLinks = false,
   showWork = true,
+  showReasoning = false,
 }: {
   category: ResultCategory;
   counts: ResultCounts;
@@ -25,6 +27,7 @@ export function ResultFilters({
   onPreview?: () => void;
   showLinks?: boolean;
   showWork?: boolean;
+  showReasoning?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Keep the newly selected category or preview visible in the horizontal strip.
@@ -42,9 +45,10 @@ export function ResultFilters({
   }, [category, preview]);
   return (
     <nav ref={ref} className="result-filters" aria-label="Категории результатов">
-      {(["files", "images", "links", "demos", "work"] as ResultCategory[])
+      {(["files", "images", "links", "demos", "reasoning", "work"] as ResultCategory[])
         .filter((key) => key !== "links" || showLinks)
         .filter((key) => key !== "work" || showWork)
+        .filter((key) => key !== "reasoning" || showReasoning)
         .map((key) => (
           <button
             key={key}

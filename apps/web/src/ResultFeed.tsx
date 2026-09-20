@@ -271,7 +271,7 @@ export function ResultFeed({
   ];
   const totals = { ...counts };
   totals.all = Math.max(totals.all, all.length);
-  for (const key of ["images", "demos", "files", "links", "work"] as const)
+  for (const key of ["images", "demos", "files", "links", "reasoning", "work"] as const)
     totals[key] = Math.max(
       totals[key] ?? 0,
       all.filter((row) => resultCategory(row.type) === key).length,
@@ -296,6 +296,7 @@ export function ResultFeed({
       onCategory={setCategory}
       counts={totals}
       showLinks={endpoint.startsWith("/gpt/")}
+      showReasoning={endpoint.startsWith("/gpt/")}
       showWork={!endpoint.startsWith("/gpt/")}
       error={
         recovering

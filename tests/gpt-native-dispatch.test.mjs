@@ -9,6 +9,7 @@ import { NativeGptJobs } from "../apps/hub/dist/gpt-native-jobs.js";
 import { NativeDispatchReceipts } from "../ops/gpt-native/dispatch-receipts.mjs";
 import { nativeDispatch } from "../ops/gpt-native/renderer-dispatch.mjs";
 import { nativeLive } from "../ops/gpt-native/renderer-live.mjs";
+import { nativeActivity } from "../ops/gpt-native/public-activity.mjs";
 import { NativeReadService } from "../ops/gpt-native/service.mjs";
 
 const conversationId = randomUUID(),
@@ -133,6 +134,7 @@ function fixture(creating = false) {
       async () => m,
       runtime,
       async () => ({ appActionRegistry: registry }),
+      nativeActivity,
     );
   return { run, input, state, scope, values, registry, original, ui, runtime, read };
 }
@@ -170,8 +172,8 @@ test("native live text follows decoded updates, isolates chats/accounts and neve
   assert.equal((await read()).items[0].text, "Visible  tail ");
   emit("a".repeat(40000));
   assert.equal((await read()).items[0].text.length, 32768);
-  for (let n = 0; n < 10; n++) emit("next", { id: randomUUID() });
-  assert.equal((await read()).items.length, 6);
+  for (let n = 0; n < 60; n++) emit("next", { id: randomUUID() });
+  assert.equal((await read()).items.length, 48);
   await assert.rejects(
     nativeLive({ ...f.input, userMessageId: randomUUID() }, f.read, f.runtime),
     /SUBMISSION_MISMATCH/,
@@ -183,11 +185,34 @@ test("native live text follows decoded updates, isolates chats/accounts and neve
   f.values.set("account", { accountId: "other", userId: "other" });
   emit("wrong account");
   assert.equal((await read()).items.at(-1).text, "next");
-  assert.equal(f.state.forwarded, 20);
+  assert.equal(f.state.forwarded, 70);
   assert.equal(f.state.post, 1);
   assert.equal((await f.run({ operation: "inspectDispatch" })).state, "finished");
   f.runtime[Symbol.for("codex-web.native-live")].get(f.input.key).at -= 3600001;
   assert.deepEqual(await read(), { items: [] });
+});
+
+test("native public action stream forwards its category without exporting arguments", async () => {
+  const f = fixture();
+  await f.run();
+  f.state.emit({
+    type: "message",
+    conversationId,
+    message: {
+      id: randomUUID(),
+      author: { role: "assistant" },
+      channel: "analysis",
+      recipient: "api_tool.call_tool",
+      content: {
+        parts: [JSON.stringify({ path: "/mcp/github/search", args: { secret: "PRIVATE" } })],
+      },
+    },
+  });
+  const result = await nativeLive(f.input, f.read, f.runtime);
+  assert.equal(result.items[0].activity, "search");
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE|args|analysis/);
+  assert.equal(f.state.forwarded, 1);
+  assert.equal(f.state.post, 1);
 });
 test("native text dispatch preserves ID and exact text, uses principal-bound native stream and blocks its retry", async () => {
   const f = fixture();

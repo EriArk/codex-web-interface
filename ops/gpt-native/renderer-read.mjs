@@ -1,6 +1,6 @@
 // Version-specific, private research adapter. No sends, navigation or generic RPC.
 // Keep this function self-contained: it also runs inside the native renderer.
-export async function nativeRead(request, load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis) {
+export async function nativeRead(request, load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis, activity = () => null) {
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const projectId = value => typeof value==='string'&&/^g-p-[a-zA-Z0-9-]{1,80}$/.test(value);
  const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
@@ -186,6 +186,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
    if(!identity(id)||node?.id!==id||(node.parent!=null&&!identity(node.parent)))fail('INVALID_HISTORY');
    const n={id,parent:node.parent??null,children:Array.isArray(node.children)?node.children.filter(identity):[],message:null};
    const m=node.message,role=m?.author?.role,meta=m?.metadata??{},content=m?.content;
+   const action=activity(m);
    const generated=role==='tool'&&m.channel==='final'&&typeof meta.image_gen_title==='string';
    const publicMessage=(['user','assistant'].includes(role)||generated)&&identity(m?.id)&&meta.is_visually_hidden_from_conversation!==true&&meta.tool_invoking_message!==true&&
     (m.channel==null||['final','commentary'].includes(m.channel))&&(m.recipient==null||m.recipient==='all')&&
@@ -201,6 +202,9 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
      create_time:Number.isFinite(m.create_time)&&m.create_time>=0?m.create_time:0,status:m.status==='finished_successfully'?'finished_successfully':'in_progress',end_turn:m.end_turn===true,
      metadata:{attachments,content_references:refs(meta.content_references),model_slug:scalar(meta.model_slug,128),thinking_effort:scalar(meta.thinking_effort,128),is_complete:meta.is_complete===true||(m.end_turn===true&&m.status==='finished_successfully')}};
    }
+    if(action&&!publicMessage&&identity(m?.id))n.message={id:m.id,author:{role:'assistant'},channel:'commentary',recipient:'all',
+    content:{content_type:'text',parts:[action.text]},create_time:Number.isFinite(m.create_time)?m.create_time:0,
+    status:action.state==='completed'?'finished_successfully':'in_progress',end_turn:false,metadata:{codex_activity:action.kind}};
    size+=new TextEncoder().encode(JSON.stringify(n)).length;if(size>1500000)fail('HISTORY_TOO_LARGE');
    clean[id]=n;
   }

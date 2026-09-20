@@ -201,10 +201,11 @@ export class NativeGptReadClient {
                 id: uuid,
                 text: z.string().max(32768),
                 state: z.enum(["active", "completed"]),
+                activity: z.enum(["search", "review", "code", "image", "tool"]).optional(),
               })
               .strict(),
           )
-          .max(6),
+          .max(48),
       })
       .strict()
       .parse(result);

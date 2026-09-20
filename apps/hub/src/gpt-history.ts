@@ -164,6 +164,9 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
             role: (generatedImage ? "assistant" : author.role) as "user" | "assistant",
             text: body,
             createdAt: Number(message.create_time) || 0,
+            ...(["search", "review", "code", "image", "tool"].includes(metadata.codex_activity)
+              ? { activity: metadata.codex_activity as GptMessage["activity"] }
+              : {}),
             ...(author.role === "assistant"
               ? {
                   phase:

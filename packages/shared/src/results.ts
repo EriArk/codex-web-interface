@@ -1,16 +1,25 @@
 import { z } from "zod";
-export const resultCategorySchema = z.enum(["all", "images", "demos", "files", "links", "work"]);
+export const resultCategorySchema = z.enum([
+  "all",
+  "images",
+  "demos",
+  "files",
+  "links",
+  "work",
+  "reasoning",
+]);
 export type ResultCategory = z.infer<typeof resultCategorySchema>;
 export type ResultCounts = Record<ResultCategory, number>;
 export function resultCategory(type: string): Exclude<ResultCategory, "all"> {
   if (type === "image") return "images";
   if (type === "link") return "links";
   if (type === "preview") return "demos";
+  if (type === "reasoning") return "reasoning";
   if (type === "file" || type === "artifact") return "files";
   return "work";
 }
 export function emptyResultCounts(): ResultCounts {
-  return { all: 0, images: 0, demos: 0, files: 0, links: 0, work: 0 };
+  return { all: 0, images: 0, demos: 0, files: 0, links: 0, work: 0, reasoning: 0 };
 }
 export interface ResultItem {
   id: string;
@@ -21,6 +30,7 @@ export interface ResultItem {
   type: string;
   createdAt: string;
   payload: {
+    steps?: import("./gpt.js").GptProgress[];
     text?: string;
     message?: string;
     captureId?: string;

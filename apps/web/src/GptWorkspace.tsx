@@ -603,6 +603,27 @@ export function GptWorkspace({
     .sort((a, b) => a.createdAt - b.createdAt);
   const active = currentJobs.find(isActive);
   const awaitingReply = currentJobs.find((job) => job.status === "unknown" && !job.error);
+  const progressJob = active ?? awaitingReply;
+  const progressUser = progressJob
+    ? messages.findLastIndex(
+        (message) =>
+          message.role === "user" &&
+          message.text === progressJob.text &&
+          message.createdAt * 1000 >= progressJob.createdAt - 30000,
+      )
+    : -1;
+  const cachedProgress =
+    progressUser >= 0
+      ? messages
+          .slice(progressUser + 1)
+          .filter((message) => message.role === "assistant")
+          .map((message) => ({
+            id: message.id,
+            text: message.text,
+            activity: message.activity,
+            state: message.complete ? ("completed" as const) : ("active" as const),
+          }))
+      : [];
   // biome-ignore lint/correctness/useExhaustiveDependencies: New content scrolls only while the reader follows the latest reply.
   useLayoutEffect(() => {
     if (sticky.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
@@ -1055,26 +1076,27 @@ export function GptWorkspace({
               </div>
             </article>
           )}
-          {!answerInHistory && (job.answer || job.assets.length > 0) && (
-            <article className="message assistant" data-message={"job:" + job.id}>
-              <div className="message-header">
-                <span className="avatar">G</span>
-                <b>GPT</b>
-                <span className="message-actions">
-                  <SpeechButton id={`${speechScope}:job-${job.id}`} text={job.answer} />
-                  <CopyButton text={job.answer} />
-                </span>
-              </div>
-              <div className="message-body">
-                {!isActive(job) && !!job.progress?.length && <GptProgress items={job.progress} />}
-                <Text
-                  value={job.answer}
-                  onArtifact={(source) => openArtifact(source, job.assets, job.id)}
-                />
-                <ResponseResults text={job.answer} files={job.assets} onOpen={openResults} />
-              </div>
-            </article>
-          )}
+          {!answerInHistory &&
+            job.status === "completed" &&
+            (job.answer || job.assets.length > 0) && (
+              <article className="message assistant" data-message={"job:" + job.id}>
+                <div className="message-header">
+                  <span className="avatar">G</span>
+                  <b>GPT</b>
+                  <span className="message-actions">
+                    <SpeechButton id={`${speechScope}:job-${job.id}`} text={job.answer} />
+                    <CopyButton text={job.answer} />
+                  </span>
+                </div>
+                <div className="message-body">
+                  <Text
+                    value={job.answer}
+                    onArtifact={(source) => openArtifact(source, job.assets, job.id)}
+                  />
+                  <ResponseResults text={job.answer} files={job.assets} onOpen={openResults} />
+                </div>
+              </article>
+            )}
           {job.error && (
             <div className="gpt-job-error" role="status">
               {["failed", "cancelled"].includes(job.status) && (
@@ -1721,125 +1743,109 @@ export function GptWorkspace({
               {!selected && !messages.length && !currentJobs.length && (
                 <div className="gpt-empty">Что обсудим?</div>
               )}
-              {messages.map((message) => (
-                <article
-                  className={"message " + message.role}
-                  key={message.id}
-                  data-message={message.id}
-                >
-                  <div className="message-header">
-                    <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
-                    <b>{message.role === "user" ? "Вы" : "GPT"}</b>
-                    <span className="message-actions">
-                      {nativeOperations.button(message, !!active || busy)}
-                      {message.role === "assistant" && (
-                        <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
-                      )}
-                      {onNotebook && message.text.trim() && (
-                        <button
-                          type="button"
-                          className="icon-button"
-                          aria-label="Сохранить в заметки"
-                          onClick={() => {
-                            const context = notebookContext();
-                            onNotebook({
-                              ...context,
-                              mode: "notes",
-                              capture: {
-                                scope: context.scope,
-                                text: message.text,
-                                role: message.role,
-                                target: {
-                                  client: "gpt",
-                                  kind: "thread",
-                                  id: selected,
-                                  threadId: selected,
-                                  messageId: message.id,
-                                  title: items.find((c) => c.id === selected)?.title || "Чат GPT",
+              {messages
+                .filter(
+                  (message) =>
+                    message.role === "user" ||
+                    (message.phase !== "commentary" && message.complete !== false),
+                )
+                .map((message) => (
+                  <article
+                    className={"message " + message.role}
+                    key={message.id}
+                    data-message={message.id}
+                  >
+                    <div className="message-header">
+                      <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
+                      <b>{message.role === "user" ? "Вы" : "GPT"}</b>
+                      <span className="message-actions">
+                        {nativeOperations.button(message, !!active || busy)}
+                        {message.role === "assistant" && (
+                          <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
+                        )}
+                        {onNotebook && message.text.trim() && (
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label="Сохранить в заметки"
+                            onClick={() => {
+                              const context = notebookContext();
+                              onNotebook({
+                                ...context,
+                                mode: "notes",
+                                capture: {
+                                  scope: context.scope,
+                                  text: message.text,
+                                  role: message.role,
+                                  target: {
+                                    client: "gpt",
+                                    kind: "thread",
+                                    id: selected,
+                                    threadId: selected,
+                                    messageId: message.id,
+                                    title: items.find((c) => c.id === selected)?.title || "Чат GPT",
+                                  },
                                 },
-                              },
-                            });
-                          }}
-                        >
-                          <Icon name="file" size={17} />
-                        </button>
-                      )}
-                      <CopyButton text={message.text} />
-                    </span>
-                  </div>
-                  <div className="message-body">
-                    {message.role === "assistant" &&
-                      currentJobs
-                        .filter(
-                          (job) =>
-                            !isActive(job) &&
-                            job.progress?.length &&
-                            messages.some(
-                              (m) =>
-                                m.role === "user" &&
-                                m.text === job.text &&
-                                m.createdAt * 1000 >= job.createdAt - 30000,
-                            ) &&
-                            messages.findIndex((m) => m.id === message.id) ===
-                              messages.findIndex(
-                                (m) =>
-                                  m.role === "user" &&
-                                  m.text === job.text &&
-                                  m.createdAt * 1000 >= job.createdAt - 30000,
-                              ) +
-                                1,
-                        )
-                        .map((job) => <GptProgress key={job.id} items={job.progress ?? []} />)}
-                    <Text
-                      value={message.text}
-                      onArtifact={
-                        message.role === "assistant"
-                          ? (source) => openArtifact(source, message.files, message.id)
-                          : undefined
-                      }
-                    />
-                    {!!message.unsupported?.length && (
-                      <aside className="native-content-notice">
-                        <p>
-                          {message.unsupported
-                            .map(
-                              (kind) =>
-                                ({
-                                  audio: "Аудио",
-                                  video: "Видео",
-                                  interactive: "Интерактивное содержимое",
-                                  other: "Дополнительное содержимое",
-                                })[kind],
-                            )
-                            .join(" · ")}{" "}
-                          доступно в оригинале.
-                        </p>
-                        <a
-                          href={`https://chatgpt.com/c/${encodeURIComponent(selected)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Открыть этот диалог в ChatGPT
-                        </a>
-                      </aside>
-                    )}
-                    {message.role === "user" ? (
-                      <Files files={message.files} />
-                    ) : (
-                      <ResponseResults
-                        text={message.text}
-                        files={message.files}
-                        onOpen={openResults}
+                              });
+                            }}
+                          >
+                            <Icon name="file" size={17} />
+                          </button>
+                        )}
+                        <CopyButton text={message.text} />
+                      </span>
+                    </div>
+                    <div className="message-body">
+                      <Text
+                        value={message.text}
+                        onArtifact={
+                          message.role === "assistant"
+                            ? (source) => openArtifact(source, message.files, message.id)
+                            : undefined
+                        }
                       />
-                    )}
-                  </div>
-                  {reviews
-                    .filter((r) => r.source?.messageId === message.id)
-                    .map((r) => (
-                      <WorkReviewLink key={r.id} scope={r.scope} id={r.id} state={r.state} />
-                    ))}
-                </article>
-              ))}
+                      {!!message.unsupported?.length && (
+                        <aside className="native-content-notice">
+                          <p>
+                            {message.unsupported
+                              .map(
+                                (kind) =>
+                                  ({
+                                    audio: "Аудио",
+                                    video: "Видео",
+                                    interactive: "Интерактивное содержимое",
+                                    other: "Дополнительное содержимое",
+                                  })[kind],
+                              )
+                              .join(" · ")}{" "}
+                            доступно в оригинале.
+                          </p>
+                          <a
+                            href={`https://chatgpt.com/c/${encodeURIComponent(selected)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Открыть этот диалог в ChatGPT
+                          </a>
+                        </aside>
+                      )}
+                      {message.role === "user" ? (
+                        <Files files={message.files} />
+                      ) : (
+                        <ResponseResults
+                          text={message.text}
+                          files={message.files}
+                          onOpen={openResults}
+                        />
+                      )}
+                    </div>
+                    {reviews
+                      .filter((r) => r.source?.messageId === message.id)
+                      .map((r) => (
+                        <WorkReviewLink key={r.id} scope={r.scope} id={r.id} state={r.state} />
+                      ))}
+                  </article>
+                ))}
               {jobElements}
               {reviews
                 .filter(
@@ -1877,7 +1883,13 @@ export function GptWorkspace({
             {(active || awaitingReply || busy) && (
               <GptProgress
                 key={active?.id ?? awaitingReply?.id ?? "sending"}
-                items={active?.status === "running" ? (active.progress ?? []) : []}
+                items={
+                  cachedProgress.length
+                    ? cachedProgress
+                    : active?.status === "running"
+                      ? (active.progress ?? [])
+                      : []
+                }
                 live={
                   live && live.jobId === (active?.id ?? awaitingReply?.id) ? live.items : undefined
                 }

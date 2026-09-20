@@ -63,7 +63,21 @@ try {
           url: "/api/gpt/previews/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         },
       };
-      const counts = { all: 25, links: 24, demos: 1, files: 0, images: 0, work: 0 };
+      const reasoning = {
+        id: "reasoning-request",
+        type: "reasoning",
+        title: "Review the project",
+        turnId: "request",
+        createdAt: new Date(0).toISOString(),
+        payload: {
+          text: "Review the project",
+          steps: [
+            { id: "s1", text: "Просмотр материалов", activity: "review", state: "completed" },
+            { id: "s2", text: "Public intermediate message", state: "completed" },
+          ],
+        },
+      };
+      const counts = { all: 26, links: 24, demos: 1, files: 0, images: 0, work: 0, reasoning: 1 };
       let initialReads = 0;
       await page.route("https://outbox.test/**", async (route) => {
         const url = new URL(route.request().url()),
@@ -95,7 +109,9 @@ try {
                   ? [demo]
                   : category === "all"
                     ? [demo, ...links]
-                    : [];
+                    : category === "reasoning"
+                      ? [reasoning]
+                      : [];
           const offset = url.searchParams.has("before") ? 20 : 0;
           return route.fulfill({
             json: {
@@ -130,7 +146,13 @@ try {
       await expect(page.locator(".empty-state h2")).toHaveText("Загружаем…");
       await expect.poll(() => initialReads, { timeout: 8000 }).toBe(2);
       await expect(page.locator(".empty-state h2")).toHaveText("Пока нет результатов.");
-      await expect(filters).toHaveText([/^Файлы/, /^Изображения/, /^Ссылки/, /^Демо/]);
+      await expect(filters).toHaveText([
+        /^Файлы/,
+        /^Изображения/,
+        /^Ссылки/,
+        /^Демо/,
+        /^Рассуждения/,
+      ]);
       await expect(filters.first()).toHaveAttribute("aria-pressed", "true");
       await filters.nth(2).click();
       await expect(page.locator(".result-site-link")).toHaveCount(20);
@@ -150,7 +172,12 @@ try {
         assert(box.width <= 390);
         await page.screenshot({ path: `.local/qa-gpt-result-links/${name}-${theme}.png` });
       }
-      await expect(filters).toHaveCount(4);
+      await expect(filters).toHaveCount(5);
+      await filters.nth(4).click();
+      await page.locator(".result-reasoning-details summary").click();
+      await expect(page.locator(".gpt-public-steps")).toContainText("Public intermediate message");
+      await expect(page.locator(".gpt-public-steps svg")).toHaveCount(2);
+      await page.screenshot({ path: `.local/qa-gpt-result-links/${name}-reasoning.png` });
       await filters.nth(3).click();
       await page.locator(".result-demo-open").click();
       const frame = page.locator("iframe");

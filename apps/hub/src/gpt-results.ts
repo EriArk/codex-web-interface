@@ -1,8 +1,8 @@
+import { createHash } from "node:crypto";
 import type { GptMessage, ResultCategory, ResultItem, ResultPage } from "@codex-web/shared";
 import { emptyResultCounts, HubError, resultCategory } from "@codex-web/shared";
-import { createHash } from "node:crypto";
-import type { Previews } from "./previews.js";
 import { gptResultContent } from "./gpt-result-content.js";
+import type { Previews } from "./previews.js";
 
 export function gptResults(
   nativeId: string,
@@ -11,7 +11,26 @@ export function gptResults(
   publicBaseUrl?: string,
 ): ResultItem[] {
   const results = new Map<string, ResultItem>();
+  let request: ResultItem | undefined;
   for (const message of messages) {
+    if (message.role === "user") {
+      request = {
+        id: "reasoning-" + message.id,
+        turnId: message.id,
+        type: "reasoning",
+        title: message.text.trim().slice(0, 160) || "Запрос с вложениями",
+        createdAt: new Date(message.createdAt * 1000 || 0).toISOString(),
+        payload: { text: message.text, steps: [] },
+      };
+      results.set(request.id, request);
+    } else if (request && message.phase === "commentary") {
+      request.payload.steps!.push({
+        id: message.id,
+        text: message.text,
+        activity: message.activity,
+        state: message.complete ? "completed" : "active",
+      });
+    }
     const content = gptResultContent(message.text, publicBaseUrl);
     for (const [url, title] of content.links) {
       if (message.files.some((file) => file.url === url)) continue;

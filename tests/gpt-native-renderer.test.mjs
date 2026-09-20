@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 import test from "node:test";
+import { nativeActivity } from "../ops/gpt-native/public-activity.mjs";
 import { nativeRead } from "../ops/gpt-native/renderer-read.mjs";
 
 const conversationId = "10000000-0000-4000-8000-000000000001";
@@ -45,7 +46,7 @@ function fixture() {
   const load = async () => service;
   const read = (request, cached = false) => {
     if (!cached) runtime[Symbol.for("codex-web.native-history")]?.clear();
-    return nativeRead(request, load, runtime);
+    return nativeRead(request, load, runtime, nativeActivity);
   };
   const node = (n, text, extra = {}) => {
     const message = {
@@ -64,6 +65,38 @@ function fixture() {
   node(1, "visible");
   return { account, runtime, conversation, calls, service, read, node, binding };
 }
+
+test("canonical graph keeps public action categories and generated images, excluding tool bodies", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  f.node(2, JSON.stringify({ path: "/mcp/github/search", args: { secret: "PRIVATE" } }), {
+    id: id(92),
+    recipient: "api_tool.call_tool",
+    channel: "analysis",
+  });
+  f.node(3, "PRIVATE image output", {
+    id: id(93),
+    author: { role: "tool", name: "image_gen" },
+    metadata: { image_gen_title: "Picture" },
+    content: {
+      content_type: "multimodal_text",
+      parts: [
+        { content_type: "image_asset_pointer", asset_pointer: "file-service://file-picture" },
+      ],
+    },
+  });
+  const graph = await f.read({
+    operation: "readConversationGraph",
+    conversationId,
+    accountFingerprint,
+  });
+  assert.equal(graph.mapping[id(2)].message.metadata.codex_activity, "search");
+  assert.equal(
+    graph.mapping[id(3)].message.content.parts[0].asset_pointer,
+    "file-service://file-picture",
+  );
+  assert.doesNotMatch(JSON.stringify(graph), /PRIVATE|args/);
+});
 
 test("stopped native turns finish without exposing hidden terminal content", async () => {
   for (const terminal of [

@@ -2,8 +2,14 @@
 
 ## Owner-requested Results tab order (2026-09-20)
 
-- GPT Results tabs: Files, Images, Links, Demos. Codex Results tabs: Files, Images, Demos, Work.
+- GPT Results tabs: Files, Images, Links, Demos, Reasoning. Codex Results tabs: Files, Images, Demos, Work.
 - Remove the All tab in both clients; default to Files. Exact result navigation selects its category. Keep aggregate counts and backend compatibility.
+
+## Owner-requested public GPT progress and warm active history (2026-09-20)
+
+- GPT chat shows user messages and completed final responses. Public commentary and recognized public tool-action categories belong in Results → Reasoning, grouped by the exact native user message, and in the expanded running progress panel.
+- The collapsed progress control shows only a short action with its icon, never a scrolling answer. Keep live public text in the expanded panel. Never expose hidden analysis, raw tool arguments/results or internal diagnostics.
+- Keep active native chats warm on the Hub independently of the open browser page. Reuse canonical reads, coalesce concurrent loads and bound refresh frequency/cache size. Refresh completion immediately; never replay sends or preload the entire catalog. Returning viewers see available cached history while background work continues.
 
 This repository is intended to be implemented primarily with Codex. Read this file before changing architecture or starting a large feature.
 

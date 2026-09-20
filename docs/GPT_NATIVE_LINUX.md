@@ -523,7 +523,17 @@ bounded text/cache lifetime and a short independent deadline apply. Optional liv
 reads bypass the writer queue and never confirm delivery or completion. Failure
 silently retains the existing canonical reconciliation/history fallback.
 
-The bottom progress strip follows the newest text; expansion shows the bounded
-public messages with line breaks. Scrolling upward pauses following. No artificial
-typing animation or continuous marquee is used. Final rich text, links, files and
-results still come from the canonical history path.
+The collapsed bottom strip shows a short recognized action and icon. Text streams
+only in the expanded panel; scrolling upward pauses following. Results → Reasoning
+groups public commentary/actions by native user-message ID. The main chat displays
+completed final responses and user messages. No hidden analysis or tool payloads
+are exported. Action labels are localized categories derived from recognized native
+tool identities, not invented detailed descriptions or copies of raw tool output.
+
+Active native job reconciliation warms the owner-scoped Hub history cache in the
+background (at most once per ten seconds per chat, immediately on completion).
+It reuses the native canonical read cache and coalesces pending reads; a returning
+client can display the warm snapshot without waiting for another network fetch.
+The existing twelve-chat / 16 MiB memory bound and private disk snapshots remain.
+This does not crawl inactive chats or retry submissions. Public final rich text,
+links, files and results continue to come from canonical history.

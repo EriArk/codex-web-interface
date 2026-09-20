@@ -18,6 +18,7 @@ import remarkGfm from "remark-gfm";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { CommandOutput } from "./CommandOutput";
 import { CopyButton } from "./CopyButton";
+import { GptSteps } from "./GptProgress";
 import { Icon } from "./icons";
 import { LiveCommandOutput } from "./LiveCommandOutput";
 import { MarkdownTable } from "./MarkdownTable";
@@ -46,6 +47,7 @@ export function Results({
   onRevealRetry,
   showLinks = false,
   showWork = true,
+  showReasoning = false,
 }: {
   focusVersion?: number;
   onRetry?: () => void;
@@ -68,6 +70,7 @@ export function Results({
   onRevealRetry?: () => void;
   showLinks?: boolean;
   showWork?: boolean;
+  showReasoning?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
@@ -123,6 +126,7 @@ export function Results({
       <ResultFilters
         showLinks={showLinks}
         showWork={showWork}
+        showReasoning={showReasoning}
         category={category}
         counts={counts}
         preview={inspecting}
@@ -234,7 +238,15 @@ export function Results({
                   )}
                   <span className="result-icon">
                     <Icon
-                      name={r.type === "image" ? "image" : r.type === "check" ? "check" : "folder"}
+                      name={
+                        r.type === "reasoning"
+                          ? "activity"
+                          : r.type === "image"
+                            ? "image"
+                            : r.type === "check"
+                              ? "check"
+                              : "folder"
+                      }
                     />
                   </span>
                   <div>
@@ -254,6 +266,16 @@ export function Results({
                     </span>
                   )}
                 </div>
+                {r.type === "reasoning" && (
+                  <details className="result-reasoning-details">
+                    <summary>
+                      <Icon name="chevron" size={16} /> Ход ответа{" "}
+                      <span className="muted">{r.payload.steps?.length || 0}</span>
+                    </summary>
+                    {r.payload.text !== r.title && <p className="result-reasoning-request">{r.payload.text}</p>}
+                    <GptSteps items={r.payload.steps ?? []} />
+                  </details>
+                )}
                 {r.type === "image" && r.payload.url && (
                   <button
                     type="button"

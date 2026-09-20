@@ -4,6 +4,7 @@ import "../../src/styles.css";
 import "../../src/workspace.css";
 import "../../src/themes.css";
 import "../../src/compact.css";
+import "../../src/gpt.css";
 import "../../src/materials.css";
 import "../../src/polymer.css";
 import "../../src/accent-colors.css";

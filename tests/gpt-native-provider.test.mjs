@@ -103,7 +103,11 @@ test("native queue retains public progress across lost ack and restart without r
   f.state.loseAck = true;
   first.enqueue(key, f.input);
   await until(() => first.job(key).status === "running" && first.job(key).progress?.length);
-  assert.equal(first.job(key).answer, "Проверяю вложение");
+  assert.equal(first.job(key).answer, "");
+  assert.equal(first.job(key).progress[0].text, "Проверяю вложение");
+  await until(() =>
+    first.historyCache.peek(f.conversationId).some((m) => m.text === "Проверяю вложение"),
+  );
   assert.equal(first.enqueue(key, f.input).id, key);
   assert.equal(f.state.sends, 1);
   await first.close();
@@ -113,6 +117,10 @@ test("native queue retains public progress across lost ack and restart without r
   await second.pump();
   assert.equal(second.job(key).status, "completed");
   assert.match(second.job(key).answer, /nativeworkspaceok/);
+  assert.doesNotMatch(second.job(key).answer, /Проверяю вложение/);
+  await until(() =>
+    second.historyCache.peek(f.conversationId).some((m) => m.text === "nativeworkspaceok"),
+  );
   assert.equal(f.state.sends, 1);
   assert.equal(
     f.store.db.prepare("SELECT provider FROM gpt_job_providers WHERE jobId=?").get(key).provider,
@@ -216,7 +224,7 @@ test("native stop is bound to the job and only becomes cancelled after confirmat
     service = f.open(),
     key = randomUUID();
   service.enqueue(key, f.input);
-  await until(() => service.job(key).status === "running" && service.job(key).answer);
+  await until(() => service.job(key).status === "running" && service.job(key).progress?.length);
   await service.cancel(key);
   await service.pump();
   assert.equal(service.job(key).status, "cancelled");
