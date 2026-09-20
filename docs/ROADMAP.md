@@ -1,5 +1,13 @@
 # Roadmap
 
+## Installed member release (2026-09-20)
+
+Release `1568870` is installed on the engine and web gateway (deployment receipt: 16:45 UTC). The owner explicitly authorized interrupting running work to apply the release and begin the friend's admission. The one-use host deployment wrapper bypassed only the idle wait; production-image verification, coordinated backup, privacy admission and rollback remained intact. No permanent idle-check bypass was added to the application.
+
+A coordinated checkpoint was created before switching. Post-install authenticated owner GPT reads returned healthy/send-ready with three models, five power choices and no active/unknown GPT jobs. Invitation-only registration is now enabled and the first member invitation has been issued privately. The original owner's login, native profile and direct LAN setup remain in place. Real friend-PC/native-account acceptance is the next step, not a completed check. These installed facts supersede the queued/registration-closed status in the historical entries below.
+
+Friend setup instructions: [quick start](FRIEND_QUICKSTART.md).
+
 ## Independent-member work — four passes (2026-09-20)
 
 1. **Personal native GPT:** per-user Linux client, empty profile, private login/Remote, account activation and own Hub runtime. Includes immediate local chat deletion with a durable background native queue. Implemented in the current candidate; deployment status is recorded separately from source completion.
