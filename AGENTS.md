@@ -642,3 +642,11 @@ Before mobile support is considered complete, the same core workflow must also w
 - Pass the selected model/effort explicitly to the native completion action. Retain exact account/conversation binding, draft preservation and durable at-most-once dispatch.
 - Remove obsolete local failed/limbo send cards when the owner requests cleanup, preserving native conversation history and idempotency receipts. Never replay an uncertain send as cleanup.
 - Verify the changed path with focused checks; do not repeat unrelated download or broad regression suites without a new reason.
+
+
+## Owner-requested quiet recovery UX (2026-09-20)
+
+- Recover transient connection/read failures quietly before asking the owner to act. Show manual recovery only after automatic recovery fails; suppress routine success/delivery-check banners.
+- Never turn this into blind retries of sends, mutations, terminal input, permission changes or native sign-in. Keep existing identities, drafts, receipts and active work.
+- Internal initial GPT outbox queuing is ordinary sending, not a user-visible waiting queue. Show waiting only for actual preceding work in the same chat.
+- Recovery UX inventory and next actions: `docs/UX_RECOVERY_AUDIT_2026-09-20.md`.

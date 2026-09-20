@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect, webkit } from "@playwright/test";
 import { handoffFixture } from "./handoff-fixture.mjs";
@@ -43,16 +43,11 @@ for (const [engine, type] of [
     });
     await page.goto(origin);
     const editor = page.getByRole("textbox", { name: "Сообщение Codex" });
-    const recover = page.getByRole("button", { name: "Восстановить диалог", exact: true });
+    const recover = page.getByRole("button", { name: "Повторить подключение", exact: true });
     await expect(editor).toBeVisible();
     await editor.fill("Черновик остаётся до моей отправки");
-    await expect(recover).toBeEnabled();
-    await recover.tap();
-    await expect(page.getByText("Восстанавливаем связь…", { exact: true })).toBeVisible();
-    const pending = page.getByRole("button", { name: "Подключаемся…", exact: true });
-    await expect(pending).toBeDisabled();
     await expect.poll(() => attempts).toBe(1);
-    await page.screenshot({ path: `.local/qa-recovery/${engine}-pending.png` });
+    await expect(page.locator(".connection-recovery")).toHaveCount(0);
     release();
     await expect(page.locator(".connection-recovery")).toContainText("Компьютер недоступен");
     await expect(recover).toBeEnabled();
@@ -60,34 +55,24 @@ for (const [engine, type] of [
     failed = false;
     await recover.tap();
     await expect.poll(() => attempts).toBe(2);
+    await expect(page.getByRole("button", { name: "Подключаемся…", exact: true })).toBeDisabled();
     release();
-    await expect(
-      page.getByText("Связь восстановлена. Codex продолжает работу.", { exact: true }),
-    ).toBeVisible();
-    await expect(editor).toHaveValue("Черновик остаётся до моей отправки");
-    await expect(recover).toHaveCount(0);
-    await page.screenshot({ path: `.local/qa-recovery/${engine}-running.png` });
-    await page.getByRole("button", { name: "Скрыть результат восстановления" }).tap();
     await expect(page.locator(".connection-recovery")).toHaveCount(0);
-    f.store.setStatus(f.thread.id, "unknown", "last-turn");
-    await page.reload();
-    status = "idle";
-    await expect(recover).toBeEnabled();
-    await recover.tap();
-    await expect.poll(() => attempts).toBe(3);
-    release();
-    await expect(
-      page.getByText("Диалог восстановлен. Чтобы продолжить задачу, отправь сообщение.", {
-        exact: true,
-      }),
-    ).toBeVisible();
     await expect(editor).toHaveValue("Черновик остаётся до моей отправки");
+    f.store.setStatus(f.thread.id, "unknown", "last-turn");
+    status = "idle";
+    await page.reload();
+    await expect.poll(() => attempts).toBe(3);
+    await expect(page.locator(".connection-recovery")).toHaveCount(0);
+    release();
+    await expect(editor).toHaveValue("Черновик остаётся до моей отправки");
+    await expect(page.locator(".connection-recovery")).toHaveCount(0);
     await page.screenshot({ path: `.local/qa-recovery/${engine}-idle.png` });
     assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 0);
     assert.equal(f.desktopCalls.filter((c) => c.includes("Restart")).length, 0);
     console.log(
       engine +
-        ": recovery pending, failure/retry, active/idle feedback, draft preserved, no replay/restart",
+        ": quiet automatic recovery, failure/manual retry, draft preserved, no replay/restart",
     );
   } finally {
     await context.close();

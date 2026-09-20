@@ -30,7 +30,7 @@ import { useGptNativeOperations } from "./GptNativeOperations";
 import { GptProgress } from "./GptProgress";
 import { GptProjectPending } from "./GptProjectContent";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
-import { mergeGptJobs, showGptJob } from "./gptState";
+import { mergeGptJobs, showGptJob, waitingGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import { SpeechButton, useSpeechScope } from "./MessageSpeech";
@@ -1002,7 +1002,11 @@ export function GptWorkspace({
                 <span className="avatar">Я</span>
                 <b>Вы</b>
                 <small>
-                  {job.status === "unknown" && !job.error ? "Отправляется" : titles[job.status]}
+                  {job.status === "unknown" && !job.error
+                    ? "Отправляется"
+                    : job.status === "queued" && !waitingGptJob(job, jobs)
+                      ? "Отправляется"
+                      : titles[job.status]}
                 </small>
                 <CopyButton text={job.text} />
               </div>
@@ -1104,7 +1108,7 @@ export function GptWorkspace({
                 })
               }
             >
-              Убрать из очереди
+              {waitingGptJob(job, jobs) ? "Убрать из очереди" : "Отменить отправку"}
             </button>
           )}
         </section>
@@ -1189,7 +1193,11 @@ export function GptWorkspace({
           <span>
             {job.text.slice(0, 60) || "Новая отправка"}
             <small>
-              {job.status === "unknown" && !job.error ? "Отправляется" : titles[job.status]}
+              {job.status === "unknown" && !job.error
+                ? "Отправляется"
+                : job.status === "queued" && !waitingGptJob(job, jobs)
+                  ? "Отправляется"
+                  : titles[job.status]}
             </small>
           </span>
           {isActive(job) && <span className="spinner" aria-hidden="true" />}
@@ -1820,7 +1828,7 @@ export function GptWorkspace({
                 )}
               </div>
             )}
-            {active && (
+            {active && (active.status === "running" || waitingGptJob(active, jobs)) && (
               <GptProgress
                 key={active.id}
                 items={active.progress ?? []}

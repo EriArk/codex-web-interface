@@ -48,7 +48,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   }, timeout);
   try {
     return await Promise.race([
-      request<T>(path, { ...options, signal: controller.signal }),
+      readWithRecovery<T>(path, { ...options, signal: controller.signal }),
       cancelled,
     ]);
   } catch (error) {
@@ -65,6 +65,41 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", abort);
     controller.signal.removeEventListener("abort", rejectAbort);
+  }
+}
+// A short transport hiccup should not turn a read into a user task.
+// Mutations, auth and application errors never enter this retry path.
+async function readWithRecovery<T>(path: string, options: ApiOptions): Promise<T> {
+  const revision = sessionRevision;
+  try {
+    return await request<T>(path, options);
+  } catch (error) {
+    if (
+      (options.method && options.method !== "GET") ||
+      path.startsWith("/auth/") ||
+      !(error instanceof ApiError) ||
+      ![0, 502, 503, 504].includes(error.status) ||
+      !["OFFLINE", "INVALID_RESPONSE", "REQUEST_FAILED", "TRANSPORT_UNAVAILABLE"].includes(
+        error.code,
+      ) ||
+      options.signal?.aborted ||
+      revision !== sessionRevision
+    )
+      throw error;
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        reject(options.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+      };
+      const timer = setTimeout(() => {
+        options.signal?.removeEventListener("abort", abort);
+        resolve();
+      }, 800);
+      options.signal?.addEventListener("abort", abort, { once: true });
+      if (options.signal?.aborted) abort();
+    });
+    if (options.signal?.aborted || revision !== sessionRevision) throw error;
+    return request<T>(path, options);
   }
 }
 async function request<T>(

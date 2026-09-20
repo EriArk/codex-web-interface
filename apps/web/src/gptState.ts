@@ -1,5 +1,21 @@
 import type { GptHistoryPage, GptJob, GptMessage } from "@codex-web/shared";
 import type { GptCachedChat } from "./gptCache";
+// The durable outbox's initial "queued" state is not a user-visible queue.
+export function waitingGptJob(job: GptJob, jobs: GptJob[]): boolean {
+  return (
+    job.status === "queued" &&
+    !!job.nativeId &&
+    jobs.some(
+      (other) =>
+        other.id !== job.id &&
+        !other.dismissed &&
+        other.nativeId === job.nativeId &&
+        other.createdAt <= job.createdAt &&
+        ["queued", "preparing", "running", "unknown"].includes(other.status),
+    )
+  );
+}
+
 // A failed pre-dispatch attempt can outlive an explicit successful retry.
 // Hide only that obsolete presentation; do not mutate receipts or resolve unknown sends.
 export function completedGptRetry(job: GptJob, jobs: GptJob[]): boolean {

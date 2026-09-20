@@ -732,7 +732,7 @@ export function Chat({
           key={threadId}
           needed={state.thread.status === "unknown"}
           error={state.error}
-          disabled={busy}
+          disabled={busy || !visible}
           onRecover={onReconnect}
         />
       )}
