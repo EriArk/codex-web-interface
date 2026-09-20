@@ -21,6 +21,7 @@ export function useGptHistory(selected: string) {
   const pageScope = useRef(selected);
   const selectedRef = useRef(selected),
     mounted = useRef(true);
+  const failures = useRef({ id: "", epoch: -1, count: 0, since: 0 });
   const pending = useRef(new Map<string, Promise<void>>());
   selectedRef.current = selected;
   const rememberScroll = useCallback((id = selectedRef.current) => {
@@ -80,6 +81,22 @@ export function useGptHistory(selected: string) {
         return;
       const epoch = gptCacheEpoch(),
         serial = beginGptHistory(id);
+      const reportFailure = (message: string, transient: boolean) => {
+        if (epoch !== gptCacheEpoch() || !currentGptHistory(id, serial)) return;
+        if (failures.current.id !== id || failures.current.epoch !== epoch)
+          failures.current = { id, epoch, count: 0, since: Date.now() };
+        const failure = failures.current;
+        if (!failure.count) failure.since = Date.now();
+        failure.count++;
+        // Existing periodic reads recover cached history; do not add more native requests.
+        const quiet =
+          transient &&
+          cached &&
+          !older &&
+          !messageId &&
+          (failure.count < 3 || Date.now() - failure.since < 30000);
+        if (mounted.current && selectedRef.current === id) setError(quiet ? "" : message);
+      };
       const task = (async () => {
         if (mounted.current && selectedRef.current === id && (older || !cached)) setLoading(true);
         if (mounted.current && selectedRef.current === id) {
@@ -112,7 +129,11 @@ export function useGptHistory(selected: string) {
           gptCache.chats[id] = next;
           saveGptCache();
           if (!mounted.current || selectedRef.current !== id) return;
-          setError(data.refreshMessage ?? "");
+          if (data.stale && data.refreshMessage) reportFailure(data.refreshMessage, true);
+          else {
+            failures.current = { id, epoch, count: 0, since: 0 };
+            setError("");
+          }
           const oldHeight = scroll.current?.scrollHeight ?? 0;
           setPage(next);
           if (older)
@@ -130,7 +151,19 @@ export function useGptHistory(selected: string) {
             await history(id, undefined, true);
             return;
           }
-          if (mounted.current && selectedRef.current === id) setError(messageOf(error));
+          const transient =
+            error instanceof ApiError &&
+            (error.status === 0 ||
+              [
+                "GPT_HISTORY_RATE_LIMITED",
+                "GPT_HISTORY_UNAVAILABLE",
+                "GPT_CONNECTION_LOST",
+                "TRANSPORT_UNAVAILABLE",
+                "REQUEST_FAILED",
+                "INVALID_RESPONSE",
+              ].includes(error.code)) &&
+            ![401, 403, 404].includes(error.status);
+          reportFailure(messageOf(error), transient);
           throw error;
         } finally {
           if (mounted.current && selectedRef.current === id) {
@@ -149,13 +182,8 @@ export function useGptHistory(selected: string) {
     [rememberScroll],
   );
   useEffect(() => {
-    let active = true;
     const refresh = () => {
-      if (!document.hidden)
-        void history(selected).catch((error) => {
-          if (active && mounted.current && selectedRef.current === selected)
-            setError(messageOf(error));
-        });
+      if (!document.hidden) void history(selected).catch(() => {});
     };
     refresh();
     const timer = setInterval(refresh, 15000);
@@ -163,7 +191,6 @@ export function useGptHistory(selected: string) {
     window.addEventListener("pageshow", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
-      active = false;
       clearInterval(timer);
       window.removeEventListener("online", refresh);
       window.removeEventListener("pageshow", refresh);
