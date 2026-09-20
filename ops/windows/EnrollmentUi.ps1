@@ -69,9 +69,26 @@ function Get-CwTailnetAddress([string]$program) {
         return $null
     } finally { $ErrorActionPreference = $previous }
 }
+function Read-CwLiveLog([string]$path) {
+    $stream = $null; $reader = $null
+    try {
+        $stream = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        if ($stream.Length -gt 65536) { return '' }
+        $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8)
+        $buffer = [char[]]::new(65536)
+        $count = $reader.ReadBlock($buffer, 0, $buffer.Length)
+        return [string]::new($buffer, 0, $count)
+    } catch [IO.IOException] {
+        # A temporarily locked/rotating log is not a failed native login; retry next tick.
+        return ''
+    } finally {
+        if ($reader) { $reader.Dispose() } elseif ($stream) { $stream.Dispose() }
+    }
+}
 function Invoke-CwInstaller([string]$program, [string[]]$arguments, [switch]$GithubLogin) {
     # Long dependency installation keeps the wizard responsive; close does not kill a package installer.
-    $stdout = Join-Path $PSScriptRoot 'installer-output.log'; $stderr = Join-Path $PSScriptRoot 'installer-error.log'
+    $attempt = [Guid]::NewGuid().ToString('N')
+    $stdout = Join-Path $PSScriptRoot ('installer-' + $attempt + '-output.log'); $stderr = Join-Path $PSScriptRoot ('installer-' + $attempt + '-error.log')
     $inputFile = Join-Path $PSScriptRoot 'installer-input.txt'
     [IO.File]::WriteAllText($inputFile, '')
     $process = Start-Process -FilePath $program -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardInput $inputFile -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
@@ -84,7 +101,7 @@ function Invoke-CwInstaller([string]$program, [string[]]$arguments, [switch]$Git
         # Non-interactive gh prints its device code/URL instead of opening the browser.
         # Only extract the short code. Never display native credential logs or arbitrary URLs.
         if ($GithubLogin -and -not $displayedCode -and (Test-Path -LiteralPath $stderr)) {
-            $log = [IO.File]::ReadAllText($stderr)
+            $log = Read-CwLiveLog $stderr
             if ($log.Length -le 65536 -and $log -match '(?i)one-time code[^\r\n]*?\b([A-Z0-9]{4}-[A-Z0-9]{4})\b') {
                 $displayedCode = $Matches[1]
                 if (-not $script:CwWindow.IsDisposed) {
