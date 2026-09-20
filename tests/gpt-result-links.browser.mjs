@@ -59,9 +59,12 @@ try {
         title: "Interactive demo",
         turnId: "reply",
         createdAt: new Date(0).toISOString(),
-        payload: { url: "/api/gpt/previews/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        payload: {
+          url: "/api/gpt/previews/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
       };
       const counts = { all: 25, links: 24, demos: 1, files: 0, images: 0, work: 0 };
+      let initialReads = 0;
       await page.route("https://outbox.test/**", async (route) => {
         const url = new URL(route.request().url()),
           path = url.pathname;
@@ -74,6 +77,16 @@ try {
             body: '<!doctype html><meta charset="utf-8"><div id="root"></div><link rel="stylesheet" href="/fixture.css"><script src="/fixture.js"></script>',
           });
         if (path.endsWith("/results")) {
+          if (url.searchParams.get("category") === "files" && ++initialReads === 1)
+            return route.fulfill({
+              status: 503,
+              json: {
+                error: {
+                  code: "GPT_HISTORY_UNAVAILABLE",
+                  message: "Temporary native history failure",
+                },
+              },
+            });
           const category = url.searchParams.get("category"),
             items =
               category === "links"
@@ -93,7 +106,10 @@ try {
           });
         }
         if (path.endsWith("/ready")) return route.fulfill({ json: { ready: true } });
-        if (path === "/api/gpt/previews/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        if (
+          path ===
+          "/api/gpt/previews/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
           return route.fulfill({
             contentType: "text/html",
             body: `<button onclick="this.textContent='Clicked'">Demo action</button>`,
@@ -109,6 +125,11 @@ try {
       });
       await page.goto("https://outbox.test/");
       const filters = page.locator(".result-filters button");
+      await expect.poll(() => initialReads).toBe(1);
+      await expect(page.locator(".results-error")).toHaveCount(0);
+      await expect(page.locator(".empty-state h2")).toHaveText("Загружаем…");
+      await expect.poll(() => initialReads, { timeout: 8000 }).toBe(2);
+      await expect(page.locator(".empty-state h2")).toHaveText("Пока нет результатов.");
       await expect(filters).toHaveText([/^Файлы/, /^Изображения/, /^Ссылки/, /^Демо/]);
       await expect(filters.first()).toHaveAttribute("aria-pressed", "true");
       await filters.nth(2).click();

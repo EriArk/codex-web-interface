@@ -340,14 +340,24 @@ function gptLinkedText(body, metadata) {
   if(request.newChat===true&&(chain.slice(index+1).some(n=>n.message?.author?.role==='user')||(conversation.gizmo_id??null)!==(request.projectId??null)||conversation.conversation_origin==='tpp'))fail('SUBMISSION_MISMATCH');
   // Receipt identity is checked against the bounded canonical branch, not its
   // latest UI page: long-running turns can have far more than 20 public updates.
-  const later=chain.slice(0,index);
-  if(later.some(n=>n.message?.author?.role==='user'))return {state:'unknown',messages:[]};
+  const descendants=chain.slice(0,index);
+  const nextUser=descendants.findLastIndex(n=>n.message?.author?.role==='user');
+  // A later user turn does not undo the exact delivery proof above. Reconcile
+  // only this submission's descendants, never borrow a subsequent answer.
+  const later=descendants.slice(nextUser+1);
   const ids=new Set(later.map(n=>n.message?.id));
   const visible=page.messages.filter(m=>ids.has(m.id)&&m.role==='assistant');
   const latest=visible.at(-1);
-  const finished=latest?.nodeId===conversation.current_node&&latest?.complete&&latest.channel==='final'&&
+  // Native stopped/error turns can end on a non-public node, without a final
+  // assistant answer. Inspect terminal metadata only; never return its content.
+  const head=later[0]?.message;
+  const stopped=head && (head.metadata?.finish_details?.type==='interrupted' ||
+   head.metadata?.is_error===true || head.status==='finished_partial_completion' ||
+   ['error','system_error'].includes(head.content?.content_type));
+  if(stopped)return {state:'cancelled',messages:visible};
+  const finished=latest?.nodeId===later[0]?.id&&latest?.complete&&latest.channel==='final'&&
    later.some(n=>n.message?.id===latest.id&&n.message.end_turn===true);
-  return {state:finished?'completed':'running',messages:visible};
+  return {state:finished?'completed':nextUser>=0?'cancelled':'running',messages:visible};
  }
  return page;
 }

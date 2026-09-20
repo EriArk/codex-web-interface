@@ -127,11 +127,7 @@ function ResponseResults({
     text,
   );
   if (!files.length && !demo) return null;
-  const category = files.some((file) => !file.image)
-    ? "files"
-    : files.length
-      ? "images"
-      : "demos";
+  const category = files.some((file) => !file.image) ? "files" : files.length ? "images" : "demos";
   return (
     <button type="button" className="result-chip" onClick={() => onOpen(category)}>
       <Icon name="results" size={16} />
@@ -1017,6 +1013,17 @@ export function GptWorkspace({
         (m) =>
           m.role === "user" && m.text === job.text && m.createdAt * 1000 >= job.createdAt - 30000,
       );
+      const answerInHistory =
+        !!job.answer &&
+        !job.assets.length &&
+        !!job.progress?.length &&
+        messages
+          .filter(
+            (message) =>
+              message.role === "assistant" && job.progress?.some((step) => step.id === message.id),
+          )
+          .map((message) => message.text)
+          .join("\n\n") === job.answer;
       return (
         <section className="gpt-job" key={job.id}>
           {!nativeUser && (
@@ -1039,7 +1046,7 @@ export function GptWorkspace({
               </div>
             </article>
           )}
-          {(job.answer || job.assets.length > 0) && (
+          {!answerInHistory && (job.answer || job.assets.length > 0) && (
             <article className="message assistant" data-message={"job:" + job.id}>
               <div className="message-header">
                 <span className="avatar">G</span>

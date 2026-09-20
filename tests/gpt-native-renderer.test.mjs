@@ -65,6 +65,45 @@ function fixture() {
   return { account, runtime, conversation, calls, service, read, node, binding };
 }
 
+test("stopped native turns finish without exposing hidden terminal content", async () => {
+  for (const terminal of [
+    { status: "finished_partial_completion" },
+    { metadata: { finish_details: { type: "interrupted" } } },
+    { metadata: { is_error: true } },
+  ]) {
+    const f = fixture(),
+      accountFingerprint = await f.binding();
+    f.node(2, "prompt", { id: id(90), author: { role: "user" } });
+    f.node(3, "public update", { channel: "commentary", end_turn: false });
+    f.node(4, "private content", { channel: "analysis", end_turn: false, ...terminal });
+    const result = await f.read({
+      operation: "readSubmission",
+      conversationId,
+      accountFingerprint,
+      userMessageId: id(90),
+      parentId: id(1),
+      text: "prompt",
+    });
+    assert.equal(result.state, "cancelled");
+    assert.deepEqual(
+      result.messages.map((m) => m.text),
+      ["public update"],
+    );
+  }
+});
+
+test("a subsequent turn preserves old delivery without borrowing its answer", async () => {
+  const f = fixture(), accountFingerprint = await f.binding();
+  f.node(2, "old prompt", { id: id(90), author: { role: "user" } });
+  f.node(3, "old update", { channel: "commentary", end_turn: false });
+  f.node(4, "new prompt", { author: { role: "user" } });
+  f.node(5, "new answer", { end_turn: true });
+  const result = await f.read({ operation: "readSubmission", conversationId,
+    accountFingerprint, userMessageId: id(90), parentId: id(1), text: "old prompt" });
+  assert.equal(result.state, "cancelled");
+  assert.deepEqual(result.messages.map(m => m.text), ["old update"]);
+});
+
 test("submission readback requires exact ID, parent, unchanged text and a public final end-turn", async () => {
   const f = fixture(),
     accountFingerprint = await f.binding();
@@ -90,7 +129,7 @@ test("submission readback requires exact ID, parent, unchanged text and a public
   await assert.rejects(f.read({ ...request, parentId: id(5) }), /SUBMISSION_MISMATCH/);
   await assert.rejects(f.read({ ...request, text: "different" }), /SUBMISSION_MISMATCH/);
   f.node(6, "same prompt", { author: { role: "user" } });
-  assert.equal((await f.read(request)).state, "unknown");
+  assert.equal((await f.read(request)).state, "completed");
 });
 
 test("receipt replies resolve public sources without exposing markers or changing submitted text", async () => {
@@ -147,7 +186,7 @@ test("long-running receipts remain confirmed beyond a twenty-message page", asyn
   assert.equal((await f.read(request)).state, "completed");
   await assert.rejects(f.read({ ...request, text: "different" }), /SUBMISSION_MISMATCH/);
   f.node(44, "next task", { author: { role: "user" } });
-  assert.equal((await f.read(request)).state, "unknown");
+  assert.equal((await f.read(request)).state, "completed");
 });
 
 test("canonical attachment identity survives JSON key order, rejecting substituted files and image pointers", async () => {

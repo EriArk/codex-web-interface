@@ -175,14 +175,15 @@ export function Results({
         )}
       </div>
       <div className="pane-scroll" ref={ref} hidden={inspecting}>
-        {!results.some((r) => category === "all" || resultCategory(r.type) === category) && (
-          <div className="empty-state">
-            <div className="empty-symbol">
-              <Icon name="results" size={29} />
+        {!error &&
+          !results.some((r) => category === "all" || resultCategory(r.type) === category) && (
+            <div className="empty-state">
+              <div className="empty-symbol">
+                <Icon name="results" size={29} />
+              </div>
+              <h2>{busy ? "Загружаем…" : "Пока нет результатов."}</h2>
             </div>
-            <h2>{busy ? "Загружаем…" : "Пока нет результатов."}</h2>
-          </div>
-        )}
+          )}
         {results
           .filter((r) => category === "all" || resultCategory(r.type) === category)
           .map((r) =>

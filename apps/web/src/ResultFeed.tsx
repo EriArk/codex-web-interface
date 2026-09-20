@@ -93,6 +93,27 @@ export function ResultFeed({
   const [cursor, setCursor] = useState<string | number | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [transientFailure, setTransientFailure] = useState(false);
+  const recoveryAttempts = useRef(0);
+  const readFailed = (cause: unknown) => {
+    setTransientFailure(
+      cause instanceof TypeError ||
+        (cause instanceof ApiError && [0, 429, 502, 503, 504].includes(cause.status)),
+    );
+    setError(messageOf(cause));
+  };
+  const recovering = !!error && transientFailure && recoveryAttempts.current < 2;
+  useEffect(() => {
+    if (!recovering || !visible || !endpoint) return;
+    const timer = setTimeout(
+      () => {
+        recoveryAttempts.current++;
+        setRetry((value) => value + 1);
+      },
+      recoveryAttempts.current === 0 ? 3000 : 10000,
+    );
+    return () => clearTimeout(timer);
+  }, [recovering, visible, endpoint, category, error]);
   const generation = useRef(0),
     readScope = useRef("");
   useEffect(() => {
@@ -104,6 +125,7 @@ export function ResultFeed({
     const current = ++generation.current;
     const scope = `${endpoint}?category=${category}`;
     if (scope !== readScope.current) {
+      recoveryAttempts.current = 0;
       readScope.current = scope;
       setItems([]);
       fullyLoaded.current = false;
@@ -122,6 +144,8 @@ export function ResultFeed({
     void api<ResultPage>(endpoint + "?category=" + category)
       .then((data) => {
         if (current !== generation.current) return;
+        recoveryAttempts.current = 0;
+        setTransientFailure(false);
         setItems(data.items);
         loadedIds.current = data.items.map((item) => item.id);
         fullyLoaded.current = data.nextBefore === null;
@@ -131,7 +155,7 @@ export function ResultFeed({
         setCursor(data.nextBefore);
       })
       .catch((e) => {
-        if (current === generation.current) setError(messageOf(e));
+        if (current === generation.current) readFailed(e);
       })
       .finally(() => {
         if (current === generation.current) setBusy(false);
@@ -150,6 +174,8 @@ export function ResultFeed({
       void api<ResultPage>(endpoint + "?category=" + category)
         .then((data) => {
           if (current !== generation.current) return;
+          recoveryAttempts.current = 0;
+          setTransientFailure(false);
           setCounts(data.counts ?? emptyResultCounts());
           const replaced =
             data.sourceRevision !== undefined && data.sourceRevision !== sourceRef.current;
@@ -178,7 +204,7 @@ export function ResultFeed({
         })
         .catch((e) => {
           if (current === generation.current) {
-            setError(messageOf(e));
+            readFailed(e);
             setBusy(false);
           }
         });
@@ -258,7 +284,7 @@ export function ResultFeed({
       focusId={focusId}
       selection={selection?.request === reveal ? selection : null}
       onRevealRetry={() => setRevealRetry((value) => value + 1)}
-      busy={busy}
+      busy={busy || recovering}
       hasMore={cursor !== null}
       onOlder={() => void older()}
       onTurn={onTurn}
@@ -271,9 +297,18 @@ export function ResultFeed({
       counts={totals}
       showLinks={endpoint.startsWith("/gpt/")}
       showWork={!endpoint.startsWith("/gpt/")}
-      error={error}
+      error={
+        recovering
+          ? ""
+          : transientFailure && error
+            ? "Не удалось загрузить результаты. Попробуй ещё раз."
+            : error
+      }
       focusVersion={focusVersion}
-      onRetry={() => setRetry((v) => v + 1)}
+      onRetry={() => {
+        recoveryAttempts.current = 0;
+        setRetry((v) => v + 1);
+      }}
     />
   );
 }
