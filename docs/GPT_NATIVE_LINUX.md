@@ -465,3 +465,17 @@ The final native request still binds the exact account, conversation, canonical
 parent, text/files and model/effort; durable intent prevents duplicate sends.
 Confirmation is silent; investigate only failed delivery. Keep genuine same-chat
 active-turn ordering and drafts. This correction does not change downloads.
+
+
+Installed native runtime: `26.915.31945-direct-87bf789`; Hub stays on
+`36420c7` (no engine or Codex restart). Preparation also no longer waits for a
+mounted visual composer. The native navigation keeps existing drafts intact.
+
+Validation: the focused dispatch tests passed, including stale picker/hydration,
+explicit model/effort, wrong-account/route rejection and at-most-once POST. The
+reported Instant preparation now passes. One ordinary authenticated Hub send in
+the existing disposable native chat reached `completed` and returned the expected
+short reply. No downloads or broad suites were rerun. Removed 13 obsolete local
+failed/cancelled cards at the owner's request, retaining native history and
+idempotency records. A verified profile/receipt checkpoint and previous image
+remain available. This is send-path evidence, not acceptance of every GPT feature.
