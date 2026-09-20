@@ -23,7 +23,7 @@ export function gptResults(
         payload: { text: message.text, steps: [] },
       };
       results.set(request.id, request);
-    } else if (request && message.phase === "commentary") {
+    } else if (request && (message.phase === "commentary" || message.complete === false)) {
       request.payload.steps!.push({
         id: message.id,
         text: message.text,
