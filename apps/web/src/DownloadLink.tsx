@@ -25,7 +25,7 @@ export function isDownloadUrl(value: string | undefined): value is string {
   }
   return (
     !!value &&
-    /^\/api\/(?:gpt\/projects\/[a-zA-Z0-9_-]+\/files\/[a-zA-Z0-9_-]+|gpt\/(?:assets|results|uploads)\/[a-zA-Z0-9_-]+|gpt\/downloads\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/sandbox-[a-f0-9]{64}|(?:attachments|native-images|artifacts)\/[a-zA-Z0-9_-]+)$/.test(
+    /^\/api\/(?:gpt\/projects\/[a-zA-Z0-9_-]+\/files\/[a-zA-Z0-9_-]+|gpt\/text-artifacts\/[a-f0-9]{64}|gpt\/native-assets\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/file[-_][a-zA-Z0-9_-]+|gpt\/(?:assets|results|uploads)\/[a-zA-Z0-9_-]+|gpt\/downloads\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/sandbox-[a-f0-9]{64}|(?:attachments|native-images|artifacts)\/[a-zA-Z0-9_-]+)$/.test(
       value,
     )
   );
@@ -65,12 +65,14 @@ export function DownloadLink({
   mime,
   children,
   className = "secondary",
+  directDownload = false,
 }: {
   href?: string;
   name?: string;
   mime?: string;
   children: ReactNode;
   className?: string;
+  directDownload?: boolean;
 }) {
   const [open, setOpen] = useState(false),
     [file, setFile] = useState<File | null>(null),
@@ -192,6 +194,18 @@ export function DownloadLink({
         setError("Не удалось открыть меню сохранения. Попробуй ещё раз.");
     });
   };
+  if (directDownload)
+    return isDownloadUrl(href) ? (
+      <a
+        className={className}
+        href={workspaceUrl(href)}
+        download={name}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    ) : null;
   return (
     <>
       <button type="button" className={className} onClick={() => setOpen(true)}>

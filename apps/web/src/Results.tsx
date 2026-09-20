@@ -11,6 +11,7 @@ import { workspaceMediaUrl } from "./accountStorage.ts";
 import { DownloadLink } from "./DownloadLink";
 import { ResultFilters } from "./ResultFilters";
 import { ResultInspector } from "./ResultInspector";
+import { resultPreview } from "./resultPreview";
 import "./resultCategories.css";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
@@ -78,6 +79,7 @@ export function Results({
     [inspected, setInspected] = useState<Result | null>(null),
     [revealNotice, setRevealNotice] = useState<string | null>(null),
     [inspecting, setInspecting] = useState(false);
+  const [initialPreview, setInitialPreview] = useState(false);
   const revealed = useRef<ArtifactSelection["request"] | null>(null);
   useEffect(() => {
     onOverlayChange(!!image || !!preview);
@@ -92,7 +94,8 @@ export function Results({
           ?.scrollIntoView({ block: "center" }),
       );
   }, [focusId, visible, results]);
-  const inspect = (result: Result) => {
+  const inspect = (result: Result, openPreview = false) => {
+    setInitialPreview(openPreview);
     setRevealNotice(null);
     setInspected(result);
     setInspecting(true);
@@ -108,6 +111,7 @@ export function Results({
     if (revealed.current !== selection.request) {
       revealed.current = selection.request;
       setInspecting(true);
+      setInitialPreview(false);
     }
     setInspected(selection.item ?? null);
     setRevealNotice(selection.item ? null : selection.error || "Открываем результат…");
@@ -170,7 +174,8 @@ export function Results({
         )}
         {current && !revealNotice && (
           <ResultInspector
-            key={current.id}
+            key={current.id + ":" + initialPreview}
+            initialPreview={initialPreview}
             result={current}
             onRetry={onRetry}
             onClose={() => setInspecting(false)}
@@ -251,14 +256,17 @@ export function Results({
                   </span>
                   <div>
                     <h3>{r.title}</h3>
-                    <time>
-                      {new Date(r.payload.capturedAt || r.createdAt).toLocaleString("ru", {
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </time>
+                    {r.createdAt && (
+                      <time>
+                        {new Date(r.payload.capturedAt || r.createdAt).toLocaleString("ru", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </time>
+                    )}
+                    {r.payload.canvas && <small>Canvas · Версия {r.payload.canvas.version}</small>}
                   </div>
                   {r.type === "check" && (
                     <span className={`badge ${r.payload.exitCode === 0 ? "success" : "danger"}`}>
@@ -272,7 +280,9 @@ export function Results({
                       <Icon name="chevron" size={16} /> Ход ответа{" "}
                       <span className="muted">{r.payload.steps?.length || 0}</span>
                     </summary>
-                    {r.payload.text !== r.title && <p className="result-reasoning-request">{r.payload.text}</p>}
+                    {r.payload.text !== r.title && (
+                      <p className="result-reasoning-request">{r.payload.text}</p>
+                    )}
                     <GptSteps items={r.payload.steps ?? []} />
                   </details>
                 )}
@@ -280,7 +290,7 @@ export function Results({
                   <button
                     type="button"
                     className="screenshot-preview"
-                    onClick={() => inspect(r)}
+                    onClick={() => inspect(r, true)}
                     aria-label="Открыть снимок"
                   >
                     <img
@@ -296,7 +306,7 @@ export function Results({
                   <button
                     type="button"
                     className="secondary result-demo-open"
-                    onClick={() => inspect(r)}
+                    onClick={() => inspect(r, true)}
                   >
                     <Icon name="remote" /> Открыть демо <Icon name="chevron" size={16} />
                   </button>
@@ -317,6 +327,28 @@ export function Results({
                     message={r.payload.message}
                     onComplete={onRetry}
                   />
+                )}
+                {r.payload.excerpt && (
+                  <pre className="result-text-excerpt">{r.payload.excerpt}</pre>
+                )}
+                {r.type === "file" && r.payload.message && (
+                  <p className="result-file-size" role="status">
+                    {r.payload.message}
+                  </p>
+                )}
+                {["file", "artifact", "image", "canvas"].includes(r.type) && (
+                  <div className="result-artifact-actions">
+                    {resultPreview(r).kind !== "card" && (
+                      <button type="button" className="secondary" onClick={() => inspect(r, true)}>
+                        Предпросмотр
+                      </button>
+                    )}
+                    {r.payload.url && (
+                      <DownloadLink directDownload href={r.payload.url} name={r.title}>
+                        Скачать
+                      </DownloadLink>
+                    )}
+                  </div>
                 )}
                 {r.type === "error" && r.payload.message && <p>{r.payload.message}</p>}
                 {r.payload.bytes !== undefined && (
@@ -395,7 +427,12 @@ export function Results({
         <div className="image-viewer" role="dialog" aria-modal="true" aria-label="Просмотр снимка">
           <div className="viewer-toolbar">
             <span>{image.title}</span>
-            <DownloadLink className="secondary" href={image.payload.url} name={image.title}>
+            <DownloadLink
+              directDownload
+              className="secondary"
+              href={image.payload.url}
+              name={image.title}
+            >
               Скачать
             </DownloadLink>
             <button

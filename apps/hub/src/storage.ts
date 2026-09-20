@@ -15,7 +15,7 @@ const disposable = new RegExp(
     uuid +
     "\\.(?:bin|jpg)|gpt/" +
     uuid +
-    "|previews/[0-9a-f]{64}\\.html)$",
+    "|gpt/[0-9a-f]{64}\\.md|previews/[0-9a-f]{64}\\.html)$",
 );
 const terminal = "('idle','completed','interrupted','failed')";
 export function storageBlocked(db: DatabaseSync) {
@@ -140,6 +140,11 @@ function references(db: DatabaseSync) {
     if (row.image) required.add("uploads/" + row.id + ".jpg");
   }
   for (const row of db.prepare("SELECT id FROM gpt_uploads").all()) required.add("gpt/" + row.id);
+  if (
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gpt_text_artifacts'").get()
+  )
+    for (const row of db.prepare("SELECT id FROM gpt_text_artifacts").all())
+      required.add("gpt/" + row.id + ".md");
   for (const row of db.prepare("SELECT id FROM html_previews").all())
     optional.add("previews/" + row.id + ".html");
   for (const row of db.prepare("SELECT files FROM gpt_jobs").all()) {
@@ -336,11 +341,17 @@ export async function compactStorage(
       const table = file.path.startsWith("uploads/")
         ? "attachments"
         : file.path.startsWith("gpt/")
-          ? "gpt_uploads"
+          ? file.path.endsWith(".md")
+            ? "gpt_text_artifacts"
+            : "gpt_uploads"
           : file.path.startsWith("previews/")
             ? "html_previews"
             : "artifacts";
-      if (db.prepare("SELECT 1 FROM " + table + " WHERE id=?").get(id)) continue;
+      if (
+        db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table) &&
+        db.prepare("SELECT 1 FROM " + table + " WHERE id=?").get(id)
+      )
+        continue;
       const path = join(data.root, file.path),
         parent = dirname(path),
         rel = relative(data.root, path);

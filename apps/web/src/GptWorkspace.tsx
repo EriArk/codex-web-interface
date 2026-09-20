@@ -19,7 +19,6 @@ import {
   workspaceMediaUrl,
 } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
-import CanvasPanel from "./CanvasPanel";
 import { CollapsibleCode } from "./CollapsibleCode";
 import { openContentSearch } from "./ContentSearch";
 import { CopyButton } from "./CopyButton";
@@ -35,12 +34,12 @@ import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import { SpeechButton, useSpeechScope } from "./MessageSpeech";
 import { NavigationFooter } from "./NavigationFooter";
+import { NavigationHeader } from "./NavigationHeader";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
 import { type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PinnedList } from "./PinnedList";
 import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
-import { NavigationHeader } from "./NavigationHeader";
 import { ResultFeed } from "./ResultFeed";
 import { uploadFile } from "./uploadFile";
 import { useCompletionPosition } from "./useCompletionPosition";
@@ -269,7 +268,6 @@ export function GptWorkspace({
     hasNewer,
     error: historyNotice,
   } = useGptHistory(selected);
-  const [canvasOpen, setCanvasOpen] = useState(false);
   const nativeOperations = useGptNativeOperations(
     selected,
     { model, effort },
@@ -1543,15 +1541,6 @@ export function GptWorkspace({
         >
           <Icon name="plus" />
         </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Документы Canvas"
-          disabled={!selected}
-          onClick={() => setCanvasOpen(true)}
-        >
-          <Icon name="file" />
-        </button>
       </header>
       {(notice || loadNotice) && (
         <div className="global-notice" role="status">
@@ -1568,13 +1557,6 @@ export function GptWorkspace({
             <Icon name="close" />
           </button>
         </div>
-      )}
-      {canvasOpen && selected && (
-        <CanvasPanel
-          key={selected}
-          conversationId={selected}
-          onClose={() => setCanvasOpen(false)}
-        />
       )}
       <main className="workspace-content">
         {overviewProject && (

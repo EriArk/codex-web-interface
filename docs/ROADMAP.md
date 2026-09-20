@@ -4,7 +4,7 @@
 
 The [20 September audit](ISSUE_AUDIT_2026-09-20.md) maps all 67 open issues to implementation evidence, remaining scope and dependencies. Installed baseline: engine `b273f5e`, UI `15f50f8`, schema 28. This section supersedes the execution order and pending-installation statements in older dated sections below; those remain historical evidence, not new work orders.
 
-Recommended sequence for owner review:
+Owner-approved sequence:
 
 1. Finish everyday Results: existing Canvas into Results, then durable text-block artifacts (#183) and the relevant explicit-preview criteria (#184).
 2. Finish independent-member readiness: per-member native GPT (#151), remaining isolation/revocation (#150/#158), machine bootstrap and continuous setup (#152/#173). Preserve the owner's existing workflow.
@@ -16,6 +16,16 @@ Recommended sequence for owner review:
 
 #178 is owner-observed resolved; #179 is observe-only. #188 still has an incremental-projection remainder, but installed caching must not be rebuilt. Narrow remaining acceptance gaps replace repeated broad GPT/download test passes. No GitHub issues were automatically closed by this audit. Documentation alignment (#176) continues alongside each affected feature.
 
+### Results stage 1 implementation (2026-09-20)
+
+Implemented Canvas cards in GPT Results → Files using the existing exact-document/version viewer; removed the separate header shortcut. Canvas metadata is read independently, coalesced and bounded per account, so it cannot hold up ordinary file results. The owner requested one retained demonstration chat before deciding whether Canvas is useful.
+
+Completed public top-level fenced blocks now materialize exact UTF-8 `.md` artifacts on the Hub, including original line endings. Identity binds conversation, native message, block position and contents. Repeated reads reuse the same file; changed versions get another identity. Cards show a short prefix; ordinary prose and public intermediate steps do not become files. Limits: 2 MiB per block, 2,000 artifacts / up to 128 MiB per private account store. Overflow reports that the original message remains available. Metadata and files participate in normal storage inventory/backup.
+
+Result cards separate explicit Preview from direct Download. The shared viewer supports bounded text (64 KiB), raster images (32 MiB), PDF (12 MiB) and isolated HTML/SVG (256 KiB); unsupported binary formats keep metadata and Download. The original file is never replaced by the preview prefix. Technical CAD formats (#167) remain a later stage, not a completion claim for all of #184.
+
+Verification: exact bytes/idempotency/version identity, account isolation/revocation, Canvas metadata coalescing and exact navigation; Chromium and WebKit checks of explicit fetch/download behavior, preview failures and phone/tablet geometry in four themes. These are automated browser checks, not owner hardware acceptance. Deployment is a separate guarded engine operation with a fresh backup; this entry alone does not assert it has installed.
+
 ## Current GPT backlog correction (2026-09-20)
 
 This status supersedes the older canary/pending-installation statements below. The native Linux GPT provider is in everyday owner use. Engine `b273f5e` and UI `15f50f8` were confirmed installed. Public progress/Reasoning cards, warm pinned/recent history, cached Results metadata, compact navigation and immediately restored per-user model/power choices are installed. Historical implementation notes below are evidence, not an instruction to repeat completed work.
@@ -24,7 +34,7 @@ Owner feedback and source review change the next-pass priority:
 
 - **#178:** owner reports the large-response problem no longer occurs after the native-provider migration. Remove from active repair work; this is owner-observed resolution, not a claim of an exhaustive client memory benchmark.
 - **#179:** owner reports the transient viewport problem is probably also gone. Keep as unconfirmed/observe-only unless a current reproducible case appears; do not invent a fix or run a broad investigation without one.
-- **#183:** partially overlaps completed features. Code blocks already collapse/copy, generated files already appear in Results, and HTML blocks become demos. The distinct remaining requirement is automatic creation of a durable server-stored text artifact from an ordinary supported code/Markdown block, with exact source identity and direct download. `gpt-result-content.ts` currently extracts links and HTML demos; `gpt-results.ts` adds existing files and public progress, but does not materialize general text blocks. Do not repeat the existing collapse/preview work or call #183 fully complete.
+- **#183:** partially overlaps completed features. Code blocks already collapse/copy, generated files already appear in Results, and HTML blocks become demos. The distinct remaining requirement is automatic creation of a durable server-stored text artifact from an ordinary supported code/Markdown block, with exact source identity and direct download. That gap is implemented in the Results stage above; retain the explicit bounded-scope acceptance criteria and do not repeat the existing collapse/preview work.
 - **#188:** cached-first history, background active reads and bounded per-user retention are installed. A durable incremental changed-tail projection is a separate remaining scope; an open issue does not mean those cache improvements are missing.
 - **#189–193:** much of the reported loading/recovery/trackpad/provider work is implemented. Reconcile each acceptance criterion with current installed behavior before scheduling more work. Native-provider installation does not by itself prove new-member provisioning or every advanced native feature.
 

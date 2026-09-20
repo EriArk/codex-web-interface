@@ -14,6 +14,7 @@ import {
   HubError,
   imageFilename,
   normalizeGptConnection,
+  type ResultItem,
   resultCategorySchema,
   uploadMime,
 } from "@codex-web/shared";
@@ -41,6 +42,7 @@ import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
 import { GptReadBackoff } from "./gpt-read-backoff.js";
 import { gptResults, resultPage } from "./gpt-results.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
+import { GptTextArtifacts } from "./gpt-text-artifacts.js";
 import { GptWorkspaceWork, workspaceId, workspaceInput } from "./gpt-workspace.js";
 import {
   type EntityAction,
@@ -227,6 +229,47 @@ export class GptService {
   private readonly token: string;
   readonly root: string;
   readonly previews: Previews;
+  readonly textArtifacts: GptTextArtifacts;
+  private canvasCards = new Map<string, { items: ResultItem[]; checkedAt: number }>();
+  private canvasReads = new Map<string, Promise<ResultItem[]>>();
+  async canvasResults(conversationId: string, cachedOnly = false): Promise<ResultItem[]> {
+    this.authorize();
+    this.library.assertExists("thread", conversationId);
+    const cached = this.canvasCards.get(conversationId);
+    if (cachedOnly || (cached && Date.now() - cached.checkedAt < 60000)) return cached?.items ?? [];
+    const pending = this.canvasReads.get(conversationId);
+    if (pending) return pending;
+    if (this.canvasReads.size >= 4) throw error("GPT_BUSY", "Документы ещё загружаются.", 429);
+    const read = this.workspaceWork
+      .canvases(conversationId)
+      .then(({ items }) => {
+        this.authorize();
+        this.library.assertExists("thread", conversationId);
+        const cards: ResultItem[] = items.map((canvas) => ({
+          id:
+            "canvas-" +
+            createHash("sha256")
+              .update(JSON.stringify([conversationId, canvas.id]))
+              .digest("hex"),
+          turnId: null,
+          type: "canvas",
+          title: canvas.title || "Документ Canvas",
+          createdAt: "",
+          payload: {
+            canvas: { conversationId, id: canvas.id, version: canvas.version },
+            bytes: Buffer.byteLength(canvas.content),
+          },
+        }));
+        this.canvasCards.delete(conversationId);
+        this.canvasCards.set(conversationId, { items: cards, checkedAt: Date.now() });
+        while (this.canvasCards.size > 32)
+          this.canvasCards.delete(this.canvasCards.keys().next().value!);
+        return cards;
+      })
+      .finally(() => this.canvasReads.delete(conversationId));
+    this.canvasReads.set(conversationId, read);
+    return read;
+  }
   constructor(
     readonly config: HubConfig,
     readonly store: Store,
@@ -322,6 +365,11 @@ export class GptService {
       throw error("GPT_PREVIEW_SOURCE", "Демо недоступно.");
     });
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
+    this.textArtifacts = new GptTextArtifacts(
+      this.root,
+      store,
+      Math.min(128 * 1024 * 1024, config.hub.storage.artifactBytes),
+    );
     this.historyCache = new GptHistoryCache(
       async (id) => gptHistory(await this.readConversation(id), id),
       Date.now,
@@ -1756,6 +1804,7 @@ export function registerGpt(
   }));
   app.get("/api/gpt/canvas", async (req) => {
     const q = z.object({ conversationId: workspaceId }).strict().parse(req.query);
+    service.library.assertExists("thread", q.conversationId);
     return service.workspaceWork.canvases(q.conversationId);
   });
   app.get("/api/gpt/canvas/version", async (req) => {
@@ -1767,6 +1816,7 @@ export function registerGpt(
       })
       .strict()
       .parse(req.query);
+    service.library.assertExists("thread", q.conversationId);
     return service.workspaceWork.version(q.conversationId, q.id, q.version);
   });
   app.get("/api/gpt/workspace-operations", async () => ({ items: service.workspaceWork.list() }));
@@ -1857,21 +1907,56 @@ export function registerGpt(
     );
     return {
       ...resultPage(
-        gptResults(p.id, snapshot.items, service.previews, service.config.hub.publicBaseUrl),
+        gptResults(
+          p.id,
+          snapshot.items,
+          service.previews,
+          service.config.hub.publicBaseUrl,
+          service.textArtifacts,
+        ),
         q.category,
         q.before,
       ),
       sourceRevision: snapshot.lineage,
     };
   });
+  app.get("/api/gpt/conversations/:id/canvases", async (req) => {
+    const p = z.object({ id }).parse(req.params);
+    const q = z.object({ cached: z.literal("1").optional() }).parse(req.query);
+    const items = await service.canvasResults(p.id, q.cached === "1");
+    return { ...resultPage(items, "files"), items, nextBefore: null };
+  });
+  app.get("/api/gpt/text-artifacts/:id", async (req, reply) => {
+    service.authorize();
+    const item = service.textArtifacts.describe(
+      z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }).parse(req.params).id,
+    );
+    service.library.assertExists("thread", item.conversationId);
+    return reply
+      .header("Cache-Control", "private, no-store")
+      .header("X-Content-Type-Options", "nosniff")
+      .header(
+        "Content-Disposition",
+        "attachment; filename*=UTF-8''" + encodeURIComponent(item.name),
+      )
+      .header("Content-Length", item.bytes)
+      .type("text/markdown; charset=utf-8")
+      .send(createReadStream(item.path));
+  });
   app.get("/api/gpt/conversations/:id/results/:resultId", async (req) => {
     const p = z.object({ id, resultId: id }).parse(req.params);
     service.library.assertExists("thread", p.id);
+    if (p.resultId.startsWith("canvas-")) {
+      const canvas = (await service.canvasResults(p.id)).find((row) => row.id === p.resultId);
+      if (!canvas) throw error("RESULT_NOT_FOUND", "Результат не найден.", 404);
+      return canvas;
+    }
     const item = gptResults(
       p.id,
       await service.historyCache.messages(p.id),
       service.previews,
       service.config.hub.publicBaseUrl,
+      service.textArtifacts,
     ).find((row) => row.id === p.resultId);
     if (!item) throw error("RESULT_NOT_FOUND", "Результат не найден.", 404);
     return item;

@@ -15,7 +15,7 @@ export function resultCategory(type: string): Exclude<ResultCategory, "all"> {
   if (type === "link") return "links";
   if (type === "preview") return "demos";
   if (type === "reasoning") return "reasoning";
-  if (type === "file" || type === "artifact") return "files";
+  if (type === "file" || type === "artifact" || type === "canvas") return "files";
   return "work";
 }
 export function emptyResultCounts(): ResultCounts {
@@ -30,6 +30,9 @@ export interface ResultItem {
   type: string;
   createdAt: string;
   payload: {
+    canvas?: { conversationId: string; id: string; version: number };
+    excerpt?: string;
+    language?: string;
     steps?: import("./gpt.js").GptProgress[];
     text?: string;
     message?: string;

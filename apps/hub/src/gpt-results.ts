@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { GptMessage, ResultCategory, ResultItem, ResultPage } from "@codex-web/shared";
 import { emptyResultCounts, HubError, resultCategory } from "@codex-web/shared";
 import { gptResultContent } from "./gpt-result-content.js";
+import type { GptTextArtifacts } from "./gpt-text-artifacts.js";
 import type { Previews } from "./previews.js";
 
 export function gptResults(
@@ -9,6 +10,7 @@ export function gptResults(
   messages: GptMessage[],
   previews: Previews,
   publicBaseUrl?: string,
+  textArtifacts?: GptTextArtifacts,
 ): ResultItem[] {
   const results = new Map<string, ResultItem>();
   let request: ResultItem | undefined;
@@ -50,6 +52,17 @@ export function gptResults(
       });
     }
     if (message.role !== "assistant") continue;
+    if (textArtifacts && message.complete !== false && message.phase !== "commentary") {
+      for (const block of content.blocks) {
+        const item = textArtifacts.put(
+          nativeId,
+          message.id,
+          block,
+          new Date(message.createdAt * 1000 || 0).toISOString(),
+        );
+        results.set(item.id, item);
+      }
+    }
     for (const file of message.files) {
       const id = file.id;
       results.set(id, {
@@ -58,7 +71,11 @@ export function gptResults(
         type: file.image ? "image" : "file",
         title: file.name,
         createdAt: new Date(message.createdAt * 1000 || 0).toISOString(),
-        payload: { url: file.url, mime: file.mime },
+        payload: {
+          url: file.url,
+          mime: file.mime,
+          ...(file.bytes > 0 ? { bytes: file.bytes } : {}),
+        },
       });
     }
     for (const html of content.demos) {

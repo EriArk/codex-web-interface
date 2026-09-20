@@ -1,82 +1,28 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArtifactCapture } from "./ArtifactCapture";
-import { workspaceMediaUrl, workspaceUrl } from "./accountStorage.ts";
-import { CopyButton } from "./CopyButton";
-import { DownloadLink, isDownloadUrl } from "./DownloadLink";
+import CanvasPanel from "./CanvasPanel";
+import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
 import { PreviewViewer } from "./PreviewViewer";
+import { ResultFilePreview } from "./ResultFilePreview";
+import { resultPreview } from "./resultPreview";
 import type { Result } from "./types";
 
-function TextFile({ result }: { result: Result }) {
-  const [text, setText] = useState<string | null>(null),
-    [error, setError] = useState("");
-  useEffect(() => {
-    const controller = new AbortController();
-    const path = result.payload.url ?? "";
-    if (!isDownloadUrl(path)) {
-      setError("Для просмотра скачай файл.");
-      return;
-    }
-    void (async () => {
-      try {
-        const response = await fetch(workspaceUrl(path), {
-          credentials: "same-origin",
-          signal: controller.signal,
-        });
-        if (!response.ok || !response.body) throw Error();
-        const reader = response.body.getReader(),
-          chunks: Uint8Array[] = [];
-        let size = 0;
-        try {
-          while (true) {
-            const chunk = await reader.read();
-            if (chunk.done) break;
-            size += chunk.value.length;
-            if (size > 128 * 1024) throw Error("large");
-            chunks.push(chunk.value);
-          }
-        } finally {
-          await reader.cancel();
-        }
-        const bytes = new Uint8Array(size);
-        let offset = 0;
-        for (const chunk of chunks) {
-          bytes.set(chunk, offset);
-          offset += chunk.length;
-        }
-        const value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-        if (!controller.signal.aborted) setText(value);
-      } catch {
-        if (!controller.signal.aborted) setError("Для просмотра скачай файл.");
-      }
-    })();
-    return () => controller.abort();
-  }, [result.payload.url]);
-  return (
-    <>
-      {error ? (
-        <p>{error}</p>
-      ) : (
-        <>
-          <CopyButton text={text ?? ""} label="Копировать файл" />
-          <pre>{text ?? "Загружаем…"}</pre>
-        </>
-      )}
-    </>
-  );
-}
 export function ResultInspector({
   result,
   onClose,
   onExpand,
   onRetry,
+  initialPreview = false,
 }: {
   result: Result;
   onClose: () => void;
   onExpand: () => void;
   onRetry?: () => void;
+  initialPreview?: boolean;
 }) {
-  const [imageError, setImageError] = useState(false);
+  const [opened, setOpened] = useState(initialPreview);
+  const { kind } = resultPreview(result);
   return (
     <div className="result-inspector">
       <div className="result-inspector-heading">
@@ -89,7 +35,7 @@ export function ResultInspector({
           <Icon name="back" />
         </button>
         <strong>{result.title}</strong>
-        {(result.type === "image" || result.type === "preview") && (
+        {opened && (result.type === "image" || result.type === "preview") && (
           <button
             type="button"
             className="icon-button"
@@ -100,42 +46,50 @@ export function ResultInspector({
           </button>
         )}
       </div>
-      {result.payload.captureId && !result.payload.url ? (
+      <div className="result-artifact-actions">
+        {kind !== "card" && !opened && (
+          <button type="button" className="secondary" onClick={() => setOpened(true)}>
+            Предпросмотр
+          </button>
+        )}
+        {result.payload.url && result.type !== "preview" && (
+          <DownloadLink directDownload href={result.payload.url} name={result.title}>
+            Скачать файл
+          </DownloadLink>
+        )}
+      </div>
+      {result.payload.bytes !== undefined && (
+        <small className="muted">
+          {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
+            result.payload.bytes / 1024,
+          )}{" "}
+          КБ
+        </small>
+      )}
+      {result.payload.message && <p role="status">{result.payload.message}</p>}
+      {!opened && result.payload.excerpt && (
+        <pre className="result-text-excerpt">{result.payload.excerpt}</pre>
+      )}
+      {result.payload.captureId && !result.payload.url && (
         <ArtifactCapture
           id={result.payload.captureId}
           status={result.payload.status || "failed"}
           message={result.payload.message}
           onComplete={onRetry}
         />
-      ) : result.type === "preview" ? (
-        <PreviewViewer key={result.id} result={result} onClose={onClose} embedded />
-      ) : result.type === "image" ? (
-        <>
-          {imageError ? (
-            <p role="status">Изображение удалено или доступ к нему закрыт.</p>
-          ) : (
-            <img
-              className="result-inspector-image"
-              src={workspaceMediaUrl(result.payload.url)}
-              alt={result.title}
-              onError={() => setImageError(true)}
-            />
-          )}
-          <DownloadLink className="secondary" href={result.payload.url} name={result.title}>
-            Скачать
-          </DownloadLink>
-        </>
-      ) : (
-        <div className="result-inspector-file">
-          <Icon name="file" size={30} />
-          {/^text\//.test(result.payload.mime ?? "") && (
-            <TextFile key={result.id} result={result} />
-          )}
-          <DownloadLink className="secondary" href={result.payload.url} name={result.title}>
-            Скачать файл
-          </DownloadLink>
-        </div>
       )}
+      {opened &&
+        (kind === "canvas" && result.payload.canvas ? (
+          <CanvasPanel
+            conversationId={result.payload.canvas.conversationId}
+            documentId={result.payload.canvas.id}
+            onClose={() => setOpened(false)}
+          />
+        ) : kind === "demo" ? (
+          <PreviewViewer result={result} onClose={onClose} embedded />
+        ) : kind !== "card" ? (
+          <ResultFilePreview result={result} />
+        ) : null)}
     </div>
   );
 }

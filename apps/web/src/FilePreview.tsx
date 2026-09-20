@@ -1,11 +1,15 @@
 import { Component, lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api } from "./api";
+import { CopyButton } from "./CopyButton";
 
 const PdfPreview = lazy(() => import("./PdfFilePreview"));
 const textExtensions =
   /\.(txt|md|markdown|json|jsonl|csv|tsv|log|xml|yaml|yml|toml|ini|cfg|py|js|jsx|ts|tsx|css|scss|sql|sh|ps1|c|cpp|h|rs|go|java|rb|php|bat|env)$/i;
-export function previewKind(file: File): "image" | "pdf" | "html" | "text" | "card" {
+export function previewKind(
+  file: Pick<File, "name" | "type" | "size">,
+): "image" | "pdf" | "html" | "text" | "card" {
+  if (/\.(exe|dll|com|msi|zip|7z|rar|bin|iso)$/i.test(file.name)) return "card";
   if (
     /^image\/(png|jpeg|gif|webp|avif)$/.test(file.type) ||
     /\.(png|jpe?g|gif|webp|avif)$/i.test(file.name)
@@ -101,6 +105,7 @@ function TextOrHtml({ file, html }: { file: File; html: boolean }) {
     );
   return (
     <>
+      <CopyButton text={text} label="Копировать показанный текст" />
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The bounded text pane must support keyboard scrolling. */}
       <pre className="file-text" tabIndex={0}>
         {text}

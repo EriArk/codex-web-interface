@@ -6,13 +6,15 @@ import { Icon } from "./icons";
 import { NativeWorkspaceDialog, useWorkspaceMutation, WorkspaceReceipts } from "./NativeWorkspace";
 export default function CanvasPanel({
   conversationId,
+  documentId = "",
   onClose,
 }: {
   conversationId: string;
+  documentId?: string;
   onClose: () => void;
 }) {
   const [items, setItems] = useState<GptCanvas[]>([]),
-    [selected, setSelected] = useState(""),
+    [selected, setSelected] = useState(documentId),
     [view, setView] = useState<GptCanvas | null>(null),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
