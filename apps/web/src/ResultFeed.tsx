@@ -267,6 +267,7 @@ export function ResultFeed({
       onCategory={setCategory}
       counts={totals}
       showLinks={endpoint.startsWith("/gpt/")}
+      showWork={!endpoint.startsWith("/gpt/")}
       error={error}
       focusVersion={focusVersion}
       onRetry={() => setRetry((v) => v + 1)}

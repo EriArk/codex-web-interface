@@ -45,6 +45,7 @@ export function Results({
   selection,
   onRevealRetry,
   showLinks = false,
+  showWork = true,
 }: {
   focusVersion?: number;
   onRetry?: () => void;
@@ -66,6 +67,7 @@ export function Results({
   selection?: ArtifactSelection | null;
   onRevealRetry?: () => void;
   showLinks?: boolean;
+  showWork?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
@@ -120,6 +122,7 @@ export function Results({
       {toolbar}
       <ResultFilters
         showLinks={showLinks}
+        showWork={showWork}
         category={category}
         counts={counts}
         preview={inspecting}

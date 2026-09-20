@@ -16,6 +16,7 @@ export function ResultFilters({
   preview,
   onPreview,
   showLinks = false,
+  showWork = true,
 }: {
   category: ResultCategory;
   counts: ResultCounts;
@@ -23,6 +24,7 @@ export function ResultFilters({
   preview: boolean;
   onPreview?: () => void;
   showLinks?: boolean;
+  showWork?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Keep the newly selected category or preview visible in the horizontal strip.
@@ -42,6 +44,7 @@ export function ResultFilters({
     <nav ref={ref} className="result-filters" aria-label="Категории результатов">
       {(Object.keys(resultLabels) as ResultCategory[])
         .filter((key) => key !== "links" || showLinks)
+        .filter((key) => key !== "work" || showWork)
         .map((key) => (
           <button
             key={key}

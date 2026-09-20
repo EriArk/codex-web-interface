@@ -127,8 +127,7 @@ try {
         assert(box.width <= 390);
         await page.screenshot({ path: `.local/qa-gpt-result-links/${name}-${theme}.png` });
       }
-      await filters.nth(5).click();
-      await expect(page.locator(".result-site-link")).toHaveCount(0);
+      await expect(filters).toHaveCount(5);
       await filters.nth(2).click();
       await page.locator(".result-demo-open").click();
       const frame = page.locator("iframe");
@@ -144,7 +143,7 @@ try {
           popup: true,
           themes: 4,
           demoInteractive: true,
-          workClean: true,
+          workHidden: true,
         }),
       );
     } finally {
