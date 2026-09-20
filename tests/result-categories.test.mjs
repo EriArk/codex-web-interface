@@ -124,3 +124,88 @@ test("GPT result lineage survives normal appends and invalidation but changes on
   cache.invalidate("chat");
   assert.notEqual((await cache.snapshot("chat")).lineage, first.lineage);
 });
+
+test("GPT links use visible Markdown, exact public URLs, stable identities and separate counts", () => {
+  const demoHtml = [];
+  const previews = {
+    inline: (_scope, _id, html) => {
+      demoHtml.push(html);
+      return "demo-id";
+    },
+  };
+  const messages = [
+    {
+      id: "user",
+      role: "user",
+      createdAt: 1,
+      files: [],
+      text: "[User source](https://example.org/user)",
+    },
+    {
+      id: "reply",
+      role: "assistant",
+      createdAt: 2,
+      files: [],
+      text: [
+        "[Documentation](<https://example.org/doc?q=1&b=2>)",
+        "[Reference][ref] and https://example.org/plain.",
+        "[ref]: https://example.org/reference",
+        "[Local](https://hub.test/api/artifacts/file)",
+        "[Credentials](https://user:pass@example.org/private)",
+        "[File](sandbox:/mnt/data/test.zip)",
+        "![Image](https://example.org/image.png)",
+        "`https://example.org/code`",
+        "```text\nhttps://example.org/fenced\n```",
+        "````markdown\n```html\n<div>Only an example</div>\n```\n````",
+        "```html\n<div>Real demo</div>\n```",
+        "[Bad](javascript:alert(1))",
+      ].join("\n\n"),
+    },
+    {
+      id: "latest",
+      role: "assistant",
+      createdAt: 3,
+      files: [],
+      text: "[Latest documentation](https://example.org/doc?q=1&b=2)",
+    },
+  ];
+  const items = gptResults("chat", messages, previews, "https://hub.test");
+  const page = resultPage(items, "links");
+  assert.equal(page.counts.links, 4);
+  assert.equal(page.counts.demos, 1);
+  assert.deepEqual(demoHtml, ["<div>Real demo</div>"]);
+  assert.equal(page.counts.work, 0);
+  assert.equal(page.counts.all, 5);
+  assert.equal(page.items[0].title, "Latest documentation");
+  assert.equal(page.items[0].turnId, "latest");
+  assert.equal(
+    page.items[0].id,
+    gptResults("chat", messages.slice(0, 2), previews, "https://hub.test").find(
+      (r) => r.payload.url === "https://example.org/doc?q=1&b=2",
+    ).id,
+  );
+  assert.deepEqual(
+    new Set(page.items.map((r) => r.payload.url)),
+    new Set([
+      "https://example.org/user",
+      "https://example.org/doc?q=1&b=2",
+      "https://example.org/reference",
+      "https://example.org/plain",
+    ]),
+  );
+  const many = gptResults(
+    "chat",
+    [
+      {
+        ...messages[0],
+        text: Array.from({ length: 24 }, (_, i) => `https://example.org/${i}`).join("\n\n"),
+      },
+    ],
+    previews,
+  );
+  const first = resultPage(many, "links"),
+    second = resultPage(many, "links", first.nextBefore);
+  assert.equal(first.items.length, 20);
+  assert.equal(second.items.length, 4);
+  assert.equal(second.nextBefore, null);
+});

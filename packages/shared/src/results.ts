@@ -1,15 +1,16 @@
 import { z } from "zod";
-export const resultCategorySchema = z.enum(["all", "images", "demos", "files", "work"]);
+export const resultCategorySchema = z.enum(["all", "images", "demos", "files", "links", "work"]);
 export type ResultCategory = z.infer<typeof resultCategorySchema>;
 export type ResultCounts = Record<ResultCategory, number>;
 export function resultCategory(type: string): Exclude<ResultCategory, "all"> {
   if (type === "image") return "images";
+  if (type === "link") return "links";
   if (type === "preview") return "demos";
   if (type === "file" || type === "artifact") return "files";
   return "work";
 }
 export function emptyResultCounts(): ResultCounts {
-  return { all: 0, images: 0, demos: 0, files: 0, work: 0 };
+  return { all: 0, images: 0, demos: 0, files: 0, links: 0, work: 0 };
 }
 export interface ResultItem {
   id: string;

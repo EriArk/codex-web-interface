@@ -165,3 +165,35 @@
   display: block;
   margin: 0 16px 10px;
 }
+.result-site-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 8px 0;
+  padding: 7px 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.result-site-link > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+.result-site-link strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.result-site-link small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-site-link > svg {
+  flex-shrink: 0;
+}

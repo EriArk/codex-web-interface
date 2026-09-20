@@ -1,14 +1,35 @@
 import type { GptMessage, ResultCategory, ResultItem, ResultPage } from "@codex-web/shared";
 import { emptyResultCounts, HubError, resultCategory } from "@codex-web/shared";
-import { type Previews, previewSources } from "./previews.js";
+import { createHash } from "node:crypto";
+import type { Previews } from "./previews.js";
+import { gptResultContent } from "./gpt-result-content.js";
 
 export function gptResults(
   nativeId: string,
   messages: GptMessage[],
   previews: Previews,
+  publicBaseUrl?: string,
 ): ResultItem[] {
   const results = new Map<string, ResultItem>();
   for (const message of messages) {
+    const content = gptResultContent(message.text, publicBaseUrl);
+    for (const [url, title] of content.links) {
+      if (message.files.some((file) => file.url === url)) continue;
+      const id =
+        "link-" +
+        createHash("sha256")
+          .update(JSON.stringify([nativeId, url]))
+          .digest("hex");
+      results.delete(id);
+      results.set(id, {
+        id,
+        turnId: message.id,
+        type: "link",
+        title,
+        createdAt: new Date(message.createdAt * 1000 || 0).toISOString(),
+        payload: { url },
+      });
+    }
     if (message.role !== "assistant") continue;
     for (const file of message.files) {
       const id = file.id;
@@ -21,16 +42,14 @@ export function gptResults(
         payload: { url: file.url, mime: file.mime },
       });
     }
-    for (const source of previewSources({ type: "agentMessage", text: message.text }).filter(
-      (source) => source.html,
-    )) {
-      const id = previews.inline("gpt:" + nativeId, message.id, source.html ?? "");
+    for (const html of content.demos) {
+      const id = previews.inline("gpt:" + nativeId, message.id, html);
       if (id)
         results.set(id, {
           id,
           turnId: message.id,
           type: "preview",
-          title: source.title,
+          title: "Интерактивное демо",
           createdAt: new Date(message.createdAt * 1000 || 0).toISOString(),
           payload: { url: "/api/gpt/previews/" + id },
         });

@@ -242,9 +242,9 @@ export function ResultFeed({
   ];
   const totals = { ...counts };
   totals.all = Math.max(totals.all, all.length);
-  for (const key of ["images", "demos", "files", "work"] as const)
+  for (const key of ["images", "demos", "files", "links", "work"] as const)
     totals[key] = Math.max(
-      totals[key],
+      totals[key] ?? 0,
       all.filter((row) => resultCategory(row.type) === key).length,
     );
   return (
@@ -266,6 +266,7 @@ export function ResultFeed({
       category={category}
       onCategory={setCategory}
       counts={totals}
+      showLinks={endpoint.startsWith("/gpt/")}
       error={error}
       focusVersion={focusVersion}
       onRetry={() => setRetry((v) => v + 1)}

@@ -6,6 +6,7 @@ export const resultLabels: Record<ResultCategory, string> = {
   images: "Изображения",
   demos: "Демо",
   files: "Файлы",
+  links: "Ссылки",
   work: "Работа",
 };
 export function ResultFilters({
@@ -14,12 +15,14 @@ export function ResultFilters({
   onChange,
   preview,
   onPreview,
+  showLinks = false,
 }: {
   category: ResultCategory;
   counts: ResultCounts;
   onChange: (category: ResultCategory) => void;
   preview: boolean;
   onPreview?: () => void;
+  showLinks?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Keep the newly selected category or preview visible in the horizontal strip.
@@ -37,17 +40,19 @@ export function ResultFilters({
   }, [category, preview]);
   return (
     <nav ref={ref} className="result-filters" aria-label="Категории результатов">
-      {(Object.keys(resultLabels) as ResultCategory[]).map((key) => (
-        <button
-          key={key}
-          type="button"
-          aria-pressed={!preview && key === category}
-          onClick={() => onChange(key)}
-        >
-          {resultLabels[key]}
-          {counts[key] > 0 && <span className="result-filter-count">{counts[key]}</span>}
-        </button>
-      ))}
+      {(Object.keys(resultLabels) as ResultCategory[])
+        .filter((key) => key !== "links" || showLinks)
+        .map((key) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={!preview && key === category}
+            onClick={() => onChange(key)}
+          >
+            {resultLabels[key]}
+            {counts[key] > 0 && <span className="result-filter-count">{counts[key]}</span>}
+          </button>
+        ))}
       {onPreview && (
         <button type="button" aria-pressed={preview} onClick={onPreview}>
           <Icon name="remote" size={16} />

@@ -44,6 +44,7 @@ export function Results({
   onSaveLink,
   selection,
   onRevealRetry,
+  showLinks = false,
 }: {
   focusVersion?: number;
   onRetry?: () => void;
@@ -64,6 +65,7 @@ export function Results({
   onSaveLink?: (result: ResultItem) => void;
   selection?: ArtifactSelection | null;
   onRevealRetry?: () => void;
+  showLinks?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     [image, setImage] = useState<Result | null>(null),
@@ -117,6 +119,7 @@ export function Results({
       </div>
       {toolbar}
       <ResultFilters
+        showLinks={showLinks}
         category={category}
         counts={counts}
         preview={inspecting}
@@ -179,144 +182,182 @@ export function Results({
         )}
         {results
           .filter((r) => category === "all" || resultCategory(r.type) === category)
-          .map((r) => (
-            <article className={`result-card result-${r.type}`} key={r.id} data-result={r.id}>
-              <div className="result-title">
-                {onSaveLink && (
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Сохранить ссылку: ${r.title}`}
-                    onClick={() => onSaveLink(r)}
-                  >
-                    <Icon name="pin" size={16} />
-                  </button>
-                )}
-                <span className="result-icon">
-                  <Icon
-                    name={r.type === "image" ? "image" : r.type === "check" ? "check" : "folder"}
-                  />
+          .map((r) =>
+            r.type === "link" && r.payload.url ? (
+              <a
+                key={r.id}
+                data-result={r.id}
+                className="result-site-link secondary"
+                href={r.payload.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => {
+                  if (
+                    event.button ||
+                    event.ctrlKey ||
+                    event.metaKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  event.preventDefault();
+                  window.open(
+                    r.payload.url,
+                    "_blank",
+                    "popup=yes,width=1100,height=800,noopener,noreferrer",
+                  );
+                }}
+              >
+                <Icon name="link" size={17} />
+                <span>
+                  <strong>{r.title}</strong>
+                  <small>{new URL(r.payload.url).hostname}</small>
                 </span>
-                <div>
-                  <h3>{r.title}</h3>
-                  <time>
-                    {new Date(r.payload.capturedAt || r.createdAt).toLocaleString("ru", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </time>
-                </div>
-                {r.type === "check" && (
-                  <span className={`badge ${r.payload.exitCode === 0 ? "success" : "danger"}`}>
-                    {r.payload.exitCode === 0 ? "Успешно" : "Ошибка"}
-                  </span>
-                )}
-              </div>
-              {r.type === "image" && r.payload.url && (
-                <button
-                  type="button"
-                  className="screenshot-preview"
-                  onClick={() => inspect(r)}
-                  aria-label="Открыть снимок"
-                >
-                  <img
-                    src={workspaceMediaUrl(r.payload.url)}
-                    loading="lazy"
-                    alt={r.title}
-                    width={r.payload.width}
-                    height={r.payload.height}
-                  />
-                </button>
-              )}
-              {r.type === "preview" && (
-                <button
-                  type="button"
-                  className="secondary result-demo-open"
-                  onClick={() => inspect(r)}
-                >
-                  <Icon name="remote" /> Открыть демо <Icon name="chevron" size={16} />
-                </button>
-              )}
-              {(r.type === "file" || r.type === "artifact") && r.payload.url && (
-                <button
-                  type="button"
-                  className="secondary result-file-link"
-                  onClick={() => inspect(r)}
-                >
-                  <Icon name="file" /> Открыть файл
-                </button>
-              )}
-              {r.type === "artifact" && !r.payload.url && r.payload.captureId && (
-                <ArtifactCapture
-                  id={r.payload.captureId}
-                  status={r.payload.status || "failed"}
-                  message={r.payload.message}
-                  onComplete={onRetry}
-                />
-              )}
-              {r.type === "error" && r.payload.message && <p>{r.payload.message}</p>}
-              {r.payload.bytes !== undefined && (
-                <small className="muted result-file-size">
-                  {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
-                    r.payload.bytes / 1024,
-                  )}{" "}
-                  КБ
-                </small>
-              )}
-              {r.type === "plan" && (
-                <div className="result-plan">
-                  <Markdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      pre: CollapsibleCode,
-                      table: MarkdownTable,
-                      a: ({ node: _node, ...props }) => (
-                        <a {...props} target="_blank" rel="noopener noreferrer" />
-                      ),
-                    }}
-                  >
-                    {r.payload.text ?? ""}
-                  </Markdown>
-                </div>
-              )}
-              {r.payload.command && (
-                <CollapsibleCode label="Команда и код">{r.payload.command}</CollapsibleCode>
-              )}
-              {r.type === "check" && r.payload.command && r.threadId && (
-                <CommandOutput threadId={r.threadId} resultId={r.id} />
-              )}
-              {r.payload.changes?.map((change) => (
-                <details className="file-change" key={change.path}>
-                  <summary>
-                    <span>{change.path.split(/[\\/]/).at(-1)}</span>
-                    <span className="small muted">{change.kind}</span>
-                    <CopyButton text={change.diff ?? ""} label="Копировать diff" />
-                  </summary>
-                  <small className="file-path">{change.path}</small>
-                  {onFile && (
-                    <button type="button" className="secondary" onClick={() => onFile(change.path)}>
-                      <Icon name="file" />
-                      Посмотреть файл
+                <Icon name="external" size={16} />
+              </a>
+            ) : (
+              <article className={`result-card result-${r.type}`} key={r.id} data-result={r.id}>
+                <div className="result-title">
+                  {onSaveLink && (
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Сохранить ссылку: ${r.title}`}
+                      onClick={() => onSaveLink(r)}
+                    >
+                      <Icon name="pin" size={16} />
                     </button>
                   )}
-                  <pre>{change.diff || "Сводка изменений без текстового diff"}</pre>
-                </details>
-              ))}
-              {r.turnId && onTurn && (
-                <button
-                  type="button"
-                  className="result-origin"
-                  onClick={() => onTurn(r.turnId ?? "", r.threadId)}
-                >
-                  <Icon name="chat" size={15} />
-                  {r.threadTitle || "К сообщению"}
-                  <Icon name="chevron" size={14} />
-                </button>
-              )}
-            </article>
-          ))}
+                  <span className="result-icon">
+                    <Icon
+                      name={r.type === "image" ? "image" : r.type === "check" ? "check" : "folder"}
+                    />
+                  </span>
+                  <div>
+                    <h3>{r.title}</h3>
+                    <time>
+                      {new Date(r.payload.capturedAt || r.createdAt).toLocaleString("ru", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </time>
+                  </div>
+                  {r.type === "check" && (
+                    <span className={`badge ${r.payload.exitCode === 0 ? "success" : "danger"}`}>
+                      {r.payload.exitCode === 0 ? "Успешно" : "Ошибка"}
+                    </span>
+                  )}
+                </div>
+                {r.type === "image" && r.payload.url && (
+                  <button
+                    type="button"
+                    className="screenshot-preview"
+                    onClick={() => inspect(r)}
+                    aria-label="Открыть снимок"
+                  >
+                    <img
+                      src={workspaceMediaUrl(r.payload.url)}
+                      loading="lazy"
+                      alt={r.title}
+                      width={r.payload.width}
+                      height={r.payload.height}
+                    />
+                  </button>
+                )}
+                {r.type === "preview" && (
+                  <button
+                    type="button"
+                    className="secondary result-demo-open"
+                    onClick={() => inspect(r)}
+                  >
+                    <Icon name="remote" /> Открыть демо <Icon name="chevron" size={16} />
+                  </button>
+                )}
+                {(r.type === "file" || r.type === "artifact") && r.payload.url && (
+                  <button
+                    type="button"
+                    className="secondary result-file-link"
+                    onClick={() => inspect(r)}
+                  >
+                    <Icon name="file" /> Открыть файл
+                  </button>
+                )}
+                {r.type === "artifact" && !r.payload.url && r.payload.captureId && (
+                  <ArtifactCapture
+                    id={r.payload.captureId}
+                    status={r.payload.status || "failed"}
+                    message={r.payload.message}
+                    onComplete={onRetry}
+                  />
+                )}
+                {r.type === "error" && r.payload.message && <p>{r.payload.message}</p>}
+                {r.payload.bytes !== undefined && (
+                  <small className="muted result-file-size">
+                    {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
+                      r.payload.bytes / 1024,
+                    )}{" "}
+                    КБ
+                  </small>
+                )}
+                {r.type === "plan" && (
+                  <div className="result-plan">
+                    <Markdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        pre: CollapsibleCode,
+                        table: MarkdownTable,
+                        a: ({ node: _node, ...props }) => (
+                          <a {...props} target="_blank" rel="noopener noreferrer" />
+                        ),
+                      }}
+                    >
+                      {r.payload.text ?? ""}
+                    </Markdown>
+                  </div>
+                )}
+                {r.payload.command && (
+                  <CollapsibleCode label="Команда и код">{r.payload.command}</CollapsibleCode>
+                )}
+                {r.type === "check" && r.payload.command && r.threadId && (
+                  <CommandOutput threadId={r.threadId} resultId={r.id} />
+                )}
+                {r.payload.changes?.map((change) => (
+                  <details className="file-change" key={change.path}>
+                    <summary>
+                      <span>{change.path.split(/[\\/]/).at(-1)}</span>
+                      <span className="small muted">{change.kind}</span>
+                      <CopyButton text={change.diff ?? ""} label="Копировать diff" />
+                    </summary>
+                    <small className="file-path">{change.path}</small>
+                    {onFile && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => onFile(change.path)}
+                      >
+                        <Icon name="file" />
+                        Посмотреть файл
+                      </button>
+                    )}
+                    <pre>{change.diff || "Сводка изменений без текстового diff"}</pre>
+                  </details>
+                ))}
+                {r.turnId && onTurn && (
+                  <button
+                    type="button"
+                    className="result-origin"
+                    onClick={() => onTurn(r.turnId ?? "", r.threadId)}
+                  >
+                    <Icon name="chat" size={15} />
+                    {r.threadTitle || "К сообщению"}
+                    <Icon name="chevron" size={14} />
+                  </button>
+                )}
+              </article>
+            ),
+          )}
         {hasMore && (
           <button type="button" className="secondary load-more" disabled={busy} onClick={onOlder}>
             Загрузить ещё результаты

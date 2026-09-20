@@ -1798,16 +1798,23 @@ export function registerGpt(
     service.library.assertExists("thread", p.id);
     const snapshot = await service.historyCache.snapshot(p.id);
     return {
-      ...resultPage(gptResults(p.id, snapshot.items, service.previews), q.category, q.before),
+      ...resultPage(
+        gptResults(p.id, snapshot.items, service.previews, service.config.hub.publicBaseUrl),
+        q.category,
+        q.before,
+      ),
       sourceRevision: snapshot.lineage,
     };
   });
   app.get("/api/gpt/conversations/:id/results/:resultId", async (req) => {
     const p = z.object({ id, resultId: id }).parse(req.params);
     service.library.assertExists("thread", p.id);
-    const item = gptResults(p.id, await service.historyCache.messages(p.id), service.previews).find(
-      (row) => row.id === p.resultId,
-    );
+    const item = gptResults(
+      p.id,
+      await service.historyCache.messages(p.id),
+      service.previews,
+      service.config.hub.publicBaseUrl,
+    ).find((row) => row.id === p.resultId);
     if (!item) throw error("RESULT_NOT_FOUND", "Результат не найден.", 404);
     return item;
   });
@@ -1827,7 +1834,9 @@ export function registerGpt(
           : ref.source;
         const file = message.files.find((item) => item.url === source);
         return file
-          ? gptResults(p.id, [message], service.previews).filter((item) => item.id === file.id)
+          ? gptResults(p.id, [message], service.previews, service.config.hub.publicBaseUrl).filter(
+              (item) => item.id === file.id,
+            )
           : [];
       });
     const result = matches.length === 1 ? matches[0] : undefined;
