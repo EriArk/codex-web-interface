@@ -48,7 +48,7 @@ try {
       const links = Array.from({ length: 24 }, (_, i) => ({
         id: `link-${i}`,
         type: "link",
-        title: `Documentation ${i}`,
+        title: i === 0 ? "Documentation with a very long title ".repeat(8) : `Documentation ${i}`,
         turnId: "reply",
         createdAt: new Date(0).toISOString(),
         payload: { url: `https://example.org/doc/${i}?a=1&b=2` },

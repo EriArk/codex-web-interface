@@ -167,6 +167,9 @@
 }
 .result-site-link {
   display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
   align-items: center;
   gap: 10px;
   min-height: 44px;
