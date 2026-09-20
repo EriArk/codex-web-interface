@@ -8,6 +8,8 @@ Administrator access confirmation reports only aggregate sessions, enrolled comp
 
 Focused evidence: two isolated native accounts through disable/re-enable and session revocation; host preparation revoked during its health reply; old sessions remain invalid after re-enabling; another user's stream remains connected. Registration stays disabled pending the installer/continuous-setup and independent-account acceptance passes. Issues #150/#158 retain their real-user acceptance scope.
 
+Pass 2 release: `1455724`, pushed to `feat/team-workspaces`. Typechecks, focused native/member tests and Chromium/WebKit offboarding flows passed; the confirmation was inspected at phone width and checked at tablet width. Production image startup/auth/private-socket smoke passed. The host provisioning module was installed with a private prior-file backup (`backups/host-gpt-before-isolation-1455724.js` in the native lab); its preparation service completed successfully with no pending members. The guarded `codex-web-member-1455724.service` supersedes the still-waiting `d4958f0` update, includes all of pass 1, and enables the host timer only after successful engine installation. At queue time the engine remained `b273f5e` and the installer reported `idle: false`; a fresh coordinated checkpoint is taken before actual replacement. Do not infer installation from the queued revision.
+
 ## Native member clients (2026-09-20)
 
 This section supersedes the browser-only provisioning description below. Configure new installations with `team.gptProfiles.runtime: "native"`. The explicit `browser` mode and configurations without a runtime retain compatibility with existing browser profiles; changing the mode never migrates or replaces an existing container silently.
