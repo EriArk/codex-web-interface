@@ -9,5 +9,5 @@ export async function nativeLive(request,read,runtime=globalThis){
  if(!value||Date.now()-value.at>3600000)return {items:[]};
  if(value.accountFingerprint!==request.accountFingerprint||value.userMessageId!==request.userMessageId||
     (request.conversationId!==null&&value.conversationId!==request.conversationId))fail('SUBMISSION_MISMATCH');
- return {items:value.items};
+ return {items:value.items,...(value.finished===true?{finished:true}:{})};
 }

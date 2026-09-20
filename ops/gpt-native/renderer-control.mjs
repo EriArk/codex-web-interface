@@ -33,7 +33,8 @@ export async function nativeControl(request, read, load = () => import('app://-/
    editors,attachments};
  };
  if (request.operation === 'selectConversation') {
-  if(request.conversationId!==null)await read(historyRequest,load,runtime);
+  // Selection only navigates the bound account. Dispatch preparation reads the
+  // canonical parent afterwards; do not make navigation fetch the same graph.
   deadline = Date.now() + 5000;
   // Do not navigate away from a nonempty native draft.
   const draft=controls();

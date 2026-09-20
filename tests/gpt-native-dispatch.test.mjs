@@ -157,6 +157,11 @@ test("native live text follows decoded updates, isolates chats/accounts and neve
       },
     });
   const read = () => nativeLive(f.input, f.read, f.runtime);
+  assert.equal(
+    (await read()).finished,
+    true,
+    "native completion wakes reconciliation independently of text",
+  );
   emit("First");
   assert.equal((await read()).items[0].text, "First");
   emit("First second");

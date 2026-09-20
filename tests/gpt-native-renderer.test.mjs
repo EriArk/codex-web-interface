@@ -675,3 +675,34 @@ test("native history shares canonical snapshots and backs off all readers after 
   await assert.rejects(f.read({ ...request, operation: "readConversation" }, true), /RATE_LIMITED/);
   assert.equal(attempts, 1);
 });
+
+test("stalled history body is cancelled at its deadline with a stage-specific error", async (t) => {
+  const f = fixture(),
+    accountFingerprint = await f.binding(),
+    controller = new AbortController();
+  t.mock.method(AbortSignal, "timeout", () => controller.signal);
+  let cancelled = false,
+    timer;
+  f.service.$rn.getInstance = () => ({
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start() {
+            timer = setTimeout(() => controller.abort(), 20);
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+      ),
+  });
+  try {
+    await assert.rejects(
+      f.read({ operation: "readConversationGraph", conversationId, accountFingerprint }),
+      /NATIVE_HISTORY_BODY_TIMEOUT/,
+    );
+    assert.equal(cancelled, true);
+  } finally {
+    clearTimeout(timer);
+  }
+});

@@ -565,7 +565,15 @@ export class GptService {
               "ChatGPT временно ограничил обновление истории. Повторим автоматически после паузы.",
               429,
             );
-          if (["NATIVE_READ_UNAVAILABLE", "NATIVE_TIMEOUT"].includes(cause.message))
+          if (
+            [
+              "NATIVE_READ_UNAVAILABLE",
+              "NATIVE_TIMEOUT",
+              "NATIVE_HISTORY_HEADERS_TIMEOUT",
+              "NATIVE_HISTORY_BODY_TIMEOUT",
+              "NATIVE_BUSY",
+            ].includes(cause.message)
+          )
             throw error(
               "GPT_HISTORY_UNAVAILABLE",
               "Не удалось обновить историю ChatGPT. Повторим автоматически.",
@@ -853,6 +861,7 @@ export class GptService {
     at: number;
     value: Promise<{ jobId: string; items: import("@codex-web/shared").GptProgress[] } | null>;
   };
+  private liveCompletions = new Set<string>();
   liveProgress(nativeId: string | undefined, watch: string | undefined) {
     this.authorize();
     const row =
@@ -870,7 +879,16 @@ export class GptService {
       jobId,
       JSON.parse(String(row.payload)).conversationId,
     )
-      .then((result) => ({ jobId, items: result.items }))
+      .then((result) => {
+        if (result.finished && !this.working && !this.liveCompletions.has(jobId)) {
+          this.liveCompletions.add(jobId);
+          while (this.liveCompletions.size > 32)
+            this.liveCompletions.delete(this.liveCompletions.values().next().value!);
+          clearTimeout(this.recoveryTimer);
+          void this.pump(); // Completion is a read hint, never proof of delivery or a replay.
+        }
+        return { jobId, items: result.items };
+      })
       .catch(() => null);
     this.liveRead = { id: jobId, at: Date.now(), value };
     return value;
@@ -1277,7 +1295,10 @@ export class GptService {
       next = eligible.get();
       if (!next) return;
       retry = true;
-      if ((await this.connection(true)).state !== "healthy" || this.stopped) {
+      // Preparation validates the bound account and the selected model itself.
+      // Do not fetch the model catalog once here and again during preparation.
+      const status = await this.native.workspace.client.status();
+      if (status.manual || this.stopped) {
         this.nativeReadFailures++;
         return;
       }
@@ -1286,7 +1307,7 @@ export class GptService {
       if (this.job(jobId).status !== "queued") return;
       try {
         await this.nativeJobs.run(jobId);
-      } catch {
+      } catch (cause) {
         const current = this.job(jobId);
         const receipt = this.store.db
           .prepare("SELECT 1 FROM gpt_native_receipts WHERE jobId=?")
@@ -1296,7 +1317,9 @@ export class GptService {
             status: receipt ? "unknown" : "failed",
             error: receipt
               ? ""
-              : "Новый клиент GPT не подготовил отправку. Текст и файлы сохранены.",
+              : cause instanceof Error && /^NATIVE_[A-Z_]+$/.test(cause.message)
+                ? cause.message
+                : "NATIVE_PREPARATION_FAILED",
           });
       }
       this.invalidateNativeJob(jobId, true);
@@ -1311,7 +1334,9 @@ export class GptService {
         clearTimeout(this.recoveryTimer);
         this.recoveryTimer = setTimeout(
           () => void this.pump(),
-          Math.min(60000, 5000 * 2 ** Math.min(4, this.nativeReadFailures)),
+          this.nativeReadFailures
+            ? Math.min(60000, 5000 * 2 ** Math.min(4, this.nativeReadFailures))
+            : 2000,
         );
         this.recoveryTimer.unref();
       }

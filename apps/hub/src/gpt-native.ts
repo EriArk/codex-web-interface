@@ -78,7 +78,10 @@ const historySchema = z
 /** Private typed native transport. Dispatch requires the host's disposable-chat
  * canary allowlist; this client never selects the main GptService provider. */
 export class NativeGptReadClient {
-  private tail: Promise<unknown> = Promise.resolve();
+  private queue: { run: () => Promise<void>; interactive: boolean; readOnly: boolean }[] = [];
+  private draining = false;
+  private interactiveBurst = 0;
+  private reads = new Map<string, Promise<unknown>>();
   private waiting = 0;
   constructor(
     private readonly binding: { socketPath: string; userId: string },
@@ -90,17 +93,73 @@ export class NativeGptReadClient {
   }
   private async call(input: Record<string, unknown>, cancellation?: AbortSignal): Promise<unknown> {
     this.authorize();
+    const readOnly = [
+      "readConversationGraph",
+      "readModels",
+      "readCatalog",
+      "readPins",
+      "readProjects",
+      "readProject",
+      "readProjectConversations",
+    ].includes(String(input.operation));
+    const key = readOnly && !cancellation ? JSON.stringify(input) : undefined;
+    if (!readOnly) this.reads.clear(); // Never share a pre-mutation snapshot with a later read.
+    const shared = key ? this.reads.get(key) : undefined;
+    if (shared) return shared;
     if (this.waiting >= 64) fail("BUSY");
     this.waiting++;
-    const task = this.tail.then(() => {
-      cancellation?.throwIfAborted();
-      return this.request(input, cancellation);
+    const interactive = [
+      "prepareDispatch",
+      "dispatchText",
+      "stopDispatch",
+      "reconcileDispatch",
+      "reviewDispatch",
+      "uploadFile",
+      "stageUpload",
+      "uploadStoredFile",
+    ].includes(String(input.operation));
+    const task = new Promise<unknown>((resolve, reject) => {
+      this.queue.push({
+        interactive,
+        readOnly,
+        run: async () => {
+          try {
+            cancellation?.throwIfAborted();
+            resolve(await this.request(input, cancellation));
+          } catch (error) {
+            reject(error);
+          }
+        },
+      });
     });
-    this.tail = task.catch(() => {});
+    if (key) this.reads.set(key, task);
+    void this.drain();
     try {
       return await task;
     } finally {
       this.waiting--;
+      if (key && this.reads.get(key) === task) this.reads.delete(key);
+    }
+  }
+  private async drain() {
+    if (this.draining) return;
+    this.draining = true;
+    try {
+      while (this.queue.length) {
+        // Reorder only past queued reads. Mutations remain ordered, and every
+        // fourth interactive operation yields to the oldest background read.
+        const candidate =
+          this.interactiveBurst < 4 ? this.queue.findIndex((entry) => entry.interactive) : -1;
+        const index =
+          candidate > 0 && this.queue.slice(0, candidate).every((entry) => entry.readOnly)
+            ? candidate
+            : 0;
+        const entry = this.queue.splice(index, 1)[0]!;
+        this.interactiveBurst = entry.interactive ? this.interactiveBurst + 1 : 0;
+        await entry.run();
+      }
+    } finally {
+      this.draining = false;
     }
   }
   async activate() {
@@ -208,6 +267,7 @@ export class NativeGptReadClient {
     );
     return z
       .object({
+        finished: z.boolean().optional(),
         items: z
           .array(
             z

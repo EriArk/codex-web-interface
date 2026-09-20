@@ -49,6 +49,8 @@ const unavailable = () =>
     "Это действие ещё не подключено к новому клиенту GPT. Открой клиент в настройках подключения.",
   );
 export class NativeGptProvider {
+  private verified?: { instance: string; until: number };
+  private checking?: { instance: string; task: Promise<void> };
   constructor(readonly workspace: NativeGptWorkspace) {}
   assertSubmission(id: string, nativeId: string | null) {
     if (
@@ -61,7 +63,24 @@ export class NativeGptProvider {
   async connection(): Promise<GptConnection> {
     const status = await this.workspace.client.status();
     // Status alone proves the supervisor is alive, not that the account is usable.
-    if (!status.manual) await this.workspace.client.models();
+    if (status.manual) {
+      this.verified = undefined;
+      this.checking = undefined;
+    } else if (this.verified?.instance !== status.instanceId || this.verified.until <= Date.now()) {
+      if (this.checking?.instance !== status.instanceId) {
+        const task = this.workspace.client.models().then(() => {
+          if (this.checking?.instance === status.instanceId)
+            this.verified = { instance: status.instanceId, until: Date.now() + 60000 };
+        });
+        this.checking = { instance: status.instanceId, task };
+      }
+      const check = this.checking;
+      try {
+        await check.task;
+      } finally {
+        if (this.checking === check) this.checking = undefined;
+      }
+    }
     const state = status.manual ? "attention" : "healthy";
     return {
       configured: true,

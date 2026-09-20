@@ -172,6 +172,10 @@ export class GptHistoryCache {
     const cached = immediate ? this.cached(id) : undefined;
     // Results follows its initial cached read with one canonical refresh.
     if (cached) return cached;
+    // A cache-only miss must not occupy the native queue. The caller follows
+    // this immediately with its canonical request; do not persist an empty chat.
+    if (immediate)
+      return { items: [], revision: "", checkedAt: 0, bytes: 0, lineage: 0, usedAt: this.now() };
     return this.readable(id, ttl);
   }
   async messages(id: string, ttl = 60000): Promise<GptMessage[]> {

@@ -11,6 +11,20 @@ const messages = (text = "Saved") => [
   { id: "message", role: "assistant", text, files: [], createdAt: 1 },
 ];
 
+test("cold Results cache lookup is immediate and does not persist an empty history", async () => {
+  let reads = 0;
+  const cache = new GptHistoryCache(async () => {
+    reads++;
+    return messages();
+  });
+  assert.deepEqual((await cache.snapshot("chat", 60000, true)).items, []);
+  assert.equal(reads, 0);
+  const canonical = await cache.snapshot("chat");
+  assert.equal(reads, 1);
+  assert.equal(canonical.items[0].text, "Saved");
+  assert.equal((await cache.snapshot("chat", 60000, true)).lineage, canonical.lineage);
+});
+
 test("Results uses retained file metadata immediately, then coalesces canonical refresh", async () => {
   let now = 1000,
     reads = 0,

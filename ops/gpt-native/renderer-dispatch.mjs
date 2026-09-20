@@ -160,7 +160,7 @@ export async function nativeDispatch(request, read, control,
     model:request.model,thinkingEffort:request.effort,prompt:request.text,userCompletionMessages:messages,
     systemHints:scope.get(m.UNt,id),startupSignal,requireDispatchAcceptance:true,
     isSubmissionCurrent:()=>sameAccount()&&sameRoute(),
-    onCompletion:status=>{state.state=status==='completed'?'finished':'unknown';},
+    onCompletion:status=>{state.state=status==='completed'?'finished':'unknown';live.finished=true;live.at=Date.now();},
     ...(creating?{projectId:request.projectId??null,conversationOrigin:null,isTemporaryChat:false,onServerThreadIdChange:candidate=>{if(uuid(candidate))state.conversationId=candidate;}}:{}),
    });
    if(creating){if(uuid(result?.serverConversationId))state.conversationId=result.serverConversationId;}

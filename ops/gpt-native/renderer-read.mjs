@@ -152,10 +152,20 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   // The default safeGet retries history failures internally; use the pinned,
   // principal-bound native transport once and respect its rate-limit response.
   const {url,headers}=m.kWt.getRequestTarget('/conversation/{conversation_id}',{parameters:{path:{conversation_id:request.conversationId}}});
-  const response=await bounded(m.$rn.getInstance().fetch(url,{headers,expectedIdentity:principal,signal,retry:false}));
+  let response;
+  try { response=await bounded(m.$rn.getInstance().fetch(url,{headers,expectedIdentity:principal,signal,retry:false})); }
+  catch(e){if(signal.aborted)fail('HISTORY_HEADERS_TIMEOUT');throw e;}
   if(!response.ok){const status=response.status;await response.body?.cancel();throw {status,responseStatus:status};}
   let bytes=0,text='';const decoder=new TextDecoder();
-  for await(const part of response.body){if(signal.aborted)fail('TIMEOUT');bytes+=part.length;if(bytes>16*1024**2)fail('HISTORY_TOO_LARGE');text+=decoder.decode(part,{stream:true});}
+  const reader=response.body.getReader();
+  try {
+   while(true){
+    let chunk;try{chunk=await bounded(reader.read());}catch(e){if(signal.aborted)fail('HISTORY_BODY_TIMEOUT');throw e;}
+    if(chunk.done)break;
+    bytes+=chunk.value.length;if(bytes>16*1024**2)fail('HISTORY_TOO_LARGE');text+=decoder.decode(chunk.value,{stream:true});
+   }
+  } catch(e){void reader.cancel().catch(()=>{});throw e;}
+  finally{reader.releaseLock();}
   text+=decoder.decode();conversation=JSON.parse(text);
   if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
   cache.set(key,{value:conversation,bytes,at:Date.now(),retryAt:0});
