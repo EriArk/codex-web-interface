@@ -12,6 +12,14 @@ The native supervisor can start before login using a private `enrollment.json` c
 
 Verification: `tests/gpt-member-deletion.test.mjs` covers two distinct bindings/private runtimes, owner preservation and restart behavior; `tests/team-native-host.linux.mjs` starts and removes an actual empty native profile. This establishes provisioning, not a completed friend-account sign-in or hardware acceptance. The next isolation/revocation pass precedes enabling registration.
 
+Deployment record for this pass:
+
+- Source pushed: `da71ff2`, with host CLI compatibility fix `d4958f0` (the current Team registry is schema 9; its GPT-profile tables are compatible with schemas 3–9).
+- Owner native image installed: `codex-web-gpt-native:26.915.31945-member-da71ff2`. Existing account remained signed in; three model choices were read after startup. A previously unknown native delete reconciled as completed without replay.
+- Private native-profile checkpoint: `/home/abysscloud/codex-web-native-lab/backups/native-before-member-da71ff2.tar`, with checksum/receipt-integrity evidence in `member-native-checkpoint.json`. Host config/gateway backup: `backups/member-host-before-da71ff2.tar` under the same lab root.
+- Login gateway updated; personal host preparation installed and successfully invoked with no pending profiles. Native preparation is configured for two profiles including the owner. Registration remains disabled.
+- Engine/UI `d4958f0` built and image-smoked, then queued through `codex-web-member-d4958f0.service`. Last observed state: **waiting for active work**, current engine still `b273f5e`. The updater creates a fresh coordinated checkpoint before replacement and enables the profile-preparation timer after successful installation. This supersedes the old waiting `c12e4cf`/`fcca962` installation pair; it does not claim the new engine/UI is already live.
+
 ### Background chat deletion
 
 The Hub saves a tombstone and a durable deletion job before acknowledging the confirmed delete. The chat disappears immediately; unsubmitted queued prompts for it are cancelled. Existing work is allowed to finish. Native deletion is attempted while idle with bounded retry delays. Unknown outcomes are reconciled from the same receipt after reconnect/restart rather than resent. Such a receipt blocks only that deleted conversation, not ordinary sends in another chat. A native chat already absent completes without another write. Project deletion keeps its existing separate semantics.
