@@ -143,7 +143,10 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  if(cache.size>=20&&!cache.has(key))cache.delete(cache.keys().next().value);
  let saved=cache.get(key),conversation;
  if(saved?.retryAt>now)fail('RATE_LIMITED');
- if(saved?.value&&now-saved.at<15000)conversation=saved.value;
+ // Receipt polling follows a newly submitted turn. A navigation snapshot from
+ // before submission must not hold back delivery/output for fifteen seconds.
+ const historyTtl=request.operation==='readSubmission'?1000:15000;
+ if(saved?.value&&now-saved.at<historyTtl)conversation=saved.value;
  else try {
   const principal=before.principal;
   // The default safeGet retries history failures internally; use the pinned,

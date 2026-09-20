@@ -594,6 +594,7 @@ export function GptWorkspace({
     .filter((job) => (selected ? job.nativeId === selected : job.id === createdJob))
     .sort((a, b) => a.createdAt - b.createdAt);
   const active = currentJobs.find(isActive);
+  const awaitingReply = currentJobs.find((job) => job.status === "unknown" && !job.error);
   // biome-ignore lint/correctness/useExhaustiveDependencies: New content scrolls only while the reader follows the latest reply.
   useLayoutEffect(() => {
     if (sticky.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
@@ -1033,7 +1034,7 @@ export function GptWorkspace({
                 <b>Вы</b>
                 <small>
                   {job.status === "unknown" && !job.error
-                    ? "Отправляется"
+                    ? "Ожидаем ответ"
                     : job.status === "queued" && !waitingGptJob(job, jobs)
                       ? "Отправляется"
                       : titles[job.status]}
@@ -1505,7 +1506,9 @@ export function GptWorkspace({
           </span>
           <small>{selectedTitle}</small>
         </button>
-        {active && <span className="spinner" role="img" aria-label="GPT работает" />}
+        {(active || awaitingReply || busy) && (
+          <span className="spinner" role="img" aria-label="Ожидаем ответ GPT" />
+        )}
         <button
           type="button"
           className="icon-button wide-pane-control"
@@ -1863,9 +1866,9 @@ export function GptWorkspace({
                 )}
               </div>
             )}
-            {(active || busy) && (
+            {(active || awaitingReply || busy) && (
               <GptProgress
-                key={active?.id ?? "sending"}
+                key={active?.id ?? awaitingReply?.id ?? "sending"}
                 items={active?.status === "running" ? (active.progress ?? []) : []}
                 running
                 label={
@@ -1873,7 +1876,9 @@ export function GptWorkspace({
                     ? titles.running
                     : active && waitingGptJob(active, jobs)
                       ? titles.queued
-                      : "Отправляется"
+                      : awaitingReply
+                        ? "Ожидаем ответ GPT"
+                        : "Отправляется"
                 }
                 onStop={
                   active

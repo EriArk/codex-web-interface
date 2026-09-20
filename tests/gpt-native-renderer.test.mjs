@@ -93,15 +93,25 @@ test("stopped native turns finish without exposing hidden terminal content", asy
 });
 
 test("a subsequent turn preserves old delivery without borrowing its answer", async () => {
-  const f = fixture(), accountFingerprint = await f.binding();
+  const f = fixture(),
+    accountFingerprint = await f.binding();
   f.node(2, "old prompt", { id: id(90), author: { role: "user" } });
   f.node(3, "old update", { channel: "commentary", end_turn: false });
   f.node(4, "new prompt", { author: { role: "user" } });
   f.node(5, "new answer", { end_turn: true });
-  const result = await f.read({ operation: "readSubmission", conversationId,
-    accountFingerprint, userMessageId: id(90), parentId: id(1), text: "old prompt" });
+  const result = await f.read({
+    operation: "readSubmission",
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "old prompt",
+  });
   assert.equal(result.state, "cancelled");
-  assert.deepEqual(result.messages.map(m => m.text), ["old update"]);
+  assert.deepEqual(
+    result.messages.map((m) => m.text),
+    ["old update"],
+  );
 });
 
 test("submission readback requires exact ID, parent, unchanged text and a public final end-turn", async () => {
@@ -591,6 +601,28 @@ test("history projects only explicit canonical model/effort strings", async () =
   });
   assert.equal(invalid.messages.at(-1).model, null);
   assert.equal(invalid.messages.at(-1).effort, null);
+});
+
+test("receipt polling refreshes a pre-send navigation snapshot promptly", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  await f.read({ operation: "readConversation", conversationId, accountFingerprint }, true);
+  for (const value of f.runtime[Symbol.for("codex-web.native-history")].values()) value.at -= 2000;
+  f.node(2, "prompt", { id: id(90), author: { role: "user" } });
+  f.node(3, "answer", { end_turn: true });
+  const result = await f.read(
+    {
+      operation: "readSubmission",
+      conversationId,
+      accountFingerprint,
+      userMessageId: id(90),
+      parentId: id(1),
+      text: "prompt",
+    },
+    true,
+  );
+  assert.equal(result.state, "completed");
+  assert.equal(f.calls.length, 2);
 });
 
 test("native history shares canonical snapshots and backs off all readers after 429", async () => {
