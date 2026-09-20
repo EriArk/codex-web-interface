@@ -1099,7 +1099,7 @@ export function GptWorkspace({
               )}
             </div>
           )}
-          {job.status === "queued" && (
+          {["queued", "preparing"].includes(job.status) && (
             <button
               type="button"
               onClick={() =>
