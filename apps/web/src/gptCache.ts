@@ -1,5 +1,8 @@
 import type { GptConversation, GptJob, GptMessage, GptModels, GptProject } from "@codex-web/shared";
-import { accountSessionStorage as sessionStorage } from "./accountStorage.ts";
+import {
+  accountSessionStorage as sessionStorage,
+  accountLocalStorage as localStorage,
+} from "./accountStorage.ts";
 
 export interface GptCachedChat {
   stale?: boolean;
@@ -16,6 +19,7 @@ export interface GptCachedChat {
   sticky: boolean;
 }
 const key = "gpt-view-cache-v1";
+const navigationKey = "gpt-navigation-cache-v1";
 type Cache = {
   chats: Record<string, GptCachedChat>;
   jobs: GptJob[];
@@ -48,7 +52,28 @@ function restore(): Cache {
     if (value?.version === 1 && value.expires > Date.now() && value.data?.chats)
       return { ...empty(), ...value.data, stamps: {} };
   } catch {}
-  return empty();
+  const cache = empty();
+  try {
+    const value = JSON.parse(localStorage.getItem(navigationKey) ?? "null");
+    if (
+      value?.version === 1 &&
+      value.expires > Date.now() &&
+      Array.isArray(value.items) &&
+      Array.isArray(value.projects) &&
+      value.items.every(
+        (row: GptConversation) =>
+          row && typeof row.id === "string" && typeof row.title === "string",
+      ) &&
+      value.projects.every(
+        (row: GptProject) => row && typeof row.id === "string" && typeof row.name === "string",
+      )
+    ) {
+      cache.items = value.items;
+      cache.projects = value.projects;
+      cache.offset = Number.isSafeInteger(value.offset) && value.offset >= 0 ? value.offset : null;
+    }
+  } catch {}
+  return cache;
 }
 export const gptCache = restore();
 let epoch = 0;
@@ -70,6 +95,17 @@ export function saveGptCache() {
 }
 export function flushGptCache() {
   clearTimeout(timer);
+  // Navigation survives PWA tab eviction; history, readiness and credentials do not.
+  try {
+    const data = JSON.stringify({
+      version: 1,
+      expires: Date.now() + 7 * 86400000,
+      items: gptCache.items,
+      projects: gptCache.projects,
+      offset: gptCache.offset,
+    });
+    if (data.length < 500000) localStorage.setItem(navigationKey, data);
+  } catch {}
   // Bound both the in-memory LRU and the optional same-tab reload cache.
   const entries = Object.entries(gptCache.chats).sort((a, b) => b[1].checkedAt - a[1].checkedAt);
   let budget = 0;
@@ -104,6 +140,9 @@ export function clearGptCache() {
   historyRequests.clear();
   clearTimeout(timer);
   Object.assign(gptCache, empty());
+  try {
+    localStorage.removeItem(navigationKey);
+  } catch {}
   try {
     sessionStorage.removeItem(key);
   } catch {}

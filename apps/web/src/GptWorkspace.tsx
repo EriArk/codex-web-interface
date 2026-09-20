@@ -298,6 +298,7 @@ export function GptWorkspace({
     }
   }, []);
   const catalogVersion = useRef(0);
+  const [catalogLoaded, setCatalogLoaded] = useState(gptCache.catalogAt > 0);
   const catalog = useCallback(async (append = false, next = 0, force = true) => {
     if (!append && !force && Date.now() - gptCache.catalogAt < 30000) return;
     const version = catalogVersion.current;
@@ -309,6 +310,7 @@ export function GptWorkspace({
     }>("/gpt/conversations?offset=" + next);
     if (version !== catalogVersion.current) return;
     gptCache.catalogAt = Date.now();
+    setCatalogLoaded(true);
     const metadata = new Map(
       (data.library ?? []).filter((e) => e.kind === "thread").map((e) => [e.id, e]),
     );
@@ -382,6 +384,11 @@ export function GptWorkspace({
       attempt = 0;
     let retry: ReturnType<typeof setTimeout>;
     const load = async () => {
+      // Read navigation immediately, independently of the native connection probe.
+      const catalogRead = catalog(false, 0, false).then(
+        () => null,
+        (error: unknown) => error,
+      );
       try {
         const request = ++connectionRequest.current;
         const status = await api<GptConnection>("/gpt/status");
@@ -394,7 +401,8 @@ export function GptWorkspace({
           setLoadNotice("Подключение GPT ещё не настроено.");
           return;
         }
-        await catalog(false, 0, false);
+        const catalogError = await catalogRead;
+        if (catalogError) throw catalogError;
         if (disposed) return;
         if (!status.canSend && !gptCache.models) {
           retry = setTimeout(() => void load(), 5000);
@@ -1393,6 +1401,11 @@ export function GptWorkspace({
           storageKey="gpt-threads"
           searching={!!search.trim()}
         />
+        {!catalogLoaded && items.length === 0 && (
+          <p className="muted" role="status">
+            {loadNotice || "Загружаются диалоги…"}
+          </p>
+        )}
         {offset !== null && (
           <button
             type="button"

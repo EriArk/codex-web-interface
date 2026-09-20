@@ -492,3 +492,17 @@ Recovery cards have a secondary 44px close target. Restore-to-draft persists exa
 text/files before dismissing the card, confirms replacement of a different draft,
 and does not let a late dismissal response overwrite another chat's draft. New-chat
 recovery moves to the ordinary new-chat composer. Both paths survive reload.
+
+### Navigation after PWA tab eviction (2026-09-20)
+
+The conversation catalog now has a separate account-scoped local snapshot (seven
+days, under 500,000 characters). Only navigation metadata and pagination survive;
+message history keeps its existing short session cache. Logout clears both.
+Restored catalogs refresh in the background, and cold catalog reads start without
+waiting for the native connection status. A first visit without a snapshot shows
+a loading label instead of an unexplained blank list.
+
+The focused navigation browser check passes in Chromium and WebKit after removing
+session storage and disabling the network, including all 20 restored rows,
+pagination metadata and logout cleanup. Physical iPhone verification remains the
+owner's everyday usage check.

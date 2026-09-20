@@ -159,6 +159,26 @@ try {
       await page.locator('[data-message="reply"] .download-text').click();
       await expect.poll(() => reveal?.messageId).toBe("reply");
       assert.equal(reveal.source, "sandbox:/mnt/data/report.txt");
+      // Safari may discard the tab and its short-lived history cache. Navigation
+      // must still be usable while all native reads are unavailable.
+      await page.clock.runFor(300);
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("pagehide"));
+        const saved = JSON.parse(localStorage.getItem("gpt-navigation-cache-v1"));
+        if (saved.items.length !== 20 || saved.offset !== 20 || "chats" in saved)
+          throw new Error("Navigation snapshot must contain metadata and paging only");
+        sessionStorage.clear();
+      });
+      offline = true;
+      await page.reload();
+      await page.locator(".workspace-header > button").first().click();
+      await expect(drawer.getByText("Chat 0", { exact: true })).toBeVisible();
+      await expect(drawer.getByText("Chat 19", { exact: true })).toBeAttached();
+      await page.evaluate(() => window.dispatchEvent(new Event("private-session-ended")));
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("gpt-navigation-cache-v1")),
+        null,
+      );
       console.log(
         JSON.stringify({
           browser: name,
