@@ -243,6 +243,7 @@ export const ENROLLMENT_FILES = [
   "EnrollmentState.ps1",
   "Enroll-Computer.ps1",
   "Pair-ComputerSsh.ps1",
+  "Set-EnrollmentFirewallBoundary.ps1",
   "Install-EnrolledRemote.ps1",
   "Install-RemoteDesktop.ps1",
   "Install-Companion.ps1",

@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 #Requires -RunAsAdministrator
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)]$Connection, [Parameter(Mandatory=$true)]$Window)
+param([Parameter(Mandatory=$true)]$Connection, [Parameter(Mandatory=$true)]$Window, [switch]$PrivateBoundary)
 $ErrorActionPreference = 'Stop'
 function Test-CwRemotePort($filter) {
     if ([string]$filter.Protocol -notin @('TCP', '6', 'Any', '256')) { return $false }
@@ -59,7 +59,10 @@ $program = Join-Path $env:ProgramFiles 'TightVNC\tvnserver.exe'
 foreach ($profile in @(Get-NetFirewallProfile -PolicyStore ActiveStore)) {
     if ([string]$profile.Enabled -ne 'True' -or [string]$profile.DefaultInboundAction -ne 'Block') { throw 'Для приватного Remote нужен включённый брандмауэр Windows с блокировкой входящих подключений.' }
 }
-foreach ($rule in @(Get-NetFirewallRule -PolicyStore ActiveStore -Enabled True -Direction Inbound -Action Allow)) {
+if ($PrivateBoundary) {
+    & (Join-Path $PSScriptRoot 'Set-EnrollmentFirewallBoundary.ps1') -HubAddress $Connection.hubAddress -Program $program -Port 5900 | Out-Host
+}
+foreach ($rule in $(if (-not $PrivateBoundary) { @(Get-NetFirewallRule -PolicyStore ActiveStore -Enabled True -Direction Inbound -Action Allow) })) {
     if (-not (Test-CwRemotePort ($rule | Get-NetFirewallPortFilter))) { continue }
     $application = $rule | Get-NetFirewallApplicationFilter; $serviceFilter = $rule | Get-NetFirewallServiceFilter
     # Package-scoped AppContainer rules cannot grant access to the native VNC service.

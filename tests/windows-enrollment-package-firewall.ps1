@@ -8,9 +8,10 @@ $Connection=@{hubAddress='100.79.63.56'}
 $sshBin='C:\Windows\System32\OpenSSH'
 $program='C:\Program Files\TightVNC\tvnserver.exe'
 foreach($file in @('Pair-ComputerSsh.ps1','Install-EnrolledRemote.ps1')) {
- $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path 'D:\Projects\CodexWeb\.local\qa-enrollment' $file),[ref]$null,[ref]$null)
+ $ast=[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText((Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) 'ops\windows') $file)),[ref]$null,[ref]$null)
  foreach($f in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){. ([scriptblock]::Create($f.Extent.Text))}
- $loop=$ast.Find({param($n) $n -is [Management.Automation.Language.ForEachStatementAst] -and $n.Extent.Text -match 'foreach \(\$rule in @\(Get-NetFirewallRule'},$true)
+ $loop=$ast.Find({param($n) $n -is [Management.Automation.Language.ForEachStatementAst] -and $n.Variable.VariablePath.UserPath -eq 'rule'},$true)
+ if (-not $loop) { throw 'Firewall scan loop missing.' }
  foreach($p in @('S-1-15-2-12345','Any','')){
   $script:package=$p
   $caught=$false

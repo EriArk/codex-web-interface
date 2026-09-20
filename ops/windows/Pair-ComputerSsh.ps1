@@ -1,6 +1,6 @@
 #Requires -RunAsAdministrator
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)]$Connection)
+param([Parameter(Mandatory=$true)]$Connection, [switch]$PrivateBoundary)
 $ErrorActionPreference = 'Stop'
 function Test-CwSshPort($filter) {
     if ([string]$filter.Protocol -notin @('TCP', '6', 'Any', '256')) { return $false }
@@ -91,14 +91,17 @@ if (-not (Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue)) {
 }
 # Scope the standard Windows OpenSSH rule only; custom SSH rules remain visible for review.
 $defaultRule = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
-if ($defaultRule -and $defaultRule.Enabled -eq 'True') {
+if (-not $PrivateBoundary -and $defaultRule -and $defaultRule.Enabled -eq 'True') {
     Write-Host 'Windows has a standard SSH rule allowing incoming connections. This master will disable that standard rule and use the Hub-only rule.'
     if (-not (Confirm-Cw 'Разрешить SSH только от приватного адреса Hub вместо стандартного правила Windows «от всех»? Другие правила брандмауэра останутся без изменений.')) { throw 'Проверьте правило SSH перед продолжением.' }
     $defaultRule | Disable-NetFirewallRule
 }
 # Do not silently inherit an unrelated broad rule on a freshly enabled SSH service.
 # Existing custom rules are never rewritten; a non-standard setup needs an explicit local review.
-foreach ($rule in @(Get-NetFirewallRule -Enabled True -Direction Inbound -Action Allow)) {
+if ($PrivateBoundary) {
+    & (Join-Path $PSScriptRoot 'Set-EnrollmentFirewallBoundary.ps1') -HubAddress $Connection.hubAddress -Program (Join-Path $sshBin 'sshd.exe') -Port 22
+}
+foreach ($rule in $(if (-not $PrivateBoundary) { @(Get-NetFirewallRule -Enabled True -Direction Inbound -Action Allow) })) {
     $portFilter = $rule | Get-NetFirewallPortFilter
     if (-not (Test-CwSshPort $portFilter)) { continue }
     $application = $rule | Get-NetFirewallApplicationFilter
