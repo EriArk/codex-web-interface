@@ -107,6 +107,10 @@ try {
               currentEffort: "2",
             },
           });
+        if (path.endsWith("/messages"))
+          return route.fulfill({
+            json: { nativeId: "native-created-chat", title: "Recovery", items: [], before: null },
+          });
         if (path === "/api/gpt/jobs")
           return route.fulfill({ json: { items: jobs, stamp: Date.now() } });
         if (path === "/api/gpt/send") {
@@ -166,6 +170,15 @@ try {
           .tap();
       };
       await draft.fill("Unsent new draft");
+      // A previously saved outbox draft remains separate from a new-chat draft.
+      await page.evaluate(
+        (job) =>
+          sessionStorage.setItem(
+            "gpt-draft-job:" + job.id,
+            JSON.stringify({ text: job.text, files: job.files }),
+          ),
+        jobs[0],
+      );
       await open();
       await page
         .locator(".project-sheet")
@@ -173,7 +186,6 @@ try {
         .filter({ hasText: "Old failed question" })
         .tap();
       await expect(chat).toContainText("Preparation failed");
-      await chat.getByRole("button", { name: "Вернуть в черновик" }).tap();
       await expect(draft).toHaveValue("Old failed question");
       await expect(page.locator(".gpt-composer")).toContainText("old.txt");
       await newChat();
@@ -275,11 +287,99 @@ try {
           .filter({ hasText: /Old failed question|Revised question/ }),
       ).toHaveCount(0);
       assert.equal(submissions, 2, "Deletion and reload never replay sends");
+
+      // Existing conversations have independent dismissible failed attempts too.
+      jobs.push(
+        ...["44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555"].map(
+          (id) => ({
+            ...jobs[0],
+            id,
+            nativeId: "native-created-chat",
+            dismissed: false,
+            text: "Exact saved text\n",
+            files: [
+              {
+                id: "file-old",
+                name: "old.txt",
+                url: "/api/gpt/uploads/file-old",
+                mime: "text/plain",
+                bytes: 3,
+                image: false,
+              },
+            ],
+            status: "failed",
+            error: "Preparation failed",
+            updatedAt: Date.now(),
+          }),
+        ),
+      );
+      await page.evaluate(() => localStorage.setItem("gpt-conversation", "native-created-chat"));
+      await page.reload();
+      const dismiss = page.getByRole("button", {
+        name: "Скрыть неотправленное сообщение",
+        exact: true,
+      });
+      await expect(dismiss).toHaveCount(2);
+      for (const width of [390, 1366, 1920]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
+        const box = await dismiss.first().boundingBox();
+        assert(box.width >= 44 && box.height >= 44);
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      await dismiss.first().scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `.local/qa-gpt-outbox/${name}-recovery.png` });
+
+      await dismiss.first().tap();
+      await expect(dismiss).toHaveCount(1);
+      await page.reload();
+      await expect(dismiss).toHaveCount(1);
+      await draft.fill("My newer draft");
+      await page.getByRole("button", { name: "Вернуть в черновик", exact: true }).tap();
+      await expect(page.getByRole("group", { name: "Заменить черновик?" })).toBeVisible();
+      await expect(draft).toHaveValue("My newer draft");
+      await page.getByRole("button", { name: "Отмена", exact: true }).tap();
+      await expect(draft).toHaveValue("My newer draft");
+      await page.getByRole("button", { name: "Вернуть в черновик", exact: true }).tap();
+      await page.getByRole("button", { name: "Заменить черновик", exact: true }).tap();
+      await expect(dismiss).toHaveCount(0);
+      await expect(draft).toHaveValue("Exact saved text\n");
+      await expect(page.locator(".gpt-upload-list")).toContainText("old.txt");
+      await page.reload();
+      await expect(draft).toHaveValue("Exact saved text\n");
+      await expect(dismiss).toHaveCount(0);
+      assert.equal(submissions, 2, "recovery never sends upstream");
+      const fresh = {
+        ...jobs[0],
+        id: "66666666-6666-4666-8666-666666666666",
+        nativeId: null,
+        dismissed: false,
+        text: "Recover new-chat draft",
+        files: [],
+        status: "failed",
+        error: "Preparation failed",
+        updatedAt: Date.now(),
+      };
+      jobs.push(fresh);
+      await open();
+      await expect(
+        page.locator(".project-sheet .nav-thread").filter({ hasText: fresh.text }),
+      ).toBeVisible();
+      await page.locator(".project-sheet .nav-thread").filter({ hasText: fresh.text }).tap();
+      await page.getByRole("button", { name: "Вернуть в черновик", exact: true }).tap();
+      const replace = page.getByRole("button", { name: "Заменить черновик", exact: true });
+      if (await replace.isVisible()) await replace.tap();
+      await expect(draft).toHaveValue("Recover new-chat draft");
+      await expect(chat.locator(".gpt-job")).toHaveCount(0);
+      await page.reload();
+      await expect(draft).toHaveValue("Recover new-chat draft");
+      assert.equal(submissions, 2, "new-chat restore also never sends");
+
       console.log(
         JSON.stringify({
           browser: name,
           cleanNewChat: true,
-          recoveryWithFiles: true,
+          scopedDraftWithFiles: true,
           scopedDrafts: true,
           reload: true,
           lateAckDoesNotHijack: true,

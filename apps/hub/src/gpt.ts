@@ -812,7 +812,10 @@ export class GptService {
   private assertDismissible(jobId: string) {
     const job = this.job(jobId);
     if (job.dismissed) return;
-    if (job.nativeId || !["failed", "cancelled", "completed"].includes(job.status))
+    if (
+      !["failed", "cancelled"].includes(job.status) &&
+      !(job.status === "completed" && !job.nativeId)
+    )
       throw error("GPT_JOB_BUSY", "Сначала дождись завершения или проверь состояние отправки.");
   }
   private dismissRecord(jobId: string) {

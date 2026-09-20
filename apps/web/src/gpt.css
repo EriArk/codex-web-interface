@@ -538,3 +538,24 @@
   grid-column: 2;
   grid-row: 1 / span 2;
 }
+
+.gpt-job-error {
+  position: relative;
+}
+.gpt-job-error:has(.gpt-recovery-dismiss) {
+  padding-inline-end: 52px;
+}
+.gpt-job-error .gpt-recovery-dismiss {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--muted);
+}
+.gpt-recovery-conflict {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 4px;
+}

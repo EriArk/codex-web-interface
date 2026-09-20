@@ -398,6 +398,32 @@ test("GPT dismissed and replaced outbox items retain deduplication receipts with
       .items.every((job) => job.dismissed && !job.text && !job.files.length),
   );
   assert.equal(pumps, 2, "Deletion never sends a prompt");
+  const nativeId = randomUUID(),
+    third = randomUUID(),
+    fourth = randomUUID();
+  const existing = { ...body, nativeId };
+  service.enqueue(third, existing);
+  service.enqueue(fourth, existing);
+  store.db
+    .prepare("UPDATE gpt_jobs SET status='failed',error='Preparation failed' WHERE id IN (?,?)")
+    .run(third, fourth);
+  service.dismiss(third);
+  assert.equal(service.job(third).dismissed, true);
+  assert.equal(service.job(fourth).dismissed, false, "identical text is a separate attempt");
+  assert.equal(service.job(fourth).text, body.text);
+  assert.equal(
+    JSON.parse(
+      store.db.prepare("SELECT value FROM library_entities WHERE id=?").get("outbox:" + third)
+        .value,
+    ).deleted,
+    true,
+  );
+  service.enqueue(third, existing);
+  assert.equal(pumps, 4, "dismissal retains exact send idempotency");
+  store.db.prepare("UPDATE gpt_jobs SET status='unknown',submitted=1 WHERE id=?").run(fourth);
+  assert.throws(() => service.dismiss(fourth), { code: "GPT_JOB_BUSY" });
+  assert.equal(service.job(fourth).status, "unknown");
+  assert.equal(service.job(fourth).text, body.text);
 });
 
 test("GPT cancellation during connection preflight never reaches the native composer", async (t) => {

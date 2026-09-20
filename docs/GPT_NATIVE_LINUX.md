@@ -479,3 +479,16 @@ short reply. No downloads or broad suites were rerun. Removed 13 obsolete local
 failed/cancelled cards at the owner's request, retaining native history and
 idempotency records. A verified profile/receipt checkpoint and previous image
 remain available. This is send-path evidence, not acceptance of every GPT feature.
+
+
+### Recovery cards (#190, 2026-09-20)
+
+Confirmed failed/cancelled sends in existing chats can be dismissed individually
+through the existing owner-scoped endpoint. Their idempotency identities survive;
+no native message is removed or sent. Unknown sends remain visible/reconcilable
+and cannot use this dismiss action.
+
+Recovery cards have a secondary 44px close target. Restore-to-draft persists exact
+text/files before dismissing the card, confirms replacement of a different draft,
+and does not let a late dismissal response overwrite another chat's draft. New-chat
+recovery moves to the ordinary new-chat composer. Both paths survive reload.

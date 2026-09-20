@@ -922,6 +922,63 @@ export function GptWorkspace({
       };
     }),
   });
+  const [restoreConflict, setRestoreConflict] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState("");
+  const dismissRecovery = async (job: GptJob) => {
+    const data = await api<{ job: GptJob }>("/gpt/jobs/" + job.id + "/dismiss", {
+      method: "POST",
+      body: { confirm: true },
+    });
+    sticky.current = false;
+    setJobs((old) => mergeGptJobs(old, [data.job]));
+  };
+  const recoverJob = async (job: GptJob, replace = false) => {
+    if (recoveryBusy) return;
+    const target = job.nativeId ?? "";
+    let draft = { text, files };
+    if (target !== draftScope) {
+      try {
+        draft = JSON.parse(
+          sessionStorage.getItem("gpt-draft-" + target) ?? '{"text":"","files":[]}',
+        );
+      } catch {
+        setNotice("Не удалось прочитать черновик. Попробуй ещё раз.");
+        return;
+      }
+    }
+    const different = (value: { text: string; files: GptFile[] }) =>
+      (!!value.text || !!value.files?.length) &&
+      (value.text !== job.text ||
+        JSON.stringify((value.files ?? []).map((f) => f.id)) !==
+          JSON.stringify(job.files.map((f) => f.id)));
+    if (!replace && (different(draft) || (target !== draftScope && different({ text, files })))) {
+      setRestoreConflict(job.id);
+      return;
+    }
+    // Persist the exact draft before dismissing its recovery card. A late reply
+    // only updates that card and never overwrites a newly selected chat/draft.
+    try {
+      sessionStorage.setItem(
+        "gpt-draft-" + target,
+        JSON.stringify({ text: job.text, files: job.files }),
+      );
+    } catch {
+      setNotice("Не удалось сохранить черновик. Сообщение осталось в чате.");
+      return;
+    }
+    if (target !== draftScope) choose(target);
+    setText(job.text);
+    setFiles(job.files);
+    setRestoreConflict("");
+    setRecoveryBusy(job.id);
+    try {
+      await dismissRecovery(job);
+    } catch (e) {
+      setNotice(messageOf(e));
+    } finally {
+      setRecoveryBusy("");
+    }
+  };
   const jobElements = currentJobs
     .filter((job) =>
       showGptJob(
@@ -977,6 +1034,23 @@ export function GptWorkspace({
           )}
           {job.error && (
             <div className="gpt-job-error" role="status">
+              {["failed", "cancelled"].includes(job.status) && (
+                <button
+                  type="button"
+                  className="icon-button gpt-recovery-dismiss"
+                  aria-label="Скрыть неотправленное сообщение"
+                  title="Скрыть неотправленное сообщение"
+                  disabled={!!recoveryBusy}
+                  onClick={() => {
+                    setRecoveryBusy(job.id);
+                    void dismissRecovery(job)
+                      .catch((e) => setNotice(messageOf(e)))
+                      .finally(() => setRecoveryBusy(""));
+                  }}
+                >
+                  <Icon name="close" size={18} />
+                </button>
+              )}
               <p>
                 {job.files.length === 0 &&
                 job.error === "Не удалось подготовить вложения в ChatGPT. Текст и файлы сохранены."
@@ -998,23 +1072,26 @@ export function GptWorkspace({
               ) : (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (job.nativeId && job.nativeId !== selected) {
-                      try {
-                        sessionStorage.setItem(
-                          "gpt-draft-" + job.nativeId,
-                          JSON.stringify({ text: job.text, files: job.files }),
-                        );
-                      } catch {}
-                      setSelected(job.nativeId);
-                    } else {
-                      setText(job.text);
-                      setFiles(job.files);
-                    }
-                  }}
+                  disabled={!!recoveryBusy}
+                  onClick={() => void recoverJob(job)}
                 >
                   Вернуть в черновик
                 </button>
+              )}
+              {restoreConflict === job.id && (
+                <div className="gpt-recovery-conflict" role="group" aria-label="Заменить черновик?">
+                  <p>В поле уже есть другой черновик. Заменить его сохранённым сообщением?</p>
+                  <button
+                    type="button"
+                    disabled={!!recoveryBusy}
+                    onClick={() => void recoverJob(job, true)}
+                  >
+                    Заменить черновик
+                  </button>
+                  <button type="button" onClick={() => setRestoreConflict("")}>
+                    Отмена
+                  </button>
+                </div>
               )}
             </div>
           )}
