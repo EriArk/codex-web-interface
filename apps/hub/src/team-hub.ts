@@ -667,16 +667,26 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   app.post("/api/team/gpt/apply", async (req) => {
     const userId = actor(req);
-    await teamGpt.activate(userId);
+    await teamGpt.activate(userId, () => {
+      auth.session(req);
+    });
+    auth.session(req);
     if (!teamGpt.runtime(userId) && !teamGpt.nativeRuntime(userId))
       throw new HubError(409, "GPT_PROFILE_NOT_READY", "Личный браузер ещё не готов.");
-    await restartPersonal(userId);
+    await restartPersonal(userId, () => {
+      auth.session(req);
+    });
+    auth.session(req);
     return { ok: true };
   });
   app.get("/api/team/users", (req) => ({
     items: registry.users(actor(req)),
     registrationEnabled: config.team?.registrationEnabled !== false,
   }));
+  app.get("/api/team/users/:id/offboarding", (req) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    return registry.offboarding(actor(req), id);
+  });
   app.post("/api/team/invitations", slow, (req) => {
     registry.admin(actor(req));
     if (config.team?.registrationEnabled === false)

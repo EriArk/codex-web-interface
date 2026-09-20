@@ -45,7 +45,7 @@ export class TeamStore {
   readonly ownerId: string;
   constructor(
     readonly path: string,
-    config: HubConfig,
+    readonly config: HubConfig,
     legacy: Store,
   ) {
     if (path !== ":memory:") {
@@ -462,6 +462,30 @@ export class TeamStore {
       this.audit(id, "user.activated", id);
       return publicUser(this.user(id));
     });
+  }
+  offboarding(actor: string, userId: string) {
+    this.admin(actor);
+    const user = this.user(userId);
+    const count = (sql: string) => Number(this.db.prepare(sql).get(userId)?.n ?? 0);
+    return {
+      user: publicUser(user),
+      sessions: Number(
+        this.db
+          .prepare(
+            "SELECT COUNT(*) n FROM team_sessions WHERE userId=? AND revision=? AND expires>?",
+          )
+          .get(userId, user.revision, Date.now())?.n ?? 0,
+      ),
+      sharedOwnedProjects: count(
+        "SELECT COUNT(*) n FROM team_projects WHERE ownerId=? AND visibility='shared' AND archived=0",
+      ),
+      machines: count(
+        "SELECT COUNT(*) n FROM team_machine_enrollments WHERE ownerId=? AND state='approved'",
+      ),
+      gptProfile:
+        !!this.db.prepare("SELECT 1 FROM team_gpt_profiles WHERE userId=?").get(userId) ||
+        (userId === this.ownerId && !!(this.config.gpt || this.config.nativeGpt)),
+    };
   }
   disable(actor: string, userId: string, disabled: boolean) {
     this.admin(actor);

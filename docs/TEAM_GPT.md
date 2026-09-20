@@ -1,5 +1,13 @@
 # Private ChatGPT profiles
 
+## Revocation follow-up (2026-09-20)
+
+An in-flight member activation checks its initiating Hub session before native dispatch and after the reply. Disable/re-enable changes the access epoch, so old activation and profile preparation cannot become valid again just because the user is active. A revoked activation may have recorded its own native binding before acknowledgement; that private binding is retained and cannot switch accounts. The user signs in to the Hub again before retrying. No new checks are added to ordinary message delivery.
+
+Administrator access confirmation reports only aggregate sessions, enrolled computers and shared-project ownership blockers. Private conversations, project titles and credentials are not returned. Disabling closes Hub sessions/Remote subscriptions and blocks new Hub execution; existing native work and private profiles are retained. Native-client shutdown, native logout, machine unpairing and external GitHub/Tailnet revocation are separate operations, not implied destructive cleanup.
+
+Focused evidence: two isolated native accounts through disable/re-enable and session revocation; host preparation revoked during its health reply; old sessions remain invalid after re-enabling; another user's stream remains connected. Registration stays disabled pending the installer/continuous-setup and independent-account acceptance passes. Issues #150/#158 retain their real-user acceptance scope.
+
 ## Native member clients (2026-09-20)
 
 This section supersedes the browser-only provisioning description below. Configure new installations with `team.gptProfiles.runtime: "native"`. The explicit `browser` mode and configurations without a runtime retain compatibility with existing browser profiles; changing the mode never migrates or replaces an existing container silently.

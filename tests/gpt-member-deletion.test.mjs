@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NativeEnrollment } from "../ops/gpt-native/enrollment.mjs";
-import { NativeReadService, listenNative } from "../ops/gpt-native/service.mjs";
-import { NativeDispatchReceipts } from "../ops/gpt-native/dispatch-receipts.mjs";
-import { NativeLibraryReceipts } from "../ops/gpt-native/library-receipts.mjs";
+import test from "node:test";
+import { GptDeletions } from "../apps/hub/dist/gpt-deletions.js";
+import { Library } from "../apps/hub/dist/library.js";
 import { Store } from "../apps/hub/dist/store.js";
-import { TeamStore } from "../apps/hub/dist/team-store.js";
 import { TeamGpt } from "../apps/hub/dist/team-gpt.js";
 import { privateConfig } from "../apps/hub/dist/team-hub.js";
-import { Library } from "../apps/hub/dist/library.js";
-import { GptDeletions } from "../apps/hub/dist/gpt-deletions.js";
+import { TeamStore } from "../apps/hub/dist/team-store.js";
+import { NativeDispatchReceipts } from "../ops/gpt-native/dispatch-receipts.mjs";
+import { NativeEnrollment } from "../ops/gpt-native/enrollment.mjs";
+import { NativeLibraryReceipts } from "../ops/gpt-native/library-receipts.mjs";
+import { listenNative, NativeReadService } from "../ops/gpt-native/service.mjs";
 import { configSchema } from "../packages/shared/dist/index.js";
 
 function temp(t) {
@@ -50,7 +50,7 @@ test("member activation binds own account, survives restart, refuses another ide
     "a".repeat(64),
   );
 });
-test("two members activate separate sockets and private configurations; owner remains unchanged", async (t) => {
+test("two members keep separate native profiles through revocation and reactivation", async (t) => {
   const root = temp(t);
   const config = configSchema.parse({
     hub: {
@@ -80,7 +80,8 @@ test("two members activate separate sockets and private configurations; owner re
     socketPath: join(root, "owner.sock"),
   };
   const gpt = new TeamGpt(config, registry),
-    ids = [];
+    ids = [],
+    onInspect = [];
   for (const [index, fp] of ["a", "b"].entries()) {
     const id = randomUUID();
     ids.push(id);
@@ -111,8 +112,15 @@ test("two members activate separate sockets and private configurations; owner re
     writeFileSync(join(adapter, "enrollment.json"), JSON.stringify({ userId: id }), {
       mode: 0o600,
     });
+    let inspect = () => {};
+    onInspect.push((fn) => {
+      inspect = fn;
+    });
     const reader = {
-      inspectAccount: async () => ({ build: "26.915.31945", accountFingerprint: fp.repeat(64) }),
+      inspectAccount: async () => {
+        inspect();
+        return { build: "26.915.31945", accountFingerprint: fp.repeat(64) };
+      },
     };
     const server = await listenNative(
       new NativeEnrollment(
@@ -133,6 +141,29 @@ test("two members activate separate sockets and private configurations; owner re
   }
   assert.notEqual(gpt.nativeRuntime(ids[0]).socketPath, gpt.nativeRuntime(ids[1]).socketPath);
   assert.deepEqual(privateConfig(config, registry, registry.ownerId).nativeGpt, config.nativeGpt);
+  const ownBinding = gpt.nativeRuntime(ids[0]);
+  registry.disable(registry.ownerId, ids[0], true);
+  assert.throws(() => gpt.nativeRuntime(ids[0]));
+  assert.throws(() => gpt.connection(ids[0]));
+  assert.equal(gpt.nativeRuntime(ids[1]).userId, ids[1]);
+  registry.disable(registry.ownerId, ids[0], false);
+  assert.deepEqual(gpt.nativeRuntime(ids[0]), ownBinding, "native login is retained");
+  onInspect[0](() => {
+    registry.disable(registry.ownerId, ids[0], true);
+    registry.disable(registry.ownerId, ids[0], false);
+  });
+  await assert.rejects(gpt.activate(ids[0]), { code: "GPT_ACCESS_CHANGED" });
+  let revoked = false;
+  onInspect[0](() => {
+    revoked = true;
+  });
+  await assert.rejects(
+    gpt.activate(ids[0], () => {
+      if (revoked) throw Error("SESSION_REVOKED");
+    }),
+    /SESSION_REVOKED/,
+  );
+  assert.deepEqual(gpt.nativeRuntime(ids[0]), ownBinding);
 });
 test("deletion is immediate locally, waits while busy, and reconciles after restart without resending", async (t) => {
   const store = new Store(join(temp(t), "app.db"));

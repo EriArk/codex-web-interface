@@ -3,11 +3,13 @@
 ## Independent-member work — four passes (2026-09-20)
 
 1. **Personal native GPT:** per-user Linux client, empty profile, private login/Remote, account activation and own Hub runtime. Includes immediate local chat deletion with a durable background native queue. Implemented in the current candidate; deployment status is recorded separately from source completion.
-2. **Isolation and revocation:** finish #150/#158 acceptance against native profiles, account changes, active work and recovery. Keep registration disabled until admitted; do not rebuild the existing boundaries.
+2. **Isolation and revocation:** implemented native activation/session and provisioning-revocation fixes, with a concise administrator offboarding summary. Keep registration disabled until pass 4; live independent-account acceptance remains there.
 3. **Friend PC setup:** finish #152/#173 installer/bootstrap and resume interrupted setup with minimal user steps.
 4. **New-user acceptance:** exercise the complete separate-account workflow, smaller tablet layout and shared-project ownership. The friend's actual login/device check remains distinct from automated fixtures.
 
 Pass 1 evidence: focused account-binding/deletion tests, Chromium/WebKit immediate deletion with an unavailable native client, and one disposable real Linux native profile with private Remote, logged-out startup and idempotent host provisioning. No production account was copied and no large download suite was repeated.
+
+Pass 2: native activation rechecks the initiating session and access epoch, including disable/re-enable while the operation is pending. Host provisioning uses the same epoch before promoting a profile to ready. Offboarding shows session/machine counts and the number of shared projects requiring transfer/archive, without disclosing their contents or private account credentials. Revocation preserves native login/data and uncertain receipts; it does not kill native work or remove GitHub/Tailnet access. Re-enabling requires fresh login and never restores revoked project links. Focused two-member tests cover the affected races, independent access and retained binding. Next implementation pass: PC installer and continuous setup (#152/#173).
 
 ## Canvas removed from scope (2026-09-20)
 

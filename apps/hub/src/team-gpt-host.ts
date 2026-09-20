@@ -123,7 +123,7 @@ async function reconcileLocked(
     .slice(0, 16);
   const rows = db
     .prepare(
-      "SELECT p.* FROM team_gpt_profiles p JOIN team_users u ON p.userId=u.id WHERE p.state='requested' AND u.state='active' ORDER BY p.createdAt",
+      "SELECT p.*,u.executionEpoch FROM team_gpt_profiles p JOIN team_users u ON p.userId=u.id WHERE p.state='requested' AND u.state='active' ORDER BY p.createdAt",
     )
     .all();
   let prepared = 0,
@@ -189,9 +189,9 @@ async function reconcileLocked(
       const stillAllowed = () =>
         db
           .prepare(
-            "SELECT 1 FROM team_gpt_profiles p JOIN team_users u ON p.userId=u.id WHERE p.userId=? AND p.revision=? AND p.state='requested' AND u.state='active'",
+            "SELECT 1 FROM team_gpt_profiles p JOIN team_users u ON p.userId=u.id WHERE p.userId=? AND p.revision=? AND p.state='requested' AND u.state='active' AND u.executionEpoch=?",
           )
-          .get(row.userId, row.revision);
+          .get(row.userId, row.revision, Number(input.executionEpoch));
       const start = async (
         id: string,
         image: string,
@@ -363,7 +363,7 @@ async function reconcileLocked(
           "UPDATE team_gpt_profiles SET state='ready',code=NULL,updatedAt=? WHERE userId=? AND revision=?",
         ).run(Date.now(), row.userId, row.revision);
         prepared++;
-      }
+      } else throw Error("GPT_REQUEST_REVOKED");
     } catch (error) {
       const code =
         error instanceof Error && /^GPT_[A-Z_]+$/.test(error.message)

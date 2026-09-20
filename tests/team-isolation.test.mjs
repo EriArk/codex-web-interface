@@ -1380,6 +1380,21 @@ test("revocation closes only the disabled user's streams and clears personal tic
   const f = await fixture(t),
     ownerSocket = await f.connect(f.owner),
     friendSocket = await f.connect(f.friend);
+  const before = await f.request(`/api/team/users/${f.friendId}/offboarding`, f.owner);
+  assert.equal(before.status, 200);
+  assert.equal(before.body.sessions, 1);
+  assert.equal(before.body.sharedOwnedProjects, 0);
+  assert.deepEqual(Object.keys(before.body).sort(), [
+    "gptProfile",
+    "machines",
+    "sessions",
+    "sharedOwnedProjects",
+    "user",
+  ]);
+  assert.equal(
+    (await f.request(`/api/team/users/${f.registry.ownerId}/offboarding`, f.friend)).status,
+    403,
+  );
   const closed = once(friendSocket, "close");
   const disabled = await f.request(`/api/team/users/${f.friendId}/state`, f.owner, "POST", {
     disabled: true,
@@ -1393,6 +1408,16 @@ test("revocation closes only the disabled user's streams and clears personal tic
     (await f.request("/api/auth/login", {}, "POST", { login: "friend", password: f.password }))
       .status,
     401,
+  );
+  assert.equal(
+    (await f.request(`/api/team/users/${f.friendId}/offboarding`, f.owner)).body.sessions,
+    0,
+  );
+  f.registry.disable(f.registry.ownerId, f.friendId, false);
+  assert.equal(
+    (await f.request("/api/workspace/notes", f.friend)).status,
+    401,
+    "enabling never revives an old session",
   );
 });
 
@@ -2141,6 +2166,25 @@ test("personal GPT provisioning is idempotent and never reuses another account, 
   assert.equal(process.env[service.runtime(f.friendId).tokenSecret], row.serviceToken);
   assert.equal(service.runtime(f.registry.ownerId), undefined);
   assert.equal(service.connection(f.friendId).host, teamGptName(f.friendId));
+  f.registry.db
+    .prepare("UPDATE team_gpt_profiles SET state='requested' WHERE userId=?")
+    .run(f.friendId);
+  assert.equal(
+    (
+      await reconcileGptProfiles(f.config, f.registry.db, {
+        ...options,
+        health: async () => {
+          f.registry.db
+            .prepare("UPDATE team_users SET executionEpoch=executionEpoch+2 WHERE id=?")
+            .run(f.friendId);
+          return true;
+        },
+      })
+    ).failed,
+    1,
+  );
+  assert.equal(service.row(f.friendId).code, "GPT_REQUEST_REVOKED");
+  service.request(f.friendId);
   f.registry.db
     .prepare("UPDATE team_gpt_profiles SET state='requested' WHERE userId=?")
     .run(f.friendId);

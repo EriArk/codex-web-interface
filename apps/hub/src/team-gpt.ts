@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, lstatSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { NativeGptReadClient } from "./gpt-native.js";
 import { type HubConfig, HubError } from "@codex-web/shared";
 import { z } from "zod";
+import { NativeGptReadClient } from "./gpt-native.js";
 import type { TeamStore } from "./team-store.js";
 
 const secret = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
@@ -165,19 +165,28 @@ export class TeamGpt {
       .parse(JSON.parse(readFileSync(path, "utf8")));
     return { userId, socketPath, accountFingerprint: binding.accountFingerprint };
   }
-  async activate(userId: string) {
+  async activate(userId: string, authorize: () => void = () => {}) {
     if (userId === this.registry.ownerId || this.config.team?.gptProfiles?.runtime !== "native")
       return;
+    const epoch = this.registry.active(userId).executionEpoch;
+    const guard = () => {
+      authorize();
+      if (this.registry.active(userId).executionEpoch !== epoch)
+        throw new HubError(
+          403,
+          "GPT_ACCESS_CHANGED",
+          "Доступ изменился. Открой подключение заново.",
+        );
+      if (nativeAdmissionBlocked(this.registry)) throw Error("RESTORE_ADMISSION_REQUIRED");
+    };
     const client = new NativeGptReadClient(
       { userId, socketPath: this.nativeSocket(userId) },
-      () => {
-        this.registry.active(userId);
-        if (nativeAdmissionBlocked(this.registry)) throw Error("RESTORE_ADMISSION_REQUIRED");
-      },
+      guard,
     );
     try {
       await client.activate();
     } catch {
+      guard();
       throw new HubError(
         409,
         "GPT_LOGIN_REQUIRED",

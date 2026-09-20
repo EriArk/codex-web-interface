@@ -37,6 +37,27 @@ export function TeamAccess() {
     user: TeamUser;
     action: "recovery" | "state" | "role";
   } | null>(null);
+  const [offboarding, setOffboarding] = useState<{
+    sessions: number;
+    sharedOwnedProjects: number;
+    machines: number;
+    gptProfile: boolean;
+  } | null>(null);
+  useEffect(() => {
+    setOffboarding(null);
+    if (confirm?.action !== "state" || confirm.user.state !== "active") return;
+    const abort = new AbortController();
+    void api<NonNullable<typeof offboarding>>(`/team/users/${confirm.user.id}/offboarding`, {
+      signal: abort.signal,
+    })
+      .then((value) => {
+        if (!abort.signal.aborted) setOffboarding(value);
+      })
+      .catch(() => {
+        /* The state action still checks current ownership. */
+      });
+    return () => abort.abort();
+  }, [confirm]);
   const [audit, setAudit] = useState<AuditEntry[]>([]),
     [auditOpen, setAuditOpen] = useState(false),
     [auditMore, setAuditMore] = useState(false);
@@ -277,6 +298,35 @@ export function TeamAccess() {
                   участников остаются закрытыми.
                 </p>
               )}
+              {confirm.action === "state" &&
+                (confirm.user.state === "active" ? (
+                  <>
+                    <p>
+                      Вход и открытые подключения будут закрыты. Личные данные и вход в ChatGPT
+                      сохранятся. Уже запущенные задачи не прерываются этим действием.
+                    </p>
+                    {offboarding && (
+                      <p className="muted">
+                        Сессии: {offboarding.sessions} · Компьютеры: {offboarding.machines}
+                        {offboarding.gptProfile ? " · Личный GPT сохранится" : ""}
+                      </p>
+                    )}
+                    {!!offboarding?.sharedOwnedProjects && (
+                      <p role="status">
+                        Сначала нужно передать или архивировать общие проекты:{" "}
+                        {offboarding.sharedOwnedProjects}.
+                      </p>
+                    )}
+                    <p className="review-caption">
+                      Доступ к GitHub и приватной сети управляется отдельно.
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    Потребуется новый вход. Отозванные связи между проектами автоматически не
+                    восстанавливаются.
+                  </p>
+                ))}
               <div>
                 <button
                   type="button"
