@@ -11,6 +11,7 @@ import {
 } from "@codex-web/shared";
 import { Artifacts } from "./artifacts.js";
 import { GeneratedArtifacts } from "./generatedArtifacts.js";
+import { gptResultContent } from "./gpt-result-content.js";
 import { type EntityAction, Library } from "./library.js";
 import { displayUserText, NativeImages } from "./nativeImages.js";
 import { Previews } from "./previews.js";
@@ -734,12 +735,23 @@ export class Catalog {
     }
     return results;
   }
+  observeLinks(thread: ThreadRecord, turnId: string | null, item: Record<string, unknown>) {
+    if (item.type !== "agentMessage" || typeof item.text !== "string") return [];
+    const results: string[] = [];
+    for (const [url, title] of gptResultContent(item.text, this.config.hub.publicBaseUrl).links) {
+      const key = "external-link:" + createHash("sha256").update(url).digest("hex");
+      const id = this.store.result(thread.id, turnId, key, "link", title, { url });
+      if (id) results.push(id);
+    }
+    return results;
+  }
   private result(thread: ThreadRecord, entry: Record<string, unknown>) {
     const item = obj(entry.item),
       id = str(item.id, 200),
       turn = str(entry.turnId, 100) || null;
     this.previews.observe(thread, turn, item);
     this.observeImages(thread, turn, item);
+    this.observeLinks(thread, turn, item);
     if (item.type === "fileChange")
       this.store.result(thread.id, turn, id, "diff-summary", "Изменения файлов", {
         changes: array(item.changes).map((c) => ({

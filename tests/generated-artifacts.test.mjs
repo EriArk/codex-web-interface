@@ -159,6 +159,67 @@ test("capture failure and interrupted capture are visible and explicitly retryab
     await f.close();
   }
 });
+test("raster artifacts display inline while active formats remain downloads", async () => {
+  const f = await handoffFixture();
+  try {
+    const artifacts = new Artifacts(f.sessions.config.hub.resultsPath, f.store);
+    for (const mime of [
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif",
+      "image/svg+xml",
+      "text/html",
+    ]) {
+      const file = artifacts.putFile(
+        f.thread.id,
+        null,
+        "example",
+        "fixture",
+        mime,
+        Buffer.from("fixture"),
+      );
+      assert.equal((await f.app.inject({ url: file.url })).statusCode, 401);
+      const response = await f.app.inject({ url: file.url, headers: f.headers });
+      const raster = ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mime);
+      assert.equal(response.statusCode, 200);
+      assert.ok(
+        response.headers["content-disposition"].startsWith(raster ? "inline;" : "attachment;"),
+      );
+      assert.equal(response.headers["content-type"], raster ? mime : "application/octet-stream");
+      assert.equal(response.body, "fixture");
+    }
+  } finally {
+    await f.close();
+  }
+});
+
+test("Codex links reuse public Markdown parsing, deduplicate and remain thread-scoped", async () => {
+  const f = await handoffFixture();
+  try {
+    const item = {
+      type: "agentMessage",
+      text: "[Docs](https://example.org/docs) and https://example.org/docs\n\n`https://hidden.test/code`\n\n[File](/api/artifacts/example)\n\n![Image](https://hidden.test/image.png)",
+    };
+    f.sessions.catalog.observeLinks(f.thread, "turn", item);
+    f.sessions.catalog.observeLinks(f.thread, "turn", item);
+    f.sessions.catalog.observeLinks(f.thread, "turn", {
+      type: "reasoning",
+      text: "https://hidden.test/reasoning",
+    });
+    const result = await f.app.inject({
+      url: "/api/projects/project/results?category=links",
+      headers: f.headers,
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.json().items.length, 1);
+    assert.equal(result.json().items[0].payload.url, "https://example.org/docs");
+    assert.equal(result.json().counts.links, 1);
+  } finally {
+    await f.close();
+  }
+});
+
 test("project library filters before paging, scopes results and artifact downloads require authentication", async () => {
   const f = await handoffFixture();
   try {

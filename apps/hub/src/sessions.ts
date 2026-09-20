@@ -1717,6 +1717,8 @@ export class Sessions extends EventEmitter {
         id = text(item.id),
         type = text(item.type);
       this.catalog.artifacts.observe(t, turnId, item);
+      for (const linkId of this.catalog.observeLinks(t, turnId, item))
+        this.emitEvent(t.id, "result.created", { id: linkId, type: "link" }, turnId);
       for (const imageId of this.catalog.observeImages(t, turnId, item))
         this.emitEvent(t.id, "result.created", { id: imageId, type: "image" }, turnId);
       for (const previewId of this.catalog.previews.observe(t, turnId, item))

@@ -1,5 +1,13 @@
 # Roadmap
 
+## Results / Remote repair (2026-09-21, source candidate)
+
+- Remote: Guacamole adds its own query delimiter; pass the workspace binding together with width/height as connect data. This fixes team-account WebSocket rejection without removing account isolation. Disconnected status no longer says “Connecting”.
+- Raster result artifacts use inline disposition, retaining authenticated reads and download controls; SVG/HTML and other files remain attachments. Safari had received a successful image response marked as a download.
+- Codex Results now include Links between Images and Demos. Reuse the GPT public-Markdown parser and compact external-site popup links; normalize completed native messages and imported history, without reading tool internals.
+- Focused Linux type checks, raster route/auth tests, link extraction/category tests and the actual Guacamole URL construction in Chromium/WebKit passed. These changes are not yet an installed release.
+- Separate live GPT incident: the owner's selected conversation graph repeatedly times out, while status/model reads work. Unsent draft remains retained; no send replay or native restart performed. Diagnosis remains open.
+
 ## Installed member release (2026-09-20)
 
 Release `1568870` is installed on the engine and web gateway (deployment receipt: 16:45 UTC). The owner explicitly authorized interrupting running work to apply the release and begin the friend's admission. The one-use host deployment wrapper bypassed only the idle wait; production-image verification, coordinated backup, privacy admission and rollback remained intact. No permanent idle-check bypass was added to the application.

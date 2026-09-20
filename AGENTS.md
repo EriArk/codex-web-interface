@@ -27,7 +27,7 @@
 
 ## Owner-requested Results tab order (2026-09-20)
 
-- GPT Results tabs: Files, Images, Links, Demos, Reasoning. Codex Results tabs: Files, Images, Demos, Work.
+- GPT Results tabs: Files, Images, Links, Demos, Reasoning. Codex Results tabs: Files, Images, Links, Demos, Work (owner update 2026-09-21).
 - Remove the All tab in both clients; default to Files. Exact result navigation selects its category. Keep aggregate counts and backend compatibility.
 
 ## Owner-requested public GPT progress and warm active history (2026-09-20)

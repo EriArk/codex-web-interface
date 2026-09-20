@@ -309,7 +309,7 @@ export function ResultFeed({
       category={category}
       onCategory={setCategory}
       counts={totals}
-      showLinks={endpoint.startsWith("/gpt/")}
+      showLinks
       showReasoning={endpoint.startsWith("/gpt/")}
       showWork={!endpoint.startsWith("/gpt/")}
       error={

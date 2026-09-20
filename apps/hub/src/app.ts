@@ -783,7 +783,9 @@ export async function createApp(
       )
       .header(
         "Content-Disposition",
-        "attachment; filename*=UTF-8''" + encodeURIComponent(artifact.name),
+        (/^image\/(png|jpeg|webp|gif)$/.test(artifact.mime) ? "inline" : "attachment") +
+          "; filename*=UTF-8''" +
+          encodeURIComponent(artifact.name),
       )
       .header("X-Content-Type-Options", "nosniff")
       .send(stream);

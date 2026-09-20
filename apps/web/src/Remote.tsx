@@ -213,7 +213,9 @@ export function Remote({
             "/api/projects/" +
             encodeURIComponent(projectId) +
             "/remote";
-        const tunnel = new G.WebSocketTunnel(workspaceUrl(url));
+        // Guacamole appends "?" plus connect data itself. Keep account scope in that data.
+        const scopedUrl = new URL(workspaceUrl(url));
+        const tunnel = new G.WebSocketTunnel(scopedUrl.origin + scopedUrl.pathname);
         tunnel.onerror = (e) => failed(e.message || "Связь с рабочим столом прервалась", e.code);
         tunnel.onstatechange = (state) => {
           if (state === 2) failed("Не удалось восстановить связь с рабочим столом.");
@@ -454,12 +456,12 @@ export function Remote({
           activeClient.sendKeyEvent(0, key);
           if (![0xffe3, 0xffe9, 0xffeb].includes(key)) release();
         };
-        client.connect(
-          "width=" +
-            Math.max(320, Math.round(surface.clientWidth)) +
-            "&height=" +
-            Math.max(240, Math.round(surface.clientHeight)),
+        scopedUrl.searchParams.set("width", String(Math.max(320, Math.round(surface.clientWidth))));
+        scopedUrl.searchParams.set(
+          "height",
+          String(Math.max(240, Math.round(surface.clientHeight))),
         );
+        client.connect(scopedUrl.searchParams.toString());
       })
       .catch((e) => {
         failed(messageOf(e));
@@ -618,8 +620,14 @@ export function Remote({
               <Icon name="back" />
             </button>
             <span className="remote-connection-label">
-              <span className={`status-dot ${connected ? "online" : "checking"}`} />
-              {connected ? "Подключено" : "Соединение…"}
+              <span
+                className={`status-dot ${connected ? "online" : status === "connecting" ? "checking" : "offline"}`}
+              />
+              {connected
+                ? "Подключено"
+                : status === "connecting"
+                  ? "Соединение…"
+                  : "Нет соединения"}
             </span>
           </div>
           {!connected && (
