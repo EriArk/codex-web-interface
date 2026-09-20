@@ -127,15 +127,11 @@ function ResponseResults({
     text,
   );
   if (!files.length && !demo) return null;
-  const category = demo
-    ? files.length
-      ? "all"
-      : "demos"
-    : files.every((file) => file.image)
+  const category = files.some((file) => !file.image)
+    ? "files"
+    : files.length
       ? "images"
-      : files.every((file) => !file.image)
-        ? "files"
-        : "all";
+      : "demos";
   return (
     <button type="button" className="result-chip" onClick={() => onOpen(category)}>
       <Icon name="results" size={16} />
@@ -877,9 +873,9 @@ export function GptWorkspace({
       !overlayOpen &&
       !resultOverlay,
   );
-  const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
+  const [resultCategory, setResultCategory] = useState<ResultCategory>("files");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
-  const openResults = (category: ResultCategory = "all") => {
+  const openResults = (category: ResultCategory = "files") => {
     setArtifactRequest(null);
     setWorkspaceResult("");
     setResultCategory(category);

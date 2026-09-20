@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested Results tab order (2026-09-20)
+
+- GPT Results tabs: Files, Images, Links, Demos. Codex Results tabs: Files, Images, Demos, Work.
+- Remove the All tab in both clients; default to Files. Exact result navigation selects its category. Keep aggregate counts and backend compatibility.
+
 This repository is intended to be implemented primarily with Codex. Read this file before changing architecture or starting a large feature.
 
 ## Product in one sentence

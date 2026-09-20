@@ -346,7 +346,7 @@ function Workspace({
     return () => clearInterval(timer);
   }, [view]);
   const [resultCount, setResultCount] = useState(0);
-  const [resultCategory, setResultCategory] = useState<ResultCategory>("all");
+  const [resultCategory, setResultCategory] = useState<ResultCategory>("files");
   const [resultFocusVersion, setResultFocusVersion] = useState(0);
   const [artifactRequest, setArtifactRequest] = useState<
     import("./ArtifactMarkdown").ArtifactRequest | null
@@ -359,7 +359,7 @@ function Workspace({
     setFocusResult("");
     setArtifactRequest(null);
     setResultFocusVersion(0);
-    setResultCategory("all");
+    setResultCategory("files");
   }, [threadId]);
   const [overviewId, setOverviewId] = useState("");
   const overviewProject = projects.find((p) => p.id === overviewId);
@@ -765,7 +765,7 @@ function Workspace({
       setBusy(false);
     }
   };
-  const showResult = (id: string, category: ResultCategory = "all") => {
+  const showResult = (id: string, category: ResultCategory = "files") => {
     setArtifactRequest(null);
     setProjectTool(null);
     setResultCategory(category);

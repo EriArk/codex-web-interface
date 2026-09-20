@@ -42,7 +42,7 @@ export function ResultFilters({
   }, [category, preview]);
   return (
     <nav ref={ref} className="result-filters" aria-label="Категории результатов">
-      {(Object.keys(resultLabels) as ResultCategory[])
+      {(["files", "images", "links", "demos", "work"] as ResultCategory[])
         .filter((key) => key !== "links" || showLinks)
         .filter((key) => key !== "work" || showWork)
         .map((key) => (

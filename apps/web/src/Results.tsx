@@ -27,7 +27,7 @@ import type { Activity, Result } from "./types";
 export function Results({
   focusVersion = 0,
   onRetry,
-  category = "all",
+  category = "files",
   onCategory = () => {},
   counts = emptyResultCounts(),
   error = "",

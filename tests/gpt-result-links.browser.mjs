@@ -109,7 +109,9 @@ try {
       });
       await page.goto("https://outbox.test/");
       const filters = page.locator(".result-filters button");
-      await filters.nth(4).click();
+      await expect(filters).toHaveText([/^Файлы/, /^Изображения/, /^Ссылки/, /^Демо/]);
+      await expect(filters.first()).toHaveAttribute("aria-pressed", "true");
+      await filters.nth(2).click();
       await expect(page.locator(".result-site-link")).toHaveCount(20);
       await page.locator(".load-more").click();
       await expect(page.locator(".result-site-link")).toHaveCount(24);
@@ -127,8 +129,8 @@ try {
         assert(box.width <= 390);
         await page.screenshot({ path: `.local/qa-gpt-result-links/${name}-${theme}.png` });
       }
-      await expect(filters).toHaveCount(5);
-      await filters.nth(2).click();
+      await expect(filters).toHaveCount(4);
+      await filters.nth(3).click();
       await page.locator(".result-demo-open").click();
       const frame = page.locator("iframe");
       await expect(frame).toHaveAttribute("sandbox", "allow-scripts");

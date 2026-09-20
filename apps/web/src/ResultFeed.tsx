@@ -15,7 +15,7 @@ export function ResultFeed({
   revision,
   visible,
   focusId = "",
-  focusCategory = "all",
+  focusCategory = "files",
   focusVersion = 0,
   extras = [],
   onTurn,
@@ -87,7 +87,7 @@ export function ResultFeed({
     fullyLoaded = useRef(false),
     loadedIds = useRef<string[]>([]);
   const [retry, setRetry] = useState(0);
-  const [category, setCategory] = useState<ResultCategory>("all");
+  const [category, setCategory] = useState<ResultCategory>("files");
   const [items, setItems] = useState<ResultItem[]>([]),
     [counts, setCounts] = useState(emptyResultCounts);
   const [cursor, setCursor] = useState<string | number | null>(null);
@@ -186,7 +186,7 @@ export function ResultFeed({
     return () => clearTimeout(task);
   }, [revision, endpoint, category]);
   useEffect(() => {
-    if (focusVersion) setCategory(focusCategory);
+    if (focusVersion) setCategory(focusCategory === "all" ? "files" : focusCategory);
   }, [focusVersion, focusCategory]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reopening the same result is an explicit navigation request.
   useEffect(() => {
@@ -195,7 +195,10 @@ export function ResultFeed({
     let disposed = false;
     void api<ResultItem>(endpoint + "/" + encodeURIComponent(focusId))
       .then((item) => {
-        if (!disposed) setFocused(item);
+        if (!disposed) {
+          setFocused(item);
+          setCategory(resultCategory(item.type));
+        }
       })
       .catch((e) => {
         if (!disposed) setError(messageOf(e));
