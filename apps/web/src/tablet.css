@@ -127,7 +127,7 @@
   }
   :root:not([data-layout="legacy"])
     .workspace:not(.nav-collapsed):not([data-remote-immersive="true"]) {
-    grid-template-columns: clamp(280px, 20.5vw, 336px) minmax(0, 1fr);
+    grid-template-columns: clamp(300px, 22vw, 356px) minmax(0, 1fr);
   }
   :root:not([data-layout="legacy"]) .workspace:not([data-remote-immersive="true"]) {
     grid-template-rows: 60px minmax(0, 1fr);
@@ -143,6 +143,9 @@
   }
   :root:not([data-layout="legacy"]) .nav-bottom {
     padding-block: 6px;
+  }
+  .desktop-nav .workspace-shortcuts {
+    grid-auto-columns: minmax(44px, 1fr);
   }
   :root:not([data-layout="legacy"]) .chat-scroll {
     padding-inline: clamp(18px, 1.5vw, 28px);
@@ -178,6 +181,11 @@
   }
   :root:not([data-layout="legacy"])[data-theme="hitech-2000s"] .desktop-nav {
     margin-right: 6px;
+  }
+}
+@media (min-width: 701px) and (max-width: 1099px) {
+  :root:not([data-layout="legacy"]) .project-sheet {
+    width: 444px;
   }
 }
 @media (min-width: 701px) {
@@ -222,7 +230,8 @@
     padding-block: 0;
   }
   :root[data-keyboard="true"] .workspace-shortcuts {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: none;
+    grid-auto-columns: minmax(44px, 1fr);
     gap: 0;
     padding-block: 0;
   }

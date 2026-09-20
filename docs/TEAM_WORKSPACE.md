@@ -52,7 +52,7 @@ Allowed roots are explicitly configured on enrollment/repair. Enforce canonical 
 
 Candidate implementation uses `MachineConfig.allowedProjectRoots`. Its absence is reserved for legacy owner configurations; enrolled machines must supply a non-empty list. Directory metadata checks may be shared briefly across catalog pages, while execution and file access revalidate the physical path independently. Runtime machine authorization is an in-memory capability bound by the personal app, never a caller-supplied JSON field. Closing or revoking that runtime does not expose the machine through an unscoped fallback.
 
-The friend gets their own Devices/Remote, usage, dictation, speech preferences and notifications. The Hub's host terminal and original Windows machine are not included. GPT uses an independent private persistent browser profile and connector/writer/queue; it cannot reuse the owner's login as a fallback. Shared speech generation may reuse a worker, but generated audio is authorized per user.
+The friend gets their own Devices/Remote, usage, dictation, speech preferences and notifications. The Hub's host terminal and original Windows machine are not included. GPT uses an independent private persistent native Linux client profile and writer/queue, with protected Remote for personal sign-in; it cannot reuse the owner's login as a fallback. Legacy browser integration is compatibility-only. Shared speech generation may reuse a worker, but generated audio is authorized per user.
 
 ## Logical projects and personal checkouts
 

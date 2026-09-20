@@ -1,0 +1,25 @@
+# Private outbound Hub -> enrolled Windows PCs. Separate from the Books Tailnet node.
+# Login is an explicit owner action; do not put auth keys in this file.
+name: codex-web-tailnet
+services:
+  tailnet:
+    image: tailscale/tailscale:v1.98.8@sha256:d54b2e6a9c09f0e5ec52e82b9ad4af3d446b54a7c08075e92f11c39dd410105f
+    container_name: codex-web-tailnet
+    restart: unless-stopped
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    mem_limit: 192m
+    cpus: 0.5
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    tmpfs: ["/tmp:size=16m,mode=1777", "/run:size=8m,mode=755"]
+    volumes:
+      - "${CODEX_WEB_TAILNET_STATE:?Set the private Tailnet state directory}:/var/lib/tailscale"
+    entrypoint: ["/usr/local/bin/tailscaled"]
+    command:
+      - "--state=/var/lib/tailscale/tailscaled.state"
+      - "--socket=/tmp/tailscaled.sock"
+      - "--tun=codex-tailnet"
+      - "--port=41642"

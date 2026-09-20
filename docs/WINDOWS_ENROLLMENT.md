@@ -12,7 +12,7 @@ Completion requires an activated approved computer with Codex/Git/GitHub readine
 
 The Windows master records its step and machine/user identity in its existing ACL-protected per-enrollment directory. Reruns recheck installed dependencies while retaining folder choices and exact submitted reports. A copied report from another machine/user is refused. Native Codex/GitHub sign-in is checked after the login process returns, rather than treating its exit alone as successful authentication. Simultaneous launches of the same installer share one local mutex. On success it offers to open the ordinary site at `/#setup`; no special user URL or account credential is embedded there.
 
-Targeted verification: PowerShell 5 parsing and checkpoint restart/identity fixtures, packaging/owner isolation, canonical web progress, Chromium/WebKit phone and compact-tablet flows, exact download retry and deferred setup across sessions. Tests do not install dependencies or modify the owner's Windows services/firewall/accounts. Production Hub still has no configured Tailscale address at this checkpoint; joining it to the chosen private network is required before real friend-PC enrollment. Registration remains closed for the final admission pass.
+Targeted verification: PowerShell 5 parsing and checkpoint restart/identity fixtures, packaging/owner isolation, canonical web progress, Chromium/WebKit phone and compact-tablet flows, exact download retry and deferred setup across sessions. Tests do not install dependencies or modify the owner's Windows services/firewall/accounts. The owner has now signed the separate Hub node into the chosen Tailscale network; its Hub configuration is included in the queued member release. See [host setup and network admission](HUB_TAILNET.md). Registration remains closed pending real member admission.
 
 ## Member workflow
 
@@ -29,7 +29,7 @@ The package lasts one day. Reopening the same package uses its saved folder choi
 
 ## Installation owner
 
-Configure `team.hubTailnetAddress` only after the Hub has a real private Tailscale IPv4 address and the member's PC can reach it. Without it the website shows an explicit setup state and cannot produce a misleading installer. At this checkpoint the running Hub has not been enrolled in Tailscale or otherwise reconfigured.
+Configure `team.hubTailnetAddress` only after the Hub has a real private Tailscale IPv4 address. Without it the website shows an explicit setup state and cannot produce a misleading installer. The member PC must join the selected private network or be explicitly shared with it; an unrelated personal Tailscale login is insufficient. Administrator approval verifies the existing outbound Hub → PC transport before activation. The Hub's new private node is independent of the owner's unchanged direct-LAN PC connection.
 
 The installer preserves existing SSH configuration and unrelated keys. It adds distinct no-PTY command and PTY terminal keys restricted to the Hub address, with forwarding disabled. It scopes the standard OpenSSH firewall rule with an explicit Windows-side confirmation and stops for custom broader SSH rules instead of rewriting them. Existing SSH sessions and active Companion tasks are not terminated. Non-standard Windows/domain/OpenSSH installations may need local review.
 
