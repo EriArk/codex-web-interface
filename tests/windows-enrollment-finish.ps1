@@ -19,7 +19,7 @@ foreach($port in @(22,5900)) {
  $script:created=$null
  $program=if($port -eq 22){Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe'}else{Join-Path $env:ProgramFiles 'TightVNC\tvnserver.exe'}
  & ([scriptblock]::Create($text)) -HubAddress '100.79.63.56' -Program $program -Port $port
- $expected=@('0.0.0.0-100.79.63.55','100.79.63.57-255.255.255.255','::/0')
+ $expected=@('0.0.0.0-100.79.63.55','100.79.63.57-255.255.255.255','::/1','8000::/1')
  if(@(Compare-Object $expected $script:created.RemoteAddress).Count){throw 'Wrong private address boundary'}
  if($script:created.Program -ne $program -or $script:created.Port -ne $port){throw 'Wrong scope'}
 }

@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'EnrollmentUi.ps1')
 . (Join-Path $PSScriptRoot 'EnrollmentState.ps1')
 New-CwWindow
-$script:CwWindow.Text = 'CodexWeb — завершение подключения'
+$script:CwWindow.Text = 'CodexWeb — завершение подключения · v2'
 $diagnosticPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CodexWeb-connection-diagnostic.txt'
 try {
     $connection = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'connection.json') -Raw -Encoding UTF8 | ConvertFrom-Json

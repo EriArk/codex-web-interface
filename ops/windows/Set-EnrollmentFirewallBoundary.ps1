@@ -14,7 +14,8 @@ function Convert-CwIPv4([long]$value) { return ((@(24,16,8,0 | ForEach-Object { 
 $before = Convert-CwIPv4 ($number-1)
 $after = Convert-CwIPv4 ($number+1)
 # Explicit blocks override unrelated allow rules; only the enrolled native service/port is affected.
-$ranges = @("0.0.0.0-$before", "$after-255.255.255.255", '::/0')
+# NetSecurity rejects the IPv6 zero-length prefix (::/0). Two /1 prefixes cover IPv6.
+$ranges = @("0.0.0.0-$before", "$after-255.255.255.255", '::/1', '8000::/1')
 $name = "CodexWeb-Enrolled-Private-$Port"
 if (Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue) {
     Set-NetFirewallRule -Name $name -Enabled True -Direction Inbound -Action Block -Protocol TCP -LocalPort $Port -RemoteAddress $ranges -Program $Program -Profile Any | Out-Null
