@@ -534,6 +534,18 @@ Active native job reconciliation warms the owner-scoped Hub history cache in the
 background (at most once per ten seconds per chat, immediately on completion).
 It reuses the native canonical read cache and coalesces pending reads; a returning
 client can display the warm snapshot without waiting for another network fetch.
-The existing twelve-chat / 16 MiB memory bound and private disk snapshots remain.
+The memory cache retains viewed histories for thirty minutes after use, with pins
+and the ten latest unpinned catalog chats protected from time expiry. Its shared
+per-user budget is 32 chats / 32 MiB of estimated serialized text; pressure evicts
+ordinary least-used entries first, then recent chats, pins and active work. Private
+disk snapshots provide fallback, including public action categories. Pin/catalog
+discovery restores available snapshots without additional upstream history reads.
+Reopening returns cached history immediately and revalidates quietly; ordinary
+polls and explicit source/history reads still await canonical data when stale.
+Results reuse the retained history metadata, without loading file contents. Their
+initial cached page is followed by one canonical refresh. The browser also retains
+first pages for up to 64 endpoint/category scopes and 4 MiB, expiring after thirty
+minutes of inactivity. Logout clears this cache and invalidates late writes;
+embedded binary content is excluded. Canonical branch changes replace old cards.
 This does not crawl inactive chats or retry submissions. Public final rich text,
 links, files and results continue to come from canonical history.

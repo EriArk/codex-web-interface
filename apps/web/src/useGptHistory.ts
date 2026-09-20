@@ -64,7 +64,13 @@ export function useGptHistory(selected: string) {
     };
   }, [rememberScroll]);
   const history = useCallback(
-    async (id: string, older?: string, force = false, messageId?: string): Promise<void> => {
+    async (
+      id: string,
+      older?: string,
+      force = false,
+      messageId?: string,
+      preferCached = false,
+    ): Promise<void> => {
       if (!id) return;
       if (pending.current.has(id)) {
         await pending.current.get(id);
@@ -105,6 +111,7 @@ export function useGptHistory(selected: string) {
         }
         try {
           const query = new URLSearchParams();
+          if (preferCached && !older && !messageId) query.set("cached", "1");
           if (messageId) query.set("messageId", messageId);
           else if (older) query.set("before", older);
           else if (cached?.revision && !cached.contextMessage) {
@@ -185,7 +192,7 @@ export function useGptHistory(selected: string) {
     const refresh = () => {
       if (!document.hidden) void history(selected).catch(() => {});
     };
-    refresh();
+    if (!document.hidden) void history(selected, undefined, false, undefined, true).catch(() => {});
     const timer = setInterval(refresh, 15000);
     window.addEventListener("online", refresh);
     window.addEventListener("pageshow", refresh);

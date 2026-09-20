@@ -9,6 +9,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ArtifactRequest, ArtifactSelection } from "./ArtifactMarkdown";
 import { ApiError, api, messageOf } from "./api";
 import { Results } from "./Results";
+import { cachedResults, rememberResults, resultCacheEpoch } from "./resultCache";
 
 export function ResultFeed({
   endpoint,
@@ -124,16 +125,19 @@ export function ResultFeed({
   useEffect(() => {
     const current = ++generation.current;
     const scope = `${endpoint}?category=${category}`;
+    const epoch = resultCacheEpoch();
+    const saved = endpoint ? cachedResults(scope) : undefined;
     if (scope !== readScope.current) {
       recoveryAttempts.current = 0;
       readScope.current = scope;
-      setItems([]);
-      fullyLoaded.current = false;
-      loadedIds.current = [];
-      setCursor(null);
+      setItems(saved?.items ?? []);
+      setCounts(saved?.counts ?? emptyResultCounts());
+      fullyLoaded.current = saved?.nextBefore === null;
+      loadedIds.current = saved?.items.map((item) => item.id) ?? [];
+      setCursor(saved?.nextBefore ?? null);
       setFocused(null);
-      sourceRef.current = undefined;
-      setSourceRevision(undefined);
+      sourceRef.current = saved?.sourceRevision;
+      setSourceRevision(saved?.sourceRevision);
     }
     setError("");
     if (!endpoint) {
@@ -141,19 +145,27 @@ export function ResultFeed({
       return;
     }
     setBusy(true);
-    void api<ResultPage>(endpoint + "?category=" + category)
-      .then((data) => {
-        if (current !== generation.current) return;
-        recoveryAttempts.current = 0;
-        setTransientFailure(false);
-        setItems(data.items);
-        loadedIds.current = data.items.map((item) => item.id);
-        fullyLoaded.current = data.nextBefore === null;
-        sourceRef.current = data.sourceRevision;
-        setSourceRevision(data.sourceRevision);
-        setCounts(data.counts ?? emptyResultCounts());
-        setCursor(data.nextBefore);
-      })
+    const accept = (data: ResultPage) => {
+      if (current !== generation.current || epoch !== resultCacheEpoch()) return;
+      rememberResults(scope, data, epoch);
+      recoveryAttempts.current = 0;
+      setTransientFailure(false);
+      setItems(data.items);
+      loadedIds.current = data.items.map((item) => item.id);
+      fullyLoaded.current = data.nextBefore === null;
+      sourceRef.current = data.sourceRevision;
+      setSourceRevision(data.sourceRevision);
+      setCounts(data.counts ?? emptyResultCounts());
+      setCursor(data.nextBefore);
+    };
+    void (async () => {
+      if (!saved && endpoint.startsWith("/gpt/") && retry === 0) {
+        accept(await api<ResultPage>(scope + "&cached=1"));
+        if (current !== generation.current || epoch !== resultCacheEpoch()) return;
+      }
+      // Cached cards stay visible while this ordinary canonical read refreshes them.
+      accept(await api<ResultPage>(scope));
+    })()
       .catch((e) => {
         if (current === generation.current) readFailed(e);
       })
@@ -171,9 +183,11 @@ export function ResultFeed({
     if (!endpoint) return;
     const task = setTimeout(() => {
       const current = ++generation.current;
+      const epoch = resultCacheEpoch();
       void api<ResultPage>(endpoint + "?category=" + category)
         .then((data) => {
-          if (current !== generation.current) return;
+          if (current !== generation.current || epoch !== resultCacheEpoch()) return;
+          rememberResults(`${endpoint}?category=${category}`, data, epoch);
           recoveryAttempts.current = 0;
           setTransientFailure(false);
           setCounts(data.counts ?? emptyResultCounts());

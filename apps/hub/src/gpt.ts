@@ -524,7 +524,7 @@ export class GptService {
   async pins() {
     const raw = await this.json("/pins");
     const rows: Json[] = Array.isArray(raw) ? raw : Array.isArray(raw.items) ? raw.items : [];
-    return rows
+    const pins = rows
       .filter((row) => ["conversation", "project"].includes(row.item_type))
       .flatMap((row) => {
         const item = row.item;
@@ -533,6 +533,12 @@ export class GptService {
           ? [{ id: nativeId, kind: row.item_type === "project" ? "project" : "thread", item }]
           : [];
       });
+    this.historyCache.setPinned(
+      pins
+        .filter((pin) => pin.kind === "thread" && !this.library.get("thread", pin.id)?.deleted)
+        .map((pin) => pin.id),
+    );
+    return pins;
   }
   async catalog(offset = 0, archived = false) {
     const [raw, pins] = await Promise.all([
@@ -557,6 +563,11 @@ export class GptService {
         const item = gptCatalog({ items: [pin.item] }).items[0];
         if (item && !page.items.some((t) => t.id === item.id)) page.items.push(item);
       }
+      this.historyCache.setRecent(
+        page.items
+          .filter((row) => !this.library.get("thread", row.id)?.deleted)
+          .map((row) => row.id),
+      );
     }
     return {
       ...page,
@@ -1804,6 +1815,7 @@ export function registerGpt(
         .object({
           before: id.optional(),
           messageId: id.optional(),
+          cached: z.literal("1").optional(),
           known: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -1821,15 +1833,28 @@ export function registerGpt(
       )
       .get(p.id);
     service.library.assertExists("thread", p.id);
-    return service.historyCache.page(p.id, q, running ? 15000 : 60000, true);
+    return service.historyCache.page(
+      p.id,
+      q,
+      running ? 15000 : 60000,
+      !q.known || q.cached === "1",
+    );
   });
   app.get("/api/gpt/conversations/:id/results", async (req) => {
     const p = z.object({ id }).parse(req.params);
     const q = z
-      .object({ category: resultCategorySchema.default("all"), before: id.optional() })
+      .object({
+        category: resultCategorySchema.default("all"),
+        before: id.optional(),
+        cached: z.literal("1").optional(),
+      })
       .parse(req.query);
     service.library.assertExists("thread", p.id);
-    const snapshot = await service.historyCache.snapshot(p.id);
+    const snapshot = await service.historyCache.snapshot(
+      p.id,
+      60000,
+      q.cached === "1" && !q.before,
+    );
     return {
       ...resultPage(
         gptResults(p.id, snapshot.items, service.previews, service.config.hub.publicBaseUrl),

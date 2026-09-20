@@ -11,6 +11,7 @@ type Entry = {
   checkedAt: number;
   bytes: number;
   lineage: number;
+  usedAt: number;
   stale?: boolean;
   refreshMessage?: string;
 };
@@ -20,11 +21,60 @@ export class GptHistoryCache {
   private pending = new Map<string, Promise<Entry>>();
   private removed = new Map<string, number>();
   private warming = new Map<string, number>();
+  private pinned = new Set<string>();
+  private recent = new Set<string>();
   constructor(
     private load: (id: string) => Promise<GptMessage[]>,
     private now = Date.now,
     private disk?: GptHistoryDisk,
   ) {}
+  private trim() {
+    const now = this.now();
+    for (const [id, entry] of this.entries)
+      if (!this.pinned.has(id) && !this.recent.has(id) && now - entry.usedAt >= 30 * 60000)
+        this.entries.delete(id);
+    const priority = (id: string) =>
+      now - (this.warming.get(id) ?? -Infinity) < 30000
+        ? 3
+        : this.pinned.has(id)
+          ? 2
+          : this.recent.has(id)
+            ? 1
+            : 0;
+    const oldest = [...this.entries].sort(
+      ([a, av], [b, bv]) => priority(a) - priority(b) || av.usedAt - bv.usedAt,
+    );
+    let bytes = oldest.reduce((sum, [, entry]) => sum + entry.bytes, 0);
+    for (const [id, entry] of oldest) {
+      if (this.entries.size <= 32 && bytes <= 32 * 1024 ** 2) break;
+      this.entries.delete(id);
+      bytes -= entry.bytes;
+    }
+  }
+  /** Pins retain already saved history; discovering a pin never fetches its conversation. */
+  setPinned(ids: string[]) {
+    const previous = this.pinned;
+    this.pinned = new Set(ids);
+    for (const id of ids.slice(0, 32))
+      if (!previous.has(id) && !this.entries.has(id)) this.cached(id);
+    this.trim();
+  }
+  setRecent(ids: string[]) {
+    const previous = this.recent;
+    this.recent = new Set(ids.filter((id) => !this.pinned.has(id)).slice(0, 10));
+    for (const id of this.recent) if (!previous.has(id) && !this.entries.has(id)) this.cached(id);
+    this.trim();
+  }
+  private cached(id: string) {
+    this.trim();
+    let entry = this.entries.get(id);
+    if (!entry) {
+      const saved = this.disk?.read(id);
+      if (saved) entry = this.seed(id, saved.items, saved.checkedAt, false);
+    }
+    if (entry) entry.usedAt = this.now();
+    return entry;
+  }
   seed(id: string, items: GptMessage[], checkedAt = this.now(), persist = true) {
     const previous = this.entries.get(id);
     const sameBranch =
@@ -34,16 +84,13 @@ export class GptHistoryCache {
       items,
       revision: hash(items),
       checkedAt,
+      usedAt: this.now(),
       bytes: JSON.stringify(items).length * 2,
     };
     this.entries.delete(id);
     this.entries.set(id, value);
     if (persist) this.disk?.write(id, items, checkedAt);
-    while (
-      this.entries.size > 12 ||
-      [...this.entries.values()].reduce((n, v) => n + v.bytes, 0) > 16 * 1024 ** 2
-    )
-      this.entries.delete(this.entries.keys().next().value!);
+    this.trim();
     return value;
   }
   invalidate(id: string) {
@@ -55,6 +102,8 @@ export class GptHistoryCache {
     this.entries.delete(id);
     this.disk?.remove(id);
     this.warming.delete(id);
+    this.pinned.delete(id);
+    this.recent.delete(id);
   }
   /** Active native jobs and returning viewers coalesce bounded background reads. */
   warm(id: string, finished = false) {
@@ -75,11 +124,7 @@ export class GptHistoryCache {
     void read.catch(() => {});
   }
   private async get(id: string, ttl: number) {
-    let cached = this.entries.get(id);
-    if (!cached) {
-      const saved = this.disk?.read(id);
-      if (saved) cached = this.seed(id, saved.items, saved.checkedAt, false);
-    }
+    const cached = this.cached(id);
     if (cached && this.now() - cached.checkedAt < ttl) return cached;
     const pending = this.pending.get(id);
     if (pending) return pending;
@@ -120,9 +165,13 @@ export class GptHistoryCache {
     }
   }
   peek(id: string): GptMessage[] {
+    this.trim();
     return this.entries.get(id)?.items ?? [];
   }
-  async snapshot(id: string, ttl = 60000) {
+  async snapshot(id: string, ttl = 60000, immediate = false) {
+    const cached = immediate ? this.cached(id) : undefined;
+    // Results follows its initial cached read with one canonical refresh.
+    if (cached) return cached;
     return this.readable(id, ttl);
   }
   async messages(id: string, ttl = 60000): Promise<GptMessage[]> {
@@ -142,10 +191,7 @@ export class GptHistoryCache {
   ): Promise<GptHistoryPage> {
     // A returning viewer may use a warm snapshot while its background read runs.
     // Explicit refreshes, older pages and source navigation still await canonical data.
-    const cached =
-      immediate && !query.known && !query.before && !query.messageId
-        ? this.entries.get(id)
-        : undefined;
+    const cached = immediate && !query.before && !query.messageId ? this.cached(id) : undefined;
     if (cached && this.now() - cached.checkedAt >= ttl) this.warm(id);
     const entry = cached ?? (await this.readable(id, ttl)),
       list = entry.items;

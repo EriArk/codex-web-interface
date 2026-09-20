@@ -10,6 +10,8 @@
 - GPT chat shows user messages and completed final responses. Public commentary and recognized public tool-action categories belong in Results → Reasoning, grouped by the exact native user message, and in the expanded running progress panel.
 - The collapsed progress control shows only a short action with its icon, never a scrolling answer. Keep live public text in the expanded panel. Never expose hidden analysis, raw tool arguments/results or internal diagnostics.
 - Keep active native chats warm on the Hub independently of the open browser page. Reuse canonical reads, coalesce concurrent loads and bound refresh frequency/cache size. Refresh completion immediately; never replay sends or preload the entire catalog. Returning viewers see available cached history while background work continues.
+- Retain recently viewed GPT history for 30 minutes after use. Pins and the ten latest unpinned catalog chats have no time expiry in memory, subject to a shared 32-chat / 32 MiB per-user budget. Prefer active work, pins, then the recent ten during eviction. Restore available private disk snapshots without polling inactive native chats; refresh an opened chat quietly.
+- Retain Results metadata with the same history; never preload binary files for navigation. Show cached first pages immediately and refresh canonically in the background. Bound the browser first-page cache to 64 chat/category scopes and 4 MiB, expire after 30 minutes of inactivity, and clear on logout. Keep account isolation, exact source navigation and branch replacement intact.
 
 This repository is intended to be implemented primarily with Codex. Read this file before changing architecture or starting a large feature.
 
