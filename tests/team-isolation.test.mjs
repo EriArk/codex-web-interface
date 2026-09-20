@@ -23,6 +23,7 @@ import { TeamGpt, teamGptName } from "../apps/hub/dist/team-gpt.js";
 import { reconcileGptProfiles } from "../apps/hub/dist/team-gpt-host.js";
 import { createTeamHub, privateConfig } from "../apps/hub/dist/team-hub.js";
 import { restoreTeamSnapshot, verifyTeamSnapshot } from "../apps/hub/dist/team-maintenance.js";
+import { memberSetupStatus } from "../apps/hub/dist/team-onboarding.js";
 import { unzipSync } from "../apps/hub/node_modules/fflate/esm/index.mjs";
 import WebSocket from "../apps/hub/node_modules/ws/wrapper.mjs";
 import { gptSessionAllowed } from "../ops/gpt/session-watch.mjs";
@@ -1376,6 +1377,72 @@ test("invitations are one-use and CSRF, role and last-admin guards apply before 
   assert.equal(wrong.status, 401);
 });
 
+test("member onboarding resumes canonical progress, excludes the owner and cannot claim readiness", async (t) => {
+  const f = await fixture(t);
+  const path = "/api/team/onboarding";
+  assert.equal((await f.request(path, f.owner)).body.originalOwner, true);
+  assert.equal((await f.request(path, f.owner)).body.state, "complete");
+  // Legacy LAN machines do not depend on member Tailnet enrollment.
+  const lan = {
+    id: "owner-lan",
+    name: "Owner PC",
+    type: "ssh-windows",
+    ssh: { host: "192.168.1.10" },
+  };
+  f.config.machines.push(lan);
+  assert.equal(f.config.team.hubTailnetAddress, undefined);
+  assert.deepEqual(privateConfig(f.config, f.registry, f.registry.ownerId).machines, [lan]);
+  assert.deepEqual(privateConfig(f.config, f.registry, f.friendId).machines, []);
+  assert.equal((await f.request(path, f.owner)).body.ready, true);
+  assert.equal((await f.request(path, f.friend)).body.state, "pending");
+  assert.equal((await f.request(path, f.friend, "POST", { state: "complete" })).status, 409);
+  assert.equal((await f.request(path, f.friend, "POST", { state: "deferred" })).status, 200);
+  assert.equal((await f.request(path, f.friend)).body.state, "deferred");
+  assert.equal(
+    (await f.request(path, f.friend, "POST", { state: "complete", userId: f.registry.ownerId }))
+      .status,
+    400,
+  );
+  const gpt = { status: () => ({ enabled: true, state: "ready" }) };
+  const id = randomUUID();
+  const enrollments = {
+    list: (actor) => {
+      assert.equal(actor, f.friendId);
+      return [
+        {
+          id,
+          state: "approved",
+          machineId: id,
+          createdAt: 1,
+          readiness: { codex: true, git: true, github: true },
+        },
+        { id: randomUUID(), state: "pending", createdAt: 2 },
+      ];
+    },
+  };
+  const runtime = { machines: [{ id }], nativeGpt: { userId: f.friendId } };
+  assert.equal(memberSetupStatus(f.config, f.registry, enrollments, gpt, f.friendId).ready, false);
+  const ready = memberSetupStatus(f.config, f.registry, enrollments, gpt, f.friendId, runtime);
+  assert.equal(ready.ready, true);
+  assert.equal(
+    ready.machine.stage,
+    "active",
+    "a later pending computer does not hide the ready one",
+  );
+  assert.equal(ready.gpt.stage, "active");
+  assert.equal(
+    memberSetupStatus(
+      f.config,
+      f.registry,
+      enrollments,
+      { status: () => ({ enabled: true, state: "blocked" }) },
+      f.friendId,
+      runtime,
+    ).ready,
+    false,
+  );
+});
+
 test("revocation closes only the disabled user's streams and clears personal ticket sessions", async (t) => {
   const f = await fixture(t),
     ownerSocket = await f.connect(f.owner),
@@ -1558,7 +1625,7 @@ test("the native GPT gateway rejects another account including a member carrying
   assert.equal(legacyGateway.statusCode, 403);
 });
 
-test("administrator role changes require current roles, revoke old sessions and cannot remove the last admin", async (t) => {
+test("administrator role changes revoke sessions and preserve the installation owner", async (t) => {
   const f = await fixture(t);
   assert.equal(
     (
@@ -1594,8 +1661,27 @@ test("administrator role changes require current roles, revoke old sessions and 
         expectedRole: "admin",
       })
     ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await f.request(`/api/team/users/${f.registry.ownerId}/state`, admin, "POST", {
+        disabled: true,
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await f.request(`/api/team/users/${f.registry.ownerId}/recovery`, admin, "POST", {})).status,
+    409,
+  );
+  assert.equal((await f.request("/api/auth/session", f.owner)).status, 200);
+  assert.equal(f.registry.user(f.registry.ownerId).role, "admin");
+  assert.equal(
+    (await f.request(`/api/team/users/${f.registry.ownerId}/recovery`, f.owner, "POST", {})).status,
     200,
   );
+  const audit = await f.request("/api/team/audit", admin);
   assert.equal(
     (
       await f.request(`/api/team/users/${f.friendId}/role`, admin, "POST", {
@@ -1603,9 +1689,8 @@ test("administrator role changes require current roles, revoke old sessions and 
         expectedRole: "admin",
       })
     ).status,
-    409,
+    200,
   );
-  const audit = await f.request("/api/team/audit", admin);
   assert(
     audit.body.items.some(
       (item) => item.action === "team.request_denied" && item.outcome === "denied",

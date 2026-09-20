@@ -23,6 +23,7 @@ import { GptLoadBoundary } from "./GptLoadBoundary";
 import { Icon } from "./icons";
 import { Login } from "./Login";
 import { MachineHealthPanel } from "./MachineHealth";
+import { MemberSetup } from "./MemberSetup";
 import { NotebookPanel, type NotebookRequest, type WorkspaceDestination } from "./Notebook";
 import { type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PaneDivider } from "./PaneDivider";
@@ -197,19 +198,22 @@ export default function App() {
       />
     );
   return (
-    <Workspace
-      onSession={login}
-      onLogout={() => {
-        setSession(null);
-        for (const key of Object.keys(sessionStorage))
-          if (
-            key.startsWith("codex-draft-") ||
-            key.startsWith("gpt-draft-") ||
-            key.startsWith("codex-pending-send:")
-          )
-            sessionStorage.removeItem(key);
-      }}
-    />
+    <>
+      <Workspace
+        onSession={login}
+        onLogout={() => {
+          setSession(null);
+          for (const key of Object.keys(sessionStorage))
+            if (
+              key.startsWith("codex-draft-") ||
+              key.startsWith("gpt-draft-") ||
+              key.startsWith("codex-pending-send:")
+            )
+              sessionStorage.removeItem(key);
+        }}
+      />
+      {session.team && !session.originalOwner && <MemberSetup key={session.user?.id} />}
+    </>
   );
 }
 function clearNotification(id: string) {

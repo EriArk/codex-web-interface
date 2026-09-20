@@ -1,6 +1,18 @@
 # Connecting a personal Windows PC
 
-Candidate implementation for #151, #6 and #37. The stable production installation is not replaced by this work. The friend does not need to attend development verification; their real installation and account checks remain a later acceptance step.
+Implementation for #152/#173 over the existing #151/#6/#37 boundaries. New members enter a persistent setup flow after registration; the original owner bypasses it entirely. The friend's real installation and account checks remain a separate acceptance step.
+
+The original owner's Windows PC is an explicit direct-LAN exception: retain its existing SSH/Companion configuration and native accounts, without Tailscale enrollment or setup readiness gates. The original owner remains the installation's principal administrator. Team administration cannot demote/disable that account or let another administrator issue its recovery link; owner self/host recovery remains available. These installation rights do not implicitly grant application access to members' private content.
+
+## Continuous setup (2026-09-20)
+
+The web master has Computer → ChatGPT → Readiness steps and reuses the existing enrollment, administrator approval and personal GPT controls. Progress comes from canonical private connection/runtime state; only the deferred/completed preference is stored per user on the Hub. Closing the browser or switching devices never creates another identity. **Later** keeps ordinary workspace access available; Settings → Access → **Continue setup** reopens the master. A same-site `/#setup` return from the Windows installer survives login and resumes the existing setup. While the computer awaits administrator approval, the member can finish personal GPT sign-in.
+
+Completion requires an activated approved computer with Codex/Git/GitHub readiness and activated personal GPT. These are the existing setup proofs, not a second background polling/Doctor layer. The UI does not claim continuous native health; normal execution keeps its normal checks. An expired/revoked download attempt releases the old form so a new package can be created.
+
+The Windows master records its step and machine/user identity in its existing ACL-protected per-enrollment directory. Reruns recheck installed dependencies while retaining folder choices and exact submitted reports. A copied report from another machine/user is refused. Native Codex/GitHub sign-in is checked after the login process returns, rather than treating its exit alone as successful authentication. Simultaneous launches of the same installer share one local mutex. On success it offers to open the ordinary site at `/#setup`; no special user URL or account credential is embedded there.
+
+Targeted verification: PowerShell 5 parsing and checkpoint restart/identity fixtures, packaging/owner isolation, canonical web progress, Chromium/WebKit phone and compact-tablet flows, exact download retry and deferred setup across sessions. Tests do not install dependencies or modify the owner's Windows services/firewall/accounts. Production Hub still has no configured Tailscale address at this checkpoint; joining it to the chosen private network is required before real friend-PC enrollment. Registration remains closed for the final admission pass.
 
 ## Member workflow
 

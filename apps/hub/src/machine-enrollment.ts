@@ -240,6 +240,7 @@ export async function verifyEnrollment(config: HubConfig, row: EnrollmentRow) {
 // These are reviewed helpers, not arbitrary repository files. No credentials/native state in bundle.
 export const ENROLLMENT_FILES = [
   "EnrollmentUi.ps1",
+  "EnrollmentState.ps1",
   "Enroll-Computer.ps1",
   "Pair-ComputerSsh.ps1",
   "Install-EnrolledRemote.ps1",

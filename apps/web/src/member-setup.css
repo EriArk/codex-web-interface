@@ -1,0 +1,53 @@
+.member-setup {
+  width: min(48rem, calc(100% - 1.5rem));
+  max-width: calc(100% - 1.5rem);
+  max-height: calc(var(--app-height, 100dvh) - 1.5rem);
+  padding: 0;
+}
+.member-setup[open] {
+  display: flex;
+  flex-direction: column;
+}
+.member-setup .settings-heading {
+  background: var(--panel-heading);
+  border-bottom: 1px solid var(--line);
+  padding: 1rem;
+  flex-shrink: 0;
+}
+.member-setup h2 {
+  font-size: 1.15rem;
+}
+.member-setup-body {
+  padding: 1rem;
+  overflow: auto;
+  min-height: 0;
+}
+.member-setup-steps,
+.member-setup-actions {
+  background: var(--panel-heading);
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.member-setup-steps {
+  margin: 1rem 0;
+}
+.member-setup-steps button {
+  flex: 1;
+  min-height: 44px;
+}
+.member-setup-actions {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+.member-setup-actions button {
+  min-height: 44px;
+}
+:root:is([data-theme="crt-green"], [data-theme="hitech-2000s"]) .member-setup-actions {
+  color: var(--case-ink);
+}
+.member-setup-actions .text-button {
+  color: inherit;
+}

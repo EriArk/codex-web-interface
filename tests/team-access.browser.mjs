@@ -141,6 +141,10 @@ try {
         .poll(() => page.evaluate(() => sessionStorage.getItem("codex-workspace-identity")))
         .not.toBe(hub.registry.ownerId);
       const friendId = hub.registry.byLogin("friend_" + engine).id;
+      await page
+        .getByRole("dialog", { name: "Настройка рабочего пространства" })
+        .getByRole("button", { name: "Позже", exact: true })
+        .click();
       assert.equal(
         await page.evaluate(
           (id) => sessionStorage.getItem(`cw-user:${id}:codex-draft-identical`),

@@ -37,6 +37,7 @@ import { registerTeamGitHub } from "./team-github-routes.js";
 import { TeamGpt } from "./team-gpt.js";
 import { registerTeamLinks } from "./team-link-routes.js";
 import { TeamLinks } from "./team-links.js";
+import { memberSetupStatus, saveMemberSetup } from "./team-onboarding.js";
 import { registerTeamProjects } from "./team-project-routes.js";
 import { TeamProjects } from "./team-projects.js";
 import { attachTeamRelayTools } from "./team-relay-tools.js";
@@ -659,6 +660,29 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       ),
     };
   });
+  const setupStatus = async (req: FastifyRequest) => {
+    const userId = actor(req),
+      current = await instances.get(userId)?.catch(() => undefined);
+    auth.session(req);
+    return memberSetupStatus(
+      config,
+      registry,
+      enrollments,
+      teamGpt,
+      userId,
+      current?.runtime.sessions.config,
+    );
+  };
+  app.get("/api/team/onboarding", setupStatus);
+  app.post("/api/team/onboarding", async (req) => {
+    const { state } = z
+      .object({ state: z.enum(["deferred", "complete"]) })
+      .strict()
+      .parse(req.body);
+    const status = await setupStatus(req);
+    saveMemberSetup(registry, actor(req), state, status);
+    return { ...status, state: status.originalOwner ? "complete" : state };
+  });
   app.post("/api/team/gpt", slow, (req) => {
     z.object({})
       .strict()
@@ -681,6 +705,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   app.get("/api/team/users", (req) => ({
     items: registry.users(actor(req)),
+    ownerId: registry.ownerId,
     registrationEnabled: config.team?.registrationEnabled !== false,
   }));
   app.get("/api/team/users/:id/offboarding", (req) => {

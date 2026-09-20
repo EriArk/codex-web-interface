@@ -32,6 +32,7 @@ function New-CwWindow {
     $form.Show(); [Windows.Forms.Application]::DoEvents()
 }
 function Write-CwStep([int]$step, [string]$text) {
+    if (Get-Command Save-CwEnrollmentStep -ErrorAction SilentlyContinue) { Save-CwEnrollmentStep $step }
     if ($script:CwWindow.IsDisposed) { throw 'Настройка закрыта. Запустите установщик повторно, чтобы продолжить.' }
     $script:CwProgress.Value = [Math]::Min(5, $step)
     $script:CwStatus.Text = $text

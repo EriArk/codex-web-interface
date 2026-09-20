@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
+import { openMemberSetup } from "./MemberSetup";
 import "./team.css";
 
 type AuditEntry = {
@@ -26,6 +27,8 @@ const auditLabels: Record<string, string> = {
 };
 
 export function TeamAccess() {
+  const [originalOwner, setOriginalOwner] = useState(true);
+  const [ownerId, setOwnerId] = useState<string>();
   const [me, setMe] = useState<TeamUser | null>(null),
     [users, setUsers] = useState<TeamUser[]>([]),
     [registrationEnabled, setRegistrationEnabled] = useState(true);
@@ -65,12 +68,20 @@ export function TeamAccess() {
     { id: string; name: string; state: string; expires: number }[]
   >([]);
   const refresh = useCallback(async (signal?: AbortSignal) => {
-    const { user } = await api<{ user: TeamUser }>("/team/me", { signal });
+    const { user, originalOwner } = await api<{ user: TeamUser; originalOwner: boolean }>(
+      "/team/me",
+      { signal },
+    );
     setMe(user);
+    setOriginalOwner(originalOwner);
     if (user.role === "admin") {
-      const data = await api<{ items: TeamUser[]; registrationEnabled?: boolean }>("/team/users", {
-        signal,
-      });
+      const data = await api<{ items: TeamUser[]; ownerId: string; registrationEnabled?: boolean }>(
+        "/team/users",
+        {
+          signal,
+        },
+      );
+      setOwnerId(data.ownerId);
       setUsers(data.items);
       setRegistrationEnabled(data.registrationEnabled !== false);
       setInvitations(
@@ -164,11 +175,25 @@ export function TeamAccess() {
   };
   return (
     <section className="team-access" aria-label="Участники установки">
+      {!originalOwner && (
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => window.dispatchEvent(new Event(openMemberSetup))}
+        >
+          Продолжить настройку
+        </button>
+      )}
       {me && (
         <div className="team-account">
           <strong>{me.name}</strong>
           <span className="muted">
-            {me.login} · {me.role === "admin" ? "Администратор" : "Участник"}
+            {me.login} ·{" "}
+            {originalOwner
+              ? "Владелец установки"
+              : me.role === "admin"
+                ? "Администратор"
+                : "Участник"}
           </span>
         </div>
       )}
@@ -182,14 +207,16 @@ export function TeamAccess() {
                   <strong>{user.name}</strong>
                   <small>
                     {user.login} ·{" "}
-                    {user.state === "disabled"
-                      ? "Доступ закрыт"
-                      : user.role === "admin"
-                        ? "Администратор"
-                        : "Участник"}
+                    {user.id === ownerId
+                      ? "Владелец установки"
+                      : user.state === "disabled"
+                        ? "Доступ закрыт"
+                        : user.role === "admin"
+                          ? "Администратор"
+                          : "Участник"}
                   </small>
                 </div>
-                {user.id !== me.id && (
+                {user.id !== me.id && user.id !== ownerId && (
                   <div className="team-person-actions">
                     {user.state === "active" && (
                       <button

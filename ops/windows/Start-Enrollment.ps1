@@ -20,6 +20,9 @@ $gzip = [IO.Compression.GZipStream]::new($stream, [IO.Compression.CompressionMod
 $reader = [IO.StreamReader]::new($gzip, [Text.Encoding]::UTF8)
 try { $payload = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose(); $gzip.Dispose(); $stream.Dispose() }
 if ($payload.descriptor.version -ne 1 -or $payload.descriptor.id -notmatch '^[a-f0-9-]{36}$') { throw 'Invalid connection package.' }
+$enrollmentMutex = [Threading.Mutex]::new($false, ('Local\CodexWebEnrollment-' + $payload.descriptor.id))
+try { $acquired = $enrollmentMutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $acquired = $true }
+if (-not $acquired) { $enrollmentMutex.Dispose(); throw 'Этот мастер уже открыт. Продолжите настройку в его окне.' }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $directory = Join-Path $env:LOCALAPPDATA ('CodexWeb\enrollment\' + $payload.descriptor.id)
 $boundary = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'CodexWeb\enrollment')).TrimEnd('\') + '\'
@@ -55,7 +58,10 @@ if ((Test-Path -LiteralPath $descriptor) -and ((Get-Item -LiteralPath $descripto
 New-CwWindow
 try {
     & (Join-Path $directory 'Enroll-Computer.ps1') -ConnectionFile $descriptor
-    [void](Confirm-Cw 'Компьютер подготовлен. Вернитесь на сайт: осталось подтверждение администратора и активация подключения.')
+    if (Confirm-Cw 'Компьютер подготовлен. Открыть сайт и продолжить настройку? Там появится подтверждение администратора и активация подключения.') {
+        $target = [Uri]$payload.descriptor.baseUrl
+        if ($target.Scheme -eq 'https' -and -not $target.UserInfo -and $target.AbsolutePath -eq '/' -and -not $target.Query -and -not $target.Fragment) { Start-Process ($target.AbsoluteUri + '#setup') }
+    }
 } catch {
     [void][Windows.Forms.MessageBox]::Show($script:CwWindow, $_.Exception.Message, 'CodexWeb — настройка приостановлена', 'OK', 'Warning')
-} finally { $script:CwWindow.Dispose() }
+} finally { $script:CwWindow.Dispose(); $enrollmentMutex.ReleaseMutex(); $enrollmentMutex.Dispose() }

@@ -72,7 +72,11 @@ export function Login({
         null,
         "",
         location.pathname +
-          (/^[a-f0-9]{32}$/.test(notification) ? "#notification=" + notification : ""),
+          (/^[a-f0-9]{32}$/.test(notification)
+            ? "#notification=" + notification
+            : location.hash === "#setup" && session.team && !session.originalOwner
+              ? "#setup"
+              : ""),
       );
       onLogin(session);
     } catch (e) {

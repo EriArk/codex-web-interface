@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-confirmed installation authority and LAN exception (2026-09-20)
+
+- The original owner is the installation's principal administrator. Do not demote or disable that account through team administration, including when other admins exist; another admin cannot issue owner password recovery. Preserve owner self/host recovery.
+- Keep the owner's existing Windows PC on its direct LAN SSH/Companion connection. Member Tailscale enrollment and readiness requirements never replace or gate this connection or force owner onboarding. Preserve the owner's accounts, sessions and projects.
+
 ## Owner-approved independent-member passes and background GPT deletion (2026-09-20)
 
 - Complete member readiness in four bounded passes: personal native GPT profiles/login; remaining isolation and revocation; PC installer and continuous setup; new-user acceptance. Use focused checks for the affected behavior rather than repeating unrelated large suites.

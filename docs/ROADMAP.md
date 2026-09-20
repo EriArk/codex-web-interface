@@ -4,8 +4,10 @@
 
 1. **Personal native GPT:** per-user Linux client, empty profile, private login/Remote, account activation and own Hub runtime. Includes immediate local chat deletion with a durable background native queue. Implemented in the current candidate; deployment status is recorded separately from source completion.
 2. **Isolation and revocation:** implemented native activation/session and provisioning-revocation fixes, with a concise administrator offboarding summary. Keep registration disabled until pass 4; live independent-account acceptance remains there.
-3. **Friend PC setup:** finish #152/#173 installer/bootstrap and resume interrupted setup with minimal user steps.
-4. **New-user acceptance:** exercise the complete separate-account workflow, smaller tablet layout and shared-project ownership. The friend's actual login/device check remains distinct from automated fixtures.
+3. **Friend PC setup:** implemented the member-only Computer → ChatGPT → Readiness flow, cross-session continuation and installer return, expired-package recovery, Windows step/identity checkpoint and post-login checks. Details and remaining infrastructure admission in [WINDOWS_ENROLLMENT.md](WINDOWS_ENROLLMENT.md).
+4. **New-user acceptance:** prepare the Hub's private Tailscale connection, then exercise the complete separate-account workflow, smaller tablet layout and shared-project ownership. The friend's actual login/device check remains distinct from automated fixtures; public registration stays disabled until admission.
+
+Pass 3 verification: Windows PowerShell 5 installer parsing, retained step/identity and native-login fixtures; five focused Hub checks; Chromium/WebKit reload/download, deferred setup across sessions, same-site installer return through login, expired packets and phone/tablet layout. Original-owner LAN configuration, legacy password/session and principal-admin protections are covered. The owner explicitly retains direct LAN SSH/Companion and never enters member enrollment; member network readiness is not a gate on the owner's existing work.
 
 Pass 1 evidence: focused account-binding/deletion tests, Chromium/WebKit immediate deletion with an unavailable native client, and one disposable real Linux native profile with private Remote, logged-out startup and idempotent host provisioning. No production account was copied and no large download suite was repeated.
 

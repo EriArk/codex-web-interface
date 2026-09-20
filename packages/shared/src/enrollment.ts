@@ -65,3 +65,20 @@ export interface MachineEnrollment {
   readiness?: MachineEnrollmentReport["readiness"];
   machineId?: string;
 }
+
+export interface MemberSetupStatus {
+  originalOwner: boolean;
+  state: "pending" | "deferred" | "complete";
+  ready: boolean;
+  machine: {
+    enabled: boolean;
+    stage: "absent" | "pending" | "reported" | "approved" | "active";
+    codex: boolean;
+    git: boolean;
+    github: boolean;
+  };
+  gpt: {
+    enabled: boolean;
+    stage: "absent" | "requested" | "ready" | "failed" | "blocked" | "active";
+  };
+}

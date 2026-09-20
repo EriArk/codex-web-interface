@@ -6,7 +6,7 @@ $repository = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $repository 'ops\windows'
 $artifacts = Join-Path $repository '.local\qa-enrollment'
 New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
-$names = @('Start-Enrollment.ps1', 'EnrollmentUi.ps1', 'Enroll-Computer.ps1', 'Pair-ComputerSsh.ps1', 'Install-EnrolledRemote.ps1', 'Install-RemoteDesktop.ps1')
+$names = @('Start-Enrollment.ps1', 'EnrollmentUi.ps1', 'EnrollmentState.ps1', 'Enroll-Computer.ps1', 'Pair-ComputerSsh.ps1', 'Install-EnrolledRemote.ps1', 'Install-RemoteDesktop.ps1')
 foreach ($name in $names) {
     $text = [IO.File]::ReadAllText((Join-Path $source $name), [Text.Encoding]::UTF8)
     # Exercise the actual Windows PS5 file decoding used by the downloaded package.
@@ -17,6 +17,23 @@ foreach ($name in $names) {
     if ($errors.Count) { throw ('PowerShell parsing failed: ' + $name + ': ' + ($errors.Message -join ', ')) }
 }
 . (Join-Path $artifacts 'EnrollmentUi.ps1')
+. (Join-Path $artifacts 'EnrollmentState.ps1')
+$statePath = Join-Path $artifacts ('state-' + [Guid]::NewGuid().ToString() + '.json')
+$connection = @{ id = [Guid]::NewGuid().ToString(); baseUrl = 'https://fixture.invalid/' }
+$sid = 'S-1-5-21-1-2-3-1001'; $machine = [Guid]::NewGuid().ToString(); $profile = 'C:\Users\Fixture'
+try {
+    if ((Initialize-CwEnrollmentState $statePath $connection $sid $machine $profile) -ne 0) { throw 'Fresh setup must start at zero.' }
+    Save-CwEnrollmentStep 3
+    . (Join-Path $artifacts 'EnrollmentState.ps1')
+    if ((Initialize-CwEnrollmentState $statePath $connection $sid $machine $profile) -ne 3) { throw 'Interrupted setup did not resume.' }
+    $refused = $false
+    try { Initialize-CwEnrollmentState $statePath $connection $sid ([Guid]::NewGuid().ToString()) $profile | Out-Null } catch { $refused = $true }
+    if (-not $refused) { throw 'Another machine reused setup state.' }
+    Assert-CwReportIdentity @{ sid=$sid; machineGuid=$machine; profile=$profile } $sid $machine $profile
+    $refused = $false
+    try { Assert-CwReportIdentity @{ sid=$sid; machineGuid=$machine; profile=$profile } 'S-1-5-21-1-2-3-1002' $machine $profile } catch { $refused = $true }
+    if (-not $refused) { throw 'Another user reused the submitted report.' }
+} finally { Remove-Item -LiteralPath $statePath -ErrorAction SilentlyContinue; $script:CwEnrollmentStatePath = $null }
 $tokens = $null; $errors = $null
 $pair = [Management.Automation.Language.Parser]::ParseFile((Join-Path $artifacts 'Pair-ComputerSsh.ps1'), [ref]$tokens, [ref]$errors)
 $port = $pair.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Test-CwSshPort' }, $true)

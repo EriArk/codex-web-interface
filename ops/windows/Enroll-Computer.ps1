@@ -13,6 +13,10 @@ if ($identity.User.Value -notin $interactiveSids) { throw 'Run this file as admi
 $headers = @{ Authorization = 'Bearer ' + $connection.token }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $savedReport = Join-Path $PSScriptRoot 'submitted-report.json'
+$machineGuid = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid.ToLowerInvariant()
+. (Join-Path $PSScriptRoot 'EnrollmentState.ps1')
+$lastStep = Initialize-CwEnrollmentState (Join-Path $PSScriptRoot 'setup-state.json') $connection $identity.User.Value $machineGuid $env:USERPROFILE
+if ($lastStep -gt 0) { $script:CwLog.AppendText("Продолжаем настройку после шага $lastStep из 5. Готовые программы и выбранная папка сохранятся.`r`n`r`n") }
 function Submit-Report([string]$json) {
     try {
         Invoke-RestMethod -Method Post -Uri ($base.AbsoluteUri.TrimEnd('/') + '/api/machine-enrollment/report') -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 30 | Out-Null
@@ -25,6 +29,8 @@ function Submit-Report([string]$json) {
 }
 if (Test-Path -LiteralPath $savedReport) {
     # A lost HTTP acknowledgement is reconciled with the exact same report, never a new identity.
+    $saved = [IO.File]::ReadAllText($savedReport) | ConvertFrom-Json
+    Assert-CwReportIdentity $saved $identity.User.Value $machineGuid $env:USERPROFILE
     Submit-Report ([IO.File]::ReadAllText($savedReport))
     Show-CwFingerprint (([IO.File]::ReadAllText($savedReport) | ConvertFrom-Json).hostKey)
     Write-Host 'The same connection report was confirmed. Return to CodexWeb for administrator approval.'
@@ -87,12 +93,14 @@ if (-not $node -or -not $codex) { throw 'Install stable Node.js and the native C
 if (-not (Test-CwNativeLogin $codex.Source @('login', 'status') 'codex-login-status.log')) {
     if (-not (Confirm-Cw 'Сейчас откроется вход OpenAI. Войдите в свой аккаунт ChatGPT/Codex в браузере. Мастер дождётся завершения входа.')) { throw 'Вход в Codex отменён.' }
     Invoke-CwInstaller $codex.Source @('login')
+    if (-not (Test-CwNativeLogin $codex.Source @('login', 'status') 'codex-login-status.log')) { throw 'Вход в Codex ещё не завершён. Настройки сохранены; откройте Connect.cmd после входа.' }
 }
 $ghCommand = Get-Command gh.exe -ErrorAction Stop
 if (-not (Test-CwNativeLogin $ghCommand.Source @('auth', 'status', '--hostname', 'github.com') 'github-login-status.log')) {
     if (-not (Confirm-Cw 'Для работы с GitHub войдите в свой аккаунт. Сейчас откроется браузер; при необходимости GitHub покажет подтверждение доступа.')) { throw 'Вход в GitHub можно завершить при повторном запуске мастера.' }
     # Native gh stores its own credential in this Windows profile; none is sent to the Hub.
     Invoke-CwInstaller $ghCommand.Source @('auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web', '--clipboard') -GithubLogin
+    if (-not (Test-CwNativeLogin $ghCommand.Source @('auth', 'status', '--hostname', 'github.com') 'github-login-status.log')) { throw 'Вход в GitHub ещё не завершён. Настройки сохранены; откройте Connect.cmd после входа.' }
 }
 $companionTask = Get-ScheduledTask -TaskName 'CodexWebCompanion' -ErrorAction SilentlyContinue
 if ($companionTask -and $companionTask.State -eq 'Running') {
@@ -117,7 +125,7 @@ Show-CwFingerprint $hostKey
 $remote = & (Join-Path $PSScriptRoot 'Install-EnrolledRemote.ps1') -Connection $connection -Window $script:CwWindow
 $report = @{
     version = 1; address = $address.Trim(); hostKey = $hostKey
-    machineGuid = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid.ToLowerInvariant()
+    machineGuid = $machineGuid
     sid = $identity.User.Value; username = $identity.Name.Split('\')[-1]; profile = $env:USERPROFILE; roots = @($roots)
     readiness = @{ companion = $true; codex = $true; node = $true; git = [bool](Get-Command git.exe -ErrorAction SilentlyContinue); github = [bool]$gh; desktop = $desktop; remote = [bool]$remote }
 }

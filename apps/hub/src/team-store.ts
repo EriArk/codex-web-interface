@@ -407,6 +407,12 @@ export class TeamStore {
   }
   invite(actor: string, name: string, role: TeamRole = "member", kind = "member", userId?: string) {
     this.admin(actor);
+    if (kind === "recovery" && userId === this.ownerId && actor !== this.ownerId)
+      throw new HubError(
+        409,
+        "INSTALLATION_OWNER",
+        "Вход владельца восстанавливается им самим или на сервере.",
+      );
     if (userId) this.active(userId);
     const token = randomBytes(32).toString("base64url"),
       id = randomUUID(),
@@ -489,6 +495,8 @@ export class TeamStore {
   }
   disable(actor: string, userId: string, disabled: boolean) {
     this.admin(actor);
+    if (userId === this.ownerId)
+      throw new HubError(409, "INSTALLATION_OWNER", "Доступ владельца установки нельзя отключить.");
     const user = this.user(userId);
     if (
       disabled &&
@@ -549,6 +557,12 @@ export class TeamStore {
   }
   setRole(actor: string, userId: string, role: TeamRole, expectedRole: TeamRole) {
     this.admin(actor);
+    if (userId === this.ownerId && role !== "admin")
+      throw new HubError(
+        409,
+        "INSTALLATION_OWNER",
+        "Владелец установки сохраняет права главного администратора.",
+      );
     const user = this.active(userId);
     if (user.role !== expectedRole)
       throw new HubError(409, "MEMBERSHIP_CHANGED", "Роль уже изменилась. Обнови список.");

@@ -25,6 +25,7 @@ function savedAttempt(): EnrollmentAttempt | null {
       value.expires > Date.now()
     )
       return value;
+    sessionStorage.removeItem(attemptKey);
   } catch {}
   return null;
 }
@@ -98,6 +99,21 @@ export function TeamMachines({ visible }: { visible: boolean }) {
       sessionStorage.removeItem(attemptKey);
     } catch {}
   };
+  useEffect(() => {
+    if (
+      attempt &&
+      (attempt.expires <= Date.now() ||
+        items.some(
+          (item) => item.id === attempt.request.id && ["revoked", "expired"].includes(item.state),
+        ))
+    ) {
+      setAttempt(null);
+      setCreated(null);
+      try {
+        sessionStorage.removeItem(attemptKey);
+      } catch {}
+    }
+  }, [attempt, items]);
   const download = async () => {
     const input = attempt ?? {
       name: name.trim(),
@@ -178,7 +194,7 @@ export function TeamMachines({ visible }: { visible: boolean }) {
           />
           <button className="secondary" type="submit" disabled={busy || !name.trim()}>
             <Icon name="remote" />
-            {created ? "Скачать установщик ещё раз" : "Подключить Windows ПК"}
+            {attempt ? "Скачать установщик ещё раз" : "Подключить Windows ПК"}
           </button>
           <small className="muted">
             Подготовка → проверка администратора → активация. Пакет действует сутки.
