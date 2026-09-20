@@ -155,9 +155,8 @@ test("ordinary new Chat binds caller-owned local/user/parent IDs and resolves on
   wrongHome.scope.value.routeKind = "chatgpt-thread";
   await assert.rejects(wrongHome.run(), /SELECTED_CHAT_MISMATCH/);
 });
-test("drafts, wrong routes and principals fail before sending; preparation never submits", async () => {
+test("wrong routes and principals fail before sending; preparation never submits", async () => {
   for (const change of [
-    (f) => (f.ui.hasDraft = true),
     (f) => (f.scope.value.conversationId = randomUUID()),
     (f) => f.values.set("account", {}),
   ]) {
@@ -520,6 +519,7 @@ test("explicit native request is independent of stale picker, hydration and back
   const f = fixture();
   f.values.set("selected", { slug: "previous-model", thinkingEffort: null });
   f.values.set("node", null);
+  f.ui.composerReady = false;
   f.values.set("pending", true);
   f.values.set("staging", true);
   assert.equal((await f.run({ operation: "prepareDispatch" })).parentId, parentId);
@@ -540,7 +540,7 @@ test("preparation navigates once and resolves the requested preset without opera
   delete input.operation;
   let navigations = 0, catalogs = 0;
   const result = await ledger.prepare(input, {
-    selectConversation: async () => { navigations++; return { selected: true, composerReady: true, hasDraft: false, stopAvailable: false }; },
+    selectConversation: async () => { navigations++; return { selected: true, composerReady: false, hasDraft: false, stopAvailable: false }; },
     inspectConversation: async () => { throw Error("Redundant inspection"); },
     selectSettings: async () => { throw Error("Visual picker must not gate sends"); },
     readModels: async () => { catalogs++; return { versions: [{ id: "latest", enabled: true, presets: [{ id: 0, available: true, model: "instant", effort: null }] }] }; },

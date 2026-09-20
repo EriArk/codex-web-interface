@@ -70,17 +70,8 @@ export class NativeDispatchReceipts {
  async prepare(r,reader){
   this.validate(r);
   if(this.blocksDispatch(r.conversationId))fail('PENDING_DISPATCH');
-  let ui=await reader.selectConversation(r);
-  // Native navigation is asynchronous. Wait only for the exact idle composer;
-  // never interpret a stale/home composer as the selected conversation.
-  let ready=false;
-  for(let attempt=0;attempt<12;attempt++){
-   if(attempt)ui=await reader.inspectConversation(r);
-   if(ui.hasDraft||ui.stopAvailable)fail('NOT_READY');
-   if(ui.selected&&ui.composerReady){ready=true;break;}
-   await new Promise(resolve=>setTimeout(resolve,125));
-  }
-  if(!ready)fail('NOT_READY');
+  await reader.selectConversation(r);
+  // The native completion action does not need a mounted visual composer.
   // Model and effort are passed directly to the native completion action.
   // Do not drive the visual picker or gate sends on its asynchronously derived state.
   const catalog=await reader.readModels(r);
