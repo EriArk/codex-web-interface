@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Temporary owner-requested forced updates (2026-09-21)
+
+- Expose an additional “Обновить жёстко” action only to the original installation owner while the host updater enables it. Other users, including administrators, cannot invoke it.
+- After explicit confirmation, the action may bypass active/unknown work and terminal waiting for the exact pending release. This supersedes idle-only deployment for that explicit action. Retain backups, integrity checks, private account isolation, rollback and uncertain-send receipts; never replay interrupted sends.
+- Ordinary updates retain idle waiting. The host enables the temporary option with `--allow-owner-force`; omit it to remove the control.
+
 ## Owner-confirmed installation authority and LAN exception (2026-09-20)
 
 - The original owner is the installation's principal administrator. Do not demote or disable that account through team administration, including when other admins exist; another admin cannot issue owner password recovery. Preserve owner self/host recovery.

@@ -1,5 +1,9 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, statSync, writeFileSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { z } from "zod";
+import { HubError } from "@codex-web/shared";
+import { TeamAuth } from "./team-auth.js";
+import type { Auth } from "./auth.js";
 import type { FastifyInstance } from "fastify";
 import type { Store } from "./store.js";
 
@@ -120,8 +124,36 @@ export function registerDeploymentStatus(
   app: FastifyInstance,
   store: Store,
   terminalWork?: () => Promise<{ busy: number; unknown: number }>,
+  control?: { auth: Auth; databasePath: string },
 ) {
-  app.get("/api/deployment", async () => {
+  const owner = (req: Parameters<Auth["session"]>[0]) =>
+    control?.auth instanceof TeamAuth &&
+    control.auth.session(req).user.id === control.auth.registry.ownerId;
+  const maintenance = () => {
+    try {
+      const root = process.env.HUB_RELEASE_ROOT;
+      if (!root) return null;
+      return JSON.parse(readFileSync(join(root, "maintenance.json"), "utf8"));
+    } catch { return null; }
+  };
+  app.post("/api/deployment/apply", async (req) => {
+    if (!owner(req)) throw new HubError(403, "OWNER_REQUIRED", "Доступно только владельцу установки.");
+    control!.auth.csrf(req);
+    const input = z.object({ revision: z.string().regex(/^[a-f0-9]{7,64}$/), startedAt: z.number().int(), force: z.boolean(), confirm: z.boolean() }).strict().parse(req.body);
+    const pending = maintenance();
+    if (!pending || pending.state !== "waiting" || pending.revision !== input.revision || pending.startedAt !== input.startedAt)
+      throw new HubError(409, "UPDATE_CHANGED", "Состояние обновления изменилось. Обнови плашку.");
+    if (input.force) {
+      if (pending.ownerForce !== 1 || !input.confirm)
+        throw new HubError(409, "UPDATE_CONFIRMATION_REQUIRED", "Подтверди остановку активной работы.");
+      const path = join(dirname(control!.databasePath), "owner-update-request.json");
+      const value = { revision: input.revision, startedAt: input.startedAt, force: true, requestedAt: Date.now() };
+      writeFileSync(path + ".tmp", JSON.stringify(value), { mode: 0o600 });
+      renameSync(path + ".tmp", path);
+    }
+    return { accepted: true, force: input.force };
+  });
+  app.get("/api/deployment", async (req) => {
     const root = process.env.HUB_RELEASE_ROOT;
     const readStatus = (file: string) => {
       if (!root) return null;
@@ -156,7 +188,8 @@ export function registerDeploymentStatus(
       schema: store.schemaVersion,
       web: readStatus("status.json"),
       maintenance: readStatus("maintenance.json"),
-      blockers: deploymentBlockers(store, await terminalWork?.()),
+      ownerForceAllowed: owner(req) && maintenance()?.ownerForce === 1,
+      blockers: (req.query as { brief?: string }).brief === "1" ? [] : deploymentBlockers(store, await terminalWork?.()),
     };
   });
 }

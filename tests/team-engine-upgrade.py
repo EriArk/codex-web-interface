@@ -207,7 +207,7 @@ class CheckpointTest(unittest.TestCase):
 class UpgraderTest(unittest.TestCase):
     setUp = CheckpointTest.setUp
 
-    def execute(self, failure=None, check=False, busy=False):
+    def execute(self, failure=None, check=False, busy=False, force=False):
         spec = importlib.util.spec_from_file_location('upgrade', 'ops/linux/upgrade-engine.py')
         upgrade = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(upgrade)
@@ -251,7 +251,14 @@ class UpgraderTest(unittest.TestCase):
         argv = ['upgrade-engine.py', 'ccccccc', '--expected', 'aaaaaaa', '--state', str(self.state), '--release', str(release), '--verification', str(proof)]
         if check:
             argv.append('--check')
-        with patch.object(sys, 'argv', argv), patch.object(upgrade, 'inspect', inspect), patch.object(upgrade.subprocess, 'run', run), patch.object(upgrade.subprocess, 'check_output', output), patch.object(upgrade.Path, 'home', lambda: self.state):
+        if force:
+            argv.append('--allow-owner-force')
+        atomic = upgrade.atomic
+        def write_status(path, value):
+            atomic(path, value)
+            if force and path.name == 'maintenance.json' and value['state'] == 'waiting':
+                atomic(self.data / 'owner-update-request.json', dict(force=True, revision=value['revision'], startedAt=value['startedAt'], requestedAt=upgrade.time.time()*1000))
+        with patch.object(upgrade, 'atomic', write_status), patch.object(sys, 'argv', argv), patch.object(upgrade, 'inspect', inspect), patch.object(upgrade.subprocess, 'run', run), patch.object(upgrade.subprocess, 'check_output', output), patch.object(upgrade.Path, 'home', lambda: self.state):
             if failure:
                 with self.assertRaises((subprocess.CalledProcessError, RuntimeError, AssertionError)):
                     upgrade.main()
@@ -263,6 +270,13 @@ class UpgraderTest(unittest.TestCase):
         events = self.execute(check=True, busy=True)
         self.assertFalse(any('stop' in event or 'compose' in event for event in events))
         self.assertFalse((self.state / 'backups').exists())
+
+    def test_owner_force_bypasses_work_but_keeps_backup_and_admission(self):
+        events = self.execute(busy=True, force=True)
+        self.assertTrue(any('stop' in event for event in events))
+        receipt = json.loads((self.state / 'deployment-ccccccc.json').read_text())
+        self.assertTrue((Path(receipt['checkpoint']) / 'verified.json').exists())
+        self.assertTrue((Path(receipt['checkpoint']) / 'admitted.json').exists())
 
     def test_success_checks_before_gateway_and_records_admission(self):
         events = self.execute()

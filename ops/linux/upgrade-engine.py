@@ -78,6 +78,7 @@ def main():
     p.add_argument('--verification', required=True)
     p.add_argument('--check', action='store_true')
     p.add_argument('--enable-team-owner', action='store_true')
+    p.add_argument('--allow-owner-force', action='store_true')
     a = p.parse_args()
     if not a.state or not all(re.fullmatch(r'[a-f0-9]{7,64}', x) for x in [a.revision, a.expected]):
         p.error('Explicit state and image revisions required')
@@ -113,7 +114,18 @@ def main():
     started = int(time.time() * 1000)
 
     def status(value, **extra):
-        atomic(web / 'maintenance.json', dict(kind='engine', revision=a.revision, state=value, startedAt=started, updatedAt=int(time.time()*1000), **extra))
+        atomic(web / 'maintenance.json', dict(kind='engine', revision=a.revision, state=value, startedAt=started, ownerForce=int(a.allow_owner_force), updatedAt=int(time.time()*1000), **extra))
+
+    def forced():
+        if not a.allow_owner_force:
+            return False
+        try:
+            request = json.loads((database.parent / 'owner-update-request.json').read_text())
+            return (request.get('force') is True and request.get('revision') == a.revision
+                    and request.get('startedAt') == started
+                    and 0 <= time.time() * 1000 - request['requestedAt'] < 600000)
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
 
     def idle(reserve_terminals=False):
         try:
@@ -159,7 +171,8 @@ def main():
                         shutil.copyfile(source, target)
         status('waiting')
         while True:
-            if not idle():
+            force = forced()
+            if not force and not idle():
                 time.sleep(5)
                 continue
             # Enabled Team's reservation freezes all API/native mutation paths.
@@ -169,13 +182,13 @@ def main():
             try:
                 if db:
                     db.execute('BEGIN IMMEDIATE')
-                if not idle(reserve_terminals=True):
+                if not force and not idle(reserve_terminals=True):
                     continue
                 assert inspect(container)['Config']['Labels']['org.opencontainers.image.revision'] == a.expected
                 assert (state / 'config.json').read_bytes() == original_config, 'Configuration changed while waiting'
                 if activation:
                     owner_activation(state, config)
-                status('installing')
+                status('installing', forced=int(force))
                 # No public admission after the final database-locked recheck.
                 run(['docker', 'stop', '--time', '10', 'codex-web-hub'])
                 if old_engine:

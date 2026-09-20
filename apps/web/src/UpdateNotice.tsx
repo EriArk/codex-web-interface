@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "./api";
 import {
   clearUpdate,
   pendingUpdate,
@@ -9,7 +10,49 @@ import {
 } from "./updateVersion";
 
 const failure = "Обновление не загрузилось. Попробуй ещё раз.";
+type Deployment = { ownerForceAllowed: boolean; maintenance: { revision: string; startedAt: number; state: string } | null };
 export function UpdateNotice({ visible, busy }: { visible: boolean; busy: boolean }) {
+  const [deployment, setDeployment] = useState<Deployment | null>(null);
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (!visible) return;
+    const abort = new AbortController();
+    let loading = false;
+    const load = async () => {
+      if (loading || document.hidden) return;
+      loading = true;
+      try { const value = await api<Deployment>("/deployment?brief=1", { signal: abort.signal, timeoutMs: 8000 }); if (!abort.signal.aborted) setDeployment(value); }
+      catch { /* Reconnect polling retains the pending release during restart. */ }
+      finally { loading = false; }
+    };
+    void load();
+    const timer = setInterval(() => void load(), 10000);
+    return () => { abort.abort(); clearInterval(timer); };
+  }, [visible]);
+  const pending = deployment?.maintenance;
+  const apply = async (force: boolean) => {
+    if (!pending || sending) return;
+    if (force && !window.confirm("Обновить жёстко? Активные задачи и терминалы могут прерваться у всех пользователей.")) return;
+    setSending(true); setMessage("");
+    try {
+      await api("/deployment/apply", { method: "POST", body: { revision: pending.revision, startedAt: pending.startedAt, force, confirm: force } });
+      setMessage(force ? "Начинаем жёсткое обновление…" : "Обновление установится после завершения активной работы.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Не удалось начать обновление."); }
+    finally { setSending(false); }
+  };
+  return <>
+    {visible && deployment?.ownerForceAllowed && pending && ["waiting", "installing"].includes(pending.state) && <div className="update-notice" role="status">
+      <span>{pending.state === "installing" ? "Устанавливаем обновление сервера…" : message || "Готово обновление сервера"}</span>
+      {pending.state === "waiting" && <>
+        <button type="button" className="secondary" disabled={sending} onClick={() => void apply(false)}>Обновить</button>
+        <button type="button" className="danger" disabled={sending} onClick={() => void apply(true)}>Обновить жёстко</button>
+      </>}
+    </div>}
+    <ClientUpdateNotice visible={visible} busy={busy} allowForce={!!deployment?.ownerForceAllowed} />
+  </>;
+}
+function ClientUpdateNotice({ visible, busy, allowForce }: { visible: boolean; busy: boolean; allowForce: boolean }) {
   // This is the release that actually booted, independent of lazy-loaded route styles.
   const [current] = useState(
     () => document.querySelector<HTMLMetaElement>('meta[name="codex-release"]')?.content ?? "",
@@ -91,8 +134,9 @@ export function UpdateNotice({ visible, busy }: { visible: boolean; busy: boolea
     const timer = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
-  const apply = async () => {
-    if (busy || applying.current) return;
+  const apply = async (force = false) => {
+    if ((busy && !force) || applying.current) return;
+    if (force && (!allowForce || !window.confirm("Перезагрузить интерфейс сейчас, даже если идёт работа?"))) return;
     applying.current = true;
     setUpdating(true);
     setNotice("");
@@ -137,6 +181,7 @@ export function UpdateNotice({ visible, busy }: { visible: boolean; busy: boolea
           {updating ? <span className="spinner" role="img" aria-label="Обновление" /> : "Обновить"}
         </button>
       )}
+      {available && allowForce && <button type="button" className="danger" disabled={updating} onClick={() => void apply(true)}>Обновить жёстко</button>}
     </div>
   );
 }

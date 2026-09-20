@@ -158,7 +158,7 @@ export async function createApp(
   auth.install(app);
   registerCommandOutput(app, sessions);
   const devices = registerDevices(app, config, store, auth, options.devices);
-  registerDeploymentStatus(app, store, () => devices.maintenance());
+  registerDeploymentStatus(app, store, () => devices.maintenance(), { auth, databasePath: config.hub.databasePath });
   if (options.executionService) {
     app.get("/internal/terminals/maintenance", () => devices.maintenance());
     app.post("/internal/terminals/maintenance", () => devices.maintenance(true));
