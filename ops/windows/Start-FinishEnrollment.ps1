@@ -21,7 +21,7 @@ try {
     $mutex = [Threading.Mutex]::new($false, ('Local\CodexWebEnrollment-' + $folders[0].Name))
     try { $acquired = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $acquired=$true }
     if (-not $acquired) { throw 'Закройте прежний мастер подключения и запустите этот файл снова.' }
-    foreach ($name in @('Finish-Enrollment.ps1','Set-EnrollmentFirewallBoundary.ps1','Pair-ComputerSsh.ps1','Install-EnrolledRemote.ps1','Install-RemoteDesktop.ps1')) {
+    foreach ($name in @('Finish-Enrollment.ps1','EnrollmentState.ps1','Set-EnrollmentFirewallBoundary.ps1','Pair-ComputerSsh.ps1','Install-EnrolledRemote.ps1','Install-RemoteDesktop.ps1')) {
         $target = Join-Path $directory $name
         if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Файл подключения содержит ссылку.' }
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $target -Force

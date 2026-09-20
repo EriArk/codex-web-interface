@@ -31,6 +31,9 @@ if (Test-Path -LiteralPath $savedReport) {
     # A lost HTTP acknowledgement is reconciled with the exact same report, never a new identity.
     $saved = [IO.File]::ReadAllText($savedReport) | ConvertFrom-Json
     Assert-CwReportIdentity $saved $identity.User.Value $machineGuid $env:USERPROFILE
+    if (Repair-CwEnrollmentReportRoots $saved) {
+        [IO.File]::WriteAllText($savedReport, ($saved | ConvertTo-Json -Depth 6 -Compress), [Text.UTF8Encoding]::new($false))
+    }
     Submit-Report ([IO.File]::ReadAllText($savedReport))
     Show-CwFingerprint (([IO.File]::ReadAllText($savedReport) | ConvertFrom-Json).hostKey)
     Write-Host 'The same connection report was confirmed. Return to CodexWeb for administrator approval.'
@@ -52,7 +55,7 @@ if (-not $address) {
 }
 Write-CwStep 2 '2 из 5 · Папка ваших проектов'
 $savedRoots = Join-Path $PSScriptRoot 'selected-roots.json'
-$roots = if (Test-Path -LiteralPath $savedRoots) { @(Get-Content -LiteralPath $savedRoots -Raw -Encoding UTF8 | ConvertFrom-Json) } else { @() }
+$roots = if (Test-Path -LiteralPath $savedRoots) { [string[]](Get-Content -LiteralPath $savedRoots -Raw -Encoding UTF8 | ConvertFrom-Json) } else { @() }
 if (-not $roots.Count) {
     $suggestion = Join-Path $env:USERPROFILE 'Projects'
     if (-not (Test-Path -LiteralPath $suggestion)) { New-Item -ItemType Directory -Path $suggestion | Out-Null }

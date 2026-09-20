@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'EnrollmentUi.ps1')
 . (Join-Path $PSScriptRoot 'EnrollmentState.ps1')
 New-CwWindow
-$script:CwWindow.Text = 'CodexWeb — завершение подключения · v3'
+$script:CwWindow.Text = 'CodexWeb — завершение подключения · v4'
 $diagnosticPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CodexWeb-connection-diagnostic.txt'
 try {
     $connection = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'connection.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -24,9 +24,13 @@ try {
         $json = [IO.File]::ReadAllText($savedReport)
         $report = $json | ConvertFrom-Json
         Assert-CwReportIdentity $report $identity.User.Value $machineGuid $env:USERPROFILE
+        if (Repair-CwEnrollmentReportRoots $report) {
+            $json = $report | ConvertTo-Json -Depth 6 -Compress
+            [IO.File]::WriteAllText($savedReport, $json, [Text.UTF8Encoding]::new($false))
+        }
     } else {
         if ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() -ge $connection.expires) { throw 'Срок пакета подключения истёк. Получите новый пакет на сайте.' }
-        $roots = @(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'selected-roots.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $roots = [string[]](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'selected-roots.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
         if (-not $roots.Count) { throw 'Не найдена сохранённая папка проектов.' }
         $address = Get-CwTailnetAddress (Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe')
         if (-not $address) { throw 'Войдите в Tailscale и повторите запуск.' }
@@ -49,7 +53,10 @@ try {
     Write-CwStep 5 'Отправляем готовое подключение на сервер'
     try {
         Invoke-RestMethod -Method Post -Uri ($base.AbsoluteUri.TrimEnd('/') + '/api/machine-enrollment/report') -Headers @{Authorization=('Bearer ' + $connection.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 30 | Out-Null
-    } catch { throw 'Сервер пока не подтвердил подключение. Отчёт сохранён; можно повторить запуск этого файла.' }
+    } catch {
+        $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+        throw ('Сервер пока не подтвердил подключение (HTTP {0}). Отчёт сохранён; можно повторить запуск этого файла.' -f $status)
+    }
     [void](Confirm-Cw 'Подключение подготовлено и отправлено. Откройте CodexWeb: осталось подтверждение администратора и активация компьютера.')
     Start-Process ($base.AbsoluteUri + '#setup')
 } catch {

@@ -30,3 +30,13 @@ function Assert-CwReportIdentity($report, [string]$sid, [string]$machineGuid, [s
         throw 'Сохранённый отчёт относится к другому компьютеру или пользователю Windows. Создайте своё подключение на сайте.'
     }
 }
+function Repair-CwEnrollmentReportRoots($report) {
+    # PS5 serializes a pipeline-wrapped ConvertFrom-Json array as {value:[...],Count:n}.
+    # Only repair that known invalid shape; a valid acknowledged report stays byte-identical.
+    if (@($report.roots).Count -ne 1 -or $report.roots[0] -is [string]) { return $false }
+    $wrapper = $report.roots[0]
+    $keys = @($wrapper.PSObject.Properties.Name | Sort-Object)
+    if (($keys -join ',') -ne 'Count,value' -or $wrapper.Count -ne @($wrapper.value).Count -or @($wrapper.value | Where-Object { $_ -isnot [string] }).Count) { throw 'Сохранённый список папок имеет неизвестный формат.' }
+    $report.roots = [string[]]$wrapper.value
+    return $true
+}
