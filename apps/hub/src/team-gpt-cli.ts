@@ -33,7 +33,12 @@ async function main() {
   const db = new DatabaseSync(path, { readOnly: !values.apply });
   try {
     db.exec("PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;");
-    if (db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value !== "3")
+    // Later Team migrations retain the same profile/user tables used here.
+    if (
+      !["3", "4", "5", "6", "7", "8", "9"].includes(
+        String(db.prepare("SELECT value FROM team_meta WHERE key='schema'").get()?.value),
+      )
+    )
       throw Error("TEAM_SCHEMA_UNSUPPORTED");
     if (!values.apply) {
       const rows = db
