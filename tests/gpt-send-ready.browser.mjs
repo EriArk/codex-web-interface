@@ -75,7 +75,10 @@ try {
           return route.fulfill({
             json: {
               models: [{ id: "latest", label: "Latest" }],
-              efforts: [{ id: "0", label: "Instant" }],
+              efforts: [
+                { id: "0", label: "Instant" },
+                { id: "2", label: "Extended" },
+              ],
               currentModel: "latest",
               currentEffort: "0",
             },
@@ -144,8 +147,19 @@ try {
       await expect(editor).toBeVisible();
       await editor.fill("Draft while the chat loads");
       await expect(button).toBeDisabled();
-      await expect(button).toHaveAttribute("aria-busy", "true");
-      await expect(button.locator(".spinner")).toBeVisible();
+      await expect(button.locator(".spinner")).toHaveCount(0);
+      const loading = page.locator(".composer-loading .spinner");
+      await expect(loading).toBeVisible();
+      const ring = await loading.boundingBox(),
+        field = await editor.boundingBox();
+      assert(ring.y + ring.height <= field.y, "loading ring is above, not over the input");
+      assert(
+        await loading.evaluate(
+          (el) =>
+            parseFloat(getComputedStyle(el).width) <= 14 &&
+            parseFloat(getComputedStyle(el).height) <= 14,
+        ),
+      );
       await page
         .locator(".gpt-composer")
         .evaluate((form) =>
@@ -153,29 +167,25 @@ try {
         );
       assert.equal(sends, 0);
       await expect.poll(() => !!releaseHistory && !!releaseModels).toBe(true);
+      releaseModels();
+      await expect(button).toBeEnabled();
+      await expect(button.locator(".spinner")).toHaveCount(0);
+      await expect(editor).toHaveValue("Draft while the chat loads");
+      await expect(loading).toBeVisible();
+      await button.click();
+      await expect.poll(() => sends).toBe(1);
+      assert.equal(reads, 1, "history is still pending while the durable send is accepted");
+      const progress = page.locator(".gpt-progress-toggle");
+      await expect(progress).toContainText("Отправляется");
+      await expect(progress.locator(".spinner")).toBeVisible();
+      releaseSend();
+      await expect(editor).toHaveValue("");
       releaseHistory();
       await expect(page.getByText("Saved reply", { exact: true })).toBeVisible();
       await expect(page.getByText("Intermediate stays in Results", { exact: true })).toHaveCount(0);
       await expect(page.getByText("Partial final stays in progress", { exact: true })).toHaveCount(
         0,
       );
-      await expect(button).toBeDisabled();
-      releaseModels();
-      await expect(button).toBeEnabled();
-      await expect(button.locator(".spinner")).toHaveCount(0);
-      await expect(editor).toHaveValue("Draft while the chat loads");
-      await page.clock.fastForward(16000);
-      await expect.poll(() => reads).toBe(2);
-      await expect(button).toBeEnabled();
-      await expect(button.locator(".spinner")).toHaveCount(0);
-      releaseHistory();
-      await button.click();
-      await expect.poll(() => sends).toBe(1);
-      const progress = page.locator(".gpt-progress-toggle");
-      await expect(progress).toContainText("Отправляется");
-      await expect(progress.locator(".spinner")).toBeVisible();
-      releaseSend();
-      await expect(editor).toHaveValue("");
       await expect(progress).toContainText("Отправляется");
       job.status = "unknown";
       job.updatedAt += 10000;
@@ -186,6 +196,9 @@ try {
       job.updatedAt += 10000;
       await page.clock.fastForward(1500);
       await expect(progress).toContainText("GPT работает");
+      const effort = page.getByRole("combobox", { name: "Мощность GPT" });
+      await expect(effort).toBeEnabled();
+      await effort.selectOption("2");
       live = {
         jobId: job.id,
         items: [{ id: "public-message", text: "Live first line", state: "active" }],
@@ -226,7 +239,7 @@ try {
       assert.equal(sends, 1);
       console.log(
         name +
-          ": visible draft and send ring until history/models ready; background refresh does not block; no premature send",
+          ": tiny loading indicator above input; enqueue during history loading; model readiness retained; effort editable while running",
       );
     } finally {
       await context.close();

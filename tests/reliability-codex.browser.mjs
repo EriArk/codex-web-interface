@@ -56,6 +56,13 @@ for (const [name, type] of [
     assert.deepEqual(attempts[0], attempts[1]);
     assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
     assert.equal(f.calls.filter((c) => c.method === "thread/queue/add").length, 0);
+    const effort = page.getByRole("combobox", { name: "Уровень размышления" });
+    await expect(effort).toBeEnabled();
+    await expect(page.getByRole("combobox", { name: "Модель Codex" })).toBeDisabled();
+    await effort.selectOption("low");
+    await expect
+      .poll(() => f.calls.findLast((c) => c.method === "thread/settings/update")?.params.effort)
+      .toBe("low");
     f.finishTurn();
     await expect(page.getByRole("button", { name: "Остановить Codex", exact: true })).toHaveCount(
       0,

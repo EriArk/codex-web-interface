@@ -485,7 +485,7 @@ export function Chat({
       (active && !external && !pendingRetry && !queue.state.available) ||
       attachments.busy ||
       options.saving ||
-      state.loading ||
+      (state.loading && !(active && queue.state.available)) ||
       !options.selection
     )
       return;
@@ -840,6 +840,7 @@ export function Chat({
         <ComposerOptions
           options={options}
           disabled={!threadId || state.loading || busy || active}
+          effortDisabled={!threadId || (state.loading && !active) || busy}
         />
         <AttachmentList
           files={attachments.files}
@@ -849,6 +850,11 @@ export function Chat({
         {(attachments.error || attachments.busy) && (
           <div className="composer-error" role="status">
             {attachments.busy ? attachments.progress || "Загружаем вложение…" : attachments.error}
+          </div>
+        )}
+        {(state.loading || options.loading || sending || queue.busy) && (
+          <div className="composer-loading" role="status" aria-label="Загрузка чата Codex">
+            <span className="spinner" aria-hidden="true" />
           </div>
         )}
         <div className="composer-input">
@@ -939,7 +945,7 @@ export function Chat({
                   handoff.pending ||
                   (active && !external && !pendingRetry && !queue.state.available) ||
                   attachments.busy ||
-                  state.loading ||
+                  (state.loading && !(active && queue.state.available)) ||
                   options.loading ||
                   options.saving ||
                   !options.selection ||
@@ -947,11 +953,7 @@ export function Chat({
                 }
                 aria-label={active && !pendingRetry ? "Добавить в очередь" : "Отправить сообщение"}
               >
-                {sending || queue.busy ? (
-                  <span className="spinner" />
-                ) : (
-                  <Icon name={active && !pendingRetry ? "plus" : "send"} />
-                )}
+                <Icon name={active && !pendingRetry ? "plus" : "send"} />
               </button>
             )}
           </div>

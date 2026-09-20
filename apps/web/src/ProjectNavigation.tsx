@@ -11,6 +11,7 @@ import { ActivityBadge } from "./ActivityBadge";
 import { openContentSearch } from "./ContentSearch";
 import { EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
+import { NavigationHeader } from "./NavigationHeader";
 import { NavigationFooter } from "./NavigationFooter";
 import { PinnedList } from "./PinnedList";
 import type { Project, Thread } from "./types";
@@ -248,83 +249,65 @@ export function ProjectNavigation({
   };
   return (
     <div className="navigation-inner" data-section={section}>
-      <div className="navigation-top-row">
-        <div className="nav-search">
+      <NavigationHeader
+        query={query}
+        onQuery={setQuery}
+        label="Поиск проектов и диалогов"
+        onClose={onClose}
+        onContentSearch={() =>
+          openContentSearch({ client: "codex", threadId: threadId || undefined, query })
+        }
+      >
+        <nav className="nav-mobile-switch" aria-label="Навигация по проектам">
           <button
             type="button"
-            className="icon-button"
-            aria-label="Поиск по содержимому"
-            title="Поиск по содержимому"
-            onClick={() =>
-              openContentSearch({ client: "codex", threadId: threadId || undefined, query: query })
-            }
+            className={section === "projects" ? "selected" : ""}
+            onClick={() => {
+              setSection("projects");
+              setQuery("");
+            }}
           >
-            <Icon name="search" size={18} />
+            <span className="nav-tab-title">
+              Проекты <small>{folders.length}</small>
+            </span>
+            <ActivityBadge
+              counts
+              active={folders.filter((p) => summary(p).active > 0).length}
+              waiting={
+                folders.filter(
+                  (p) => summary(p).active > 0 && summary(p).active === summary(p).waiting,
+                ).length
+              }
+              unread={folders.filter((p) => summary(p).unread > 0).length}
+            />
           </button>
-          <input
-            aria-label="Поиск проектов и диалогов"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Найти…"
-            type="search"
-          />
-        </div>
-        <button
-          type="button"
-          className="icon-button mobile-only panel-close"
-          aria-label="Закрыть проекты"
-          data-drawer-close
-          onClick={onClose}
-        >
-          <Icon name="close" />
-        </button>
-      </div>
-      <nav className="nav-mobile-switch" aria-label="Навигация по проектам">
-        <button
-          type="button"
-          className={section === "projects" ? "selected" : ""}
-          onClick={() => {
-            setSection("projects");
-            setQuery("");
-          }}
-        >
-          <span className="nav-tab-title">
-            Проекты <small>{folders.length}</small>
-          </span>
-          <ActivityBadge
-            counts
-            active={folders.filter((p) => summary(p).active > 0).length}
-            waiting={
-              folders.filter(
-                (p) => summary(p).active > 0 && summary(p).active === summary(p).waiting,
-              ).length
-            }
-            unread={folders.filter((p) => summary(p).unread > 0).length}
-          />
-        </button>
-        <button
-          type="button"
-          className={section === "threads" ? "selected" : ""}
-          onClick={() => {
-            setSection("threads");
-            setQuery("");
-            for (const p of standalone) void load(p.id);
-          }}
-        >
-          <span className="nav-tab-title">
-            Диалоги{" "}
-            <small>
-              {standalone.reduce((sum, p) => sum + (groups[p.id]?.length ?? p.threadCount ?? 0), 0)}
-            </small>
-          </span>
-          <ActivityBadge
-            counts
-            active={standalone.reduce((sum, p) => sum + summary(p).active, 0)}
-            waiting={standalone.reduce((sum, p) => sum + summary(p).waiting, 0)}
-            unread={standalone.reduce((sum, p) => sum + summary(p).unread, 0)}
-          />
-        </button>
-      </nav>
+          <button
+            type="button"
+            className={section === "threads" ? "selected" : ""}
+            onClick={() => {
+              setSection("threads");
+              setQuery("");
+              for (const p of standalone) void load(p.id);
+            }}
+          >
+            <span className="nav-tab-title">
+              Диалоги{" "}
+              <small>
+                {standalone.reduce(
+                  (sum, p) => sum + (groups[p.id]?.length ?? p.threadCount ?? 0),
+                  0,
+                )}
+              </small>
+            </span>
+            <ActivityBadge
+              counts
+              active={standalone.reduce((sum, p) => sum + summary(p).active, 0)}
+              waiting={standalone.reduce((sum, p) => sum + summary(p).waiting, 0)}
+              unread={standalone.reduce((sum, p) => sum + summary(p).unread, 0)}
+            />
+          </button>
+        </nav>
+      </NavigationHeader>
       <div className="nav-scroll">
         <section className="nav-projects">
           <div className="nav-label">

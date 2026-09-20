@@ -6,6 +6,8 @@ import "../../src/styles.css";
 import "../../src/workspace.css";
 import "../../src/themes.css";
 import "../../src/compact.css";
+import "../../src/materials.css";
+import "../../src/polymer.css";
 
 const threads = Array.from({ length: 6 }, (_, i) => ({
   id: "pin" + i,

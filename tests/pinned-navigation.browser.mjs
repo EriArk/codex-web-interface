@@ -165,17 +165,29 @@ try {
         await expect(panel.locator(".entity-row")).toHaveCount(6);
         await panel.getByRole("button", { name: "Свернуть закреплённые" }).tap();
         await expect(panel.locator(".entity-row")).toHaveCount(3);
+        const header = page.locator(".navigation-header:visible");
+        const magnifier = header.getByRole("button", { name: "Найти", exact: true });
         const search = page
-          .getByRole("textbox", {
-            name: mode === "gpt" ? "Найти чат GPT" : "Поиск проектов и диалогов",
-          })
-          .or(page.getByRole("searchbox", { name: "Поиск проектов и диалогов" }))
+          .getByLabel(mode === "gpt" ? "Найти чат GPT" : "Поиск проектов и диалогов")
           .filter({ visible: true });
+        await expect(search).toHaveCount(0);
+        if (mode === "codex") {
+          const tabs = await header.locator(".nav-mobile-switch").boundingBox();
+          const glass = await magnifier.boundingBox();
+          const close = await header.locator(".panel-close").boundingBox();
+          assert(glass.x + glass.width <= tabs.x);
+          assert(Math.abs(tabs.y + tabs.height / 2 - close.y - close.height / 2) < 2);
+        }
+        await magnifier.tap();
+        await expect(search).toBeFocused();
         await search.fill("Закреплённый 0");
         await expect(panel.locator(".entity-row")).toHaveCount(1);
         await expect(panel).toContainText("Закреплённый 0");
         await search.fill("");
         await expect(panel.locator(".entity-row")).toHaveCount(3);
+        await search.press("Escape");
+        await expect(search).toHaveCount(0);
+        await expect(magnifier).toBeFocused();
         const toggle = panel.getByRole("button", { name: "Показать все закреплённые" });
         assert((await toggle.boundingBox()).height >= 44);
         for (const theme of ["crt-green", "organizer", "hitech-2000s", "classic-dark"]) {

@@ -92,6 +92,33 @@ async function setup() {
     },
   };
 }
+test("effort changes configure subsequent native queue turns while Steer retains the active turn", async () => {
+  const f = await setup();
+  try {
+    const { sessions, store, rpc, queue, t } = f;
+    const initial = rpc.calls.find((c) => c.method === "turn/start");
+    const selection = { ...store.threadSettings(t.id), effort: "high" };
+    const turn = store.thread(t.id).activeTurnId;
+    await sessions.setSettings(t.id, selection);
+    const update = rpc.calls.findLast((c) => c.method === "thread/settings/update");
+    assert.equal(update.p.effort, "high");
+    assert.equal(update.p.collaborationMode.settings.reasoning_effort, "high");
+    assert.equal(update.p.permissions, undefined);
+    assert.equal(update.p.approvalPolicy, undefined);
+    assert.equal(store.thread(t.id).activeTurnId, turn);
+    const item = await queue.add(t.id, "Next", [], randomUUID());
+    await queue.change(t.id, item.id, item.revision, "steer", undefined, turn);
+    const steer = rpc.calls.findLast((c) => c.method === "turn/steer");
+    assert.equal(steer.p.expectedTurnId, turn);
+    assert.equal(steer.p.effort, undefined);
+    assert.equal(steer.p.collaborationMode, undefined);
+    assert.equal(rpc.calls.filter((c) => c.method === "turn/start").length, 1);
+    assert.notEqual(initial.p.effort, "high");
+  } finally {
+    await f.close();
+  }
+});
+
 test("native queue edits preserve images, survives service recreation and steers once with the exact active turn", async () => {
   const f = await setup();
   try {

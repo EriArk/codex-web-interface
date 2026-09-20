@@ -40,6 +40,7 @@ import { type NotificationTarget, useNotificationPresence } from "./Notification
 import { PinnedList } from "./PinnedList";
 import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { clearAcknowledgedSend, completePendingSend, pendingSendKey } from "./pendingSend";
+import { NavigationHeader } from "./NavigationHeader";
 import { ResultFeed } from "./ResultFeed";
 import { uploadFile } from "./uploadFile";
 import { useCompletionPosition } from "./useCompletionPosition";
@@ -704,9 +705,10 @@ export function GptWorkspace({
   };
   const composer = useRef<HTMLTextAreaElement>(null);
   useGrowingComposer(composer, text);
-  const sendReady = ready && !!model && (!selected || historyReady);
+  // Enqueueing is durable on the Hub and does not depend on rendering history here.
+  const sendReady = ready && !!model;
   const preparingSend =
-    !sendReady &&
+    (!sendReady || (!!selected && !historyReady)) &&
     !loadNotice &&
     !historyNotice &&
     (!connection || connection.canSend || checkingConnection);
@@ -1286,36 +1288,17 @@ export function GptWorkspace({
     ));
   const navigation = (
     <div className="navigation-inner">
-      <div className="navigation-top-row">
-        <div className="nav-search">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Поиск по содержимому"
-            title="Поиск по содержимому"
-            onClick={() =>
-              openContentSearch({ client: "gpt", threadId: selected || undefined, query: search })
-            }
-          >
-            <Icon name="search" size={18} />
-          </button>
-          <input
-            aria-label="Найти чат GPT"
-            placeholder="Найти…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </div>
-        <button
-          type="button"
-          className="icon-button mobile-only panel-close"
-          aria-label="Закрыть проекты"
-          data-drawer-close
-          onClick={() => setDrawer(false)}
-        >
-          <Icon name="close" />
-        </button>
-      </div>
+      <NavigationHeader
+        query={search}
+        onQuery={setSearch}
+        label="Найти чат GPT"
+        onClose={() => setDrawer(false)}
+        onContentSearch={() =>
+          openContentSearch({ client: "gpt", threadId: selected || undefined, query: search })
+        }
+      >
+        <strong className="navigation-header-title">Проекты и диалоги</strong>
+      </NavigationHeader>
       <div className="gpt-nav-list">
         <PinnedList
           activeBeforePinned={false}
@@ -1982,6 +1965,11 @@ export function GptWorkspace({
                   {uploadProgress}
                 </div>
               )}
+              {(preparingSend || busy) && (
+                <div className="composer-loading" role="status" aria-label="Загрузка чата GPT">
+                  <span className="spinner" aria-hidden="true" />
+                </div>
+              )}
               <div className="gpt-input-row">
                 <button
                   type="button"
@@ -2013,20 +2001,10 @@ export function GptWorkspace({
                       !sendReady ||
                       (!text.trim() && !files.length)
                     }
-                    aria-label={
-                      preparingSend
-                        ? "Загрузка чата GPT"
-                        : active
-                          ? "Добавить в очередь GPT"
-                          : "Отправить GPT"
-                    }
-                    aria-busy={preparingSend || busy}
+                    aria-label={active ? "Добавить в очередь GPT" : "Отправить GPT"}
+                    aria-busy={busy}
                   >
-                    {busy || preparingSend ? (
-                      <span className="spinner" aria-hidden="true" />
-                    ) : (
-                      <Icon name="arrow-up" />
-                    )}
+                    <Icon name="arrow-up" />
                   </button>
                 </div>
               </div>

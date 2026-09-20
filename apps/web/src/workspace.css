@@ -56,6 +56,19 @@
 }
 
 /* Shared project navigation and creation. */
+.composer-loading {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  align-items: center;
+  height: 18px;
+  pointer-events: none;
+}
+.composer-loading .spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}
 .navigation-inner {
   display: flex;
   flex-direction: column;

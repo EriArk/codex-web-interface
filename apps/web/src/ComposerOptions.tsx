@@ -90,9 +90,11 @@ export type ReturnTypeOfSettings = ReturnType<typeof useTurnSettings>;
 export function ComposerOptions({
   options,
   disabled,
+  effortDisabled = disabled,
 }: {
   options: ReturnType<typeof useTurnSettings>;
   disabled: boolean;
+  effortDisabled?: boolean;
 }) {
   const { caps, selection, loading, saving, error, change, reload } = options;
   const model = caps?.models.find((m) => m.id === selection?.model);
@@ -159,7 +161,7 @@ export function ComposerOptions({
             className="effort-select"
             aria-label="Уровень размышления"
             value={selection.effort}
-            disabled={disabled || saving}
+            disabled={effortDisabled || saving}
             onChange={(e) =>
               void change({ ...selection, effort: e.target.value as TurnSettings["effort"] })
             }

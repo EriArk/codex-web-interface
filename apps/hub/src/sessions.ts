@@ -828,10 +828,30 @@ export class Sessions extends EventEmitter {
     return this.locked(thread.projectId, async () => {
       await this.validateSettings(thread.projectId, value);
       const r = await this.runtime(thread.projectId);
-      if (changingAccess && r.loaded.has(id))
+      const previous =
+        this.store.threadSettings(id) ?? (await this.capabilities(thread.projectId)).defaults;
+      const changingTurn =
+        previous.model !== value.model ||
+        previous.effort !== value.effort ||
+        previous.mode !== value.mode;
+      if (r.loaded.has(id) && (changingAccess || changingTurn))
         await r.rpc.request("thread/settings/update", {
           threadId: thread.codexThreadId,
-          ...turnAccess(value.access),
+          ...(changingAccess ? turnAccess(value.access) : {}),
+          model: value.model,
+          effort: value.effort,
+          ...(r.nativeModes
+            ? {
+                collaborationMode: {
+                  mode: value.mode,
+                  settings: {
+                    model: value.model,
+                    reasoning_effort: value.effort,
+                    developer_instructions: null,
+                  },
+                },
+              }
+            : {}),
         });
       this.store.setThreadSettings(id, value);
       this.emitEvent(id, "thread.settings", { settings: value });

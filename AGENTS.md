@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Owner-requested compact navigation and queue controls (2026-09-20)
+
+- Put the search magnifier to the left of Projects/Dialogs, with the tabs and drawer close control in one row. Expand the title filter only on demand; preserve full content search.
+- Allow Codex reasoning effort changes during a running turn for subsequent queued work. Apply native thread settings for subsequent turns; Steer keeps the active turn's settings. Native queues use thread defaults, not unsupported per-item overrides.
+- Keep the send icon visible. Show a tiny centered loading indicator above the message field, never over it or inside Send. GPT durable enqueue does not wait for browser history rendering; retain model selection, account binding, attachment and exact-send protections.
+
 ## Owner-requested Results tab order (2026-09-20)
 
 - GPT Results tabs: Files, Images, Links, Demos, Reasoning. Codex Results tabs: Files, Images, Demos, Work.
