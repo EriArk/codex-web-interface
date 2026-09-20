@@ -1,5 +1,19 @@
 # Roadmap
 
+## Current GPT backlog correction (2026-09-20)
+
+This status supersedes the older canary/pending-installation statements below. The native Linux GPT provider is in everyday owner use. Engine `b273f5e` and UI `15f50f8` were confirmed installed. Public progress/Reasoning cards, warm pinned/recent history, cached Results metadata, compact navigation and immediately restored per-user model/power choices are installed. Historical implementation notes below are evidence, not an instruction to repeat completed work.
+
+Owner feedback and source review change the next-pass priority:
+
+- **#178:** owner reports the large-response problem no longer occurs after the native-provider migration. Remove from active repair work; this is owner-observed resolution, not a claim of an exhaustive client memory benchmark.
+- **#179:** owner reports the transient viewport problem is probably also gone. Keep as unconfirmed/observe-only unless a current reproducible case appears; do not invent a fix or run a broad investigation without one.
+- **#183:** partially overlaps completed features. Code blocks already collapse/copy, generated files already appear in Results, and HTML blocks become demos. The distinct remaining requirement is automatic creation of a durable server-stored text artifact from an ordinary supported code/Markdown block, with exact source identity and direct download. `gpt-result-content.ts` currently extracts links and HTML demos; `gpt-results.ts` adds existing files and public progress, but does not materialize general text blocks. Do not repeat the existing collapse/preview work or call #183 fully complete.
+- **#188:** cached-first history, background active reads and bounded per-user retention are installed. A durable incremental changed-tail projection is a separate remaining scope; an open issue does not mean those cache improvements are missing.
+- **#189–193:** much of the reported loading/recovery/trackpad/provider work is implemented. Reconcile each acceptance criterion with current installed behavior before scheduling more work. Native-provider installation does not by itself prove new-member provisioning or every advanced native feature.
+
+Before the next feature pass, use this distinction throughout the open GPT issues: installed, partially implemented with a precise remainder, owner-observed resolution, or currently reproducible defect. The open/closed flag alone is not a backlog assessment. No GitHub issue was closed by this documentation correction. The previously suggested #178 + #179 repair pass is withdrawn.
+
 ## Immediate priority — Linux ChatGPT client (#193, 2026-09-19)
 
 The official isolated Linux client is installed and authenticated. Owner integration, native dictation and sandboxed runtime are now verified; the coordinated main-engine release is being prepared for the next safe idle point. Keep #193 open for advanced-feature parity. Preserve both profiles, existing/unknown jobs, and independent Windows Codex recovery. Current proof and installation scope: [owner admission](GPT_NATIVE_LINUX.md#owner-workspace-admission-and-dictation-2026-09-19).
