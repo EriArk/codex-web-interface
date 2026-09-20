@@ -26,6 +26,10 @@ Result cards separate explicit Preview from direct Download. The shared viewer s
 
 Verification: exact bytes/idempotency/version identity, account isolation/revocation, Canvas metadata coalescing and exact navigation; Chromium and WebKit checks of explicit fetch/download behavior, preview failures and phone/tablet geometry in four themes. These are automated browser checks, not owner hardware acceptance. Deployment is a separate guarded engine operation with a fresh backup; this entry alone does not assert it has installed.
 
+Release `c12e4cf` passed the production-image startup/private-socket/auth smoke and Codex connectivity preflight. Its guarded updater was queued against engine `b273f5e`; it waits for active work and creates a fresh checkpoint before switching. Do not call it installed until the deployment receipt confirms that revision. Focused lint still reports four pre-existing diagnostics in touched files; typecheck, build and focused functional checks passed.
+
+The requested real Canvas example could not be created in the current native account: Latest and GPT-5.5 both reported no Canvas tool, and the canonical document list remained empty. The separate chat **Canvas - capability check** is retained for the owner. This is a creation-capability limitation observed in this account, not evidence that Canvas was globally removed or that old documents cannot be read. Existing-document navigation is implemented and browser-tested with fixtures; a real native Canvas-viewer acceptance remains open.
+
 ## Current GPT backlog correction (2026-09-20)
 
 This status supersedes the older canary/pending-installation statements below. The native Linux GPT provider is in everyday owner use. Engine `b273f5e` and UI `15f50f8` were confirmed installed. Public progress/Reasoning cards, warm pinned/recent history, cached Results metadata, compact navigation and immediately restored per-user model/power choices are installed. Historical implementation notes below are evidence, not an instruction to repeat completed work.
