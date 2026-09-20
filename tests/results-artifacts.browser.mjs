@@ -122,7 +122,8 @@ try {
               nextBefore: null,
             },
           });
-        if (path.endsWith("/canvases"))
+        if (path.endsWith("/canvases")) {
+          canvasBodyReads++;
           return route.fulfill({
             json: {
               items: [canvas],
@@ -130,6 +131,7 @@ try {
               nextBefore: null,
             },
           });
+        }
         if (path === textUrl) return route.continue();
         if (path === binaryUrl)
           return route.fulfill({
@@ -168,7 +170,7 @@ try {
       await page.goto(origin + "/");
       const card = page.locator('[data-result="text"]');
       await expect(card).toBeVisible();
-      await expect(page.locator('[data-result="canvas"]')).toBeVisible();
+      await expect(page.locator('[data-result="canvas"]')).toHaveCount(0);
       assert.equal(reads, 0);
       assert.equal(canvasBodyReads, 0);
       await card.getByRole("button", { name: "Открыть файл" }).click();
@@ -202,13 +204,6 @@ try {
       await expect(
         page.locator('[data-result="binary"]').getByRole("button", { name: "Предпросмотр" }),
       ).toHaveCount(0);
-      await page
-        .locator('[data-result="canvas"]')
-        .getByRole("button", { name: "Предпросмотр" })
-        .click();
-      await expect(page.locator(".native-workspace-editor pre")).toHaveText("target exact content");
-      await page.getByRole("button", { name: "Закрыть", exact: true }).click();
-      await page.getByRole("button", { name: "Вернуться к результатам" }).click();
       failPreview = true;
       await card.getByRole("button", { name: "Предпросмотр" }).click();
       await expect(
@@ -225,9 +220,10 @@ try {
       await expect(
         page.locator('[data-result="image"]').getByRole("link", { name: "Скачать" }),
       ).toBeVisible();
+      assert.equal(canvasBodyReads, 0, "Canvas must not be read in the background");
       assert.equal(failures.length, 0, failures.join("\n"));
       console.log(
-        `${name}: exact direct download, explicit bounded preview, failure fallback, Canvas identity, thumbnails and four responsive themes passed`,
+        `${name}: exact direct download, explicit bounded preview, failure fallback, no Canvas reads, thumbnails and four responsive themes passed`,
       );
     } finally {
       await context.close();

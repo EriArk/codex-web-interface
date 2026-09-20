@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { ArtifactCapture } from "./ArtifactCapture";
-import CanvasPanel from "./CanvasPanel";
 import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
 import { PreviewViewer } from "./PreviewViewer";
@@ -79,13 +78,7 @@ export function ResultInspector({
         />
       )}
       {opened &&
-        (kind === "canvas" && result.payload.canvas ? (
-          <CanvasPanel
-            conversationId={result.payload.canvas.conversationId}
-            documentId={result.payload.canvas.id}
-            onClose={() => setOpened(false)}
-          />
-        ) : kind === "demo" ? (
+        (kind === "demo" ? (
           <PreviewViewer result={result} onClose={onClose} embedded />
         ) : kind !== "card" ? (
           <ResultFilePreview result={result} />

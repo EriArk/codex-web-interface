@@ -42,13 +42,6 @@ export function ResultFeed({
   onCount?: (count: number) => void;
   reveal?: ArtifactRequest | null;
 }) {
-  const [canvases, setCanvases] = useState<{ scope: string; items: ResultItem[]; error?: string }>({
-    scope: "",
-    items: [],
-  });
-  const canvasScope = /^\/gpt\/conversations\/[^/]+\/results$/.test(endpoint)
-    ? endpoint.replace(/results$/, "canvases")
-    : "";
   const [selection, setSelection] = useState<ArtifactSelection | null>(null);
   const [revealRetry, setRevealRetry] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry repeats a read of the exact source reference.
@@ -95,39 +88,6 @@ export function ResultFeed({
     fullyLoaded = useRef(false),
     loadedIds = useRef<string[]>([]);
   const [retry, setRetry] = useState(0);
-  // Canvas metadata refreshes independently: a slow native document read never blocks ordinary Results.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Completed history and Retry may refresh the bounded metadata snapshot.
-  useEffect(() => {
-    if (!canvasScope || !visible) return;
-    const saved = cachedResults(canvasScope);
-    setCanvases({ scope: canvasScope, items: saved?.items ?? [] });
-    const controller = new AbortController(),
-      epoch = resultCacheEpoch();
-    const accept = (page: ResultPage) => {
-      if (controller.signal.aborted || epoch !== resultCacheEpoch()) return;
-      rememberResults(canvasScope, page, epoch);
-      setCanvases({ scope: canvasScope, items: page.items });
-    };
-    const timer = setTimeout(() => {
-      void (async () => {
-        if (!saved)
-          accept(await api<ResultPage>(canvasScope + "?cached=1", { signal: controller.signal }));
-        accept(await api<ResultPage>(canvasScope, { signal: controller.signal }));
-      })().catch(() => {
-        if (!controller.signal.aborted && epoch === resultCacheEpoch())
-          setCanvases((old) => ({
-            scope: canvasScope,
-            items: old.scope === canvasScope ? old.items : [],
-            error: "Не удалось обновить документы Canvas.",
-          }));
-      });
-    }, 400);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [canvasScope, visible, revision, retry]);
-  const canvasItems = canvases.scope === canvasScope ? canvases.items : [];
   const [category, setCategory] = useState<ResultCategory>("files");
   const [items, setItems] = useState<ResultItem[]>([]),
     [counts, setCounts] = useState(emptyResultCounts);
@@ -158,8 +118,8 @@ export function ResultFeed({
   const generation = useRef(0),
     readScope = useRef("");
   useEffect(() => {
-    onCount?.(counts.all + canvasItems.length);
-  }, [counts.all, canvasItems.length, onCount]);
+    onCount?.(counts.all);
+  }, [counts.all, onCount]);
   // Each response belongs to the exact conversation and category that requested it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: The retry button deliberately repeats the same read.
   useEffect(() => {
@@ -320,15 +280,10 @@ export function ResultFeed({
   };
   const all = [
     ...new Map(
-      [...(focused ? [focused] : []), ...extras, ...canvasItems, ...items].map((row) => [
-        row.id,
-        row,
-      ]),
+      [...(focused ? [focused] : []), ...extras, ...items].map((row) => [row.id, row]),
     ).values(),
   ];
   const totals = { ...counts };
-  totals.all += canvasItems.length;
-  totals.files += canvasItems.length;
   totals.all = Math.max(totals.all, all.length);
   for (const key of ["images", "demos", "files", "links", "reasoning", "work"] as const)
     totals[key] = Math.max(
@@ -362,7 +317,7 @@ export function ResultFeed({
           ? ""
           : transientFailure && error
             ? "Не удалось загрузить результаты. Попробуй ещё раз."
-            : error || (canvases.scope === canvasScope ? (canvases.error ?? "") : "")
+            : error
       }
       focusVersion={focusVersion}
       onRetry={() => {

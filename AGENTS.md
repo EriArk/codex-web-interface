@@ -1,8 +1,8 @@
 # AGENTS.md
 
-## Owner-requested Canvas evaluation (2026-09-20)
+## Owner-requested Canvas removal (2026-09-20)
 
-- Keep existing Canvas documents accessible through GPT Results → Files and the exact-document viewer. The owner will decide whether to retain this feature after seeing one example in a separate chat. Preserve that demonstration chat during test cleanup; ordinary Markdown is not proof that a native Canvas was created.
+- Remove Canvas from the product UI and planned work, including its cards, viewer and background metadata reads. This supersedes the earlier Canvas navigation/evaluation requests. Retain normal file artifacts, text blocks and HTML demos; HTML canvas elements are unrelated. Do not delete native documents as part of UI removal.
 
 ## Owner-requested immediate GPT choices (2026-09-20)
 
@@ -622,7 +622,7 @@ Before mobile support is considered complete, the same core workflow must also w
 - Files and Git have separate icon-only buttons in the Codex header, each opening its own window directly for the selected project. This supersedes the combined header shortcut/menu. Keep equal square touch targets and preserve chat state.
 - Remove the Settings button from the top bar in both Codex and GPT; Settings remains in the sidebar footer.
 
-## Owner-requested Canvas navigation follow-up (2026-09-13)
+## Historical Canvas navigation follow-up (2026-09-13, cancelled 2026-09-20)
 
 - On the next GPT Results pass, include existing Canvas documents as Results cards and open the existing document viewer from them. Remove the separate Canvas header shortcut. Keep exact private conversation/document identities. This is a deferred navigation task, not approval to expand into full Canvas authoring now.
 

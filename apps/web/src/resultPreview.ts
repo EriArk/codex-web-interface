@@ -2,7 +2,6 @@ import type { ResultItem } from "@codex-web/shared";
 import { previewKind } from "./FilePreview";
 
 export function resultPreview(result: ResultItem) {
-  if (result.type === "canvas") return { kind: "canvas", limit: 0 } as const;
   if (result.type === "preview") return { kind: "demo", limit: 0 } as const;
   if (!result.payload.url) return { kind: "card", limit: 0 } as const;
   const kind = previewKind({

@@ -1,12 +1,16 @@
 # Roadmap
 
+## Canvas removed from scope (2026-09-20)
+
+The owner cancelled Canvas after evaluating its usefulness and the current native-model limitation. Remove Canvas cards, its viewer and background reads from the UI. Earlier Canvas plans and acceptance reminders below are historical and superseded; do not schedule Canvas implementation or more model probes. Ordinary downloadable files, frozen text blocks, images and HTML demos remain in scope. Native document data and low-level compatibility contracts are not deleted.
+
 ## Current prioritization after the full issue audit (2026-09-20)
 
 The [20 September audit](ISSUE_AUDIT_2026-09-20.md) maps all 67 open issues to implementation evidence, remaining scope and dependencies. Installed baseline: engine `b273f5e`, UI `15f50f8`, schema 28. This section supersedes the execution order and pending-installation statements in older dated sections below; those remain historical evidence, not new work orders.
 
 Owner-approved sequence:
 
-1. Finish everyday Results: existing Canvas into Results, then durable text-block artifacts (#183) and the relevant explicit-preview criteria (#184).
+1. Finish everyday Results: durable text-block artifacts (#183) and the relevant explicit-preview criteria (#184). Canvas is cancelled.
 2. Finish independent-member readiness: per-member native GPT (#151), remaining isolation/revocation (#150/#158), machine bootstrap and continuous setup (#152/#173). Preserve the owner's existing workflow.
 3. Introduce minimal AI role bindings (#209), Project GPT (#200) and `CODEXWEB.md` (#207); then Intake/Issue Drawer/preparation (#210/#211/#201). Establish #195 ownership rules before exposing another owner's project context.
 4. Complete the GitHub collaboration cycle (#195/#197/#198/#196), then reports and a minimal Inbox (#199/#205). Reuse the old Team foundation rather than implementing two competing workflows.

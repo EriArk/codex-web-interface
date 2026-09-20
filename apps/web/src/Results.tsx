@@ -266,7 +266,6 @@ export function Results({
                         })}
                       </time>
                     )}
-                    {r.payload.canvas && <small>Canvas · Версия {r.payload.canvas.version}</small>}
                   </div>
                   {r.type === "check" && (
                     <span className={`badge ${r.payload.exitCode === 0 ? "success" : "danger"}`}>
@@ -336,7 +335,7 @@ export function Results({
                     {r.payload.message}
                   </p>
                 )}
-                {["file", "artifact", "image", "canvas"].includes(r.type) && (
+                {["file", "artifact", "image"].includes(r.type) && (
                   <div className="result-artifact-actions">
                     {resultPreview(r).kind !== "card" && (
                       <button type="button" className="secondary" onClick={() => inspect(r, true)}>
