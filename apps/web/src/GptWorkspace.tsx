@@ -661,14 +661,20 @@ export function GptWorkspace({
   };
   const composer = useRef<HTMLTextAreaElement>(null);
   useGrowingComposer(composer, text);
+  const sendReady = ready && !!model && (!selected || historyReady);
+  const preparingSend =
+    !sendReady &&
+    !loadNotice &&
+    !historyNotice &&
+    (!connection || connection.canSend || checkingConnection);
   const send = async (dictated?: string) => {
     const value = dictated ?? text;
     if (
       (dictation.locked && dictated === undefined) ||
       sending.current ||
       uploading ||
-      (selected && !historyReady) ||
-      !model ||
+      !sendReady ||
+      nativeOperations.blocked ||
       (!value.trim() && !files.length)
     )
       return;
@@ -834,7 +840,7 @@ export function GptWorkspace({
       !overlayOpen &&
       !resultOverlay &&
       !busy &&
-      (!selected || historyReady),
+      sendReady,
     text,
     setText,
     100000,
@@ -1844,7 +1850,6 @@ export function GptWorkspace({
             {dictation.panel}
             <form
               className="composer gpt-composer"
-              hidden={!!selected && !historyReady}
               onSubmit={(event) => {
                 event.preventDefault();
                 void send();
@@ -1939,14 +1944,23 @@ export function GptWorkspace({
                       dictation.locked ||
                       busy ||
                       uploading ||
-                      !ready ||
-                      (!!selected && !historyReady) ||
-                      !model ||
+                      !sendReady ||
                       (!text.trim() && !files.length)
                     }
-                    aria-label={active ? "Добавить в очередь GPT" : "Отправить GPT"}
+                    aria-label={
+                      preparingSend
+                        ? "Загрузка чата GPT"
+                        : active
+                          ? "Добавить в очередь GPT"
+                          : "Отправить GPT"
+                    }
+                    aria-busy={preparingSend || busy}
                   >
-                    {busy ? <span className="spinner" /> : <Icon name="arrow-up" />}
+                    {busy || preparingSend ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : (
+                      <Icon name="arrow-up" />
+                    )}
                   </button>
                 </div>
               </div>
