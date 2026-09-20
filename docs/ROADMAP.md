@@ -1,5 +1,9 @@
 # Roadmap
 
+## GPT reliability audit (2026-09-21)
+
+The owner requested a full GPT performance/stability audit after slow sends and history/Results failures. Findings, evidence limits and the three implementation stages are recorded in [GPT performance audit](GPT_PERFORMANCE_AUDIT_2026-09-21.md). Prioritize send scheduling/readiness, then prompt completion reconciliation, then history/Results caching. The native supervisor heartbeat now bypasses the renderer FIFO in source, with a focused blocked-history/serialized-writer test; this audit change is not deployed. The native history timeout remains unresolved, including the newly reported second conversation.
+
 ## Results / Remote repair (2026-09-21, UI installed / engine queued)
 
 - Remote: Guacamole adds its own query delimiter; pass the workspace binding together with width/height as connect data. This fixes team-account WebSocket rejection without removing account isolation. Disconnected status no longer says “Connecting”.

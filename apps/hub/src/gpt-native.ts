@@ -333,15 +333,19 @@ export class NativeGptReadClient {
       );
   }
   async status() {
-    return z
-      .object({
-        instanceId: uuid,
-        manual: z.boolean(),
-        busy: z.boolean(),
-        writesEnabled: z.boolean(),
-      })
-      .strict()
-      .parse(await this.call({ operation: "status" }));
+    return (
+      z
+        .object({
+          instanceId: uuid,
+          manual: z.boolean(),
+          busy: z.boolean(),
+          writesEnabled: z.boolean(),
+        })
+        .strict()
+        // The supervisor serves status without taking its renderer lock. Do not
+        // queue this heartbeat behind a slow history read or a large upload.
+        .parse(await this.request({ operation: "status" }))
+    );
   }
   async catalog(offset = 0, archived = false) {
     z.number().int().min(0).max(10000).parse(offset);
