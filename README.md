@@ -1,6 +1,6 @@
 # Codex Web Interface
 
-Private Codex/GPT workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine. The current installation includes owner-enabled [private team workspace](docs/TEAM_WORKSPACE.md) functionality; registration of additional members remains closed pending independent-account and isolation acceptance. See [the current issue and interface audit](docs/ISSUE_AUDIT_2026-09-13.md) for what is installed, unfinished and planned.
+Private Codex/GPT workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine. The current installation includes owner-enabled [private team workspace](docs/TEAM_WORKSPACE.md) functionality; registration of additional members remains closed pending independent-account and isolation acceptance. See [the current issue and plan audit](docs/ISSUE_AUDIT_2026-09-20.md) for what is installed, unfinished and planned.
 
 ## Available now
 

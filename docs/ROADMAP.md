@@ -1,5 +1,21 @@
 # Roadmap
 
+## Current prioritization after the full issue audit (2026-09-20)
+
+The [20 September audit](ISSUE_AUDIT_2026-09-20.md) maps all 67 open issues to implementation evidence, remaining scope and dependencies. Installed baseline: engine `b273f5e`, UI `15f50f8`, schema 28. This section supersedes the execution order and pending-installation statements in older dated sections below; those remain historical evidence, not new work orders.
+
+Recommended sequence for owner review:
+
+1. Finish everyday Results: existing Canvas into Results, then durable text-block artifacts (#183) and the relevant explicit-preview criteria (#184).
+2. Finish independent-member readiness: per-member native GPT (#151), remaining isolation/revocation (#150/#158), machine bootstrap and continuous setup (#152/#173). Preserve the owner's existing workflow.
+3. Introduce minimal AI role bindings (#209), Project GPT (#200) and `CODEXWEB.md` (#207); then Intake/Issue Drawer/preparation (#210/#211/#201). Establish #195 ownership rules before exposing another owner's project context.
+4. Complete the GitHub collaboration cycle (#195/#197/#198/#196), then reports and a minimal Inbox (#199/#205). Reuse the old Team foundation rather than implementing two competing workflows.
+5. Interleave bounded personal improvements: scale (#175), message navigation (#186), writable Files (#169), Codex scheduling (#214). Engineering viewers (#167) are a separate substantial pass.
+6. Communication and shared Results (#202/#213), then Brainstorm and room handoff (#203/#212/#204).
+7. Global AI helper, advanced profiles, shortcuts and full help come later. Remote replacement requires a demonstrated benefit; a separate Hub installer (#11) remains deferred.
+
+#178 is owner-observed resolved; #179 is observe-only. #188 still has an incremental-projection remainder, but installed caching must not be rebuilt. Narrow remaining acceptance gaps replace repeated broad GPT/download test passes. No GitHub issues were automatically closed by this audit. Documentation alignment (#176) continues alongside each affected feature.
+
 ## Current GPT backlog correction (2026-09-20)
 
 This status supersedes the older canary/pending-installation statements below. The native Linux GPT provider is in everyday owner use. Engine `b273f5e` and UI `15f50f8` were confirmed installed. Public progress/Reasoning cards, warm pinned/recent history, cached Results metadata, compact navigation and immediately restored per-user model/power choices are installed. Historical implementation notes below are evidence, not an instruction to repeat completed work.

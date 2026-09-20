@@ -1,6 +1,6 @@
 # Private team workspaces
 
-Owner-approved specification, 2026-09-13. Tracking: [#159](https://github.com/EriArk/codex-web-interface/issues/159). This document describes the next implementation, not a claim that team access is already installed. [Roadmap](ROADMAP.md) records acceptance separately from development progress.
+Original owner-approved specification, 2026-09-13. Foundation tracking: [#159](https://github.com/EriArk/codex-web-interface/issues/159). Parts of this foundation are installed for owner evaluation; independent-member acceptance remains separate. The newer direction [#194](https://github.com/EriArk/codex-web-interface/issues/194) uses owner-authoritative projects, private integration copies and GitHub collaboration. Preserve the identity/isolation foundation below, but do not build its older Links/Bridges presentation as a competing user workflow. See the [current audit](ISSUE_AUDIT_2026-09-20.md) and [Roadmap](ROADMAP.md) for remaining scope and recommended order. The detailed specification still needs alignment as each new workflow is implemented.
 
 ## Product and first acceptance
 
