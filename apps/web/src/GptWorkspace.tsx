@@ -9,7 +9,7 @@ import type {
   ResultCategory,
   ResultItem,
 } from "@codex-web/shared";
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type ArtifactRequest, artifactComponents, artifactSource } from "./ArtifactMarkdown";
@@ -87,18 +87,31 @@ const Text = memo(function Text({
   value: string;
   onArtifact?: (source: string) => void;
 }) {
-  return (
-    <Markdown
-      urlTransform={(url) => (onArtifact && artifactSource(url) ? url : defaultUrlTransform(url))}
-      remarkPlugins={[remarkGfm]}
-      components={{
-        pre: CollapsibleCode,
-        table: MarkdownTable,
-        ...artifactComponents(onArtifact),
-      }}
-    >
-      {value}
-    </Markdown>
+  const artifactHandler = useRef(onArtifact);
+  useLayoutEffect(() => {
+    artifactHandler.current = onArtifact;
+  }, [onArtifact]);
+  const openArtifact = useCallback((source: string) => artifactHandler.current?.(source), []);
+  const hasArtifacts = !!onArtifact;
+  // Drawer, draft and job updates must not reparse unchanged replies. Keep the
+  // latest handler separately so cached links still target the current message.
+  return useMemo(
+    () => (
+      <Markdown
+        urlTransform={(url) =>
+          hasArtifacts && artifactSource(url) ? url : defaultUrlTransform(url)
+        }
+        remarkPlugins={[remarkGfm]}
+        components={{
+          pre: CollapsibleCode,
+          table: MarkdownTable,
+          ...artifactComponents(hasArtifacts ? openArtifact : undefined),
+        }}
+      >
+        {value}
+      </Markdown>
+    ),
+    [value, hasArtifacts, openArtifact],
   );
 });
 function ResponseResults({
