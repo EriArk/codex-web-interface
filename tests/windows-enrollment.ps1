@@ -88,6 +88,10 @@ try {
     $script:CwWindow.Show()
     [Windows.Forms.Application]::DoEvents()
     Write-CwStep 3 '3 / 5 - Applications and CodexWeb components'
+    Invoke-CwInstaller $cmd @('/c', 'exit', '0')
+    $failedExit = $false
+    try { Invoke-CwInstaller $cmd @('/c', 'exit', '7') } catch { $failedExit = $_.Exception.Message -match '7' }
+    if (-not $failedExit) { throw 'Installer must preserve actual failure exit code 7.' }
     # Exercise the bootstrap's real invocation operator across a .ps1 boundary.
     # The former call operator lost script-scoped controls on resumed setup.
     $scopeDirectory = Join-Path $artifacts 'scope-probe'

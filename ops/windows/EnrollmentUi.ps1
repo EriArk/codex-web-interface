@@ -75,6 +75,8 @@ function Invoke-CwInstaller([string]$program, [string[]]$arguments, [switch]$Git
     $inputFile = Join-Path $PSScriptRoot 'installer-input.txt'
     [IO.File]::WriteAllText($inputFile, '')
     $process = Start-Process -FilePath $program -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardInput $inputFile -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    # Windows PowerShell 5 needs a retained process handle to read ExitCode after exit.
+    $processHandle = $process.Handle
     $startedAt = [DateTime]::UtcNow
     $displayedCode = $null
     while (-not $process.HasExited) {
