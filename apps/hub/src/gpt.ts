@@ -22,6 +22,7 @@ import type { FastifyInstance } from "fastify";
 import sharp from "sharp";
 import { z } from "zod";
 import { GptHistoryCache } from "./gpt-cache.js";
+import { GptDeletions } from "./gpt-deletions.js";
 import {
   gptCatalog,
   gptCompletion,
@@ -34,7 +35,6 @@ import { GptHistoryDisk } from "./gpt-history-disk.js";
 import { gptLinkedText } from "./gpt-links.js";
 import { NativeGptJobs } from "./gpt-native-jobs.js";
 import { NativeGptLibrary } from "./gpt-native-library.js";
-import { GptDeletions } from "./gpt-deletions.js";
 import { nativeProjectTransport } from "./gpt-native-project.js";
 import { NativeGptProvider, type NativeGptWorkspace } from "./gpt-native-provider.js";
 import { GptOperations, gptOperationInput } from "./gpt-operations.js";
@@ -222,9 +222,19 @@ export class GptService {
         message: gptConnectionMessages.degraded,
       };
     const operations = this.nativeCounts();
+    const blocked = this.nativeBlocked();
+    if (blocked && value.canSend)
+      value = {
+        ...value,
+        state: operations.unknown || this.nativeLibrary?.blocked() ? "degraded" : "busy",
+        message:
+          operations.unknown || this.nativeLibrary?.blocked()
+            ? "Не удалось подтвердить изменение GPT."
+            : "В GPT завершается другое действие.",
+        canSend: false,
+      };
     return {
       ...value,
-      canSend: value.canSend && !this.nativeBlocked(),
       activeJobs: activeJobs + operations.active,
       unknownJobs: unknownJobs + operations.unknown,
     };
@@ -812,7 +822,9 @@ export class GptService {
     if (this.modelCache && (this.working || this.modelCache.expires > Date.now()))
       return this.modelCache.value;
     if (this.modelsPending) return this.modelsPending;
-    if (this.working || this.libraryBusy || this.nativeBlocked())
+    // Native choices are a read, independent of mutation receipts and sends.
+    // The old browser adapter needs an idle composer to inspect its controls.
+    if (!this.native && (this.working || this.libraryBusy || this.nativeBlocked()))
       throw error("GPT_BUSY", "Модели обновятся после текущего ответа.");
     this.modelsPending = this.loadModels();
     try {

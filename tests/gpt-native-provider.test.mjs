@@ -40,6 +40,58 @@ function setup(t) {
   });
   return { ...f, store, config, open };
 }
+test("legacy unknown chat deletion resumes in background without blocking another send", async (t) => {
+  const f = setup(t),
+    first = f.open();
+  await first.close();
+  const id = randomUUID(),
+    key = randomUUID();
+  f.workspace.conversations.add(id);
+  f.store.db
+    .prepare("INSERT INTO gpt_native_library VALUES(?,'thread',?,?,'unknown')")
+    .run(key, id, JSON.stringify({ action: "delete", confirm: true }));
+  let checks = 0;
+  f.client.libraryMutation = async (input, checkOnly) => {
+    assert.equal(checkOnly, true, "retain the original deletion receipt, never replay it");
+    assert.equal(input.key, key);
+    assert.equal(input.id, id);
+    checks++;
+    return { state: "unknown", name: "", projectId: null };
+  };
+  const service = f.open();
+  assert.equal(service.library.get("thread", id).deleted, true);
+  assert.equal(service.nativeBlocked(), false);
+  assert.equal((await service.connection()).canSend, true);
+  assert.ok((await service.models()).models.length);
+  await service.deletions.tick(
+    () => {},
+    () => true,
+  );
+  assert.equal(checks, 1);
+  await service.close();
+  const restarted = f.open();
+  assert.equal(f.store.db.prepare("SELECT count(*) n FROM gpt_deletions").get().n, 1);
+  assert.equal(f.store.db.prepare("SELECT receipt FROM gpt_deletions").get().receipt, key);
+  assert.equal(restarted.nativeBlocked(), false);
+  assert.throws(() => restarted.enqueue(randomUUID(), { ...f.input, nativeId: id }), /удалён/);
+  restarted.enqueue(randomUUID(), f.input);
+  await until(() => f.state.sends === 1);
+});
+
+test("native model catalog stays readable during an unrelated unresolved mutation", async (t) => {
+  const f = setup(t),
+    service = f.open();
+  f.store.db
+    .prepare("INSERT INTO gpt_native_library VALUES(?,'thread',?,?,'unknown')")
+    .run(randomUUID(), randomUUID(), JSON.stringify({ action: "rename", name: "Renamed" }));
+  const status = await service.connection();
+  assert.equal(status.canSend, false);
+  assert.equal(status.state, "degraded");
+  assert.notEqual(status.message, "GPT на связи.");
+  assert.ok((await service.models()).models.length, "cold tablet can fetch native choices");
+  assert.equal(f.state.sends, 0);
+});
+
 test("shared authenticated GPT routes use native catalog, pins, history and per-model presets", async (t) => {
   const native = nativeWorkspaceFixture(),
     f = await handoffFixture(undefined, undefined, { nativeGpt: native.workspace });

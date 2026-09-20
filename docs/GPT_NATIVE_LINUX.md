@@ -551,3 +551,24 @@ minutes of inactivity. Logout clears this cache and invalidates late writes;
 embedded binary content is excluded. Canonical branch changes replace old cards.
 This does not crawl inactive chats or retry submissions. Public final rich text,
 links, files and results continue to come from canonical history.
+
+### Legacy delete acknowledgement recovery (2026-09-20)
+
+A production chat deletion left an `unknown` receipt in the old synchronous
+library path. Its global blocker returned `canSend=false` with a healthy message
+and refused `/gpt/models` with 409, explaining why a phone retained its cached
+choices while a cold tablet had none. A read-only native receipt check confirmed
+the deletion; applying that confirmation restored the running owner's workspace
+without a restart or repeated send/delete.
+
+The candidate adopts old unknown chat deletions into the durable background queue,
+retaining the original native receipt and starting with reconciliation only.
+The deleted chat is hidden and its unsent queued prompts are cancelled; unrelated
+chats remain usable. Restart does not create a new deletion receipt. Native model
+metadata is readable independently of mutation blockers; the legacy browser
+adapter keeps its composer-dependent read restriction. A real mutation blocker
+no longer reports the misleading healthy connection message.
+
+Four focused checks cover old-receipt migration/restart, unrelated sends, deletion
+reconciliation and cold model loading during an unresolved mutation. The permanent
+fix follows the guarded engine release; live recovery is recorded separately.
