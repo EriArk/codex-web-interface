@@ -153,15 +153,13 @@ test("ordinary new Chat binds caller-owned local/user/parent IDs and resolves on
   assert.equal(replaced.state.send, 0);
   const wrongHome = fixture(true);
   wrongHome.scope.value.routeKind = "chatgpt-thread";
-  await assert.rejects(wrongHome.run(), /CONTEXT_CHANGED/);
+  await assert.rejects(wrongHome.run(), /SELECTED_CHAT_MISMATCH/);
 });
-test("prepare is read-only; drafts, route, model, principal and branch changes fail before sending", async () => {
+test("drafts, wrong routes and principals fail before sending; preparation never submits", async () => {
   for (const change of [
     (f) => (f.ui.hasDraft = true),
     (f) => (f.scope.value.conversationId = randomUUID()),
-    (f) => f.values.set("selected", { slug: "other" }),
     (f) => f.values.set("account", {}),
-    (f) => f.values.set("node", randomUUID()),
   ]) {
     const f = fixture();
     change(f);
@@ -515,4 +513,41 @@ test("project association is part of the durable Hub dispatch and cannot change 
   };
   await assert.rejects(f.open().run(f.id), /PROJECT_CHANGED/);
   assert.equal(f.state.sends, 0);
+});
+
+
+test("explicit native request is independent of stale picker, hydration and background fetch state", async () => {
+  const f = fixture();
+  f.values.set("selected", { slug: "previous-model", thinkingEffort: null });
+  f.values.set("node", null);
+  f.values.set("pending", true);
+  f.values.set("staging", true);
+  assert.equal((await f.run({ operation: "prepareDispatch" })).parentId, parentId);
+  assert.equal(f.state.post, 0);
+  assert.equal((await f.run()).state, "finished");
+  assert.equal(f.state.post, 1);
+  const busy = fixture();
+  busy.values.set("status", "streaming");
+  await assert.rejects(busy.run(), /CONVERSATION_BUSY/);
+  assert.equal(busy.state.post, 0);
+});
+
+
+test("preparation navigates once and resolves the requested preset without operating the model picker", async (t) => {
+  const f = receipts(t), ledger = f.open();
+  t.after(() => ledger.close());
+  const input = { ...fixture().input, versionId: "latest", presetId: 0 };
+  delete input.operation;
+  let navigations = 0, catalogs = 0;
+  const result = await ledger.prepare(input, {
+    selectConversation: async () => { navigations++; return { selected: true, composerReady: true, hasDraft: false, stopAvailable: false }; },
+    inspectConversation: async () => { throw Error("Redundant inspection"); },
+    selectSettings: async () => { throw Error("Visual picker must not gate sends"); },
+    readModels: async () => { catalogs++; return { versions: [{ id: "latest", enabled: true, presets: [{ id: 0, available: true, model: "instant", effort: null }] }] }; },
+    prepareDispatch: async r => { assert.equal(r.model, "instant"); assert.equal(r.effort, null); return { parentId, model: r.model, effort: r.effort }; },
+  });
+  assert.equal(result.presetId, 0);
+  assert.equal(navigations, 1);
+  assert.equal(catalogs, 1);
+  assert.equal(ledger.pending(), false);
 });

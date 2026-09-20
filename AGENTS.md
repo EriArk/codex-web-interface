@@ -634,3 +634,11 @@ Before mobile support is considered complete, the same core workflow must also w
 - Consumer ChatGPT documents the 512 MB file and 20 MB image ceilings; spreadsheet processing is approximately 50 MB and text/document processing is limited to 2 million tokens. Do not confuse these with API Uploads limits or invent a native Codex arbitrary-file ceiling: Codex receives verified local paths through the existing machine transport.
 - Stream large files through bounded, acknowledged chunks and disk staging. A retry of an upload fragment must never authorize a second chat submission. Keep visible upload progress and stop private transfers on session termination.
 - Preserve the old GPT connector/profile until native provider admission is complete. Repository upload support and disposable native acceptance are not evidence that the primary GPT workspace has switched providers.
+
+
+## Owner-requested simpler GPT submission (2026-09-20)
+
+- Ordinary GPT flow is send, then silently confirm delivery. Diagnose only an actual failure; do not gate sends on repeated UI/model-picker/hydration probes.
+- Pass the selected model/effort explicitly to the native completion action. Retain exact account/conversation binding, draft preservation and durable at-most-once dispatch.
+- Remove obsolete local failed/limbo send cards when the owner requests cleanup, preserving native conversation history and idempotency receipts. Never replay an uncertain send as cleanup.
+- Verify the changed path with focused checks; do not repeat unrelated download or broad regression suites without a new reason.

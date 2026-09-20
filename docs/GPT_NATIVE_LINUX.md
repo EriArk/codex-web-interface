@@ -449,3 +449,19 @@ Remaining installation/admission work after the owner's task finishes:
    with the new receipts. Record installed versus pending functionality explicitly.
 
 Issue #193 remains open. No update is silently scheduled by this source change.
+
+
+### Send-path correction (2026-09-20)
+
+Release `36420c7` and native `parity-82ff520` were installed, preserving the
+owner profile and receipts. Everyday sends then exposed a preparation failure
+(`NATIVE_DISPATCH_CONTEXT_CHANGED`) that read-only admission did not exercise.
+
+Simplify ordinary sends: select the conversation once, resolve the requested
+model/preset from the native catalog, and pass those values to the native
+completion action. Do not operate the visual model picker or require its derived
+model, UI history hydration and background-fetch flags to match before sending.
+The final native request still binds the exact account, conversation, canonical
+parent, text/files and model/effort; durable intent prevents duplicate sends.
+Confirmation is silent; investigate only failed delivery. Keep genuine same-chat
+active-turn ordering and drafts. This correction does not change downloads.

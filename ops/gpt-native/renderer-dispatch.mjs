@@ -36,10 +36,10 @@ export async function nativeDispatch(request, read, control,
   }
   if (request.operation!=='resolveCreation'&&previous?.signature === signature && previous.dispatched) return {key:request.key,state:previous.state,userMessageId:request.userMessageId};
   if (request.operation!=='resolveCreation'&&previous?.dispatched && previous.state === 'running' && previous.conversationId===request.conversationId) fail('BUSY');
-  if(request.operation!=='resolveCreation'){
+  if(request.operation==='dispatchText'){
    const ui = await control({operation:'inspectConversation',...binding},read,load,runtime);
    if (!ui.selected || !ui.composerReady || ui.hasDraft || ui.stopAvailable) fail('NOT_READY');
-  }else if(!creating)fail('INVALID_REQUEST');
+  }else if(request.operation==='resolveCreation'&&!creating)fail('INVALID_REQUEST');
   if(request.projectId)await read({operation:'readProject',projectId:request.projectId,accountFingerprint:request.accountFingerprint});
   const history = creating?{messages:[],currentNode:request.parentId}:await read({operation:'readConversation',...binding});
   if(!creating&&request.projectId!=null&&history.projectId!==request.projectId)fail('PROJECT_MISMATCH');
@@ -74,10 +74,13 @@ export async function nativeDispatch(request, read, control,
    const candidate=scope.get(m.lzt,id)??(previous?.signature===signature?previous.conversationId:null);
    return {conversationId:uuid(candidate)?candidate:null};
   }
-  const selected=scope.get(m.VNt,id);
-  if(!sameRoute()||!sameAccount()||(creating?(scope.get(m.gzt,id)!=null||scope.get(m.lzt,id)!=null):scope.get(m.gzt,id)!==history.currentNode)||
-     scope.get(m.Nzt,id)!=='idle'||scope.get(m.NNt,id)||scope.get(m.Pzt,id)||
-     selected?.slug!==request.model||(selected?.thinkingEffort??null)!==request.effort) fail('DISPATCH_CONTEXT_CHANGED');
+  // The completion action receives an explicit canonical parent and selected
+  // model/effort. UI hydration, picker defaults and background fetches are not
+  // submission requirements. Verify the actual outgoing request below instead.
+  if(!sameRoute())fail('SELECTED_CHAT_MISMATCH');
+  if(!sameAccount())fail('ACCOUNT_CHANGED');
+  if(creating&&(scope.get(m.gzt,id)!=null||scope.get(m.lzt,id)!=null))fail('DISPATCH_CONTEXT_CHANGED');
+  if(scope.get(m.Nzt,id)!=='idle')fail('CONVERSATION_BUSY');
   if (scope.get(m.hzt,id)==='tpp'||(creating&&scope.get(m.Tzt,id)!=null)) fail('CHAT_REQUIRED');
   if(request.operation==='prepareDispatch')return {parentId:history.currentNode,model:request.model,effort:request.effort};
   const state={signature,dispatched:true,state:'running',conversationId:request.conversationId};
