@@ -34,6 +34,7 @@ import { GptHistoryDisk } from "./gpt-history-disk.js";
 import { gptLinkedText } from "./gpt-links.js";
 import { NativeGptJobs } from "./gpt-native-jobs.js";
 import { NativeGptLibrary } from "./gpt-native-library.js";
+import { GptDeletions } from "./gpt-deletions.js";
 import { nativeProjectTransport } from "./gpt-native-project.js";
 import { NativeGptProvider, type NativeGptWorkspace } from "./gpt-native-provider.js";
 import { GptOperations, gptOperationInput } from "./gpt-operations.js";
@@ -75,6 +76,25 @@ export class GptService {
   private readonly native?: NativeGptProvider;
   private readonly nativeJobs?: NativeGptJobs;
   readonly nativeLibrary?: NativeGptLibrary;
+  readonly deletions?: GptDeletions;
+  private deletionWork: Promise<void> | undefined;
+  private deletionTimer = setInterval(() => {
+    if (!this.deletions || this.deletionWork || this.stopped) return;
+    this.deletionWork = this.deletions
+      .tick(
+        this.authorize,
+        () =>
+          !this.stopped &&
+          !this.working &&
+          !this.libraryBusy &&
+          !this.nativeBlocked() &&
+          !this.jobs().some((job) => active.includes(job.status) || job.status === "unknown"),
+      )
+      .catch(() => {})
+      .finally(() => {
+        this.deletionWork = undefined;
+      });
+  }, 5000).unref();
   private nativeReadFailures = 0;
   private readonly historyBackoff = new GptReadBackoff();
   private readonly historyReads = new Map<string, Promise<Json>>();
@@ -296,6 +316,7 @@ export class GptService {
     this.library = new Library(store, "gpt");
     if (nativeWorkspace)
       this.nativeLibrary = new NativeGptLibrary(store, nativeWorkspace, this.library);
+    if (nativeWorkspace) this.deletions = new GptDeletions(store, this.library, nativeWorkspace);
     this.operations = new GptOperations(
       store,
       (path, body) => this.json(path, body),
@@ -692,6 +713,12 @@ export class GptService {
   }
   async manageNativeEntity(key: string, kind: EntityKind, nativeId: string, action: EntityAction) {
     if (!this.nativeLibrary) throw error("GPT_NATIVE_NOT_READY", "Новое подключение не включено.");
+    if (kind === "thread" && action.action === "delete" && this.deletions) {
+      this.authorize();
+      const result = this.deletions.enqueue(key, nativeId);
+      this.historyCache.invalidate(nativeId);
+      return result;
+    }
     if (
       this.working ||
       this.libraryBusy ||
@@ -1587,8 +1614,10 @@ export class GptService {
     this.stopped = true;
     clearTimeout(this.recoveryTimer);
     clearInterval(this.storageTimer);
+    clearInterval(this.deletionTimer);
     this.lifetime.abort();
     await this.completion;
+    await this.deletionWork;
     await this.operations.close();
     await this.projectContent.close();
     await this.workspaceWork.close();

@@ -15,7 +15,7 @@ export function teamConnection(socketPath,cookie,origin,workspace){
      if(!/^[a-f0-9-]{36}$/.test(value.userId)|| (workspace&&workspace!==value.userId))throw Error();
      if(value.legacy===true){resolve({userId:value.userId,legacy:true});return;}
      if(value.legacy!==false||value.host!=='codex-web-gpt-'+value.userId||!/^[A-Za-z0-9_-]{8}$/.test(value.password)||!Number.isInteger(value.gatewayPort)||value.gatewayPort<9000||value.gatewayPort>65109)throw Error();
-     resolve({userId:value.userId,legacy:false,host:value.host,password:value.password,gatewayPort:value.gatewayPort});
+     resolve({userId:value.userId,legacy:false,native:value.native===true,host:value.host,password:value.password,gatewayPort:value.gatewayPort});
     }catch{reject(Error('GPT_SESSION_UNAVAILABLE'));}
    });
   });

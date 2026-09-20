@@ -1,5 +1,21 @@
 # Private ChatGPT profiles
 
+## Native member clients (2026-09-20)
+
+This section supersedes the browser-only provisioning description below. Configure new installations with `team.gptProfiles.runtime: "native"`. The explicit `browser` mode and configurations without a runtime retain compatibility with existing browser profiles; changing the mode never migrates or replaces an existing container silently.
+
+Each member prepares an empty Linux client, opens their own protected connection page, signs in normally, then presses **Activate ChatGPT**. The client records that user's native account binding. Reopening the client retains the binding; another native account cannot silently replace it. The owner's configured client remains untouched. The engine derives the member socket from its private user directory; neither an HTTP parameter nor a missing member profile can select the owner's account.
+
+Host configuration adds `CODEX_WEB_GPT_NATIVE_IMAGE=codex-web-gpt-native:<verified-revision>`. `CODEX_WEB_GPT_IMAGE` still supplies the mount-free egress helper and must contain `public-egress.mjs`. The updated host service passes the pinned `ops/gpt-native/seccomp.json`; native profiles keep the existing isolated Docker network, private Guacamole transport and public-only proxy. The login gateway additionally needs `GPT_TEAM_ROOT` set to the **host-side** absolute team root. The engine's `/data/team` path is not the host path. Long host-side socket paths use a checked directory descriptor to avoid Linux's Unix-socket path-length limit.
+
+The native supervisor can start before login using a private `enrollment.json` containing only the Hub user ID. Activation creates the account binding and enables the same supported native capabilities used by the owner; no API key or copied consumer credentials are needed. Manual Remote sessions and resume controls are scoped to that user.
+
+Verification: `tests/gpt-member-deletion.test.mjs` covers two distinct bindings/private runtimes, owner preservation and restart behavior; `tests/team-native-host.linux.mjs` starts and removes an actual empty native profile. This establishes provisioning, not a completed friend-account sign-in or hardware acceptance. The next isolation/revocation pass precedes enabling registration.
+
+### Background chat deletion
+
+The Hub saves a tombstone and a durable deletion job before acknowledging the confirmed delete. The chat disappears immediately; unsubmitted queued prompts for it are cancelled. Existing work is allowed to finish. Native deletion is attempted while idle with bounded retry delays. Unknown outcomes are reconciled from the same receipt after reconnect/restart rather than resent. Such a receipt blocks only that deleted conversation, not ordinary sends in another chat. A native chat already absent completes without another write. Project deletion keeps its existing separate semantics.
+
 Candidate implementation for #151. Production `379fa17` and the original GPT browser/profile remain unchanged. This is an extension of the existing consumer ChatGPT adapter, not an API billing account.
 
 ## Member experience

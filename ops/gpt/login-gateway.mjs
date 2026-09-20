@@ -3,6 +3,7 @@ import {teamConnection} from './team-connection.mjs';
 import {nativeRecoveryBinding} from './native-recovery.mjs';
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {stripTypeScriptTypes} from 'node:module';
 import {WebSocketServer} from '../../apps/hub/node_modules/ws/wrapper.mjs';
@@ -17,13 +18,17 @@ const engineSocket=process.env.HUB_ENGINE_SOCKET;
 const vncPassword=process.env.GPT_VNC_PASSWORD_FILE?readFileSync(process.env.GPT_VNC_PASSWORD_FILE,'utf8').trim():undefined;
 const nativeConfig={userId:process.env.GPT_NATIVE_USER_ID,password:process.env.GPT_NATIVE_VNC_PASSWORD_FILE?readFileSync(process.env.GPT_NATIVE_VNC_PASSWORD_FILE,'utf8').trim():undefined};
 const nativeSocket=process.env.GPT_NATIVE_ADAPTER_SOCKET;
-let nativeResuming=false,nativeOpening=0;
-const nativeClosing=new Set();
+const nativeStates=new Map();
+function nativeState(userId){let state=nativeStates.get(userId);if(!state){state={resuming:false,opening:0,closing:new Set()};nativeStates.set(userId,state);}return state;}
+function nativeSocketFor(binding){
+ if(!binding?.native)return undefined;
+ if(binding.legacy)return binding.userId===nativeConfig.userId?nativeSocket:undefined;
+ return process.env.GPT_TEAM_ROOT?.startsWith('/')?join(process.env.GPT_TEAM_ROOT,'users',binding.userId,'gpt','native-adapter','adapter.sock'):undefined;
+}
 function nativeClient(binding){
- if(!nativeSocket||!binding?.native||binding.userId!==nativeConfig.userId)throw Error('NATIVE_UNAVAILABLE');
- return new NativeGptReadClient({socketPath:nativeSocket,userId:binding.userId},()=>{
-  if(!binding.native||binding.userId!==nativeConfig.userId)throw Error('NATIVE_WRONG_OWNER');
- },'/gpt-connect/native');
+ const socketPath=nativeSocketFor(binding);
+ if(!socketPath)throw Error('NATIVE_UNAVAILABLE');
+ return new NativeGptReadClient({socketPath,userId:binding.userId},()=>{},'/gpt-connect/native');
 }
 async function auth(req){
  if(!req.headers.cookie)return null;
@@ -31,7 +36,12 @@ async function auth(req){
   const params=new URL(req.url,'http://localhost').searchParams;
   const runtime=new URL(req.url,'http://localhost').pathname.startsWith('/gpt-connect/native/')?'native':params.get('runtime');
   const expected=params.get('workspace');
-  if(engineSocket&&runtime!=='native')return nativeRecoveryBinding(await teamConnection(engineSocket,req.headers.cookie,origin,expected),runtime,nativeConfig);
+  if(engineSocket){
+   try{return nativeRecoveryBinding(await teamConnection(engineSocket,req.headers.cookie,origin,expected),runtime,nativeConfig);}
+   catch{if(runtime!=='native')return null;}
+   // Preserve the separately provisioned owner's recovery page before its Hub
+   // provider is activated. The session/identity checks below exclude members.
+  }
   const r=await fetch(hub+'/api/auth/session',{headers:{cookie:req.headers.cookie,origin},signal:AbortSignal.timeout(4000)});
   if(!r.ok){await r.body?.cancel();return null;}
   const session=await r.json();
@@ -60,20 +70,20 @@ const server=createServer(async(req,res)=>{
  if(!binding){res.writeHead(401,{'Content-Type':'text/html; charset=utf-8'}).end('<!doctype html><meta name="viewport" content="width=device-width"><p>Проверь вход и готовность личного браузера в <a href="/">Codex Web</a>, затем открой эту страницу ещё раз.</p>');return}
  if(requestPath.startsWith('/gpt-connect/native/')){
   try{
-   const adapter=nativeClient(binding);
+   const adapter=nativeClient(binding),state=nativeState(binding.userId);
    if(resume){
-    if(nativeResuming||nativeOpening){res.writeHead(409).end();return}
+    if(state.resuming||state.opening){res.writeHead(409).end();return}
     let bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>64)throw Error('NATIVE_INVALID_REQUEST');}
     const current=await auth(req);if(!current?.native||current.userId!==binding.userId){res.writeHead(401).end();return}
-    if(nativeResuming||nativeOpening){res.writeHead(409).end();return}
-    nativeResuming=true;
+    if(state.resuming||state.opening){res.writeHead(409).end();return}
+    state.resuming=true;
     try{
-     if(nativeOpening){res.writeHead(409).end();return}
-     for(const ws of wss.clients)if(ws.native){ws.endNative?.();ws.close(1000,'Returning to website');}
-     await Promise.allSettled([...nativeClosing]);
+     if(state.opening){res.writeHead(409).end();return}
+     for(const ws of wss.clients)if(ws.native&&ws.workspace===binding.userId){ws.endNative?.();ws.close(1000,'Returning to website');}
+     await Promise.allSettled([...state.closing]);
      await adapter.manual('resumeManual');
      res.end(JSON.stringify({ok:true}));
-    }finally{nativeResuming=false;}
+    }finally{state.resuming=false;}
     return;
    }
    if(req.method!=='GET'){res.writeHead(405).end();return}
@@ -108,7 +118,7 @@ const server=createServer(async(req,res)=>{
     .replaceAll('Подключение ChatGPT','ChatGPT · Linux-клиент').replace('Открываем браузер…','Открываем приложение…')
     .replace('<script src="/gpt-connect/client.js">','<script src="/gpt-connect/input.js"></script><script src="/gpt-connect/client.js">')
     .replaceAll(/(src|href)="(\/gpt-connect\/[^"?]+)"/g,'$1="$2?runtime=native&workspace='+binding.userId+'"'));
-   if(nativeSocket)content=Buffer.from(content.toString('utf8').replace('<meta charset="utf-8">','<meta charset="utf-8"><meta name="codex-native-adapter" content="read-only">'));
+   if(nativeSocketFor(binding))content=Buffer.from(content.toString('utf8').replace('<meta charset="utf-8">','<meta charset="utf-8"><meta name="codex-native-adapter" content="read-only">'));
   }
   res.end(content);
  }catch{res.writeHead(503).end('Connection page unavailable')}
@@ -122,12 +132,13 @@ server.on('upgrade',async(req,socket,head)=>{
  if(!binding||(engineSocket&&!url.searchParams.get('workspace'))||(binding.legacy&&!binding.native&&!vncPassword)){socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');return}
  if([...wss.clients].filter(client=>client.workspace===binding.userId).length>=2){socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n');return}
  let adapter,leaseId;
- if(binding.native&&nativeSocket){
-  if(nativeResuming){socket.end('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n');return}
-  nativeOpening++;
+ const state=nativeState(binding.userId);
+ if(binding.native){
+  if(state.resuming){socket.end('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n');return}
+  state.opening++;
   try{adapter=nativeClient(binding);leaseId=randomUUID();await adapter.manual('beginManual',leaseId);}
   catch{await adapter?.manual('endManual',leaseId).catch(()=>{});socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');return}
-  finally{nativeOpening--;}
+  finally{state.opening--;}
   if(socket.destroyed){await adapter.manual('endManual',leaseId).catch(()=>{});return}
  }
  wss.handleUpgrade(req,socket,head,ws=>{
@@ -136,12 +147,12 @@ server.on('upgrade',async(req,socket,head)=>{
   let close,ended=false;
   const end=()=>{
    if(ended)return;ended=true;close?.();
-   if(adapter){const closing=adapter.manual('endManual',leaseId).catch(()=>{}).finally(()=>nativeClosing.delete(closing));nativeClosing.add(closing);}
+   if(adapter){const closing=adapter.manual('endManual',leaseId).catch(()=>{}).finally(()=>state.closing.delete(closing));state.closing.add(closing);}
   };
   ws.endNative=end;
   const stopWatch=watchHubSession(hub,origin,req.headers.cookie,()=>{
    if(ws.readyState!==1||ended)return;
-   close=connectRemote(ws,{protocol:'vnc',parameters:{hostname:binding.native?binding.host:binding.legacy?(process.env.GPT_VNC_HOST??'codex-web-gpt-connect'):binding.host,port:'5900',password:binding.native?binding.password:binding.legacy?vncPassword:binding.password,'read-only':'false','disable-copy':'true','disable-paste':'true','enable-sftp':'false','enable-audio':'false','color-depth':'24',cursor:'local'}},{width:binding.native?1280:480,height:900},binding.native?Number(process.env.GPT_NATIVE_GUACD_PORT??4822):binding.legacy?4822:binding.gatewayPort);
+   close=connectRemote(ws,{protocol:'vnc',parameters:{hostname:binding.native?binding.host:binding.legacy?(process.env.GPT_VNC_HOST??'codex-web-gpt-connect'):binding.host,port:'5900',password:binding.native?binding.password:binding.legacy?vncPassword:binding.password,'read-only':'false','disable-copy':'true','disable-paste':'true','enable-sftp':'false','enable-audio':'false','color-depth':'24',cursor:'local'}},{width:binding.native?1280:480,height:900},binding.legacy?(binding.native?Number(process.env.GPT_NATIVE_GUACD_PORT??4822):4822):binding.gatewayPort);
   },()=>{end();ws.close(1008,'Session ended');});
   ws.once('close',()=>{stopWatch();end();});
  });

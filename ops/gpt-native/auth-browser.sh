@@ -9,7 +9,10 @@ case "${1:-}" in
 esac
 [ "$#" -eq 1 ] || exit 2
 mkdir -p /data/auth-browser /data/logs
+url="$1"
+set --
+if [ -n "${HTTPS_PROXY:-}" ]; then set -- "--proxy-server=$HTTPS_PROXY"; fi
 exec /ms-playwright/chromium-1234/chrome-linux64/chrome \
   --disable-dev-shm-usage --no-first-run --no-default-browser-check \
-  --user-data-dir=/data/auth-browser --start-maximized "$1" \
+  --user-data-dir=/data/auth-browser --start-maximized "$@" "$url" \
   >>/data/logs/auth-browser.log 2>&1

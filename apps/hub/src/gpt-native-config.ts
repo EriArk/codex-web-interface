@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import type { HubConfig } from "@codex-web/shared";
 import { NativeGptReadClient } from "./gpt-native.js";
 import type { NativeGptWorkspace } from "./gpt-native-provider.js";
-/** Host-only, original-owner admission. No request can select a socket/account. */
+/** Host-derived private binding. No request can select a socket/account. */
 export function configuredNativeGpt(
   config: HubConfig,
   authorize: () => void,

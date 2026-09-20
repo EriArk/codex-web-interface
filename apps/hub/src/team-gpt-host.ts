@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import type { HubConfig } from "@codex-web/shared";
+import { NativeGptReadClient } from "./gpt-native.js";
 import { hostLock } from "./host-lock.js";
 import { teamGptName, teamGptRowSchema } from "./team-gpt.js";
 
@@ -56,6 +57,8 @@ export async function reconcileGptProfiles(
   db: DatabaseSync,
   options: {
     image: string;
+    nativeImage?: string;
+    seccompPath?: string;
     run?: Docker;
     health?: (endpoint: string, token: string) => Promise<boolean>;
   },
@@ -73,6 +76,8 @@ async function reconcileLocked(
   db: DatabaseSync,
   options: {
     image: string;
+    nativeImage?: string;
+    seccompPath?: string;
     run?: Docker;
     health?: (endpoint: string, token: string) => Promise<boolean>;
   },
@@ -84,6 +89,18 @@ async function reconcileLocked(
     db.prepare("SELECT value FROM team_meta WHERE key='nativeAdmission'").get()?.value === "blocked"
   )
     throw Error("RESTORE_ADMISSION_REQUIRED");
+  const native = config.team.gptProfiles.runtime === "native";
+  if (
+    native &&
+    (!/^codex-web-gpt-native:[a-zA-Z0-9._-]{1,100}$/.test(options.nativeImage ?? "") ||
+      !options.seccompPath ||
+      !options.seccompPath.startsWith("/"))
+  )
+    throw Error("GPT_HOST_CONFIGURATION_INVALID");
+  if (native) {
+    const seccomp = JSON.parse(readFileSync(options.seccompPath!, "utf8"));
+    if (seccomp.defaultAction !== "SCMP_ACT_ERRNO") throw Error("GPT_HOST_CONFIGURATION_INVALID");
+  }
   const run = options.run ?? docker;
   const inspect = async (
     kind: "container" | "network",
@@ -121,6 +138,15 @@ async function reconcileLocked(
       keyFile(join(root, "service-token"), row.serviceToken);
       keyFile(join(root, "bridge-token"), row.bridgeToken);
       keyFile(join(root, "vnc-password"), row.vncPassword);
+      if (native) {
+        const adapterRoot = join(root, "native-adapter");
+        directory(adapterRoot);
+        keyFile(join(adapterRoot, "enrollment.json"), JSON.stringify({ userId: row.userId }));
+        keyFile(
+          join(adapterRoot, "canary.json"),
+          JSON.stringify({ conversationIds: [], ownerMode: true }),
+        );
+      }
       const labels = {
         "io.codex-web.workspace": row.userId,
         "io.codex-web.installation": installation,
@@ -265,7 +291,7 @@ async function reconcileLocked(
       await start(remote, teamGuacdImage, [network], ["--memory", "128m", "--cpus", "0.5"], {});
       await start(
         name,
-        options.image,
+        native ? options.nativeImage! : options.image,
         [network],
         [
           "--memory",
@@ -280,6 +306,18 @@ async function reconcileLocked(
           `GPT_WORKSPACE_ID=${row.userId}`,
           "--mount",
           `type=bind,source=${root},target=/data`,
+          ...(native
+            ? [
+                "--security-opt",
+                `seccomp=${options.seccompPath}`,
+                "--env",
+                `HTTPS_PROXY=http://${edge}:3128`,
+                "--env",
+                `HTTP_PROXY=http://${edge}:3128`,
+                "--env",
+                "NO_PROXY=localhost,127.0.0.1",
+              ]
+            : []),
         ],
         {},
       );
@@ -293,17 +331,28 @@ async function reconcileLocked(
         "UPDATE team_gpt_profiles SET code='GPT_BROWSER_STARTING',updatedAt=? WHERE userId=? AND revision=? AND state='requested' AND code IS NULL",
       ).run(Date.now(), row.userId, row.revision);
       const endpoint = `http://127.0.0.1:${port}/service-health`;
-      const healthy = options.health
-        ? await options.health(endpoint, row.serviceToken)
-        : await fetch(endpoint, {
-            headers: { Authorization: `Bearer ${row.serviceToken}` },
-            signal: AbortSignal.timeout(5000),
-          })
-            .then(async (r) => {
-              await r.body?.cancel();
-              return r.ok;
-            })
-            .catch(() => false);
+      const healthy =
+        native && !options.health
+          ? await new NativeGptReadClient(
+              { userId: row.userId, socketPath: join(root, "native-adapter", "adapter.sock") },
+              () => {
+                if (!stillAllowed()) throw Error("GPT_REQUEST_REVOKED");
+              },
+            )
+              .status()
+              .then(() => true)
+              .catch(() => false)
+          : options.health
+            ? await options.health(endpoint, row.serviceToken)
+            : await fetch(endpoint, {
+                headers: { Authorization: `Bearer ${row.serviceToken}` },
+                signal: AbortSignal.timeout(5000),
+              })
+                .then(async (r) => {
+                  await r.body?.cancel();
+                  return r.ok;
+                })
+                .catch(() => false);
       if (!healthy) {
         if (row.code === "GPT_BROWSER_STARTING" && Date.now() - row.updatedAt > 300000)
           throw Error("GPT_BROWSER_START_TIMEOUT");

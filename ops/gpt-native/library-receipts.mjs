@@ -24,6 +24,10 @@ export class NativeLibraryReceipts {
    if(checkOnly)fail('RECEIPT_MISSING');
    if(this.dispatch.pending())fail('PENDING_DISPATCH');
    const baseline=await reader.readLibrary(r);
+   if(!baseline.exists&&r.kind==='thread'&&r.action==='delete'){
+    this.db.prepare("INSERT INTO library_receipts VALUES(?,?,?,?,'completed')").run(r.key,hash,JSON.stringify(r),JSON.stringify(baseline));
+    return {state:'completed',name:baseline.name,projectId:baseline.projectId};
+   }
    if(!baseline.exists||!baseline.canWrite)fail('LIBRARY_NOT_WRITABLE');
    this.db.prepare("INSERT INTO library_receipts VALUES(?,?,?,?,'unknown')").run(r.key,hash,JSON.stringify(r),JSON.stringify(baseline));
    // A crash after this commit is intentionally unknown, never an automatic retry.

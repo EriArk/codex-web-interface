@@ -253,7 +253,11 @@ test("deleting a native chat keeps its completed jobs and provider receipts", as
     payload: { action: "delete", confirm: true },
   });
   assert.equal(result.statusCode, 200, result.body);
-  assert.equal(writes, 1);
+  assert.equal(writes, 0);
+  assert.equal(
+    f.store.db.prepare("SELECT done FROM gpt_deletions WHERE id=?").get(native.conversationId).done,
+    0,
+  );
   assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM gpt_jobs WHERE id=?").get(job).n, 1);
   const again = await f.app.inject({
     method: "POST",
@@ -262,7 +266,11 @@ test("deleting a native chat keeps its completed jobs and provider receipts", as
     payload: { action: "delete", confirm: true },
   });
   assert.equal(again.statusCode, 200, again.body);
-  assert.equal(writes, 1);
+  assert.equal(writes, 0);
+  assert.equal(
+    f.store.db.prepare("SELECT done FROM gpt_deletions WHERE id=?").get(native.conversationId).done,
+    0,
+  );
 });
 
 test("native project rename preserves instructions and appearance in fixed PATCH", async () => {

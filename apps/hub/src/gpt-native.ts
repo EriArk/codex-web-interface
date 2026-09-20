@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { lstat } from "node:fs/promises";
+import { lstat, open } from "node:fs/promises";
 import { request } from "node:http";
-import { dirname, isAbsolute } from "node:path";
+import { basename, dirname, isAbsolute } from "node:path";
 import type { GptFile, GptHistoryPage, GptMessage } from "@codex-web/shared";
 import { z } from "zod";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
@@ -103,6 +103,12 @@ export class NativeGptReadClient {
       this.waiting--;
     }
   }
+  async activate() {
+    return z
+      .object({ activated: z.literal(true) })
+      .strict()
+      .parse(await this.call({ operation: "activate" }));
+  }
   private async request(
     input: Record<string, unknown>,
     cancellation?: AbortSignal,
@@ -122,6 +128,12 @@ export class NativeGptReadClient {
         fail("UNSAFE_SOCKET");
     }
     this.authorize();
+    // Linux sockaddr_un paths are short; host-side per-user roots can exceed them.
+    // Hold the checked parent open while connecting through its local descriptor.
+    const directoryHandle =
+      process.platform === "linux" && Buffer.byteLength(this.binding.socketPath) >= 104
+        ? await open(dirname(this.binding.socketPath), "r")
+        : undefined;
     const result = await new Promise<unknown>((resolve, reject) => {
       const deadline = AbortSignal.timeout(
         ["uploadStoredFile", "projectMutation"].includes(String(input.operation))
@@ -135,7 +147,9 @@ export class NativeGptReadClient {
       const signal = cancellation ? AbortSignal.any([deadline, cancellation]) : deadline;
       const req = request(
         {
-          socketPath: this.binding.socketPath,
+          socketPath: directoryHandle
+            ? `/proc/self/fd/${directoryHandle.fd}/${basename(this.binding.socketPath)}`
+            : this.binding.socketPath,
           method: "POST",
           path: "/v1",
           signal,
@@ -179,7 +193,7 @@ export class NativeGptReadClient {
         reject(Error(signal.aborted ? "NATIVE_TIMEOUT" : "NATIVE_UNAVAILABLE")),
       );
       req.end(JSON.stringify({ ...input, userId: this.binding.userId }));
-    });
+    }).finally(() => directoryHandle?.close());
     this.authorize();
     return result;
   }

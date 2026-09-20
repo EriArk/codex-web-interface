@@ -128,6 +128,7 @@ export const configSchema = z
         gptProfiles: z
           .object({
             enabled: z.boolean().default(false),
+            runtime: z.enum(["browser", "native"]).optional(),
             maxProfiles: z.number().int().min(1).max(10).default(2),
             portBase: z.number().int().min(8900).max(65000).default(8900),
           })

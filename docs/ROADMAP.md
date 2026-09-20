@@ -1,5 +1,14 @@
 # Roadmap
 
+## Independent-member work — four passes (2026-09-20)
+
+1. **Personal native GPT:** per-user Linux client, empty profile, private login/Remote, account activation and own Hub runtime. Includes immediate local chat deletion with a durable background native queue. Implemented in the current candidate; deployment status is recorded separately from source completion.
+2. **Isolation and revocation:** finish #150/#158 acceptance against native profiles, account changes, active work and recovery. Keep registration disabled until admitted; do not rebuild the existing boundaries.
+3. **Friend PC setup:** finish #152/#173 installer/bootstrap and resume interrupted setup with minimal user steps.
+4. **New-user acceptance:** exercise the complete separate-account workflow, smaller tablet layout and shared-project ownership. The friend's actual login/device check remains distinct from automated fixtures.
+
+Pass 1 evidence: focused account-binding/deletion tests, Chromium/WebKit immediate deletion with an unavailable native client, and one disposable real Linux native profile with private Remote, logged-out startup and idempotent host provisioning. No production account was copied and no large download suite was repeated.
+
 ## Canvas removed from scope (2026-09-20)
 
 The owner cancelled Canvas after evaluating its usefulness and the current native-model limitation. Remove Canvas cards, its viewer and background reads from the UI. Earlier Canvas plans and acceptance reminders below are historical and superseded; do not schedule Canvas implementation or more model probes. Ordinary downloadable files, frozen text blocks, images and HTML demos remain in scope. Native document data and low-level compatibility contracts are not deleted.

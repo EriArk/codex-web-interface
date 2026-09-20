@@ -7,7 +7,13 @@ import { reconcileGptProfiles } from "./team-gpt-host.js";
 
 async function main() {
   const { values } = parseArgs({
-    options: { config: { type: "string" }, image: { type: "string" }, apply: { type: "boolean" } },
+    options: {
+      config: { type: "string" },
+      image: { type: "string" },
+      "native-image": { type: "string" },
+      seccomp: { type: "string" },
+      apply: { type: "boolean" },
+    },
   });
   if (!values.config || !values.image)
     throw Error("Use --config and --image; --apply enables host preparation.");
@@ -35,7 +41,15 @@ async function main() {
         .all();
       console.log(JSON.stringify({ apply: false, profiles: rows }));
     } else
-      console.log(JSON.stringify(await reconcileGptProfiles(config, db, { image: values.image })));
+      console.log(
+        JSON.stringify(
+          await reconcileGptProfiles(config, db, {
+            image: values.image,
+            nativeImage: values["native-image"],
+            seccompPath: values.seccomp,
+          }),
+        ),
+      );
   } finally {
     db.close();
   }

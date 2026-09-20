@@ -1,5 +1,6 @@
 /** A separately provisioned owner's lab, never an implicit member fallback. */
 export function nativeRecoveryBinding(binding, runtime, config) {
+ if (binding?.native && !binding.legacy) return runtime === null || runtime === '' || runtime === 'native' ? binding : null;
  if (runtime === null || runtime === '') return binding;
  if (runtime !== 'native' || !binding?.legacy || !binding.userId ||
      binding.userId !== config.userId || !/^[a-f0-9-]{36}$/.test(config.userId ?? '') ||

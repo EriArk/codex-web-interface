@@ -1,9 +1,10 @@
+import {NativeEnrollment} from './enrollment.mjs';
 import {NativeOperationReceipts} from './operation-receipts.mjs';
 import {NativeWorkspaceReceipts} from './workspace-receipts.mjs';
 import {NativeProjectReceipts} from './project-receipts.mjs';
 import {NativeLibraryReceipts} from './library-receipts.mjs';
 import { spawn } from 'node:child_process';
-import { closeSync, openSync, readFileSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, existsSync } from 'node:fs';
 import { NativePipe } from './pipe.mjs';
 import { NativeRendererReader } from './renderer.mjs';
 import { listenNative, NativeReadService, privatePath } from './service.mjs';
@@ -12,11 +13,10 @@ import { NativeDispatchReceipts } from './dispatch-receipts.mjs';
 process.umask(0o077);
 const root = '/data/native-adapter';
 privatePath(root, 'isDirectory');
-privatePath(`${root}/binding.json`, 'isFile');
-const binding = JSON.parse(readFileSync(`${root}/binding.json`, 'utf8'));
+function createService(binding,reader) {
 if (binding.build !== '26.915.31945') throw Error('NATIVE_UNSUPPORTED_BUILD');
 if (Object.keys(binding).some(k => !['build', 'userId', 'accountFingerprint'].includes(k))) throw Error('NATIVE_INVALID_BINDING');
-const service = new NativeReadService({ reader: null, ...binding, statePath: `${root}/manual.json` });
+const service = new NativeReadService({ reader, ...binding, statePath: `${root}/manual.json` });
 // Host-provisioned admission; absent by default. Public APIs cannot change this binding.
 try {
   privatePath(`${root}/canary.json`,'isFile');
@@ -29,13 +29,16 @@ try {
   service.projects=new NativeProjectReceipts(service.canary,canary.projectIds??[],canary.projectCreationKeys??[]);
   for(const id of service.projects.allowed)service.library.projects.add(id);
 }catch(error){if(error.code!=='ENOENT')throw error;}
+return service;
+}
 const log = openSync('/data/logs/app.log', 'a', 0o600);
-const child = spawn('/usr/bin/chatgpt', ['--disable-gpu', '--remote-debugging-pipe'], {
+const child = spawn('/usr/bin/chatgpt', ['--disable-gpu', '--remote-debugging-pipe', ...(process.env.HTTPS_PROXY?['--proxy-server='+process.env.HTTPS_PROXY]:[])], {
   stdio: ['ignore', log, log, 'pipe', 'pipe'],
 });
 closeSync(log);
 const transport = new NativePipe(child.stdio[3], child.stdio[4]);
-service.reader = new NativeRendererReader({ transport });
+const reader=new NativeRendererReader({transport});
+const service=existsSync(`${root}/enrollment.json`)?new NativeEnrollment(root,reader,b=>createService(b,reader)):(privatePath(`${root}/binding.json`,'isFile'),createService(JSON.parse(readFileSync(`${root}/binding.json`,'utf8')),reader));
 let server, stopping = false;
 function stop(code) {
   if (stopping) return;

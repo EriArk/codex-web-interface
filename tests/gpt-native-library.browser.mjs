@@ -9,10 +9,15 @@ for (const [engine, type] of [
 ]) {
   const native = nativeWorkspaceFixture(),
     origin = "http://127.0.0.1:18941";
-  let writes=0,checks=0;
-  native.client.libraryMutation=async(r,check)=>{
-    if(check){checks++;return {state:'completed',name:'Before',projectId:null};}
-    writes++;throw Error('NATIVE_TIMEOUT');
+  let writes = 0,
+    checks = 0;
+  native.client.libraryMutation = async (r, check) => {
+    if (check) {
+      checks++;
+      return { state: "completed", name: "Before", projectId: null };
+    }
+    writes++;
+    throw Error("NATIVE_TIMEOUT");
   };
   const f = await handoffFixture(origin, undefined, { nativeGpt: native.workspace });
   const browser = await type.launch(),
@@ -36,23 +41,51 @@ for (const [engine, type] of [
     const composer = page.getByRole("textbox", { name: "Сообщение GPT" });
     await expect(composer).toBeVisible();
     await expect(page.getByText("Первый ответ", { exact: true })).toBeVisible();
-    await page.getByRole('button',{name:'Открыть проекты',exact:true}).click();
-    await page.getByRole('button',{name:'Действия: Native workspace fixture',exact:true}).first().click();
-    const dialog=page.locator('dialog.entity-dialog');
-    await dialog.getByRole('button',{name:'Переименовать',exact:true}).click();
-    await dialog.getByRole('textbox',{name:'Название'}).fill('After');
-    await dialog.getByRole('button',{name:'Сохранить',exact:true}).click();
-    await expect(dialog.getByRole('button',{name:'Проверить результат',exact:true})).toBeVisible();
+    await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Действия: Native workspace fixture", exact: true })
+      .first()
+      .click();
+    const dialog = page.locator("dialog.entity-dialog");
+    await dialog.getByRole("button", { name: "Переименовать", exact: true }).click();
+    await dialog.getByRole("textbox", { name: "Название" }).fill("After");
+    await dialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+    await expect(
+      dialog.getByRole("button", { name: "Проверить результат", exact: true }),
+    ).toBeVisible();
     await page.reload();
     await expect(composer).toBeVisible();
-    await page.getByRole('button',{name:'Открыть проекты',exact:true}).click();
-    await page.getByRole('button',{name:'Действия: Native workspace fixture',exact:true}).first().click();
-    await expect(page.getByRole('button',{name:'Проверить результат',exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+    await page.getByRole("button", { name: "Открыть проекты", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Действия: Native workspace fixture", exact: true })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Проверить результат", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Проверить результат", exact: true }).click();
     await expect(dialog).not.toBeVisible();
-    assert.equal(writes,1);assert.equal(checks,1);
+    assert.equal(writes, 1);
+    assert.equal(checks, 1);
+    // The native connection may be unavailable: hiding a chat still only waits
+    // for the local durable acknowledgement, never for the native delete.
+    native.client.libraryMutation = async () => {
+      throw Error("NATIVE_UNAVAILABLE");
+    };
+    await page.getByRole("button", { name: "Действия: After", exact: true }).first().click();
+    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Действия: After", exact: true })).toHaveCount(0);
+    assert.equal(
+      f.store.db.prepare("SELECT done FROM gpt_deletions WHERE id=?").get(native.conversationId)
+        .done,
+      0,
+    );
     assert.deepEqual(errors, []);
-    console.log(engine+': native library lost ack and page reload recover read-only through shared menu');
+    console.log(
+      engine + ": native library lost ack and page reload recover read-only through shared menu",
+    );
   } finally {
     await context.close();
     await browser.close();

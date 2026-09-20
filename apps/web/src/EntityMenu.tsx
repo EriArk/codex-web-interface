@@ -266,7 +266,9 @@ export function EntityMenu({
                 <button
                   type="button"
                   className="entity-danger"
-                  disabled={busy || active}
+                  disabled={
+                    busy || (active && !(client === "gpt" && entity.kind === "thread" && !outbox))
+                  }
                   onClick={() => setPage("delete")}
                 >
                   <Icon name="trash" />

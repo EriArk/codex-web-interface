@@ -1,5 +1,5 @@
 [Unit]
-Description=Prepare requested private CodexWeb ChatGPT browsers
+Description=Prepare requested private CodexWeb ChatGPT clients
 After=docker.service
 Requires=docker.service
 
@@ -8,7 +8,7 @@ Type=oneshot
 User=1000
 Group=1000
 EnvironmentFile=/etc/codex-web/team-host.env
-ExecStart=/usr/bin/env node ${CODEX_WEB_SOURCE}/apps/hub/dist/team-gpt-cli.js --config ${CODEX_WEB_CONFIG} --image ${CODEX_WEB_GPT_IMAGE} --apply
+ExecStart=/usr/bin/env node ${CODEX_WEB_SOURCE}/apps/hub/dist/team-gpt-cli.js --config ${CODEX_WEB_CONFIG} --image ${CODEX_WEB_GPT_IMAGE} --native-image ${CODEX_WEB_GPT_NATIVE_IMAGE} --seccomp ${CODEX_WEB_SOURCE}/ops/gpt-native/seccomp.json --apply
 NoNewPrivileges=true
 PrivateTmp=true
 UMask=0077

@@ -4,6 +4,7 @@ import { api, messageOf } from "./api";
 type Status = {
   enabled: boolean;
   legacy: boolean;
+  native?: boolean;
   activated: boolean;
   state: "absent" | "requested" | "ready" | "failed" | "blocked";
 };
@@ -53,8 +54,8 @@ export function TeamGpt({ visible }: { visible: boolean }) {
     <section className="team-access team-gpt" aria-label="Личный ChatGPT">
       <h3>Мой ChatGPT</h3>
       <p className="muted">
-        Отдельный браузер с твоим аккаунтом, чатами и лимитами. Вход выполняется на странице
-        ChatGPT.
+        Отдельный клиент с твоим аккаунтом, чатами и лимитами. Войди в ChatGPT и активируй
+        подключение.
       </p>
       {status?.state === "blocked" ? (
         <p role="status">Администратор сервера проверяет подключения после восстановления.</p>
@@ -70,13 +71,18 @@ export function TeamGpt({ visible }: { visible: boolean }) {
               Активировать ChatGPT
             </button>
           )}
-          <a className="secondary" href="/gpt-connect" target="_blank" rel="noopener noreferrer">
+          <a
+            className="secondary"
+            href={status.native ? "/gpt-connect?runtime=native" : "/gpt-connect"}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             Открыть мой ChatGPT и войти
           </a>
         </>
       ) : status?.state === "requested" ? (
         <p role="status">
-          Сервер готовит твой браузер. Статус обновится автоматически; другие диалоги продолжают
+          Сервер готовит твой клиент. Статус обновится автоматически; другие диалоги продолжают
           работать.
         </p>
       ) : status?.enabled ? (
@@ -94,7 +100,7 @@ export function TeamGpt({ visible }: { visible: boolean }) {
       ) : (
         status && (
           <p className="muted">
-            Администратор ещё не включил подготовку личных браузеров на этом сервере.
+            Администратор ещё не включил подготовку личных клиентов на этом сервере.
           </p>
         )
       )}

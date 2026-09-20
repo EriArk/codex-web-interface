@@ -16,12 +16,15 @@ until xdpyinfo >/dev/null 2>&1; do
   sleep .1
 done
 openbox >/data/logs/window-manager.log 2>&1 &
+if [ ! -f /data/vnc-auth ] && [ -f /data/vnc-password ]; then
+  x11vnc -storepasswd "$(cat /data/vnc-password)" /data/vnc-auth >/dev/null 2>&1
+fi
 # Private Docker-network VNC; no host port. Password created by the installer.
 x11vnc -display "$DISPLAY" -forever -shared -rfbport 5900 \
   -rfbauth /data/vnc-auth -noxdamage -quiet >/data/logs/vnc.log 2>&1 &
 # Chromium user-namespace sandbox requires the pinned seccomp.json container profile.
 # An explicitly provisioned read adapter owns an inherited pipe, never a listener.
-if [ -f /data/native-adapter/binding.json ]; then
+if [ -f /data/native-adapter/binding.json ] || [ -f /data/native-adapter/enrollment.json ]; then
   node /opt/native/adapter/supervisor.mjs >/data/logs/adapter.log 2>&1
 else
   chatgpt --disable-gpu >/data/logs/app.log 2>&1

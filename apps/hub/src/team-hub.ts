@@ -89,6 +89,7 @@ export function privateConfig(config: HubConfig, registry: TeamStore, userId: st
     hub: { ...config.hub, databasePath: join(root, "app.db"), resultsPath: join(root, "results") },
     auth: { username: user.login },
     gpt: new TeamGpt(config, registry).runtime(userId),
+    nativeGpt: new TeamGpt(config, registry).nativeRuntime(userId),
     machines: enrolled.machines,
     projects: [],
     devices: enrolled.devices,
@@ -651,7 +652,12 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   app.get("/api/team/gpt", async (req) => {
     const userId = actor(req),
       current = await instances.get(userId)?.catch(() => undefined);
-    return { ...teamGpt.status(userId), activated: !!current?.runtime.sessions.config.gpt };
+    return {
+      ...teamGpt.status(userId),
+      activated: !!(
+        current?.runtime.sessions.config.gpt || current?.runtime.sessions.config.nativeGpt
+      ),
+    };
   });
   app.post("/api/team/gpt", slow, (req) => {
     z.object({})
@@ -661,7 +667,8 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   app.post("/api/team/gpt/apply", async (req) => {
     const userId = actor(req);
-    if (!teamGpt.runtime(userId))
+    await teamGpt.activate(userId);
+    if (!teamGpt.runtime(userId) && !teamGpt.nativeRuntime(userId))
       throw new HubError(409, "GPT_PROFILE_NOT_READY", "Личный браузер ещё не готов.");
     await restartPersonal(userId);
     return { ok: true };

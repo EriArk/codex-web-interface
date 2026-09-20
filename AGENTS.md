@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Owner-approved independent-member passes and background GPT deletion (2026-09-20)
+
+- Complete member readiness in four bounded passes: personal native GPT profiles/login; remaining isolation and revocation; PC installer and continuous setup; new-user acceptance. Use focused checks for the affected behavior rather than repeating unrelated large suites.
+- Confirmed GPT chat deletion hides the chat after a fast durable Hub acknowledgement. Perform native deletion in the background when idle, retain its receipt across restarts, and do not block other chats on an uncertain deletion. Preserve the existing confirmation for irreversible native deletion.
+- New native member profiles start empty and bind only their own authenticated account. Preserve the owner's existing native profile and workflow. Do not enable public member registration before the remaining admission pass.
+
 ## Owner-requested Canvas removal (2026-09-20)
 
 - Remove Canvas from the product UI and planned work, including its cards, viewer and background metadata reads. This supersedes the earlier Canvas navigation/evaluation requests. Retain normal file artifacts, text blocks and HTML demos; HTML canvas elements are unrelated. Do not delete native documents as part of UI removal.

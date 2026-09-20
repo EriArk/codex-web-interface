@@ -1,4 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, lstatSync } from "node:fs";
+import { join } from "node:path";
+import { NativeGptReadClient } from "./gpt-native.js";
 import { type HubConfig, HubError } from "@codex-web/shared";
 import { z } from "zod";
 import type { TeamStore } from "./team-store.js";
@@ -43,6 +46,9 @@ export class TeamGpt {
       row = this.row(userId);
     return {
       enabled: !!this.config.team?.gptProfiles?.enabled,
+      native: legacy
+        ? !!this.config.nativeGpt
+        : this.config.team?.gptProfiles?.runtime === "native",
       legacy,
       state: nativeAdmissionBlocked(this.registry)
         ? "blocked"
@@ -107,6 +113,7 @@ export class TeamGpt {
     this.registry.active(userId);
     if (nativeAdmissionBlocked(this.registry)) return undefined;
     if (userId === this.registry.ownerId && this.config.gpt) return this.config.gpt;
+    if (this.config.team?.gptProfiles?.runtime === "native") return undefined;
     const row = this.row(userId),
       settings = this.config.team?.gptProfiles;
     if (!row || row.state !== "ready" || !settings?.enabled) return undefined;
@@ -114,6 +121,69 @@ export class TeamGpt {
     // Hub-generated connector credential, never the person's native ChatGPT login.
     process.env[tokenSecret] = row.serviceToken;
     return { endpoint: `http://127.0.0.1:${settings.portBase + row.slot}/`, tokenSecret };
+  }
+  nativeSocket(userId: string) {
+    this.registry.active(userId);
+    if (
+      !this.config.team?.gptProfiles?.enabled ||
+      this.config.team.gptProfiles.runtime !== "native" ||
+      this.row(userId)?.state !== "ready" ||
+      nativeAdmissionBlocked(this.registry)
+    )
+      throw new HubError(409, "GPT_PROFILE_NOT_READY", "Личный клиент ещё не готов.");
+    return join(this.config.team.root, "users", userId, "gpt", "native-adapter", "adapter.sock");
+  }
+  nativeRuntime(userId: string): HubConfig["nativeGpt"] {
+    this.registry.active(userId);
+    if (nativeAdmissionBlocked(this.registry)) return undefined;
+    if (userId === this.registry.ownerId)
+      return this.config.nativeGpt?.userId === userId ? this.config.nativeGpt : undefined;
+    if (
+      this.config.team?.gptProfiles?.runtime !== "native" ||
+      !this.config.team.gptProfiles.enabled ||
+      this.row(userId)?.state !== "ready"
+    )
+      return undefined;
+    const socketPath = this.nativeSocket(userId),
+      path = join(socketPath, "..", "binding.json");
+    if (!existsSync(path)) return undefined;
+    const stat = lstatSync(path);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.mode & 0o077 ||
+      (process.getuid && stat.uid !== process.getuid())
+    )
+      throw Error("NATIVE_INVALID_BINDING");
+    const binding = z
+      .object({
+        build: z.literal("26.915.31945"),
+        userId: z.literal(userId),
+        accountFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict()
+      .parse(JSON.parse(readFileSync(path, "utf8")));
+    return { userId, socketPath, accountFingerprint: binding.accountFingerprint };
+  }
+  async activate(userId: string) {
+    if (userId === this.registry.ownerId || this.config.team?.gptProfiles?.runtime !== "native")
+      return;
+    const client = new NativeGptReadClient(
+      { userId, socketPath: this.nativeSocket(userId) },
+      () => {
+        this.registry.active(userId);
+        if (nativeAdmissionBlocked(this.registry)) throw Error("RESTORE_ADMISSION_REQUIRED");
+      },
+    );
+    try {
+      await client.activate();
+    } catch {
+      throw new HubError(
+        409,
+        "GPT_LOGIN_REQUIRED",
+        "Сначала войди в свой аккаунт в клиенте ChatGPT, затем нажми «Активировать».",
+      );
+    }
   }
   connection(userId: string) {
     this.registry.active(userId);
@@ -126,7 +196,7 @@ export class TeamGpt {
     if (userId === this.registry.ownerId && this.config.gpt)
       return { userId, legacy: true as const };
     const row = this.row(userId);
-    if (!this.runtime(userId) || !row)
+    if (!row || row.state !== "ready" || !this.config.team?.gptProfiles?.enabled)
       throw new HubError(
         503,
         "GPT_PROFILE_NOT_READY",
@@ -136,6 +206,7 @@ export class TeamGpt {
     return {
       userId,
       legacy: false as const,
+      native: this.config.team?.gptProfiles?.runtime === "native",
       host: teamGptName(userId),
       password: row.vncPassword,
       gatewayPort: this.config.team!.gptProfiles!.portBase + 100 + row.slot,
