@@ -4,6 +4,7 @@ The caller holds the deployment and GPT-host locks, closes public admission and
 stops the engine. Restore is allowed only before the replacement gateway starts.
 """
 import hashlib
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -212,9 +213,24 @@ def create(state, destination, revision):
     try:
         config = json.loads((state / 'config.json').read_text())
         layout = team_layout(state, config)
-        entries = inventory(state / 'data', layout['protected'], layout['databases'])
+        # SQLite may remove WAL files when its final reader closes, even with
+        # the engine stopped. Snapshot databases through SQLite, not file copies.
+        excluded = layout['protected'] + [name + suffix for name in layout['databases'] for suffix in ('', '-wal', '-shm')]
+        entries = inventory(state / 'data', excluded)
         require(shutil.disk_usage(destination).free > 3 * sum(item.get('bytes', 0) for item in entries.values()) + 64 * 1024 ** 2, 'CHECKPOINT_DISK_SPACE')
         copy_inventory(state / 'data', destination / 'data', entries)
+        with ExitStack() as readers:
+            for name in layout['databases']:
+                source = database(state / 'data' / name)
+                readers.callback(source.close)
+                target = destination / 'data' / name
+                saved = sqlite3.connect(target)
+                try:
+                    source.backup(saved)
+                    saved.execute('PRAGMA journal_mode=DELETE')
+                finally:
+                    saved.close()
+                target.chmod(0o600)
         private = {}
         for name, source in [('config.json', state / 'config.json'), ('deploy.env', state / 'deploy.env'), ('web-pointer.json', state / 'web-releases/current.json')]:
             if source.exists():
@@ -222,7 +238,8 @@ def create(state, destination, revision):
                 shutil.copyfile(source, destination / name)
                 (destination / name).chmod(0o600)
                 private[name] = file_hash(destination / name)
-        require(inventory(state / 'data', layout['protected'], layout['databases']) == entries, 'CHECKPOINT_SOURCE_CHANGED')
+        require(inventory(state / 'data', excluded) == entries, 'CHECKPOINT_SOURCE_CHANGED')
+        entries = inventory(destination / 'data', databases=layout['databases'])
         manifest = dict(kind='codex-web-engine-checkpoint', format=1, revision=revision, state=str(state), layout=layout, entries=entries, private=private,
                         privacy=privacy(state / 'data', layout['databases'][0]), privateBindings=private_bindings(state / 'data', layout['databases']), createdAt=time.time_ns())
         write_json(destination / 'checkpoint.json', manifest)

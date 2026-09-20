@@ -180,6 +180,29 @@ class CheckpointTest(unittest.TestCase):
         with checkpoint.database(self.target / 'data/team/users' / MEMBER / 'app.db') as saved:
             self.assertEqual(saved.execute("SELECT value FROM content WHERE id='wal-thread'").fetchone(), ('committed WAL',))
 
+    def test_wal_removed_during_asset_copy_preserves_committed_data(self):
+        path = self.team / 'team.db'
+        db = sqlite3.connect(path)
+        db.execute('PRAGMA journal_mode=WAL')
+        db.execute("INSERT INTO team_audit VALUES(1,'committed before shutdown')")
+        db.commit()
+        original = checkpoint.copy_inventory
+        def copy(source, target, entries):
+            if source == self.data:
+                self.assertTrue(Path(str(path) + '-wal').exists())
+                db.close()  # Last connection checkpoints and removes the WAL.
+                self.assertFalse(Path(str(path) + '-wal').exists())
+            return original(source, target, entries)
+        try:
+            with patch.object(checkpoint, 'copy_inventory', copy):
+                self.create()
+        finally:
+            db.close()
+        checkpoint.verify(self.target)
+        with sqlite3.connect(self.target / 'data/team/team.db') as saved:
+            self.assertEqual(saved.execute('SELECT action FROM team_audit').fetchall(), [('committed before shutdown',)])
+        self.assertFalse((self.target / 'data/team/team.db-wal').exists())
+
 
 class UpgraderTest(unittest.TestCase):
     setUp = CheckpointTest.setUp
