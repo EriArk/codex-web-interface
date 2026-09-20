@@ -3,6 +3,15 @@
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)]$Connection, [Parameter(Mandatory=$true)]$Window, [switch]$PrivateBoundary)
 $ErrorActionPreference = 'Stop'
+function Get-CwRemoteEffectiveSettings($settings) {
+    # TightVNC 2.8.88 ServerConfig.cpp supplies these defaults when registry values are absent.
+    $defaults = @{RfbPort=5900; AcceptRfbConnections=1; UseVncAuthentication=1; AcceptHttpConnections=1}
+    $effective = @{}
+    foreach ($name in $defaults.Keys) {
+        $effective[$name] = if ($null -eq $settings.$name) { $defaults[$name] } else { $settings.$name }
+    }
+    return [pscustomobject]$effective
+}
 function Test-CwRemotePort($filter) {
     if ([string]$filter.Protocol -notin @('TCP', '6', 'Any', '256')) { return $false }
     foreach ($port in @($filter.LocalPort)) {
@@ -112,7 +121,9 @@ $signature = Get-AuthenticodeSignature -LiteralPath $program
 if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=OOO GlavSoft,') { throw 'Existing Remote executable is not trusted.' }
 $serviceInfo = Get-CimInstance Win32_Service -Filter "Name='tvnserver'"
 if ($serviceInfo.PathName -notmatch ('^"?' + [Regex]::Escape($program) + '"?\s+-service$')) { throw 'Remote service command changed. No service was restarted.' }
-$settings = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\TightVNC\Server'
-if ($settings.RfbPort -ne 5900 -or $settings.AcceptRfbConnections -ne 1 -or $settings.UseVncAuthentication -ne 1 -or $settings.AcceptHttpConnections -ne 0) { throw 'Remote security settings differ. Review TightVNC settings on this PC.' }
+$settings = Get-CwRemoteEffectiveSettings (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\TightVNC\Server')
+if ($settings.RfbPort -ne 5900 -or $settings.AcceptRfbConnections -ne 1 -or $settings.UseVncAuthentication -ne 1 -or $settings.AcceptHttpConnections -ne 0) {
+    throw ('Remote: настройки отличаются. Port={0}; AcceptRfb={1}; Authentication={2}; HTTP={3}. Ожидались 5900, 1, 1, 0.' -f $settings.RfbPort,$settings.AcceptRfbConnections,$settings.UseVncAuthentication,$settings.AcceptHttpConnections)
+}
 if ((Get-Service tvnserver).Status -ne 'Running') { Start-Service tvnserver }
 return @{provider='vnc'; port=5900; password=[string]$state.password}

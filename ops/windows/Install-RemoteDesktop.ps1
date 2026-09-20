@@ -26,6 +26,7 @@ if (-not (Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue)) {
 $arguments = @(
     '/i', ('"' + $Installer + '"'), '/quiet', '/norestart', 'ADDLOCAL=Server',
     'SERVER_REGISTER_AS_SERVICE=1', 'SERVER_ADD_FIREWALL_EXCEPTION=0',
+    'SET_RFBPORT=1', 'VALUE_OF_RFBPORT=5900',
     'SET_ACCEPTHTTPCONNECTIONS=1', 'VALUE_OF_ACCEPTHTTPCONNECTIONS=0',
     'SET_ACCEPTRFBCONNECTIONS=1', 'VALUE_OF_ACCEPTRFBCONNECTIONS=1',
     'SET_ALWAYSSHARED=1', 'VALUE_OF_ALWAYSSHARED=1',
