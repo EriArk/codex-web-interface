@@ -1427,14 +1427,6 @@ function Workspace({
                 ":" +
                 results.map((r) => r.id).join(",")
               }
-              toolbar={
-                project && (
-                  <div className="result-project-label">
-                    <Icon name="folder" size={15} />
-                    <span>{project.name}</span>
-                  </div>
-                )
-              }
               onOverlayChange={setResultOverlay}
               visible={view === "results" || view === "chat"}
               focusId={focusResult}
