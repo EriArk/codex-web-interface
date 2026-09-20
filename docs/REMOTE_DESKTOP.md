@@ -203,3 +203,8 @@ Both touch and trackpad modes scroll the remote application with two fingers.
 Direct touch targets the midpoint where the gesture starts; trackpad mode keeps
 the existing pointer position. A three-finger drag moves the zoomed viewport,
 and a pinch changes scale. Two-finger taps retain right-click.
+
+
+### Quiet PC Remote recovery (2026-09-20)
+
+An already opened Remote reconnects with at most three backoff attempts after a transient failure. Successful recovery is quiet; access failures and exhausted retries expose the manual action. A 20-second first-frame deadline prevents a permanent connecting screen. Backgrounding disconnects and releases input; returning resumes the still-open Remote. Explicitly closing the pane prevents automatic reopening. This reconnects the configured desktop transport, never restarts a desktop process or replays input. The separate GPT connection page has an independent release lifecycle.

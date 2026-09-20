@@ -22,7 +22,7 @@ interface Client {
   getDisplay: () => Display;
   onstatechange: (state: number) => void;
   onsync: () => void;
-  onerror: (error: { message: string }) => void;
+  onerror: (error: { message: string; code?: number }) => void;
 }
 interface Keyboard {
   onkeydown: ((key: number) => boolean) | null;
@@ -33,7 +33,10 @@ interface Guac {
   Client: new (tunnel: unknown) => Client;
   WebSocketTunnel: new (
     url: string,
-  ) => { onerror: (e: { message: string }) => void; onstatechange: (state: number) => void };
+  ) => {
+    onerror: (e: { message: string; code?: number }) => void;
+    onstatechange: (state: number) => void;
+  };
   Keyboard: new (element: HTMLElement) => Keyboard;
 }
 declare global {
@@ -96,6 +99,24 @@ export function Remote({
   const profile = useRef(
     Math.min(window.innerWidth, window.innerHeight) < 600 ? "phone" : "tablet",
   );
+  const attempts = useRef(0);
+  const [retry, setRetry] = useState(0),
+    [suspended, setSuspended] = useState(document.hidden);
+  useEffect(() => {
+    const wake = () => {
+      setSuspended(document.hidden);
+      if (!document.hidden) {
+        attempts.current = 0;
+        setRetry((n) => n + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+    return () => {
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
+    };
+  }, []);
   const [requested, setRequested] = useState(false),
     [status, setStatus] = useState("idle"),
     [error, setError] = useState(""),
@@ -129,6 +150,7 @@ export function Remote({
   }, [visible, full, requested, compact, onImmersiveChange]);
   useEffect(() => {
     if (!visible) {
+      attempts.current = 0;
       setRequested(false);
       setFull(false);
       setControls(false);
@@ -144,8 +166,10 @@ export function Remote({
     } catch {}
   }, [touchMode]);
   useEffect(() => {
-    if (!requested || !visible || !host.current) return;
+    void retry;
+    if (!requested || !visible || suspended || !host.current) return;
     let disposed = false,
+      recovering = false,
       renderStage: HTMLElement | undefined,
       keyboardSink: HTMLTextAreaElement | undefined,
       client: Client | undefined,
@@ -155,6 +179,27 @@ export function Remote({
       raf = 0,
       pending: RemoteMouseState | undefined,
       lastButtons = "";
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let stableTimer: ReturnType<typeof setTimeout> | undefined;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const failed = (message: string, code?: number) => {
+      if (disposed || recovering) return;
+      recovering = true;
+      clearTimeout(deadline);
+      clearTimeout(stableTimer);
+      keyboard?.reset();
+      input?.reset();
+      release();
+      if (![769, 771].includes(code ?? 0) && attempts.current < 3) {
+        setStatus("connecting");
+        setError("");
+        retryTimer = setTimeout(() => setRetry((n) => n + 1), 800 * 2 ** attempts.current++);
+      } else {
+        setError(message);
+        setStatus("error");
+      }
+    };
+    deadline = setTimeout(() => failed("Рабочий стол не отвечает."), 20000);
     setStatus("connecting");
     setError("");
     setZoom(1);
@@ -169,14 +214,9 @@ export function Remote({
             encodeURIComponent(projectId) +
             "/remote";
         const tunnel = new G.WebSocketTunnel(workspaceUrl(url));
-        tunnel.onerror = (e) => {
-          if (!disposed) {
-            setError(e.message || "Связь с рабочим столом прервалась");
-            setStatus("error");
-          }
-        };
+        tunnel.onerror = (e) => failed(e.message || "Связь с рабочим столом прервалась", e.code);
         tunnel.onstatechange = (state) => {
-          if (!disposed && state === 2) setStatus("disconnected");
+          if (state === 2) failed("Не удалось восстановить связь с рабочим столом.");
         };
         client = new G.Client(tunnel);
         clientRef.current = client;
@@ -332,13 +372,13 @@ export function Remote({
         resize.observe(surface);
         display.showCursor(false);
         client.onstatechange = (state) => {
-          if (!disposed && state !== 3) setStatus(state === 5 ? "disconnected" : "connecting");
+          if (state === 5) failed("Не удалось восстановить связь с рабочим столом.");
         };
         let frameReady = false;
         client.onsync = () => {
           if (frameReady) return;
           display.flush(() => {
-            if (disposed || !display.getWidth() || !display.getHeight()) return;
+            if (disposed || recovering || !display.getWidth() || !display.getHeight()) return;
             const canvas = display.flatten(),
               ctx = canvas.getContext("2d");
             if (
@@ -346,17 +386,16 @@ export function Remote({
                 .data[3]
             ) {
               frameReady = true;
+              clearTimeout(deadline);
+              stableTimer = setTimeout(() => {
+                attempts.current = 0;
+              }, 10000);
               setStatus("connected");
               layout();
             }
           });
         };
-        client.onerror = (e) => {
-          if (!disposed) {
-            setError(e.message || "Не удалось подключиться");
-            setStatus("error");
-          }
-        };
+        client.onerror = (e) => failed(e.message || "Не удалось подключиться", e.code);
         // Keep focus inside the user gesture: InputSink.focus() defers it and iOS can reject it.
         const sinkElement = document.createElement("textarea");
         keyboardSink = sinkElement;
@@ -423,10 +462,7 @@ export function Remote({
         );
       })
       .catch((e) => {
-        if (!disposed) {
-          setError(messageOf(e));
-          setStatus("error");
-        }
+        failed(messageOf(e));
       });
     const blur = () => {
       keyboard?.reset();
@@ -436,12 +472,15 @@ export function Remote({
     const visibility = () => {
       if (document.visibilityState === "hidden") {
         blur();
-        setRequested(false);
       }
     };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("blur", blur);
     return () => {
+      disposed = true;
+      clearTimeout(retryTimer);
+      clearTimeout(stableTimer);
+      clearTimeout(deadline);
       blur();
       input?.dispose();
       if (keyboard) {
@@ -450,7 +489,6 @@ export function Remote({
       }
       sinkRef.current?.blur();
       setKeyboardActive(false);
-      disposed = true;
       if (raf) cancelAnimationFrame(raf);
       pending = undefined;
       resize?.disconnect();
@@ -463,7 +501,7 @@ export function Remote({
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [requested, visible, projectId, release]);
+  }, [requested, visible, projectId, release, retry, suspended]);
   const stroke = (code: number) => {
     clientRef.current?.sendKeyEvent(1, code);
     clientRef.current?.sendKeyEvent(0, code);
@@ -592,7 +630,14 @@ export function Remote({
                   (status === "disconnected" ? "Соединение завершено" : "Подключаем рабочий стол…")}
               </p>
               {["error", "disconnected"].includes(status) && (
-                <button type="button" className="secondary" onClick={() => setRequested(false)}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    attempts.current = 0;
+                    setRetry((n) => n + 1);
+                  }}
+                >
                   Подключиться снова
                 </button>
               )}

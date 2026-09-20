@@ -63,7 +63,8 @@ export function ProjectFiles({
     [error, setError] = useState(""),
     [fileError, setFileError] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
-  const readScope = useRef("");
+  const readScope = useRef(""),
+    detailScope = useRef("");
   const base = `/projects/${encodeURIComponent(projectId)}`;
   const open = (next: string) => {
     setEditingPath(false);
@@ -131,8 +132,12 @@ export function ProjectFiles({
   }, [directory, visible, reveal, focus.path]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh repeats this scoped read.
   useEffect(() => {
-    setDiff(null);
-    setSaved(null);
+    const scope = `${base}/${mode}/${selected}?staged=${staged}`;
+    if (detailScope.current !== scope) {
+      detailScope.current = scope;
+      setDiff(null);
+      setSaved(null);
+    }
     setFileError("");
     if (!selected || !visible) return;
     const controller = new AbortController();

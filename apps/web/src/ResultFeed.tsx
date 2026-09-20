@@ -93,7 +93,8 @@ export function ResultFeed({
   const [cursor, setCursor] = useState<string | number | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const generation = useRef(0);
+  const generation = useRef(0),
+    readScope = useRef("");
   useEffect(() => {
     onCount?.(counts.all);
   }, [counts.all, onCount]);
@@ -101,10 +102,17 @@ export function ResultFeed({
   // biome-ignore lint/correctness/useExhaustiveDependencies: The retry button deliberately repeats the same read.
   useEffect(() => {
     const current = ++generation.current;
-    setItems([]);
-    fullyLoaded.current = false;
-    loadedIds.current = [];
-    setCursor(null);
+    const scope = `${endpoint}?category=${category}`;
+    if (scope !== readScope.current) {
+      readScope.current = scope;
+      setItems([]);
+      fullyLoaded.current = false;
+      loadedIds.current = [];
+      setCursor(null);
+      setFocused(null);
+      sourceRef.current = undefined;
+      setSourceRevision(undefined);
+    }
     setError("");
     if (!endpoint) {
       setCounts(emptyResultCounts());

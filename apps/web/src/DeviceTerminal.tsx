@@ -2,7 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import { workspaceSocket } from "./accountStorage.ts";
-import { api } from "./api";
+import { ApiError, api } from "./api";
 import { Icon } from "./icons";
 import "@xterm/xterm/css/xterm.css";
 
@@ -13,13 +13,19 @@ export function DeviceTerminal({ id, onExit }: { id: string; onExit: () => void 
     exitRef = useRef(onExit);
   exitRef.current = onExit;
   const [status, setStatus] = useState("Подключаемся…"),
-    [retry, setRetry] = useState(0),
+    [failed, setFailed] = useState(false),
     [connected, setConnected] = useState(false);
+  const retryRef = useRef(() => {});
   useEffect(() => {
-    void retry;
     if (!host.current) return;
     let stopped = false,
-      socket: WebSocket | undefined;
+      socket: WebSocket | undefined,
+      ready = false,
+      ended = false,
+      connecting = false,
+      attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined,
+      deadline: ReturnType<typeof setTimeout> | undefined;
     const abort = new AbortController();
     const term = new Terminal({
       cursorBlink: true,
@@ -64,58 +70,127 @@ export function DeviceTerminal({ id, onExit }: { id: string; onExit: () => void 
     observer.observe(host.current);
     resize();
     const data = term.onData((value) => {
-      if (socket?.readyState !== 1) return;
+      if (!ready || socket?.readyState !== 1) return;
       for (let i = 0; i < value.length; i += 1024)
         socket.send(JSON.stringify({ type: "input", data: value.slice(i, i + 1024) }));
     });
-    setConnected(false);
-    setStatus("Подключаемся…");
-    void api<{ ticket: string }>(`/device-terminals/${id}/ticket`, {
-      method: "POST",
-      signal: abort.signal,
-    })
-      .then(({ ticket }) => {
+    const cancelTimers = () => {
+      clearTimeout(timer);
+      clearTimeout(deadline);
+    };
+    const fail = (message: string, permanent = false) => {
+      if (stopped || ended) return;
+      connecting = false;
+      ready = false;
+      setConnected(false);
+      clearTimeout(deadline);
+      if (!permanent && attempts < 3) {
+        setStatus("Соединение…");
+        setFailed(false);
+        clearTimeout(timer);
+        timer = setTimeout(() => void connect(), 800 * 2 ** attempts++);
+      } else {
+        setStatus(message);
+        setFailed(true);
+      }
+    };
+    const connect = async () => {
+      if (stopped || ended || connecting || document.hidden) return;
+      connecting = true;
+      ready = false;
+      setConnected(false);
+      setFailed(false);
+      setStatus("Соединение…");
+      const previous = socket;
+      socket = undefined;
+      socketRef.current = null;
+      previous?.close();
+      try {
+        const { ticket } = await api<{ ticket: string }>(`/device-terminals/${id}/ticket`, {
+          method: "POST",
+          signal: abort.signal,
+          timeoutMs: 15000,
+        });
         if (stopped) return;
         const url = new URL(`/api/device-terminals/${id}/socket`, location.href);
         url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-        socket = workspaceSocket(url);
-        socketRef.current = socket;
-        socket.onopen = () => socket?.send(JSON.stringify({ ticket }));
-        socket.onmessage = (e) => {
+        const current = workspaceSocket(url);
+        socket = current;
+        socketRef.current = current;
+        deadline = setTimeout(() => {
+          if (!ready) current.close();
+        }, 12000);
+        current.onopen = () => current.send(JSON.stringify({ ticket }));
+        current.onmessage = (e) => {
+          if (stopped || socket !== current) return;
           const msg = JSON.parse(e.data);
           if (msg.type === "ready") {
-            setConnected(msg.state === "open");
-            setStatus(msg.state === "open" ? "Подключено" : "Сессия завершена");
+            connecting = false;
+            clearTimeout(deadline);
+            ready = msg.state === "open";
+            ended = !ready;
+            setConnected(ready);
+            setFailed(false);
+            setStatus(ready ? "Подключено" : "Сессия завершена");
+            // Every attach replays the server's bounded screen. Replace it, never append twice.
+            term.write("", () => term.reset());
             resize();
+            timer = setTimeout(() => {
+              attempts = 0;
+            }, 10000);
           }
           if (msg.type === "output" && typeof msg.data === "string")
             term.write(msg.data, () => {
-              if (!stopped && socket?.readyState === 1)
-                socket.send(JSON.stringify({ type: "ack", length: msg.data.length }));
+              if (!stopped && socket === current && current.readyState === 1)
+                current.send(JSON.stringify({ type: "ack", length: msg.data.length }));
             });
           if (msg.type === "exit") {
+            ended = true;
+            ready = false;
+            cancelTimers();
             setConnected(false);
+            setFailed(false);
             setStatus(
               msg.exitCode === null ? "Сессия завершена" : `Завершено · код ${msg.exitCode}`,
             );
             exitRef.current();
           }
         };
-        socket.onclose = () => {
-          if (!stopped) {
-            setConnected(false);
-            setStatus("Соединение закрыто");
+        current.onclose = (e) => {
+          if (socket === current && !stopped && !ended) {
+            clearTimeout(timer);
+            fail("Не удалось восстановить связь с терминалом.", e.code === 1008);
           }
         };
-        socket.onerror = () => {
-          if (!stopped) setStatus("Не удалось подключиться");
-        };
-      })
-      .catch((e) => {
-        if (!stopped) setStatus(e.message);
-      });
+        current.onerror = () => current.close();
+      } catch (e) {
+        if (stopped) return;
+        const permanent = e instanceof ApiError && [401, 403, 404, 410].includes(e.status);
+        if (e instanceof ApiError && e.status === 410) {
+          ended = true;
+          setStatus(e.message);
+          setConnected(false);
+          setFailed(false);
+        } else fail(e instanceof Error ? e.message : "Нет связи с терминалом", permanent);
+      }
+    };
+    retryRef.current = () => {
+      attempts = 0;
+      cancelTimers();
+      void connect();
+    };
+    const wake = () => {
+      if (!document.hidden && !ready && !connecting && !ended) retryRef.current();
+    };
+    window.addEventListener("online", wake);
+    document.addEventListener("visibilitychange", wake);
+    void connect();
     return () => {
       stopped = true;
+      cancelTimers();
+      retryRef.current = () => {};
+      window.removeEventListener("online", wake);
+      document.removeEventListener("visibilitychange", wake);
       abort.abort();
       socket?.close();
       socketRef.current = null;
@@ -126,7 +201,7 @@ export function DeviceTerminal({ id, onExit }: { id: string; onExit: () => void 
       term.dispose();
       termRef.current = null;
     };
-  }, [id, retry]);
+  }, [id]);
   const input = (data: string) => {
     if (connected && socketRef.current?.readyState === 1)
       socketRef.current.send(JSON.stringify({ type: "input", data }));
@@ -136,15 +211,17 @@ export function DeviceTerminal({ id, onExit }: { id: string; onExit: () => void 
     <div className="device-terminal">
       <div className="device-terminal-status">
         <span className={connected ? "online" : ""}>{status}</span>
-        <button
-          type="button"
-          className="icon-button"
-          title="Подключиться снова"
-          aria-label="Подключиться снова"
-          onClick={() => setRetry((v) => v + 1)}
-        >
-          <Icon name="refresh" size={17} />
-        </button>
+        {failed && (
+          <button
+            type="button"
+            className="icon-button"
+            title="Подключиться снова"
+            aria-label="Подключиться снова"
+            onClick={() => retryRef.current()}
+          >
+            <Icon name="refresh" size={17} />
+          </button>
+        )}
       </div>
       <section className="device-terminal-screen" ref={host} aria-label="Терминал устройства" />
       <div className="device-terminal-keys" role="toolbar" aria-label="Клавиши терминала">
