@@ -102,6 +102,8 @@ foreach ($rule in @(Get-NetFirewallRule -Enabled True -Direction Inbound -Action
     $portFilter = $rule | Get-NetFirewallPortFilter
     if (-not (Test-CwSshPort $portFilter)) { continue }
     $application = $rule | Get-NetFirewallApplicationFilter
+    # AppContainer rules may say Program=Any but apply only to their package, never sshd.
+    if ([string]$application.Package -notin @('', 'Any')) { continue }
     $service = $rule | Get-NetFirewallServiceFilter
     $programPath = [Environment]::ExpandEnvironmentVariables([string]$application.Program)
     if ($programPath -notin @('Any', (Join-Path $sshBin 'sshd.exe')) -or [string]$service.Service -notin @('Any', 'sshd')) { continue }

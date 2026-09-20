@@ -62,6 +62,8 @@ foreach ($profile in @(Get-NetFirewallProfile -PolicyStore ActiveStore)) {
 foreach ($rule in @(Get-NetFirewallRule -PolicyStore ActiveStore -Enabled True -Direction Inbound -Action Allow)) {
     if (-not (Test-CwRemotePort ($rule | Get-NetFirewallPortFilter))) { continue }
     $application = $rule | Get-NetFirewallApplicationFilter; $serviceFilter = $rule | Get-NetFirewallServiceFilter
+    # Package-scoped AppContainer rules cannot grant access to the native VNC service.
+    if ([string]$application.Package -notin @('', 'Any')) { continue }
     $programPath = [Environment]::ExpandEnvironmentVariables([string]$application.Program)
     if ($programPath -notin @('Any', $program) -or [string]$serviceFilter.Service -notin @('Any', 'tvnserver')) { continue }
     $addresses = @(($rule | Get-NetFirewallAddressFilter).RemoteAddress)

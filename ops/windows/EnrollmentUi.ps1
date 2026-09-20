@@ -4,7 +4,7 @@ Add-Type -AssemblyName System.Drawing
 $script:CwWindow = $null
 function New-CwWindow {
     $form = [Windows.Forms.Form]::new()
-    $form.Text = 'CodexWeb — подключение компьютера · v4'
+    $form.Text = 'CodexWeb — подключение компьютера · v5'
     $form.Size = [Drawing.Size]::new(690, 520)
     $form.MinimumSize = [Drawing.Size]::new(590, 450)
     $form.StartPosition = 'CenterScreen'
