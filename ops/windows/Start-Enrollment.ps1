@@ -57,7 +57,8 @@ if ((Test-Path -LiteralPath $descriptor) -and ((Get-Item -LiteralPath $descripto
 . (Join-Path $directory 'EnrollmentUi.ps1')
 New-CwWindow
 try {
-    & (Join-Path $directory 'Enroll-Computer.ps1') -ConnectionFile $descriptor
+    # Keep script-scoped window controls and checkpoint state in the same scope.
+    . (Join-Path $directory 'Enroll-Computer.ps1') -ConnectionFile $descriptor
     if (Confirm-Cw 'Компьютер подготовлен. Открыть сайт и продолжить настройку? Там появится подтверждение администратора и активация подключения.') {
         $target = [Uri]$payload.descriptor.baseUrl
         if ($target.Scheme -eq 'https' -and -not $target.UserInfo -and $target.AbsolutePath -eq '/' -and -not $target.Query -and -not $target.Fragment) { Start-Process ($target.AbsoluteUri + '#setup') }

@@ -88,6 +88,18 @@ try {
     $script:CwWindow.Show()
     [Windows.Forms.Application]::DoEvents()
     Write-CwStep 3 '3 / 5 - Applications and CodexWeb components'
+    # Exercise the bootstrap's real invocation operator across a .ps1 boundary.
+    # The former call operator lost script-scoped controls on resumed setup.
+    $scopeDirectory = Join-Path $artifacts 'scope-probe'
+    New-Item -ItemType Directory -Path $scopeDirectory -Force | Out-Null
+    $scopeChild = Join-Path $scopeDirectory 'Enroll-Computer.ps1'
+    [IO.File]::WriteAllText($scopeChild, 'param($ConnectionFile) $script:CwLog.AppendText("resume-marker"); Write-CwStep 2 "scope-step"')
+    $bootstrap = [IO.File]::ReadAllText((Join-Path $source 'Start-Enrollment.ps1'))
+    $invocation = ($bootstrap -split "`n" | Where-Object { $_ -match "^\s+[.&] \(Join-Path \`$directory 'Enroll-Computer.ps1'\)" })
+    if (@($invocation).Count -ne 1) { throw 'Missing bootstrap invocation.' }
+    $directory = $scopeDirectory; $descriptor = 'fixture'
+    . ([scriptblock]::Create([string]$invocation))
+    if ($script:CwLog.Text -notmatch 'resume-marker' -or $script:CwProgress.Value -ne 2) { throw 'Installer script lost window controls.' }
     $blob = [byte[]]::new(51)
     $blob[3] = 11; [Text.Encoding]::ASCII.GetBytes('ssh-ed25519').CopyTo($blob, 4); $blob[18] = 32
     Show-CwFingerprint ('ssh-ed25519 ' + [Convert]::ToBase64String($blob))
