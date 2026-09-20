@@ -183,6 +183,32 @@ export class NativeGptReadClient {
     this.authorize();
     return result;
   }
+  async liveDispatch(key: string, conversationId: string | null) {
+    const result = await this.request(
+      {
+        operation: "readLive",
+        key: uuid.parse(key),
+        conversationId: uuid.nullable().parse(conversationId),
+      },
+      AbortSignal.timeout(1100),
+    );
+    return z
+      .object({
+        items: z
+          .array(
+            z
+              .object({
+                id: uuid,
+                text: z.string().max(32768),
+                state: z.enum(["active", "completed"]),
+              })
+              .strict(),
+          )
+          .max(6),
+      })
+      .strict()
+      .parse(result);
+  }
   async transcribe(bytes: Buffer, signal: AbortSignal, mime: string) {
     signal.throwIfAborted();
     if (

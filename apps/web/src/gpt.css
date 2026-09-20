@@ -338,6 +338,16 @@
 .gpt-progress-toggle[aria-expanded="true"] > svg:last-child {
   transform: rotate(90deg);
 }
+.gpt-progress-toggle > .gpt-live-ticker {
+  text-overflow: clip;
+  overflow-anchor: none;
+}
+.gpt-live-ticker > span {
+  display: inline-block;
+}
+.gpt-progress-details li > span {
+  white-space: pre-wrap;
+}
 .gpt-progress-details {
   max-height: min(220px, 26dvh);
   overflow: auto;

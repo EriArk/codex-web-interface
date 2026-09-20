@@ -30,6 +30,7 @@ export interface NativeGptWorkspace {
     | "prepareDispatch"
     | "dispatchText"
     | "reconcileDispatch"
+    | "liveDispatch"
     | "stopDispatch"
     | "reviewDispatch"
     | "operation"

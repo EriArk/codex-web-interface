@@ -83,10 +83,40 @@ export async function nativeDispatch(request, read, control,
   const state={signature,dispatched:true,state:'running',conversationId:request.conversationId};
   // Intent was committed by Hub. From here every exception is an uncertain send.
   runtime[stateKey]=state;
+  // Observe decoded native updates without changing the writer or its callbacks.
+  // Keep only bounded public text; never retain raw events/analysis in this cache.
+  const liveKey=Symbol.for('codex-web.native-live');
+  const liveCache=runtime[liveKey]??=new Map();
+  for(const [key,value] of liveCache)if(Date.now()-value.at>3600000)liveCache.delete(key);
+  while(liveCache.size>=8)liveCache.delete(liveCache.keys().next().value);
+  const live={accountFingerprint:request.accountFingerprint,userMessageId:request.userMessageId,
+   conversationId:request.conversationId,at:Date.now(),items:[]};
+  liveCache.set(request.key,live);
+  const observe=update=>{
+   try{
+    if(!sameAccount()||liveCache.get(request.key)!==live)return;
+    if(update?.type!=='message'||!uuid(update.conversationId))return;
+    if(live.conversationId!==null&&update.conversationId!==live.conversationId)return;
+    const message=update.message;
+    if(!uuid(message?.id)||message.author?.role!=='assistant'||
+       (message.channel!=null&&!['final','commentary'].includes(message.channel))||
+       (message.recipient!=null&&message.recipient!=='all')||
+       message.metadata?.is_visually_hidden_from_conversation===true||message.metadata?.tool_invoking_message===true||
+       message.content?.content_type!=='text'||!Array.isArray(message.content.parts))return;
+    const text=message.content.parts.filter(p=>typeof p==='string').join('\n').slice(0,32768)
+      .replace(/\ue200[^\ue201]*\ue201/g,'').replace(/\ue200[^\ue201]*$/g,'').replace(/[\ue200-\ue203]/g,'');
+    if(!text.trim())return;
+    live.conversationId=update.conversationId;live.at=Date.now();
+    const item={id:message.id,text,state:message.status==='finished_successfully'?'completed':'active'};
+    const index=live.items.findIndex(x=>x.id===item.id);
+    if(index<0){live.items.push(item);if(live.items.length>6)live.items.shift();}else live.items[index]=item;
+   }catch{/* Optional display must never affect native generation. */}
+  };
   const nativeService=scope.get(m.CUt);
   let attempts=0;
   const guarded=new Proxy(nativeService,{get(target,key){
-   if(key==='createCompletionStreamHandlers')return args=>target.createCompletionStreamHandlers({...args,shouldAttemptResume:()=>false});
+   if(key==='createCompletionStreamHandlers')return args=>target.createCompletionStreamHandlers({...args,shouldAttemptResume:()=>false,
+    onUpdate:update=>{observe(update);return args.onUpdate?.(update);}});
    if(key==='startCompletionStream')return args=>{
     const body=args.request;
     const user=body?.messages?.filter(x=>x.author?.role==='user');

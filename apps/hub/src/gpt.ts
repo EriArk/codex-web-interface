@@ -750,6 +750,33 @@ export class GptService {
     this.modelCache = { value, expires: Date.now() + 15 * 60000 };
     return value;
   }
+  private liveRead?: {
+    id: string;
+    at: number;
+    value: Promise<{ jobId: string; items: import("@codex-web/shared").GptProgress[] } | null>;
+  };
+  liveProgress(nativeId: string | undefined, watch: string | undefined) {
+    this.authorize();
+    const row =
+      this.native &&
+      this.store.db
+        .prepare(
+          "SELECT j.id,r.payload FROM gpt_jobs j JOIN gpt_native_receipts r ON r.jobId=j.id WHERE (j.nativeId=? OR j.id=?) AND j.status IN ('preparing','running','unknown') ORDER BY j.createdAt DESC LIMIT 1",
+        )
+        .get(nativeId ?? null, watch ?? null);
+    if (!row) return Promise.resolve(null);
+    const jobId = String(row.id);
+    if (this.liveRead?.id === jobId && Date.now() - this.liveRead.at < 1000)
+      return this.liveRead.value;
+    const value = this.native!.workspace.client.liveDispatch(
+      jobId,
+      JSON.parse(String(row.payload)).conversationId,
+    )
+      .then((result) => ({ jobId, items: result.items }))
+      .catch(() => null);
+    this.liveRead = { id: jobId, at: Date.now(), value };
+    return value;
+  }
   updates(nativeId: string | undefined, watch: string | undefined, after: number) {
     const stamp = Date.now();
     const rows = this.store.db
@@ -1880,7 +1907,8 @@ export function registerGpt(
         after: z.coerce.number().int().min(0).default(0),
       })
       .parse(req.query);
-    return service.updates(q.nativeId, q.watch, q.after);
+    const live = await service.liveProgress(q.nativeId, q.watch);
+    return { ...service.updates(q.nativeId, q.watch, q.after), live };
   });
   app.post("/api/gpt/send", async (req, reply) =>
     reply.code(202).send({

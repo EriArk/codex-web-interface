@@ -506,3 +506,24 @@ The focused navigation browser check passes in Chromium and WebKit after removin
 session storage and disabling the network, including all 20 restored rows,
 pagination metadata and logout cleanup. Physical iPhone verification remains the
 owner's everyday usage check.
+
+### Public live output (2026-09-20)
+
+The pinned client's `createCompletionStreamHandlers.onUpdate` emits decoded
+`{type: "message", conversationId, message}` snapshots (verified in installed
+26.915.31945). A passive observer preserves the original callback and writer.
+It caches only public assistant text from final/commentary channels, excluding
+hidden/tool-directed messages and native citation control tokens. No raw stream,
+analysis, credentials or diagnostics cross the private renderer boundary.
+
+The current chat's existing jobs poll also reads this local cache, normally every
+1.2 seconds; this is sampled native streaming, not token-by-token browser SSE and
+not more upstream history polling. Private receipt/account/user-message binding,
+bounded text/cache lifetime and a short independent deadline apply. Optional live
+reads bypass the writer queue and never confirm delivery or completion. Failure
+silently retains the existing canonical reconciliation/history fallback.
+
+The bottom progress strip follows the newest text; expansion shows the bounded
+public messages with line breaks. Scrolling upward pauses following. No artificial
+typing animation or continuous marquee is used. Final rich text, links, files and
+results still come from the canonical history path.

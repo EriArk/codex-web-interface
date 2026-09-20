@@ -8,6 +8,7 @@ import test from "node:test";
 import { NativeGptJobs } from "../apps/hub/dist/gpt-native-jobs.js";
 import { NativeDispatchReceipts } from "../ops/gpt-native/dispatch-receipts.mjs";
 import { nativeDispatch } from "../ops/gpt-native/renderer-dispatch.mjs";
+import { nativeLive } from "../ops/gpt-native/renderer-live.mjs";
 import { NativeReadService } from "../ops/gpt-native/service.mjs";
 
 const conversationId = randomUUID(),
@@ -52,10 +53,16 @@ function fixture(creating = false) {
   const service = {
     createCompletionStreamHandlers: (args) => {
       assert.equal(args.shouldAttemptResume(), false);
+      state.emit = args.onUpdate;
       return {};
     },
     startCompletionStream(args) {
-      this.createCompletionStreamHandlers({ shouldAttemptResume: () => true });
+      this.createCompletionStreamHandlers({
+        shouldAttemptResume: () => true,
+        onUpdate: () => {
+          state.forwarded = (state.forwarded ?? 0) + 1;
+        },
+      });
       assert.deepEqual(args.expectedIdentity, { accountId: "account", userId: "native-user" });
       if (state.change) values.set("account", { accountId: "other", userId: "other" });
       args.assertRequestCurrent();
@@ -127,8 +134,61 @@ function fixture(creating = false) {
       runtime,
       async () => ({ appActionRegistry: registry }),
     );
-  return { run, input, state, scope, values, registry, original, ui };
+  return { run, input, state, scope, values, registry, original, ui, runtime, read };
 }
+
+test("native live text follows decoded updates, isolates chats/accounts and never changes delivery", async () => {
+  const f = fixture();
+  await f.run();
+  const id = randomUUID();
+  const emit = (text, extra = {}, chat = conversationId) =>
+    f.state.emit({
+      type: "message",
+      conversationId: chat,
+      message: {
+        id,
+        author: { role: "assistant" },
+        channel: "final",
+        recipient: "all",
+        content: { content_type: "text", parts: [text] },
+        ...extra,
+      },
+    });
+  const read = () => nativeLive(f.input, f.read, f.runtime);
+  emit("First");
+  assert.equal((await read()).items[0].text, "First");
+  emit("First second");
+  assert.equal((await read()).items[0].text, "First second");
+  assert.equal((await read()).items.length, 1);
+  emit("secret", { channel: "analysis" });
+  emit("secret", { recipient: "tool" });
+  emit("secret", { metadata: { is_visually_hidden_from_conversation: true } });
+  emit("secret", { metadata: { tool_invoking_message: true } });
+  emit("other", {}, randomUUID());
+  assert.equal((await read()).items[0].text, "First second");
+  emit("Visible \ue200cite\ue202turn0search0\ue201 tail \ue200unfinished");
+  assert.equal((await read()).items[0].text, "Visible  tail ");
+  emit("a".repeat(40000));
+  assert.equal((await read()).items[0].text.length, 32768);
+  for (let n = 0; n < 10; n++) emit("next", { id: randomUUID() });
+  assert.equal((await read()).items.length, 6);
+  await assert.rejects(
+    nativeLive({ ...f.input, userMessageId: randomUUID() }, f.read, f.runtime),
+    /SUBMISSION_MISMATCH/,
+  );
+  await assert.rejects(
+    nativeLive(f.input, async () => ({ accountFingerprint: "other" }), f.runtime),
+    /ACCOUNT_MISMATCH/,
+  );
+  f.values.set("account", { accountId: "other", userId: "other" });
+  emit("wrong account");
+  assert.equal((await read()).items.at(-1).text, "next");
+  assert.equal(f.state.forwarded, 20);
+  assert.equal(f.state.post, 1);
+  assert.equal((await f.run({ operation: "inspectDispatch" })).state, "finished");
+  f.runtime[Symbol.for("codex-web.native-live")].get(f.input.key).at -= 3600001;
+  assert.deepEqual(await read(), { items: [] });
+});
 test("native text dispatch preserves ID and exact text, uses principal-bound native stream and blocks its retry", async () => {
   const f = fixture();
   f.state.retry = true;
@@ -192,6 +252,45 @@ function receipts(t) {
   };
   return { root, options, open: () => new NativeDispatchReceipts(options) };
 }
+
+test("live reads use saved receipt identity, bypass busy writer and remain owner/manual scoped", async (t) => {
+  const f = receipts(t),
+    ledger = f.open();
+  t.after(() => ledger.close());
+  const input = { ...fixture().input, versionId: "latest", presetId: 1 };
+  delete input.operation;
+  let reads = 0;
+  const reader = {
+    dispatchText: async () => {},
+    readLive: async (r) => {
+      reads++;
+      assert.equal(r.userMessageId, input.userMessageId);
+      assert.equal(r.accountFingerprint, accountFingerprint);
+      return { items: [] };
+    },
+  };
+  await ledger.dispatch(input, reader);
+  const service = new NativeReadService({
+    reader,
+    userId,
+    accountFingerprint,
+    statePath: join(f.root, "manual.json"),
+    canary: ledger,
+  });
+  service.busy = true;
+  const request = { userId, operation: "readLive", key: input.key, conversationId };
+  assert.deepEqual(await service.request(request), { items: [] });
+  assert.equal(reads, 1);
+  assert.equal(ledger.pending(), true); // Display neither completes nor confirms the send.
+  await assert.rejects(service.request({ ...request, userId: randomUUID() }), /WRONG_OWNER/);
+  await assert.rejects(
+    service.request({ ...request, conversationId: randomUUID() }),
+    /INVALID_CANARY/,
+  );
+  service.leases.add(randomUUID());
+  await assert.rejects(service.request(request), /MANUAL_RECOVERY/);
+  assert.equal(reads, 1);
+});
 test("native Stop keeps receipt pending until exact-turn canonical read and idle composer agree", async (t) => {
   const f = receipts(t),
     ledger = f.open();
@@ -514,7 +613,6 @@ test("project association is part of the durable Hub dispatch and cannot change 
   assert.equal(f.state.sends, 0);
 });
 
-
 test("explicit native request is independent of stale picker, hydration and background fetch state", async () => {
   const f = fixture();
   f.values.set("selected", { slug: "previous-model", thinkingEffort: null });
@@ -532,19 +630,42 @@ test("explicit native request is independent of stale picker, hydration and back
   assert.equal(busy.state.post, 0);
 });
 
-
 test("preparation navigates once and resolves the requested preset without operating the model picker", async (t) => {
-  const f = receipts(t), ledger = f.open();
+  const f = receipts(t),
+    ledger = f.open();
   t.after(() => ledger.close());
   const input = { ...fixture().input, versionId: "latest", presetId: 0 };
   delete input.operation;
-  let navigations = 0, catalogs = 0;
+  let navigations = 0,
+    catalogs = 0;
   const result = await ledger.prepare(input, {
-    selectConversation: async () => { navigations++; return { selected: true, composerReady: false, hasDraft: false, stopAvailable: false }; },
-    inspectConversation: async () => { throw Error("Redundant inspection"); },
-    selectSettings: async () => { throw Error("Visual picker must not gate sends"); },
-    readModels: async () => { catalogs++; return { versions: [{ id: "latest", enabled: true, presets: [{ id: 0, available: true, model: "instant", effort: null }] }] }; },
-    prepareDispatch: async r => { assert.equal(r.model, "instant"); assert.equal(r.effort, null); return { parentId, model: r.model, effort: r.effort }; },
+    selectConversation: async () => {
+      navigations++;
+      return { selected: true, composerReady: false, hasDraft: false, stopAvailable: false };
+    },
+    inspectConversation: async () => {
+      throw Error("Redundant inspection");
+    },
+    selectSettings: async () => {
+      throw Error("Visual picker must not gate sends");
+    },
+    readModels: async () => {
+      catalogs++;
+      return {
+        versions: [
+          {
+            id: "latest",
+            enabled: true,
+            presets: [{ id: 0, available: true, model: "instant", effort: null }],
+          },
+        ],
+      };
+    },
+    prepareDispatch: async (r) => {
+      assert.equal(r.model, "instant");
+      assert.equal(r.effort, null);
+      return { parentId, model: r.model, effort: r.effort };
+    },
   });
   assert.equal(result.presetId, 0);
   assert.equal(navigations, 1);

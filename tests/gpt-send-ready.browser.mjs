@@ -52,7 +52,7 @@ try {
         releaseModels,
         reads = 0,
         sends = 0;
-      let releaseSend, job;
+      let releaseSend, job, live;
       const page = await context.newPage();
       await page.addInitScript(() => localStorage.setItem("gpt-conversation", "history-chat"));
       await page.clock.install();
@@ -97,7 +97,7 @@ try {
           });
         }
         if (path === "/api/gpt/jobs")
-          return route.fulfill({ json: { items: job ? [job] : [], stamp: Date.now() } });
+          return route.fulfill({ json: { items: job ? [job] : [], stamp: Date.now(), live } });
         if (path === "/api/gpt/send") {
           sends++;
           await new Promise((resolve) => {
@@ -164,6 +164,32 @@ try {
       job.updatedAt += 10000;
       await page.clock.fastForward(1500);
       await expect(progress).toContainText("GPT работает");
+      live = {
+        jobId: job.id,
+        items: [{ id: "public-message", text: "Live first line", state: "active" }],
+      };
+      await page.clock.fastForward(1500);
+      await expect(progress).toContainText("Live first line");
+      await progress.click();
+      const details = page.getByRole("region", { name: "Этапы GPT" });
+      await expect(details).toContainText("Live first line");
+      live.items[0].text += "\n" + "Visible next line. ".repeat(100) + "LATEST";
+      await page.clock.fastForward(1500);
+      await expect(details).toContainText("LATEST");
+      await expect(details.locator("li")).toHaveCount(1);
+      assert.ok(await progress.locator(".gpt-live-ticker").evaluate((e) => e.scrollLeft > 0));
+      await details.evaluate((e) => {
+        e.scrollTop = 0;
+        e.dispatchEvent(new Event("scroll"));
+      });
+      live.items[0].text += "\nMore live output";
+      await page.clock.fastForward(1500);
+      await expect(details).toContainText("More live output");
+      assert.equal(await details.evaluate((e) => e.scrollTop), 0);
+      // Missing optional live transport keeps the received text and ordinary job poll alive.
+      live = null;
+      await page.clock.fastForward(1500);
+      await expect(details).toContainText("More live output");
       await page.screenshot({ path: `.local/qa-gpt-send-ready/${name}.png` });
       assert.equal(sends, 1);
       console.log(

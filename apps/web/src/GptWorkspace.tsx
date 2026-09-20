@@ -212,6 +212,10 @@ export function GptWorkspace({
   });
   const [selected, setSelected] = useState(cachedId);
   const reviews = useThreadReviews("gpt", selected);
+  const [live, setLive] = useState<{
+    jobId: string;
+    items: NonNullable<GptJob["progress"]>;
+  } | null>(null);
   const [jobs, setJobs] = useState<GptJob[]>(gptCache.jobs),
     [models, setModels] = useState<GptModels | null>(gptCache.models),
     [model, setModel] = useState(gptCache.model),
@@ -477,13 +481,17 @@ export function GptWorkspace({
         const query = new URLSearchParams({ after: String(stamp) });
         if (selected) query.set("nativeId", selected);
         if (createdJob) query.set("watch", createdJob);
-        const data = await api<{ items: GptJob[]; stamp: number }>("/gpt/jobs?" + query, {
-          signal: controller.signal,
-          timeoutMs: 15000,
-        });
+        const data = await api<{ items: GptJob[]; stamp: number; live?: typeof live }>(
+          "/gpt/jobs?" + query,
+          {
+            signal: controller.signal,
+            timeoutMs: 15000,
+          },
+        );
         stamp = data.stamp;
         gptCache.stamps[selected || createdJob] = stamp;
         if (disposed) return;
+        if (data.live?.items.length) setLive(data.live);
         const completed = data.items.some(
           (job) =>
             job.status === "completed" &&
@@ -1870,6 +1878,9 @@ export function GptWorkspace({
               <GptProgress
                 key={active?.id ?? awaitingReply?.id ?? "sending"}
                 items={active?.status === "running" ? (active.progress ?? []) : []}
+                live={
+                  live && live.jobId === (active?.id ?? awaitingReply?.id) ? live.items : undefined
+                }
                 running
                 label={
                   active?.status === "running"

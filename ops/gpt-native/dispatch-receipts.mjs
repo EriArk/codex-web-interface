@@ -107,6 +107,15 @@ export class NativeDispatchReceipts {
   try{const result=await reader.dispatchText(r);if(r.conversationId===null&&uuid(result?.conversationId))this.candidate(r.key,result.conversationId);}catch{}
   return {state:'unknown',userMessageId:r.userMessageId};
  }
+ async live({key,conversationId},reader){
+  if(!uuid(key)||!(conversationId===null?this.creationKeys.has(key):this.allowed.has(conversationId)))fail('INVALID_CANARY');
+  const row=this.db.prepare('SELECT payload FROM receipts WHERE key=?').get(key);
+  if(!row)return {items:[]};
+  const payload=JSON.parse(row.payload);
+  if(payload.conversationId!==conversationId)fail('CONVERSATION_MISMATCH');
+  return reader.readLive({key,conversationId,userMessageId:payload.userMessageId,accountFingerprint:payload.accountFingerprint},
+   {signal:AbortSignal.timeout(900)});
+ }
  async reconcile({key,conversationId},reader){
   if(!uuid(key)||!(conversationId===null?this.creationKeys.has(key):this.allowed.has(conversationId)))fail('INVALID_CANARY');
   const row=this.db.prepare('SELECT * FROM receipts WHERE key=?').get(key);

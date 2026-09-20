@@ -58,6 +58,7 @@ export class NativeReadService {
       prepareDispatch: ['key','conversationId','userMessageId','text','versionId','presetId','projectId'],
       dispatchText: ['key','conversationId','userMessageId','text','versionId','presetId','parentId','model','effort','intentPersisted','attachments','projectId'],
       reconcileDispatch: ['key','conversationId'],
+      readLive: ['key','conversationId'],
       reviewDispatch: ['key','conversationId'],
       stopDispatch: ['key','conversationId'],
     } : {};
@@ -71,6 +72,13 @@ export class NativeReadService {
     }[input.operation];
     if (!Array.isArray(fields) || Object.keys(input).some(k => !['userId', 'operation', ...fields].includes(k))) fail('INVALID_REQUEST');
     if (input.operation === 'status') return { instanceId: this.instanceId, manual: this.leases.size > 0, busy: this.busy, writesEnabled: this.canary?.ownerMode===true };
+    // A read of already received text must not queue behind a writer/history read.
+    if(input.operation==='readLive'){
+      if(this.leases.size)fail('MANUAL_RECOVERY');
+      if(this.livePending)return {items:[]};
+      this.livePending=true;
+      try{return await this.canary.live(input,this.reader);}finally{this.livePending=false;}
+    }
     if (this.busy) fail('BUSY');
     if (['beginManual', 'endManual', 'resumeManual'].includes(input.operation)) {
       if (input.operation !== 'resumeManual' && !uuid(input.leaseId)) fail('INVALID_REQUEST');
