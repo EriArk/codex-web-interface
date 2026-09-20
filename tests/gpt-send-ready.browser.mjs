@@ -270,6 +270,44 @@ try {
       assert.equal(sends, 1, "metadata refresh never sends the draft");
       await page.evaluate(() => window.dispatchEvent(new Event("private-session-ended")));
       assert.equal(await page.evaluate(() => localStorage.getItem("gpt-models-cache-v1")), null);
+      // A new teammate must not inherit another account's catalog or selection.
+      await page.evaluate(() => {
+        sessionStorage.clear();
+        sessionStorage.setItem("codex-workspace-identity", "22222222-2222-4222-8222-222222222222");
+        localStorage.setItem(
+          "cw-user:11111111-1111-4111-8111-111111111111:gpt-models-cache-v1",
+          JSON.stringify({
+            version: 1,
+            model: "private-model",
+            effort: "secret-power",
+            models: {
+              models: [{ id: "private-model", label: "Other account model" }],
+              efforts: [{ id: "secret-power", label: "Private" }],
+              currentModel: "private-model",
+              currentEffort: "secret-power",
+            },
+          }),
+        );
+      });
+      releaseModels = undefined;
+      await page.reload();
+      await expect(page.getByRole("combobox", { name: "Модель GPT" })).toBeDisabled();
+      await expect(page.getByText("Other account model", { exact: true })).toHaveCount(0);
+      await expect.poll(() => typeof releaseModels).toBe("function");
+      releaseModels();
+      await expect(page.getByRole("combobox", { name: "Модель GPT" })).toBeEnabled();
+      await expect(effort).toHaveValue("2");
+      await editor.fill("New account draft");
+      await expect(page.locator(".send-button")).toBeDisabled();
+      await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+      const ownChoices = await page.evaluate(() =>
+        JSON.parse(
+          localStorage.getItem("cw-user:22222222-2222-4222-8222-222222222222:gpt-models-cache-v1"),
+        ),
+      );
+      assert.equal(ownChoices.model, "latest");
+      assert.equal(ownChoices.effort, "2");
+      assert.equal(sends, 1);
       console.log(
         name +
           ": queue/loading controls; cached model choices survive tab eviction and stay editable before connection; refresh preserves selection; logout clears choices",
