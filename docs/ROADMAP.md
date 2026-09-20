@@ -1,12 +1,12 @@
 # Roadmap
 
-## Results / Remote repair (2026-09-21, source candidate)
+## Results / Remote repair (2026-09-21, UI installed / engine queued)
 
 - Remote: Guacamole adds its own query delimiter; pass the workspace binding together with width/height as connect data. This fixes team-account WebSocket rejection without removing account isolation. Disconnected status no longer says “Connecting”.
 - Raster result artifacts use inline disposition, retaining authenticated reads and download controls; SVG/HTML and other files remain attachments. Safari had received a successful image response marked as a download.
 - Codex Results now include Links between Images and Demos. Reuse the GPT public-Markdown parser and compact external-site popup links; normalize completed native messages and imported history, without reading tool internals.
-- Focused Linux type checks, raster route/auth tests, link extraction/category tests and the actual Guacamole URL construction in Chromium/WebKit passed. These changes are not yet an installed release.
-- Separate live GPT incident: the owner's selected conversation graph repeatedly times out, while status/model reads work. Unsent draft remains retained; no send replay or native restart performed. Diagnosis remains open.
+- Focused Linux type checks, raster route/auth tests, link extraction/category tests and the actual Guacamole URL construction in Chromium/WebKit passed. Production image `1a4d056` passed isolated engine/gateway startup checks. Its web assets are installed without restarting the engine. The backend image is queued by `codex-web-media-remote-1a4d056.service`; its preflight reports active work, so raster delivery and link ingestion await the guarded idle switch from `1568870`.
+- Separate live GPT incident: the owner's selected conversation graph repeatedly times out, while another conversation graph and status/model reads work. The owner confirms the affected chat opens in the normal ChatGPT app. Unsent draft remains retained; no send replay or native restart performed. Diagnosis remains open; this release does not claim to fix that native history timeout.
 
 ## Installed member release (2026-09-20)
 
