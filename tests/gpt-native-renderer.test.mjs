@@ -93,6 +93,39 @@ test("submission readback requires exact ID, parent, unchanged text and a public
   assert.equal((await f.read(request)).state, "unknown");
 });
 
+test("receipt replies resolve public sources without exposing markers or changing submitted text", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  const marker = "\ue200cite\ue202turn0search3\ue202turn0search4\ue201";
+  f.node(2, "prompt " + marker, { id: id(90), author: { role: "user" } });
+  f.node(3, "Answer " + marker, {
+    end_turn: true,
+    metadata: {
+      content_references: [
+        {
+          type: "grouped_webpages",
+          matched_text: marker,
+          items: [
+            { url: "https://example.com/source", attribution: "Source" },
+            { url: "javascript:alert(1)", title: "Unsafe" },
+          ],
+        },
+      ],
+    },
+  });
+  const result = await f.read({
+    operation: "readSubmission",
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "prompt " + marker,
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.messages[0].text, 'Answer [Source](<https://example.com/source> "Источник")');
+  assert.equal(f.calls.length, 1, "source formatting does not request history again");
+});
+
 test("long-running receipts remain confirmed beyond a twenty-message page", async () => {
   const f = fixture(),
     accountFingerprint = await f.binding();

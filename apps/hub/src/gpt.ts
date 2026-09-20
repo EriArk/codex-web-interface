@@ -77,6 +77,20 @@ export class GptService {
   private readonly historyBackoff = new GptReadBackoff();
   private readonly historyReads = new Map<string, Promise<Json>>();
   readonly historyCache: GptHistoryCache;
+  receiptMessageIds(jobId: string, conversationId: string): string[] {
+    if (!this.nativeJobs) return [];
+    const row = this.store.db
+      .prepare(
+        "SELECT r.messages FROM gpt_native_receipts r JOIN gpt_jobs j ON j.id=r.jobId WHERE r.jobId=? AND j.nativeId=?",
+      )
+      .get(jobId, conversationId);
+    if (!row) return [];
+    const messages = z
+      .array(z.object({ id, role: z.string() }))
+      .max(20)
+      .parse(JSON.parse(String(row.messages)));
+    return messages.filter((m) => m.role === "assistant").map((m) => m.id);
+  }
   private observedHistory?: { id: string; value: Json; checkedAt: number };
   /** Short sharing window for display/completion observers, never mutation preconditions. */
   async readConversation(id: string) {
@@ -1802,13 +1816,21 @@ export function registerGpt(
       ref = resultReferenceSchema.parse(req.body);
     service.library.assertExists("thread", p.id);
     const messages = await service.historyCache.messages(p.id);
-    const message = messages.find((item) => item.id === ref.messageId && item.role === "assistant");
-    const source = ref.source.startsWith("sandbox:")
-      ? gptSandboxFiles(`[file](<${ref.source}>)`, p.id, ref.messageId).files[0]?.url
-      : ref.source;
-    const file = message?.files.find((item) => item.url === source);
-    const result =
-      file && gptResults(p.id, [message!], service.previews).find((item) => item.id === file.id);
+    // Live outbox text is keyed by its durable job, canonical history by message.
+    // Only verified receipt IDs from this conversation may bridge that identity.
+    const ids = new Set([ref.messageId, ...service.receiptMessageIds(ref.messageId, p.id)]);
+    const matches = messages
+      .filter((item) => ids.has(item.id) && item.role === "assistant")
+      .flatMap((message) => {
+        const source = ref.source.startsWith("sandbox:")
+          ? gptSandboxFiles(`[file](<${ref.source}>)`, p.id, message.id).files[0]?.url
+          : ref.source;
+        const file = message.files.find((item) => item.url === source);
+        return file
+          ? gptResults(p.id, [message], service.previews).filter((item) => item.id === file.id)
+          : [];
+      });
+    const result = matches.length === 1 ? matches[0] : undefined;
     if (!result)
       throw error(
         "RESULT_NOT_FOUND",

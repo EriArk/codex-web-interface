@@ -33,6 +33,7 @@ export function artifactSource(raw: string): string | undefined {
 export function artifactComponents(onOpen?: (source: string) => void): Components {
   return {
     a: ({ node, ...props }) => {
+      const href = String(props.href ?? "");
       const source = artifactSource(String(node?.properties.href ?? props.href ?? ""));
       if (onOpen && source)
         return (
@@ -50,8 +51,17 @@ export function artifactComponents(onOpen?: (source: string) => void): Component
         <a
           {...props}
           className={props.title === "Источник" ? "source-link" : undefined}
-          target="_blank"
+          target={href.startsWith("#") ? undefined : "_blank"}
           rel="noopener noreferrer"
+          onClick={(event) => {
+            if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+              return;
+            const url = new URL(href, location.href);
+            if (!["http:", "https:"].includes(url.protocol) || url.origin === location.origin)
+              return;
+            event.preventDefault();
+            window.open(url.href, "_blank", "popup=yes,width=1100,height=800,noopener,noreferrer");
+          }}
         />
       ) : (
         <span>{props.children}</span>

@@ -1834,16 +1834,25 @@ export function GptWorkspace({
                 )}
               </div>
             )}
-            {active && (active.status === "running" || waitingGptJob(active, jobs)) && (
+            {(active || busy) && (
               <GptProgress
-                key={active.id}
-                items={active.progress ?? []}
+                key={active?.id ?? "sending"}
+                items={active?.status === "running" ? (active.progress ?? []) : []}
                 running
-                label={titles[active.status]}
-                onStop={() =>
-                  void action(async () => {
-                    await api("/gpt/jobs/" + active.id + "/cancel", { method: "POST" });
-                  })
+                label={
+                  active?.status === "running"
+                    ? titles.running
+                    : active && waitingGptJob(active, jobs)
+                      ? titles.queued
+                      : "Отправляется"
+                }
+                onStop={
+                  active
+                    ? () =>
+                        void action(async () => {
+                          await api("/gpt/jobs/" + active.id + "/cancel", { method: "POST" });
+                        })
+                    : undefined
                 }
               />
             )}

@@ -52,6 +52,7 @@ try {
         releaseModels,
         reads = 0,
         sends = 0;
+      let releaseSend, job;
       const page = await context.newPage();
       await page.addInitScript(() => localStorage.setItem("gpt-conversation", "history-chat"));
       await page.clock.install();
@@ -95,7 +96,26 @@ try {
             },
           });
         }
-        if (path === "/api/gpt/send") sends++;
+        if (path === "/api/gpt/jobs")
+          return route.fulfill({ json: { items: job ? [job] : [], stamp: Date.now() } });
+        if (path === "/api/gpt/send") {
+          sends++;
+          await new Promise((resolve) => {
+            releaseSend = resolve;
+          });
+          job = {
+            ...route.request().postDataJSON(),
+            id: "receipt",
+            files: [],
+            status: "queued",
+            answer: "",
+            assets: [],
+            error: "",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          return route.fulfill({ json: { job } });
+        }
         return route.fulfill({
           json: { items: [], conversations: [], nextOffset: null, stamp: Date.now() },
         });
@@ -127,8 +147,20 @@ try {
       await expect(button).toBeEnabled();
       await expect(button.locator(".spinner")).toHaveCount(0);
       releaseHistory();
+      await button.click();
+      await expect.poll(() => sends).toBe(1);
+      const progress = page.locator(".gpt-progress-toggle");
+      await expect(progress).toContainText("Отправляется");
+      await expect(progress.locator(".spinner")).toBeVisible();
+      releaseSend();
+      await expect(editor).toHaveValue("");
+      await expect(progress).toContainText("Отправляется");
+      job.status = "running";
+      job.updatedAt += 10000;
+      await page.clock.fastForward(1500);
+      await expect(progress).toContainText("GPT работает");
       await page.screenshot({ path: `.local/qa-gpt-send-ready/${name}.png` });
-      assert.equal(sends, 0);
+      assert.equal(sends, 1);
       console.log(
         name +
           ": visible draft and send ring until history/models ready; background refresh does not block; no premature send",

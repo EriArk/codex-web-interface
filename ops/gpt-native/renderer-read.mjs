@@ -219,6 +219,81 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   if (start < 0) fail('CURSOR_NOT_ON_BRANCH');
   start++;
  }
+// Keep receipt text aligned with canonical Hub history (gpt-links.ts).
+ const record = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+ const text = v => typeof v === 'string' ? v : '';
+ const rows = v => Array.isArray(v) ? v : [];
+function publicUrl(value) {
+  const raw = text(value);
+  if (
+    !/^https?:\/\//i.test(raw) ||
+    raw.length > 8192 ||
+    [...raw].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127)
+  )
+    return;
+  try {
+    const url = new URL(raw);
+    if (url.username || url.password) return;
+    return url.href;
+  } catch {
+    return;
+  }
+}
+function link(value, label, source) {
+  const url = publicUrl(value);
+  if (!url) return "";
+  // Encode Markdown syntax, keeping labels literal and destinations out of HTML.
+  const title = (text(label).trim() || new URL(url).hostname)
+    .slice(0, 400)
+    .replace(/./gs, (c) => (c.charCodeAt(0) < 32 ? " " : c))
+    .replace(/[\ue200-\ue203]/g, " ")
+    .replace(/[\\\x60*_[\]<>!]/g, "\\$&");
+  const destination = url.replace(
+    /[<>"\\]/g,
+    (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+  );
+  return "[" + title + "](<" + destination + ">" + (source ? ' "Источник"' : "") + ")";
+}
+
+/** Resolve public native reference markers before discarding unsupported UI tokens. */
+function gptLinkedText(body, metadata) {
+  const references = new Map();
+  for (const value of rows(record(metadata).content_references).slice(0, 2000)) {
+    const ref = record(value),
+      match = text(ref.matched_text);
+    if (/^\ue200[^\ue201]*\ue201$/.test(match)) references.set(match, ref);
+  }
+  return body.replace(/\ue200([^\ue201]*)\ue201/g, (match, inner) => {
+    const ref = references.get(match);
+    if (ref?.type === "url") {
+      const item = record(ref.item);
+      return link(item.url, ref.title || item.title, false);
+    }
+    if (ref?.type === "grouped_webpages" || ref?.type === "webpage") {
+      const items =
+        ref.type === "webpage"
+          ? [ref.item ?? ref]
+          : [...rows(ref.items), ...rows(ref.fallback_items)];
+      const seen = new Set();
+      const links = [];
+      for (const value of items
+        .flatMap((v) => [v, ...rows(record(v).supporting_websites)])
+        .slice(0, 64)) {
+        const item = record(value),
+          url = publicUrl(item.url);
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        links.push(link(url, item.attribution || item.title, true));
+      }
+      return links.join(" ");
+    }
+    // During streaming, a direct URL can precede its metadata. Never guess search IDs.
+    const parts = inner.split("\ue202");
+    if (!ref && parts[0] === "url" && parts.length === 3) return link(parts[2], parts[1], false);
+    return "";
+  });
+}
+
  const messages = [];
  let hasMore = false, bytes = 0;
  const selected=request.messageId == null ? chain.slice(start) : chain.filter(n=>n.message?.id===request.messageId);
@@ -232,7 +307,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   if (typeof message.id !== 'string' || !content || !Array.isArray(content.parts)) continue;
   // Unknown structured content is not stringified. Media resolution is a later gate.
   const parts = ['text','multimodal_text'].includes(content.content_type) ? content.parts.filter(p => typeof p === 'string') : [];
-  const text = parts.join('\n');
+  const text = role === 'assistant' ? gptLinkedText(parts.join('\n'), message.metadata) : parts.join('\n');
   const hasAttachments = content.parts.some(p => typeof p !== 'string') || !!message.metadata?.attachments?.length;
   if (!text && !hasAttachments) continue;
   if (messages.length === 20) { hasMore = true; break; }

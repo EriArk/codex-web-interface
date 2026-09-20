@@ -56,6 +56,46 @@ test("shared authenticated GPT routes use native catalog, pins, history and per-
   assert.equal(unauthenticated.statusCode, 401);
   assert.equal(native.state.sends, 0);
 });
+test("live receipt file links reveal the canonical result and reject another chat's receipt", async (t) => {
+  const native = nativeWorkspaceFixture();
+  const read = native.workspace.client.conversationGraph;
+  native.workspace.client.conversationGraph = async (...args) => {
+    const graph = await read(...args);
+    graph.mapping[graph.current_node].message.content.parts = [
+      "[Report](sandbox:/mnt/data/report.txt)",
+    ];
+    return graph;
+  };
+  const f = await handoffFixture(undefined, undefined, { nativeGpt: native.workspace });
+  t.after(() => f.close());
+  const jobId = randomUUID();
+  f.store.db
+    .prepare(
+      "INSERT INTO gpt_jobs VALUES(?,'owner',?,'prompt','[]','latest','1','completed','','[]',1,1,'',NULL,0)",
+    )
+    .run(jobId, native.conversationId);
+  const graph = await read(native.conversationId);
+  f.store.db
+    .prepare("INSERT INTO gpt_native_receipts(jobId,payload,messages) VALUES(?,'{}',?)")
+    .run(jobId, JSON.stringify([{ id: graph.current_node, role: "assistant" }]));
+  const reveal = (messageId, source = "sandbox:/mnt/data/report.txt") =>
+    f.app.inject({
+      method: "POST",
+      url: `/api/gpt/conversations/${native.conversationId}/results/reveal`,
+      headers: f.headers,
+      payload: { source, messageId },
+    });
+  const canonical = await reveal(graph.current_node),
+    live = await reveal(jobId);
+  assert.equal(canonical.statusCode, 200, canonical.body);
+  assert.equal(live.statusCode, 200, live.body);
+  assert.equal(live.json().id, canonical.json().id);
+  assert.equal((await reveal(jobId, "sandbox:/mnt/data/other.txt")).statusCode, 404);
+  f.store.db.prepare("UPDATE gpt_jobs SET nativeId=? WHERE id=?").run(randomUUID(), jobId);
+  assert.equal((await reveal(jobId)).statusCode, 404);
+  assert.equal(native.state.sends, 0);
+});
+
 test("native queue retains public progress across lost ack and restart without replay", async (t) => {
   const f = setup(t),
     first = f.open(),

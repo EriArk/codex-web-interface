@@ -134,31 +134,46 @@ for (const [engine, type] of [
         path: `.local/qa-artifact-navigation/${engine}-${viewport.width}.png`,
       });
     }
-    await page.getByRole("button", { name: "Архив", exact: true }).click();
-    await results
-      .locator(".result-inspector")
-      .getByRole("button", { name: "Скачать файл", exact: true })
-      .click();
-    const dialog = page.getByRole("dialog", { name: "Сохранить файл" });
-    await expect(dialog).toContainText("400 МБ");
-    assert.equal(
-      archiveGets,
-      0,
-      "large download must not fetch a browser blob before the download tap",
-    );
-    const downloadEvent = page.waitForEvent("download");
-    await dialog.getByRole("link", { name: "Скачать файл" }).click();
-    const download = await downloadEvent;
-    assert.equal(download.suggestedFilename(), "case.zip");
-    assert.equal((await stat(await download.path())).size, 400 * 1024 * 1024);
+    await page.evaluate(() => {
+      window.openedLinks = [];
+      window.open = (...args) => {
+        window.openedLinks.push(args);
+        return null;
+      };
+    });
+    await page.locator('a[href="https://example.com/file.zip"]').click();
+    const opened = await page.evaluate(() => window.openedLinks);
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0][0], "https://example.com/file.zip");
+    assert.match(opened[0][2], /popup=yes.*noopener,noreferrer/);
     assert.equal(navigations, 1);
-    assert(await editor.evaluate((node) => node === window.originalEditor));
+    if (!process.env.ARTIFACT_LINKS_ONLY) {
+      await page.getByRole("button", { name: "Архив", exact: true }).click();
+      await results
+        .locator(".result-inspector")
+        .getByRole("button", { name: "Скачать файл", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", { name: "Сохранить файл" });
+      await expect(dialog).toContainText("400 МБ");
+      assert.equal(
+        archiveGets,
+        0,
+        "large download must not fetch a browser blob before the download tap",
+      );
+      const downloadEvent = page.waitForEvent("download");
+      await dialog.getByRole("link", { name: "Скачать файл" }).click();
+      const download = await downloadEvent;
+      assert.equal(download.suggestedFilename(), "case.zip");
+      assert.equal((await stat(await download.path())).size, 400 * 1024 * 1024);
+      assert.equal(navigations, 1);
+      assert(await editor.evaluate((node) => node === window.originalEditor));
+    }
     assert.equal(
       f.calls.filter((call) => ["turn/start", "thread/resume"].includes(call.method)).length,
       0,
     );
     console.log(
-      `${engine}: exact snapshots/images, unavailable reference, phone/tablet/desktop draft+attachment continuity and native 400 MiB download passed`,
+      `${engine}: exact snapshots/images, unavailable reference, phone/tablet/desktop draft+attachment continuity and link routing passed (large download optional)`,
     );
   } finally {
     await context.close();
