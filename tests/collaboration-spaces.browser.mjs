@@ -87,6 +87,7 @@ const hub = await createTeamHub(config, {
     const nativeId = randomUUID(),
       thread = personalStore.createThread(who + "-project", nativeId, "Existing " + who + " chat");
     const nativeCalls = [];
+    personalStore.createThread(who + "-extra", randomUUID(), "Personal " + who + " chat");
     const rpc = Object.assign(new EventEmitter(), {
       closed: false,
       initialize: async () => ({}),
@@ -150,6 +151,8 @@ async function login(p, user) {
   if (await later.isVisible()) await later.click();
 }
 async function drawer(p) {
+  if (await p.locator('.project-sheet[open][data-closing="true"]').count())
+    await expect(p.locator('.project-sheet[open][data-closing="true"]')).toHaveCount(0);
   if (p.viewportSize().width < 1100 && !(await p.locator(".project-sheet[open]").count()))
     await p.getByRole("button", { name: "Открыть проекты", exact: true }).click();
   if (p.viewportSize().width < 1100) await expect(p.locator(".project-sheet[open]")).toBeVisible();
@@ -209,7 +212,7 @@ try {
   await expect(nav.locator(".space-selected")).toContainText("Altar + World");
   await nav.getByRole("button", { name: "Общие", exact: true }).click();
   await mkdir(".local/spaces-qa", { recursive: true });
-  for (const width of [390, 1024]) {
+  for (const width of process.env.SPACE_NAVIGATION_ONLY ? [] : [390, 1024]) {
     await page.setViewportSize({ width, height: 844 });
     for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
       await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
@@ -277,389 +280,430 @@ try {
   await drawer(other);
   await otherNav.getByRole("button", { name: "Личные проекты", exact: true }).click();
   await expect(other.locator(".workspace-content")).toBeVisible();
+  await otherNav.locator('[data-project-id="friend-extra"]').click();
+  await expect(
+    other.getByRole("button", { name: "Обзор текущего проекта", exact: true }),
+  ).toContainText("Personal friend chat");
+  await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
+  await expect(other.getByRole("textbox", { name: "Сообщение Codex" })).toBeVisible();
+  await other.getByRole("textbox", { name: "Сообщение Codex" }).pressSequentially("Personal draft");
+  await expect(
+    other.getByRole("button", { name: "Обзор текущего проекта", exact: true }),
+  ).toContainText("Altar copy");
+  await drawer(other);
   await otherNav.getByRole("button", { name: "Общие пространства", exact: true }).click();
-  await expect(other.locator(".space-home")).toContainText("Выберите проект");
-  await expect(other.locator(".workspace-content")).toBeHidden();
-  await otherNav.locator('[data-project-id="friend-project"]').click();
   await expect(other.locator(".space-home")).toHaveCount(0);
-  await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
-  await drawer(other);
-  await otherNav.getByRole("button", { name: /Altar.*Совместная работа/ }).click();
-  const sharedProject = other.locator(".space-dialog");
   await expect(
-    sharedProject.getByRole("link", { name: "https://github.com/example/altar" }),
-  ).toBeVisible();
-  await sharedProject.getByRole("button", { name: "Создать рабочую копию", exact: true }).click();
-  await expect(other.locator(".project-setup-dialog[open]")).toBeVisible();
-  await other.keyboard.press("Escape");
-  await sharedProject.getByLabel(/^Моя рабочая копия/).selectOption("friend-extra");
-  await sharedProject
-    .getByRole("button", { name: "Подключить и открыть Codex", exact: true })
-    .click();
-  await expect(sharedProject).toHaveCount(0);
-  await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
-  await expect(other.locator(".space-home")).toHaveCount(0);
-  await expect(other.locator(".workspace-content")).toBeVisible();
-  const introCalls = runtimes.get("friend").nativeCalls.filter((c) => c.method === "turn/start");
-  assert.equal(introCalls.length, 1);
-  assert.ok(JSON.stringify(introCalls[0].params).includes("https://github.com/example/altar"));
-  const catalog = await (await other.request.get(base + "/api/team/spaces")).json();
-  const linked = catalog.spaces[0].projects.find((p) => p.personalProjectId === "friend-extra");
-  const introUrl = base + `/api/team/spaces/${catalog.spaces[0].id}/projects/${linked.id}/chat`;
-  const csrf = (
-    await (
-      await other.request.get(base + "/api/auth/session", {
-        headers: { origin: base },
-      })
-    ).json()
-  ).csrf;
-  const again = await other.request.post(introUrl, {
-    headers: { origin: base, "x-csrf-token": csrf, "idempotency-key": randomUUID() },
-    data: {},
-  });
-  assert.equal(again.status(), 200);
-  assert.equal(
-    runtimes.get("friend").nativeCalls.filter((c) => c.method === "turn/start").length,
-    1,
-  );
-  await drawer(other);
-  await otherNav
-    .getByRole("button", { name: /Altar.*Совместная работа/ })
-    .first()
-    .click();
-  await expect(
-    other.getByRole("dialog", { name: "Обзор проекта Altar copy", exact: true }),
-  ).toBeVisible();
-  await other.keyboard.press("Escape");
-  await expect(
-    other.getByRole("dialog", { name: "Обзор проекта Altar copy", exact: true }),
-  ).toHaveCount(0);
-  await drawer(other);
-  await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
-  const settings = other.locator(".space-dialog");
-  await settings.locator("summary").filter({ hasText: "Altar" }).click();
-  await expect(
-    settings.getByRole("button", { name: "Сменить рабочую копию", exact: true }),
-  ).toBeVisible();
-  await settings.getByRole("button", { name: "Запросить прямой доступ", exact: true }).click();
-  await expect(settings).toContainText("Прямой доступ запрошен");
-  await page.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
-  await nav.getByRole("button", { name: "Уведомления: 1", exact: true }).click();
-  await page
-    .locator(".space-dialog")
-    .getByRole("button", { name: /Altar.*просит прямой доступ/ })
-    .click();
-  const ownerSettings = page.locator(".space-dialog");
-  await ownerSettings.locator("summary").filter({ hasText: "Altar" }).click();
-  await ownerSettings.getByRole("button", { name: "Разрешить", exact: true }).click();
-  await expect(ownerSettings.getByLabel("Доступ: Altar · Друг", { exact: true })).toHaveValue(
-    "direct",
-  );
-  await ownerSettings.getByRole("button", { name: "Добавить свой проект", exact: true }).click();
-  await ownerSettings
-    .getByLabel("Проект для подключения", { exact: true })
-    .selectOption("owner-extra");
-  await ownerSettings.getByRole("button", { name: "Подключить", exact: true }).click();
-  await ownerSettings.locator("summary").filter({ hasText: "Assets" }).click();
-  await ownerSettings
-    .locator("details")
-    .filter({ hasText: "Assets" })
-    .getByRole("button", { name: "Убрать из пространства" })
-    .click();
-  await ownerSettings.getByRole("button", { name: "Убрать", exact: true }).click();
-  await expect(ownerSettings.locator("summary").filter({ hasText: "Assets" })).toHaveCount(0);
-  await page.screenshot({ path: ".local/spaces-qa/project-access-phone.png" });
-  await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
-  await expect(settings.locator("summary").filter({ hasText: "Altar" })).toContainText(
-    "Прямая работа",
-  );
-  await other.screenshot({ path: ".local/spaces-qa/project-access-tablet.png" });
-  // A third member joins an existing space. Foreign grants are chosen by that project's owner.
-  const third = hub.registry.accept(
-    hub.registry.invite(hub.registry.ownerId, "Третий").token,
-    "third",
-    "Третий",
-    await teamPasswordHash(password),
-    10,
-  );
-  hub.registry.db
-    .prepare("INSERT INTO team_meta(key,value) VALUES(?,?)")
-    .run(`onboarding:${third.id}`, "deferred");
-  const thirdContext = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    hasTouch: true,
-    serviceWorkers: "block",
-  });
-  const thirdPage = await thirdContext.newPage();
-  thirdPage.on("pageerror", (e) => errors.push(e.message));
-  await login(thirdPage, "third");
-  await ownerSettings.getByRole("button", { name: "Пригласить участника", exact: true }).click();
-  await ownerSettings
-    .getByRole("group", { name: "Пользователи Hub", exact: true })
-    .getByRole("button", { name: /Третий/ })
-    .click();
-  await ownerSettings.getByLabel("Приглашение: Altar", { exact: true }).selectOption("collaborate");
-  await ownerSettings.getByText("Рекомендации Codex", { exact: true }).click();
-  const inviteForm = ownerSettings.getByRole("form", { name: "Приглашение участника" });
-  await inviteForm.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).check();
-  // Focused theme/keyboard geometry on the changed invitation form.
-  for (const width of [390, 768, 1024, 1366]) {
-    await page.setViewportSize({ width, height: 400 });
-    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
-      await page.evaluate((t) => {
-        document.documentElement.dataset.theme = t;
-        document.documentElement.dataset.keyboard = "true";
-        document.documentElement.style.setProperty("--app-height", "400px");
-      }, theme);
-      await inviteForm
-        .getByRole("button", { name: "Пригласить", exact: true })
-        .scrollIntoViewIfNeeded();
-      const bounds = await ownerSettings.evaluate((el) => {
-        const r = el.getBoundingClientRect();
-        const b = el
-          .querySelector('form[aria-label="Приглашение участника"] button[type="submit"]')
-          .getBoundingClientRect();
-        return {
-          top: r.top,
-          bottom: r.bottom,
-          buttonBottom: b.bottom,
-          overflow: el.scrollWidth > el.clientWidth + 1,
-        };
-      });
-      assert.ok(
-        bounds.top >= 0 && bounds.bottom <= 401 && bounds.buttonBottom <= 401 && !bounds.overflow,
-        JSON.stringify({ width, theme, bounds }),
-      );
-    }
+    other.getByRole("button", { name: "Обзор текущего проекта", exact: true }),
+  ).toContainText("World");
+  for (const width of [390, 1024]) {
+    await other.setViewportSize({ width, height: 844 });
+    await drawer(other);
+    await otherNav.getByRole("button", { name: "Личные проекты", exact: true }).click();
+    await expect(
+      other.getByRole("button", { name: "Обзор текущего проекта", exact: true }),
+    ).toContainText("Altar copy");
+    await expect(other.getByRole("textbox", { name: "Сообщение Codex" })).toHaveValue(
+      "Personal draft",
+    );
+    await otherNav.getByRole("button", { name: "Общие пространства", exact: true }).click();
+    await expect(
+      other.getByRole("button", { name: "Обзор текущего проекта", exact: true }),
+    ).toContainText("Existing friend chat");
+    await expect(other.locator(".workspace-content")).toBeVisible();
   }
-  await page.evaluate(() => {
-    delete document.documentElement.dataset.keyboard;
-    document.documentElement.style.setProperty("--app-height", "844px");
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: ".local/spaces-qa/additional-invite-phone.png" });
-  await inviteForm.getByRole("button", { name: "Пригласить", exact: true }).click();
-  await expect(inviteForm).toHaveCount(0);
-  await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
-  await settings
-    .locator("summary")
-    .filter({ hasText: /^World/ })
-    .click();
-  await settings.getByLabel("Доступ: World · Третий", { exact: true }).selectOption("direct");
-  await expect(settings.getByLabel("Доступ: World · Третий", { exact: true })).toHaveValue(
-    "direct",
-  );
-  await thirdPage.reload();
-  const thirdNav = await drawer(thirdPage);
-  await thirdNav.getByRole("button", { name: "Уведомления: 1", exact: true }).click();
-  const thirdDialog = thirdPage.locator(".space-dialog");
-  await thirdDialog.getByRole("button", { name: /Altar \+ World/ }).click();
-  await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
-  await thirdDialog.getByLabel("Мой проект", { exact: true }).selectOption("third-project");
-  await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
-  await thirdDialog
-    .getByLabel("Доступ для Друг к моему проекту", { exact: true })
-    .selectOption("direct");
-  await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
-  await thirdDialog.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).uncheck();
-  await thirdDialog
-    .getByRole("button", { name: "Применить и присоединиться", exact: true })
-    .click();
-  await expect(thirdDialog).toHaveCount(0);
-  await assert.rejects(readFile(join(root, "third", "CODEXWEB.md")));
-  await thirdNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
-  await thirdDialog
-    .locator("summary")
-    .filter({ hasText: /^World/ })
-    .last()
-    .click();
-  await thirdDialog.getByText("Мои настройки Codex", { exact: true }).click();
-  await thirdDialog.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).check();
-  await thirdDialog.getByRole("button", { name: "Применить правила", exact: true }).click();
-  await expect
-    .poll(() => runtimes.get("third").projectGpts.get("third-project").rules.enabled)
-    .toEqual(["focused"]);
-  await thirdDialog.getByRole("button", { name: "Выйти из пространства", exact: true }).click();
-  await thirdDialog.getByRole("button", { name: "Выйти", exact: true }).click();
-  await expect(thirdDialog).toHaveCount(0);
-  await thirdContext.close();
-  // Human chat is a separate popup: files, live replies, exact-send retry and unread badges.
-  await ownerSettings.getByLabel("Закрыть пространство", { exact: true }).click();
-  await settings.getByLabel("Закрыть пространство", { exact: true }).click();
-  await nav.getByRole("button", { name: "Общие пространства", exact: true }).click();
-  await expect(nav.locator(".nav-mobile-switch > button").nth(0)).toHaveText("Пространства");
-  await expect(nav.locator(".nav-mobile-switch > button").nth(1)).toHaveText("Брейншторм");
-  await nav.getByRole("button", { name: "Брейншторм", exact: true }).click();
-  await expect(nav).toContainText("комнаты для совместного обсуждения идей");
-  await nav.getByRole("button", { name: "Пространства", exact: true }).click();
-  for (const width of [390, 768, 1024, 1366]) {
-    await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
-    const visibleNav = await drawer(page);
-    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
-      await page.evaluate((t) => {
-        document.documentElement.dataset.theme = t;
-      }, theme);
-      const layout = await visibleNav.locator(".navigation-header").evaluate((el) => {
-        const buttons = [...el.querySelector(".nav-mobile-switch").children],
-          cap = el.querySelector(".space-mode-toggle").getBoundingClientRect();
-        const left = buttons[0].querySelector(".nav-tab-title").getBoundingClientRect();
-        const right = buttons[1].querySelector(".nav-tab-title").getBoundingClientRect();
-        return {
-          width: cap.width,
-          height: cap.height,
-          overlap: left.left < cap.right || right.left < left.right,
-          overflows: el.scrollWidth > el.clientWidth + 1,
-          left: left.right,
-          right: right.left,
-          capLeft: cap.left,
-          capRight: cap.right,
-        };
-      });
-      assert.equal(layout.width, 58);
-      assert.equal(layout.height, 58);
-      assert.ok(!layout.overlap && !layout.overflows, JSON.stringify({ width, theme, layout }));
-      if (width === 390 || width === 1024)
-        await page.screenshot({ path: `.local/spaces-qa/navigation-${width}-${theme}.png` });
+  if (process.env.SPACE_NAVIGATION_ONLY) {
+    console.log(
+      "WebKit phone/tablet: separate personal/shared project and chat restoration, repeated toggles and draft preservation passed.",
+    );
+  } else {
+    await otherNav.locator('[data-project-id="friend-project"]').click();
+    await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
+    await drawer(other);
+    await otherNav.getByRole("button", { name: /Altar.*Совместная работа/ }).click();
+    const sharedProject = other.locator(".space-dialog");
+    await expect(
+      sharedProject.getByRole("link", { name: "https://github.com/example/altar" }),
+    ).toBeVisible();
+    await sharedProject.getByRole("button", { name: "Создать рабочую копию", exact: true }).click();
+    await expect(other.locator(".project-setup-dialog[open]")).toBeVisible();
+    await other.keyboard.press("Escape");
+    await sharedProject.getByLabel(/^Моя рабочая копия/).selectOption("friend-extra");
+    await sharedProject
+      .getByRole("button", { name: "Подключить и открыть Codex", exact: true })
+      .click();
+    await expect(sharedProject).toHaveCount(0);
+    await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
+    await expect(other.locator(".space-home")).toHaveCount(0);
+    await expect(other.locator(".workspace-content")).toBeVisible();
+    const introCalls = runtimes.get("friend").nativeCalls.filter((c) => c.method === "turn/start");
+    assert.equal(introCalls.length, 1);
+    assert.ok(JSON.stringify(introCalls[0].params).includes("https://github.com/example/altar"));
+    const catalog = await (await other.request.get(base + "/api/team/spaces")).json();
+    const linked = catalog.spaces[0].projects.find((p) => p.personalProjectId === "friend-extra");
+    const introUrl = base + `/api/team/spaces/${catalog.spaces[0].id}/projects/${linked.id}/chat`;
+    const csrf = (
+      await (
+        await other.request.get(base + "/api/auth/session", {
+          headers: { origin: base },
+        })
+      ).json()
+    ).csrf;
+    const again = await other.request.post(introUrl, {
+      headers: { origin: base, "x-csrf-token": csrf, "idempotency-key": randomUUID() },
+      data: {},
+    });
+    assert.equal(again.status(), 200);
+    assert.equal(
+      runtimes.get("friend").nativeCalls.filter((c) => c.method === "turn/start").length,
+      1,
+    );
+    await drawer(other);
+    await otherNav
+      .getByRole("button", { name: /Altar.*Совместная работа/ })
+      .first()
+      .click();
+    await expect(
+      other.getByRole("dialog", { name: "Обзор проекта Altar copy", exact: true }),
+    ).toBeVisible();
+    await other.keyboard.press("Escape");
+    await expect(
+      other.getByRole("dialog", { name: "Обзор проекта Altar copy", exact: true }),
+    ).toHaveCount(0);
+    await drawer(other);
+    await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
+    const settings = other.locator(".space-dialog");
+    await settings.locator("summary").filter({ hasText: "Altar" }).click();
+    await expect(
+      settings.getByRole("button", { name: "Сменить рабочую копию", exact: true }),
+    ).toBeVisible();
+    await settings.getByRole("button", { name: "Запросить прямой доступ", exact: true }).click();
+    await expect(settings).toContainText("Прямой доступ запрошен");
+    await page.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+    await nav.getByRole("button", { name: "Уведомления: 1", exact: true }).click();
+    await page
+      .locator(".space-dialog")
+      .getByRole("button", { name: /Altar.*просит прямой доступ/ })
+      .click();
+    const ownerSettings = page.locator(".space-dialog");
+    await ownerSettings.locator("summary").filter({ hasText: "Altar" }).click();
+    await ownerSettings.getByRole("button", { name: "Разрешить", exact: true }).click();
+    await expect(ownerSettings.getByLabel("Доступ: Altar · Друг", { exact: true })).toHaveValue(
+      "direct",
+    );
+    await ownerSettings.getByRole("button", { name: "Добавить свой проект", exact: true }).click();
+    await ownerSettings
+      .getByLabel("Проект для подключения", { exact: true })
+      .selectOption("owner-extra");
+    await ownerSettings.getByRole("button", { name: "Подключить", exact: true }).click();
+    await ownerSettings.locator("summary").filter({ hasText: "Assets" }).click();
+    await ownerSettings
+      .locator("details")
+      .filter({ hasText: "Assets" })
+      .getByRole("button", { name: "Убрать из пространства" })
+      .click();
+    await ownerSettings.getByRole("button", { name: "Убрать", exact: true }).click();
+    await expect(ownerSettings.locator("summary").filter({ hasText: "Assets" })).toHaveCount(0);
+    await page.screenshot({ path: ".local/spaces-qa/project-access-phone.png" });
+    await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+    await expect(settings.locator("summary").filter({ hasText: "Altar" })).toContainText(
+      "Прямая работа",
+    );
+    await other.screenshot({ path: ".local/spaces-qa/project-access-tablet.png" });
+    // A third member joins an existing space. Foreign grants are chosen by that project's owner.
+    const third = hub.registry.accept(
+      hub.registry.invite(hub.registry.ownerId, "Третий").token,
+      "third",
+      "Третий",
+      await teamPasswordHash(password),
+      10,
+    );
+    hub.registry.db
+      .prepare("INSERT INTO team_meta(key,value) VALUES(?,?)")
+      .run(`onboarding:${third.id}`, "deferred");
+    const thirdContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      serviceWorkers: "block",
+    });
+    const thirdPage = await thirdContext.newPage();
+    thirdPage.on("pageerror", (e) => errors.push(e.message));
+    await login(thirdPage, "third");
+    await ownerSettings.getByRole("button", { name: "Пригласить участника", exact: true }).click();
+    await ownerSettings
+      .getByRole("group", { name: "Пользователи Hub", exact: true })
+      .getByRole("button", { name: /Третий/ })
+      .click();
+    await ownerSettings
+      .getByLabel("Приглашение: Altar", { exact: true })
+      .selectOption("collaborate");
+    await ownerSettings.getByText("Рекомендации Codex", { exact: true }).click();
+    const inviteForm = ownerSettings.getByRole("form", { name: "Приглашение участника" });
+    await inviteForm.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).check();
+    // Focused theme/keyboard geometry on the changed invitation form.
+    for (const width of [390, 768, 1024, 1366]) {
+      await page.setViewportSize({ width, height: 400 });
+      for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+        await page.evaluate((t) => {
+          document.documentElement.dataset.theme = t;
+          document.documentElement.dataset.keyboard = "true";
+          document.documentElement.style.setProperty("--app-height", "400px");
+        }, theme);
+        await inviteForm
+          .getByRole("button", { name: "Пригласить", exact: true })
+          .scrollIntoViewIfNeeded();
+        const bounds = await ownerSettings.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const b = el
+            .querySelector('form[aria-label="Приглашение участника"] button[type="submit"]')
+            .getBoundingClientRect();
+          return {
+            top: r.top,
+            bottom: r.bottom,
+            buttonBottom: b.bottom,
+            overflow: el.scrollWidth > el.clientWidth + 1,
+          };
+        });
+        assert.ok(
+          bounds.top >= 0 && bounds.bottom <= 401 && bounds.buttonBottom <= 401 && !bounds.overflow,
+          JSON.stringify({ width, theme, bounds }),
+        );
+      }
     }
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await drawer(page);
-  await openSpaceChat(page);
-  const chat = page.locator(".space-chat-dialog");
-  await chat.getByLabel("Сообщение участникам").fill("План работ https://example.com/plan");
-  const png = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8yoAAAAASUVORK5CYII=",
-    "base64",
-  );
-  await chat.locator('input[type="file"]').setInputFiles([
-    { name: "схема.png", mimeType: "image/png", buffer: png },
-    { name: "план.txt", mimeType: "text/plain", buffer: Buffer.from("Наш план") },
-  ]);
-  await expect(chat.getByRole("button", { name: "Убрать план.txt" })).toBeVisible();
-  await chat.getByRole("button", { name: "Отправить в общий чат" }).click();
-  await expect(chat.locator(".space-chat-message")).toHaveCount(1);
-  await expect(
-    chat.locator('.space-chat-message a[href="https://example.com/plan"]'),
-  ).toBeVisible();
-  await expect
-    .poll(() => chat.locator(".space-chat-file img").evaluate((el) => el.naturalWidth))
-    .toBe(1);
-  const download = await ownerContext.request.get(
-    await chat.getByRole("link", { name: /план.txt/ }).getAttribute("href"),
-  );
-  assert.equal((await download.body()).toString(), "Наш план");
-  await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
-  await expect(otherNav.getByRole("button", { name: "Уведомления: 1", exact: true })).toBeVisible();
-  await openSpaceChat(other);
-  const otherChat = other.locator(".space-chat-dialog");
-  await expect(otherChat.locator(".space-chat-message")).toHaveCount(1);
-  await expect(otherNav.locator(".space-bell small")).toHaveCount(0);
-  await otherChat.getByLabel("Сообщение участникам").fill("Взял world в работу");
-  await otherChat.getByRole("button", { name: "Отправить в общий чат" }).click();
-  await expect(chat).toContainText("Взял world в работу", { timeout: 10000 });
-  await chat.getByLabel("Сообщение участникам").fill("Черновик общего чата");
-  for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
-    await page.evaluate((t) => {
-      document.documentElement.dataset.theme = t;
-    }, theme);
-    const bounds = await chat.evaluate((el) => {
-      document.documentElement.dataset.keyboard = "true";
-      document.documentElement.style.setProperty("--app-height", "400px");
-      const r = el.getBoundingClientRect(),
-        input = el.querySelector("textarea").getBoundingClientRect();
-      const value = {
-        top: r.top,
-        bottom: r.bottom,
-        inputBottom: input.bottom,
-        overflow: el.scrollWidth > el.clientWidth + 1,
-      };
+    await page.evaluate(() => {
       delete document.documentElement.dataset.keyboard;
       document.documentElement.style.setProperty("--app-height", "844px");
-      return value;
     });
-    assert.ok(
-      bounds.top >= 0 && bounds.bottom <= 401 && bounds.inputBottom <= 401 && !bounds.overflow,
-      JSON.stringify({ theme, bounds }),
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: ".local/spaces-qa/additional-invite-phone.png" });
+    await inviteForm.getByRole("button", { name: "Пригласить", exact: true }).click();
+    await expect(inviteForm).toHaveCount(0);
+    await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+    await settings
+      .locator("summary")
+      .filter({ hasText: /^World/ })
+      .click();
+    await settings.getByLabel("Доступ: World · Третий", { exact: true }).selectOption("direct");
+    await expect(settings.getByLabel("Доступ: World · Третий", { exact: true })).toHaveValue(
+      "direct",
     );
-    await page.screenshot({ path: `.local/spaces-qa/chat-phone-${theme}.png` });
-  }
-  await other.screenshot({ path: ".local/spaces-qa/chat-tablet.png" });
-  await chat.getByLabel("Закрыть пространство", { exact: true }).click();
-  await openSpaceChat(page);
-  await expect(chat.getByLabel("Сообщение участникам")).toHaveValue("Черновик общего чата");
-  await chat.getByLabel("Закрыть пространство", { exact: true }).click();
-  await otherChat.getByLabel("Закрыть пространство", { exact: true }).click();
-  for (const width of [390, 768, 1024, 1366]) {
-    await page.setViewportSize({ width, height: 844 });
+    await thirdPage.reload();
+    const thirdNav = await drawer(thirdPage);
+    await thirdNav.getByRole("button", { name: "Уведомления: 1", exact: true }).click();
+    const thirdDialog = thirdPage.locator(".space-dialog");
+    await thirdDialog.getByRole("button", { name: /Altar \+ World/ }).click();
+    await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
+    await thirdDialog.getByLabel("Мой проект", { exact: true }).selectOption("third-project");
+    await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
+    await thirdDialog
+      .getByLabel("Доступ для Друг к моему проекту", { exact: true })
+      .selectOption("direct");
+    await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
+    await thirdDialog.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).uncheck();
+    await thirdDialog
+      .getByRole("button", { name: "Применить и присоединиться", exact: true })
+      .click();
+    await expect(thirdDialog).toHaveCount(0);
+    await assert.rejects(readFile(join(root, "third", "CODEXWEB.md")));
+    await thirdNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
+    await thirdDialog
+      .locator("summary")
+      .filter({ hasText: /^World/ })
+      .last()
+      .click();
+    await thirdDialog.getByText("Мои настройки Codex", { exact: true }).click();
+    await thirdDialog.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).check();
+    await thirdDialog.getByRole("button", { name: "Применить правила", exact: true }).click();
+    await expect
+      .poll(() => runtimes.get("third").projectGpts.get("third-project").rules.enabled)
+      .toEqual(["focused"]);
+    await thirdDialog.getByRole("button", { name: "Выйти из пространства", exact: true }).click();
+    await thirdDialog.getByRole("button", { name: "Выйти", exact: true }).click();
+    await expect(thirdDialog).toHaveCount(0);
+    await thirdContext.close();
+    // Human chat is a separate popup: files, live replies, exact-send retry and unread badges.
+    await ownerSettings.getByLabel("Закрыть пространство", { exact: true }).click();
+    await settings.getByLabel("Закрыть пространство", { exact: true }).click();
+    await nav.getByRole("button", { name: "Общие пространства", exact: true }).click();
+    await expect(nav.locator(".nav-mobile-switch > button").nth(0)).toHaveText("Пространства");
+    await expect(nav.locator(".nav-mobile-switch > button").nth(1)).toHaveText("Брейншторм");
+    await nav.getByRole("button", { name: "Брейншторм", exact: true }).click();
+    await expect(nav).toContainText("комнаты для совместного обсуждения идей");
+    await nav.getByRole("button", { name: "Пространства", exact: true }).click();
+    for (const width of [390, 768, 1024, 1366]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
+      const visibleNav = await drawer(page);
+      for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+        await page.evaluate((t) => {
+          document.documentElement.dataset.theme = t;
+        }, theme);
+        const layout = await visibleNav.locator(".navigation-header").evaluate((el) => {
+          const buttons = [...el.querySelector(".nav-mobile-switch").children],
+            cap = el.querySelector(".space-mode-toggle").getBoundingClientRect();
+          const left = buttons[0].querySelector(".nav-tab-title").getBoundingClientRect();
+          const right = buttons[1].querySelector(".nav-tab-title").getBoundingClientRect();
+          return {
+            width: cap.width,
+            height: cap.height,
+            overlap: left.left < cap.right || right.left < left.right,
+            overflows: el.scrollWidth > el.clientWidth + 1,
+            left: left.right,
+            right: right.left,
+            capLeft: cap.left,
+            capRight: cap.right,
+          };
+        });
+        assert.equal(layout.width, 58);
+        assert.equal(layout.height, 58);
+        assert.ok(!layout.overlap && !layout.overflows, JSON.stringify({ width, theme, layout }));
+        if (width === 390 || width === 1024)
+          await page.screenshot({ path: `.local/spaces-qa/navigation-${width}-${theme}.png` });
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await drawer(page);
+    await openSpaceChat(page);
+    const chat = page.locator(".space-chat-dialog");
+    await chat.getByLabel("Сообщение участникам").fill("План работ https://example.com/plan");
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8yoAAAAASUVORK5CYII=",
+      "base64",
+    );
+    await chat.locator('input[type="file"]').setInputFiles([
+      { name: "схема.png", mimeType: "image/png", buffer: png },
+      { name: "план.txt", mimeType: "text/plain", buffer: Buffer.from("Наш план") },
+    ]);
+    await expect(chat.getByRole("button", { name: "Убрать план.txt" })).toBeVisible();
+    await chat.getByRole("button", { name: "Отправить в общий чат" }).click();
+    await expect(chat.locator(".space-chat-message")).toHaveCount(1);
+    await expect(
+      chat.locator('.space-chat-message a[href="https://example.com/plan"]'),
+    ).toBeVisible();
+    await expect
+      .poll(() => chat.locator(".space-chat-file img").evaluate((el) => el.naturalWidth))
+      .toBe(1);
+    const download = await ownerContext.request.get(
+      await chat.getByRole("link", { name: /план.txt/ }).getAttribute("href"),
+    );
+    assert.equal((await download.body()).toString(), "Наш план");
+    await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+    await expect(
+      otherNav.getByRole("button", { name: "Уведомления: 1", exact: true }),
+    ).toBeVisible();
+    await openSpaceChat(other);
+    const otherChat = other.locator(".space-chat-dialog");
+    await expect(otherChat.locator(".space-chat-message")).toHaveCount(1);
+    await expect(otherNav.locator(".space-bell small")).toHaveCount(0);
+    await otherChat.getByLabel("Сообщение участникам").fill("Взял world в работу");
+    await otherChat.getByRole("button", { name: "Отправить в общий чат" }).click();
+    await expect(chat).toContainText("Взял world в работу", { timeout: 10000 });
+    await chat.getByLabel("Сообщение участникам").fill("Черновик общего чата");
     for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
       await page.evaluate((t) => {
         document.documentElement.dataset.theme = t;
       }, theme);
-      const header = page.locator(".workspace-header");
-      const geometry = await header.evaluate((el) => {
-        const r = el.getBoundingClientRect();
-        const buttons = [...el.querySelectorAll(":scope > button")]
-          .map((b) => b.getBoundingClientRect())
-          .filter((b) => b.width > 0);
-        return {
+      const bounds = await chat.evaluate((el) => {
+        document.documentElement.dataset.keyboard = "true";
+        document.documentElement.style.setProperty("--app-height", "400px");
+        const r = el.getBoundingClientRect(),
+          input = el.querySelector("textarea").getBoundingClientRect();
+        const value = {
+          top: r.top,
+          bottom: r.bottom,
+          inputBottom: input.bottom,
           overflow: el.scrollWidth > el.clientWidth + 1,
-          outside: buttons.some((b) => b.left < r.left || b.right > r.right + 1),
-          overlap: buttons.some((b, i) => i > 0 && b.left < buttons[i - 1].right - 1),
         };
+        delete document.documentElement.dataset.keyboard;
+        document.documentElement.style.setProperty("--app-height", "844px");
+        return value;
       });
       assert.ok(
-        !geometry.overflow && !geometry.outside && !geometry.overlap,
-        JSON.stringify({ width, theme, geometry }),
+        bounds.top >= 0 && bounds.bottom <= 401 && bounds.inputBottom <= 401 && !bounds.overflow,
+        JSON.stringify({ theme, bounds }),
       );
-      await expect(header.locator(".header-space-chat")).toBeVisible();
-      if (width === 390 || width === 1024)
-        await page.screenshot({ path: `.local/spaces-qa/header-chat-${width}-${theme}.png` });
+      await page.screenshot({ path: `.local/spaces-qa/chat-phone-${theme}.png` });
     }
+    await other.screenshot({ path: ".local/spaces-qa/chat-tablet.png" });
+    await chat.getByLabel("Закрыть пространство", { exact: true }).click();
+    await openSpaceChat(page);
+    await expect(chat.getByLabel("Сообщение участникам")).toHaveValue("Черновик общего чата");
+    await chat.getByLabel("Закрыть пространство", { exact: true }).click();
+    await otherChat.getByLabel("Закрыть пространство", { exact: true }).click();
+    for (const width of [390, 768, 1024, 1366]) {
+      await page.setViewportSize({ width, height: 844 });
+      for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+        await page.evaluate((t) => {
+          document.documentElement.dataset.theme = t;
+        }, theme);
+        const header = page.locator(".workspace-header");
+        const geometry = await header.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const buttons = [...el.querySelectorAll(":scope > button")]
+            .map((b) => b.getBoundingClientRect())
+            .filter((b) => b.width > 0);
+          return {
+            overflow: el.scrollWidth > el.clientWidth + 1,
+            outside: buttons.some((b) => b.left < r.left || b.right > r.right + 1),
+            overlap: buttons.some((b, i) => i > 0 && b.left < buttons[i - 1].right - 1),
+          };
+        });
+        assert.ok(
+          !geometry.overflow && !geometry.outside && !geometry.overlap,
+          JSON.stringify({ width, theme, geometry }),
+        );
+        await expect(header.locator(".header-space-chat")).toBeVisible();
+        if (width === 390 || width === 1024)
+          await page.screenshot({ path: `.local/spaces-qa/header-chat-${width}-${theme}.png` });
+      }
+    }
+    await drawer(other);
+    await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
+    await other
+      .locator(".space-dialog")
+      .getByRole("button", { name: "Выйти из пространства", exact: true })
+      .click();
+    await other
+      .locator(".space-dialog")
+      .getByRole("button", { name: "Выйти", exact: true })
+      .click();
+    await expect(other.locator(".space-dialog")).toHaveCount(0);
+    await otherNav.getByRole("button", { name: "Личные проекты", exact: true }).click();
+    await expect(otherNav.locator('[data-project-id="friend-project"]')).toBeVisible();
+    assert.equal(
+      runtimes.get("friend").store.thread(runtimes.get("friend").thread.id).codexThreadId,
+      runtimes.get("friend").nativeId,
+    );
+    await mkdir(".local/spaces-qa", { recursive: true });
+    await page.screenshot({ path: ".local/spaces-qa/phone.png" });
+    await other.screenshot({ path: ".local/spaces-qa/tablet.png" });
+    assert.deepEqual(errors, []);
+    await page.setViewportSize({ width: 1366, height: 1024 });
+    const divider = page.getByRole("separator", { name: "Ширина левой панели", exact: true });
+    await expect(divider).toBeVisible();
+    const navWidth = () =>
+      page.locator(".desktop-nav").evaluate((el) => el.getBoundingClientRect().width);
+    const beforeWidth = await navWidth(),
+      grip = await divider.boundingBox();
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 + 50, grip.y + grip.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(navWidth).toBeGreaterThan(beforeWidth + 35);
+    await divider.focus();
+    await page.keyboard.press("Home");
+    await expect.poll(navWidth).toBe(260);
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(navWidth).toBe(276);
+    await page.reload();
+    await expect.poll(navWidth).toBe(276);
+    await page.getByRole("button", { name: "Скрыть правую панель", exact: true }).click();
+    await expect(divider).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(divider).toBeHidden();
+    console.log(
+      "WebKit phone/tablet: space membership, project access, native continuity, shared tabs, left 58x58 round key geometry, human chat text/links/PNG/files, live reply/unread, popup draft and theme/keyboard geometry passed.",
+    );
   }
-  await drawer(other);
-  await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
-  await other
-    .locator(".space-dialog")
-    .getByRole("button", { name: "Выйти из пространства", exact: true })
-    .click();
-  await other.locator(".space-dialog").getByRole("button", { name: "Выйти", exact: true }).click();
-  await expect(other.locator(".space-dialog")).toHaveCount(0);
-  await otherNav.getByRole("button", { name: "Личные проекты", exact: true }).click();
-  await expect(otherNav.locator('[data-project-id="friend-project"]')).toBeVisible();
-  assert.equal(
-    runtimes.get("friend").store.thread(runtimes.get("friend").thread.id).codexThreadId,
-    runtimes.get("friend").nativeId,
-  );
-  await mkdir(".local/spaces-qa", { recursive: true });
-  await page.screenshot({ path: ".local/spaces-qa/phone.png" });
-  await other.screenshot({ path: ".local/spaces-qa/tablet.png" });
-  assert.deepEqual(errors, []);
-  await page.setViewportSize({ width: 1366, height: 1024 });
-  const divider = page.getByRole("separator", { name: "Ширина левой панели", exact: true });
-  await expect(divider).toBeVisible();
-  const navWidth = () =>
-    page.locator(".desktop-nav").evaluate((el) => el.getBoundingClientRect().width);
-  const beforeWidth = await navWidth(),
-    grip = await divider.boundingBox();
-  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(grip.x + grip.width / 2 + 50, grip.y + grip.height / 2, { steps: 5 });
-  await page.mouse.up();
-  await expect.poll(navWidth).toBeGreaterThan(beforeWidth + 35);
-  await divider.focus();
-  await page.keyboard.press("Home");
-  await expect.poll(navWidth).toBe(260);
-  await page.keyboard.press("ArrowRight");
-  await expect.poll(navWidth).toBe(276);
-  await page.reload();
-  await expect.poll(navWidth).toBe(276);
-  await page.getByRole("button", { name: "Скрыть правую панель", exact: true }).click();
-  await expect(divider).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(divider).toBeHidden();
-  console.log(
-    "WebKit phone/tablet: space membership, project access, native continuity, shared tabs, left 58x58 round key geometry, human chat text/links/PNG/files, live reply/unread, popup draft and theme/keyboard geometry passed.",
-  );
 } catch (error) {
   await mkdir(".local/spaces-qa", { recursive: true });
   await page.screenshot({ path: ".local/spaces-qa/failure.png" });

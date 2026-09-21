@@ -241,7 +241,8 @@ function Workspace({
     } catch {}
   }, [client]);
   const navigationState = useNavigation();
-  const spaces = useCollaborationSpaces();
+  const spaceState = useCollaborationSpaces();
+  const spaces = { ...spaceState, setMode: switchSpaceMode };
   const [spaceProjectCreated, setSpaceProjectCreated] = useState("");
   const spaceProjectCreation = useRef(false);
   const [initialized, setInitialized] = useState(false),
@@ -273,6 +274,59 @@ function Workspace({
     space: string;
     project: string;
   } | null>(null);
+  const modeLocations = useRef<
+    Partial<
+      Record<
+        "personal" | "spaces",
+        {
+          projectId: string;
+          threadId: string;
+          view: View;
+          overviewId: string;
+          sharedSelection: typeof sharedSelection;
+        }
+      >
+    >
+  >({});
+  function switchSpaceMode(mode: "personal" | "spaces") {
+    if (mode === spaceState.mode) return;
+    modeLocations.current[spaceState.mode] = {
+      projectId,
+      threadId,
+      view,
+      overviewId,
+      sharedSelection,
+    };
+    const previous = modeLocations.current[mode];
+    // Invalidate an outstanding project load before it can overwrite the restored chat.
+    ++threadRequest.current;
+    if (previous && projects.some((p) => p.id === previous.projectId)) {
+      selectionRef.current = { projectId: previous.projectId, threadId: previous.threadId };
+      setProjectId(previous.projectId);
+      setThreadId(previous.threadId);
+      setThreads(threadGroups[previous.projectId] ?? []);
+      setView(previous.view);
+      setOverviewId(previous.overviewId);
+      setSharedSelection(
+        previous.sharedSelection
+          ? {
+              ...previous.sharedSelection,
+              entry: spaceState.entry + 1,
+            }
+          : null,
+      );
+    } else {
+      setOverviewId("");
+      setSharedSelection(null);
+      if (mode === "personal") {
+        setProjectId("");
+        setThreadId("");
+        setThreads([]);
+        selectionRef.current = { projectId: "", threadId: "" };
+      }
+    }
+    spaceState.setMode(mode);
+  }
   const selectedSpace = spaces.catalog.spaces.find((s) => s.id === spaces.selectedId);
   const spaceHome =
     spaces.mode === "spaces" &&

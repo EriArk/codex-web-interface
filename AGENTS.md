@@ -8,6 +8,8 @@
 ## Owner-requested theme consistency (2026-09-21)
 
 - Open the human Space chat from an icon button in the central workspace header, as a separate popup over the mounted Codex conversation. Do not put chat launch buttons in the left navigation; space cards may retain unread counts.
+- Personal and Shared navigation each remember their last selected project/chat and view during switching. Restore the previous selection on return; show the Shared empty state only until a shared project has first been chosen (owner update 2026-09-21).
+
 - Entering Shared mode shows a project-selection empty state until the user explicitly chooses a shared Project/chat; do not display the previous personal conversation or its Results underneath. Preserve its draft and running work. Wide/tablet navigation has a draggable divider matching the Results divider, with device-local width persistence in both clients.
 
 - New and changed UI must follow the active theme using existing components, semantic tokens and shared window/control materials. Do not introduce generic wizard styling that overrides the theme's casing, surfaces or buttons.

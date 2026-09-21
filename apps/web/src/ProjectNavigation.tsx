@@ -66,6 +66,11 @@ export function ProjectNavigation({
   onRemote?: () => void;
 }) {
   const openRequest = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Mode changes invalidate outstanding navigation requests.
+  useEffect(() => {
+    // A delayed project expansion must not select its chat in the other mode.
+    ++openRequest.current;
+  }, [spaces.mode]);
   const [section, setSection] = useState<"projects" | "threads">("projects");
   const [sharedSection, setSharedSection] = useState<"spaces" | "brainstorm">("spaces");
   const [query, setQuery] = useState("");
