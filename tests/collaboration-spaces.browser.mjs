@@ -86,6 +86,7 @@ const hub = await createTeamHub(config, {
     const personalStore = options.store ?? new Store(cfg.hub.databasePath);
     const nativeId = randomUUID(),
       thread = personalStore.createThread(who + "-project", nativeId, "Existing " + who + " chat");
+    const nativeCalls = [];
     const rpc = Object.assign(new EventEmitter(), {
       closed: false,
       initialize: async () => ({}),
@@ -93,6 +94,9 @@ const hub = await createTeamHub(config, {
         this.closed = true;
       },
       async request(method, params) {
+        nativeCalls.push({ method, params });
+        if (method === "thread/start") return { thread: { id: randomUUID() } };
+        if (method === "turn/start") return { turn: { id: randomUUID(), status: "inProgress" } };
         const capabilities = capabilityReply(method);
         if (capabilities) return capabilities;
         if (method === "account/read") return { account: { type: "chatgpt" } };
@@ -104,7 +108,7 @@ const hub = await createTeamHub(config, {
     const sessions = new Sessions(cfg, personalStore, () => rpc);
     sessions.externalActivity.refresh = async () => {};
     const runtime = await createApp(cfg, { ...options, sessions, store: personalStore });
-    runtimes.set(who, { ...runtime, thread, nativeId });
+    runtimes.set(who, { ...runtime, thread, nativeId, nativeCalls });
     return runtime;
   },
 });
@@ -146,8 +150,9 @@ async function login(p, user) {
   if (await later.isVisible()) await later.click();
 }
 async function drawer(p) {
-  if (!(await p.locator(".navigation-inner:visible").count()))
+  if (p.viewportSize().width < 1100 && !(await p.locator(".project-sheet[open]").count()))
     await p.getByRole("button", { name: "Открыть проекты", exact: true }).click();
+  if (p.viewportSize().width < 1100) await expect(p.locator(".project-sheet[open]")).toBeVisible();
   return p.locator(".navigation-inner:visible").last();
 }
 async function openSpaceChat(p) {
@@ -279,12 +284,60 @@ try {
   await expect(other.locator(".space-home")).toHaveCount(0);
   await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
   await drawer(other);
+  await otherNav.getByRole("button", { name: /Altar.*Совместная работа/ }).click();
+  const sharedProject = other.locator(".space-dialog");
+  await expect(
+    sharedProject.getByRole("link", { name: "https://github.com/example/altar" }),
+  ).toBeVisible();
+  await sharedProject.getByRole("button", { name: "Создать рабочую копию", exact: true }).click();
+  await expect(other.locator(".project-setup-dialog[open]")).toBeVisible();
+  await other.keyboard.press("Escape");
+  await sharedProject.getByLabel(/^Моя рабочая копия/).selectOption("friend-extra");
+  await sharedProject
+    .getByRole("button", { name: "Подключить и открыть Codex", exact: true })
+    .click();
+  await expect(sharedProject).toHaveCount(0);
+  await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
+  await expect(other.locator(".space-home")).toHaveCount(0);
+  await expect(other.locator(".workspace-content")).toBeVisible();
+  const introCalls = runtimes.get("friend").nativeCalls.filter((c) => c.method === "turn/start");
+  assert.equal(introCalls.length, 1);
+  assert.ok(JSON.stringify(introCalls[0].params).includes("https://github.com/example/altar"));
+  const catalog = await (await other.request.get(base + "/api/team/spaces")).json();
+  const linked = catalog.spaces[0].projects.find((p) => p.personalProjectId === "friend-extra");
+  const introUrl = base + `/api/team/spaces/${catalog.spaces[0].id}/projects/${linked.id}/chat`;
+  const csrf = (
+    await (
+      await other.request.get(base + "/api/auth/session", {
+        headers: { origin: base },
+      })
+    ).json()
+  ).csrf;
+  const again = await other.request.post(introUrl, {
+    headers: { origin: base, "x-csrf-token": csrf, "idempotency-key": randomUUID() },
+    data: {},
+  });
+  assert.equal(again.status(), 200);
+  assert.equal(
+    runtimes.get("friend").nativeCalls.filter((c) => c.method === "turn/start").length,
+    1,
+  );
+  await drawer(other);
+  await otherNav
+    .getByRole("button", { name: /Altar.*Совместная работа/ })
+    .first()
+    .click();
+  await expect(
+    other.getByRole("dialog", { name: "Обзор проекта Altar copy", exact: true }),
+  ).toBeVisible();
+  await other.keyboard.press("Escape");
+  await expect(
+    other.getByRole("dialog", { name: "Обзор проекта Altar copy", exact: true }),
+  ).toHaveCount(0);
+  await drawer(other);
   await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
   const settings = other.locator(".space-dialog");
   await settings.locator("summary").filter({ hasText: "Altar" }).click();
-  await settings.getByRole("button", { name: "Подключить мою копию", exact: true }).click();
-  await settings.getByLabel("Проект для подключения", { exact: true }).selectOption("friend-extra");
-  await settings.getByRole("button", { name: "Подключить", exact: true }).click();
   await expect(
     settings.getByRole("button", { name: "Сменить рабочую копию", exact: true }),
   ).toBeVisible();
@@ -610,6 +663,7 @@ try {
 } catch (error) {
   await mkdir(".local/spaces-qa", { recursive: true });
   await page.screenshot({ path: ".local/spaces-qa/failure.png" });
+  await other.screenshot({ path: ".local/spaces-qa/failure-friend.png" });
   console.log(
     await page
       .locator(".space-dialog")

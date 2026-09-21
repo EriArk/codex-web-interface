@@ -5,6 +5,7 @@ import { api } from "./api";
 
 export type SpaceWindow =
   | { kind: "create" | "invitations" }
+  | { kind: "project"; id: string; projectId: string }
   | { kind: "accept" | "settings" | "chat"; id: string };
 export function useCollaborationSpaces() {
   const [catalog, setCatalog] = useState<CollaborationCatalog>({ spaces: [], invitations: [] });

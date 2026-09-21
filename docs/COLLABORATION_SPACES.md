@@ -63,6 +63,14 @@ The latest navigation correction replaces the triangle with the existing matte r
 
 Focused verification: `tests/project-gpt.test.mjs` exercises actual native-provider/outbox routes, retry/context changes, late identity recovery, independent personal stores and real Git exclusion/rule removal. `tests/project-gpt.browser.mjs` uses WebKit and the actual Hub with simulated native transport for popup draft/binding/send/completion/reopen, rules, Results and phone/tablet/theme/keyboard geometry. The existing two-user space browser check covers the relocated round control and preserved shared navigation. These are disposable checks, not physical owner/friend acceptance.
 
+## Opening a linked Project (2026-09-21)
+
+Linked Projects are clickable project rows. An already connected personal copy opens the ordinary Project overview, with existing Files, Git, materials and personal Codex conversations. Without a copy, the same entry offers selecting an existing Project or creating a checkout through the normal themed Project wizard, prefilled with the shared repository and name. Closing that wizard returns to the selection.
+
+Connecting the copy creates a personal introductory Codex chat and sends its first message with the GitHub URL, Project and Space names and related repository URLs. It asks Codex to inspect project instructions and structure and explain the project before making changes. Account-local durable receipts reuse the same chat and submission across repeated requests/devices; uncertain sends are never replayed. Native work runs in the participant's own copy with the existing agreement. Other participants' chats and credentials stay private.
+
+The focused two-user WebKit scenario covers opening the linked row, checkout wizard return, binding, initial native prompt, duplicate-request handling and reopening the ordinary overview. Native RPC is simulated; no real GitHub changes or user prompts are made during verification.
+
 ## Earlier block verification details
 
 - `tests/collaboration-spaces.test.mjs`: asymmetric grants, invite-only visibility, own-checkout identity, same-repository acceptance, existing idempotent receipts, stale revisions, leave/close, persistence, project/member removal and explicit access elevation; route tests use disposable real Git repositories.

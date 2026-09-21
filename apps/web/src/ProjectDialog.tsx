@@ -1,5 +1,5 @@
 import type { ProjectSetupInput, ProjectSetupOperation, SetupRepository } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -68,11 +68,13 @@ export function ProjectDialog({
   machines,
   onClose,
   onCreated,
+  seed,
 }: {
   open: boolean;
   machines: Machine[];
   onClose: () => void;
   onCreated: (project: Project) => Promise<void>;
+  seed?: { name: string; repository: string };
 }) {
   const restored = useRef(restore());
   const [input, setInput] = useState<ProjectSetupInput>(() => restored.current?.input ?? initial),
@@ -107,15 +109,30 @@ export function ProjectDialog({
     operation?.state === "running" ||
     operation?.state === "unknown" ||
     operation?.state === "complete";
-  const setField = (patch: Partial<ProjectSetupInput>) => {
+  const setField = useCallback((patch: Partial<ProjectSetupInput>) => {
     generation.current++;
     setOperation(null);
     persistedOperation.current = "";
     setError("");
     setInput((old) => ({ ...old, ...patch }));
-  };
+  }, []);
   const setRepository = (patch: Partial<ProjectSetupInput["repository"]>) =>
     setField({ repository: { ...input.repository, ...patch } });
+  const appliedSeed = useRef<typeof seed>(undefined);
+  useEffect(() => {
+    if (!open || !seed || appliedSeed.current === seed || persistedOperation.current) return;
+    const match = /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/.exec(seed.repository);
+    if (!match) return;
+    appliedSeed.current = seed;
+    setField({
+      ...initial,
+      machineId: machine?.id ?? "",
+      name: seed.name,
+      repository: { ...initial.repository, mode: "connect", owner: match[1]!, name: match[2]! },
+    });
+    setEditedPath(false);
+    setStep(0);
+  }, [open, seed, machine?.id, setField]);
   useEffect(() => {
     if (!machine) return;
     setInput((old) => ({
@@ -338,7 +355,10 @@ export function ProjectDialog({
       ref={dialog}
       className="project-dialog project-setup-dialog"
       aria-label="Создание проекта"
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
     >
       <header className="dialog-heading">
         <div>

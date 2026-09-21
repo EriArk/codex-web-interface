@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested linked project entry (2026-09-21)
+
+- Linked Projects in Spaces open the normal Project tools through the participant's own working copy. Offer connecting/creating that copy directly from the Project row.
+- The automatically created personal Codex chat receives an initial message with the GitHub repository and shared project context. Reopening must not duplicate the chat or initial submission.
+
 ## Owner-requested theme consistency (2026-09-21)
 
 - Open the human Space chat from an icon button in the central workspace header, as a separate popup over the mounted Codex conversation. Do not put chat launch buttons in the left navigation; space cards may retain unread counts.

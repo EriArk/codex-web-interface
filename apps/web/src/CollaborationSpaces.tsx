@@ -12,6 +12,7 @@ import { Icon } from "./icons";
 import { emptyProjectRules, ProjectRulesEditor } from "./ProjectRulesEditor";
 import { SpaceChat } from "./SpaceChat";
 import { SpaceInvite } from "./SpaceInvite";
+import { SpaceProjectOverview } from "./SpaceProjectOverview";
 import { SpaceProjects } from "./SpaceProjects";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { TeamContactPicker } from "./TeamContactPicker";
@@ -112,15 +113,25 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
             </small>
           )}
           {selected.projects
-            .filter((p) => !p.personalProjectId)
+            .filter((p) => p.ownerId !== pageWorkspace)
             .map((p) => (
-              <div className="space-related" key={p.id}>
-                <Icon name="repository" size={16} />
+              <button
+                type="button"
+                className="nav-project"
+                key={p.id}
+                onClick={() => spaces.open({ kind: "project", id: selected.id, projectId: p.id })}
+              >
+                <span className="folder-icon">
+                  <Icon name="folder" />
+                </span>
                 <span>
                   {p.name}
                   <small>{accessLabels[p.access]}</small>
                 </span>
-              </div>
+                <span className="project-chevron">
+                  <Icon name="chevron" size={15} />
+                </span>
+              </button>
             ))}
         </div>
       ) : (
@@ -218,11 +229,15 @@ export function CollaborationWindow({
   projects,
   onNewProject,
   createdProjectId,
+  onProject,
+  onChat,
 }: {
   spaces: SpacesController;
   projects: Project[];
-  onNewProject: () => void;
+  onNewProject: (seed?: { name: string; repository: string }) => void;
   createdProjectId: string;
+  onProject: (id: string) => void;
+  onChat: (id: string, projectId: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog);
@@ -260,6 +275,19 @@ export function CollaborationWindow({
       >
         {target.kind === "chat" && space && (
           <SpaceChat key={space.id} space={space} spaces={spaces} />
+        )}
+        {target.kind === "project" && space && (
+          <SpaceProjectOverview
+            key={target.projectId}
+            spaces={spaces}
+            space={space}
+            projectId={target.projectId}
+            projects={projects}
+            onNewProject={onNewProject}
+            createdProjectId={createdProjectId}
+            onProject={onProject}
+            onChat={onChat}
+          />
         )}
         {target.kind === "invitations" && (
           <>
@@ -321,7 +349,7 @@ export function CollaborationWindow({
             spaces={spaces}
             invitation={invitation}
             projects={projects}
-            onNewProject={onNewProject}
+            onNewProject={() => onNewProject()}
             createdProjectId={createdProjectId}
           />
         )}
@@ -331,7 +359,7 @@ export function CollaborationWindow({
             spaces={spaces}
             space={space}
             projects={projects}
-            onNewProject={onNewProject}
+            onNewProject={() => onNewProject()}
             createdProjectId={createdProjectId}
           />
         )}

@@ -58,6 +58,46 @@ export function registerCollaborationSpaces(
     return { personalProjectId, name: project.name, repository };
   };
   app.get("/api/team/spaces", (req) => spaces.catalog(actor(req)));
+  app.post("/api/team/spaces/:id/projects/:projectId/chat", async (req) => {
+    const user = actor(req);
+    const params = z.object({ id: z.string().uuid(), projectId }).parse(req.params);
+    const space = spaces.catalog(user).spaces.find((s) => s.id === params.id);
+    const project = space?.projects.find((p) => p.id === params.projectId);
+    if (!space || !project || project.access === "none" || !project.personalProjectId)
+      throw new HubError(
+        409,
+        "SPACE_COPY_REQUIRED",
+        "Сначала подключи свою рабочую копию проекта.",
+      );
+    const { runtime } = await personal(user);
+    const local = runtime.sessions.project(project.personalProjectId);
+    const scope = `space-intro:${space.id}:${project.id}:${local.id}`;
+    // The account-local receipt is shared across devices; opening never duplicates a turn.
+    const thread = (await runtime.store.once(scope, "create", {}, () =>
+      runtime.sessions.create(local.id, `Изучение ${project.name}`.slice(0, 120)),
+    )) as { id: string; projectId: string };
+    actor(req);
+    await runtime.store.once(scope, "intro", {}, async () => {
+      const current = spaces.catalog(user).spaces.find((s) => s.id === params.id);
+      const bound = current?.projects.find((p) => p.id === params.projectId);
+      if (!bound || bound.access === "none" || bound.personalProjectId !== local.id)
+        throw new HubError(403, "SPACE_ACCESS_CHANGED", "Доступ к проекту изменился.");
+      return runtime.sessions.startTurn(
+        thread.id,
+        `Работаем с проектом ${project.name}. Репозиторий GitHub: ${project.repository}.\n` +
+          `Пространство: ${space.title}. Связанные проекты: ${
+            space.projects
+              .filter((p) => p.id !== project.id)
+              .map((p) => `${p.name} — ${p.repository}`)
+              .join("; ") || "нет"
+          }.\n` +
+          "Изучи инструкции проекта и структуру текущей рабочей копии. Кратко объясни назначение проекта и основные части. Пока ничего не изменяй.",
+        undefined,
+        [],
+      );
+    });
+    return thread;
+  });
   app.register(async (chat) => {
     chat.addContentTypeParser(
       "application/octet-stream",

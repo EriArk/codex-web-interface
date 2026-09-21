@@ -253,6 +253,10 @@ function Workspace({
     [sendError, setSendError] = useState("");
   const [writeBlocked, setWriteBlocked] = useState(false);
   const sendingRef = useRef(false);
+  const [sharedProjectSeed, setSharedProjectSeed] = useState<{
+    name: string;
+    repository: string;
+  }>();
   const [machines, setMachines] = useState<Machine[]>([]),
     [createProject, setCreateProject] = useState(false),
     [syncing, setSyncing] = useState(false),
@@ -1582,7 +1586,17 @@ function Workspace({
             spaces={spaces}
             projects={projects}
             createdProjectId={spaceProjectCreated}
-            onNewProject={() => {
+            onProject={(id) => {
+              spaces.open(null);
+              setDrawer(false);
+              openProjectOverview(id);
+            }}
+            onChat={(id, owner) => {
+              spaces.open(null);
+              selectThread(id, owner);
+            }}
+            onNewProject={(seed) => {
+              setSharedProjectSeed(seed);
               spaceProjectCreation.current = true;
               setCreateProject(true);
             }}
@@ -1590,9 +1604,11 @@ function Workspace({
         )}
         <ProjectDialog
           open={createProject}
+          seed={sharedProjectSeed}
           machines={machines}
           onClose={() => {
             setCreateProject(false);
+            setSharedProjectSeed(undefined);
             spaceProjectCreation.current = false;
           }}
           onCreated={async (p) => {

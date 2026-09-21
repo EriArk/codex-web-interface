@@ -28,7 +28,10 @@ export function ProjectOverviewModal({
       tabIndex={-1}
       className="project-overview-modal"
       aria-label={`Обзор проекта ${props.scope.name}`}
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
     >
       <ProjectOverview
         {...props}
