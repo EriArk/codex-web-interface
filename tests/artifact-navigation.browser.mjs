@@ -119,7 +119,7 @@ for (const [engine, type] of [
       await results.getByRole("button", { name: "Вернуться к результатам" }).click();
       if (viewport.width === 390) await chat();
       await page.getByRole("button", { name: "Точное изображение", exact: true }).click();
-      await expect(results.locator(".result-inspector-image")).toBeVisible();
+      await expect(results.locator(".result-inspector .download-image")).toBeVisible();
       await expect(results.locator(".result-inspector-heading")).toContainText("exact.png");
       if (viewport.width === 390) await chat();
       await page.getByRole("button", { name: "Нет файла", exact: true }).click();
