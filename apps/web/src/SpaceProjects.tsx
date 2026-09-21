@@ -169,7 +169,9 @@ export function SpaceProjects({
                   ))}
               </>
             )}
-            {p.personalProjectId && <SpaceProjectRules projectId={p.personalProjectId} />}
+            {p.personalProjectId && (
+              <SpaceProjectRules key={p.personalProjectId} projectId={p.personalProjectId} />
+            )}
           </div>
         </details>
       ))}
