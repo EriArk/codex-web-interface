@@ -9,7 +9,7 @@ Two creation/acceptance paths are available:
 - **One project:** the creator chooses an existing Project and a Hub contact. The recipient chooses their own existing/local Project for the same canonical GitHub repository. The existing Project creation popup can create/connect the recipient's checkout and returns to the space wizard.
 - **Space:** each participant contributes their own Project. The creator grants a proposed working mode on their Project and may request a mode on the recipient's Project. The recipient explicitly chooses their own grant; a requested higher mode is never treated as consent.
 
-The first bell contains invitations only. A single cheap catalog refresh runs per mounted Codex workspace (30 seconds while visible, coalesced with focus refresh); it queries only private Team metadata. No background machine checks, history loads, native sends, credential changes or new admission requirements are added. Project repository inspection happens once on explicit creation/acceptance, via the existing inspector and the actor's own Project catalog. Acknowledgement retries reuse the existing Team receipt mechanism and skip repository reinspection.
+The first bell contained invitations only. The current catalog refresh runs once per mounted Codex workspace (10 seconds while visible, coalesced with focus refresh); it queries only private Team metadata. No background machine checks, history loads, native sends, credential changes or new admission requirements are added. Project repository inspection happens once on explicit creation/acceptance, via the existing inspector and the actor's own Project catalog. Acknowledgement retries reuse the existing Team receipt mechanism and skip repository reinspection.
 
 Storage uses the existing Team SQLite database and transaction/receipt services. `collaboration_spaces` stores a bounded metadata aggregate; `collaboration_space_people` indexes member/invite visibility. Public responses contain project names/repository URLs and only the current viewer's local Project IDs; foreign local paths, thread IDs and private history are never serialized. The tables are additive and included in existing whole-database backups. No synthetic legacy Team Project is created merely for navigation.
 
@@ -23,9 +23,21 @@ Normal native turns receive the current public project context through native co
 
 The notifications shortcut now includes requests for access to one's own Projects. Project names, members and repository metadata refresh through the existing cheap catalog; no machine polling is added. The triangle control uses shared theme materials and a collaboration icon, with a front-facing cap and text-safe overlap of the adjacent tabs.
 
-Then deliver one human chat per space with attachments and aggregated unread counts, followed by personal Project GPT and optional local CODEXWEB.md. Do not add technical event noise, a duplicate issue tracker, or automatically create GitHub issues. The full issue's final acceptance still needs the actual two users, separately from the disposable checks below.
+Next deliver personal Project GPT and optional local CODEXWEB.md; the human chat is implemented below. Do not add technical event noise, a duplicate issue tracker, or automatically create GitHub issues. The full issue's final acceptance still needs the actual two users, separately from the disposable checks below.
 
-## Focused verification
+## Third block: human chat and shared navigation
+
+Each space has one human chat popup, opened from its small round card button or from aggregated unread Notifications. It contains text/Markdown links, files and inline uploaded images. Technical actions and native Codex/GPT messages are not inserted. Personal chat selection, native identity and composer remain behind the popup. Shared navigation retains the central collaboration key, enlarged another third to 85×80 px, between **Пространства** and **Брейншторм**. Brainstorm is only a themed future-room placeholder in this block.
+
+Chat uses additive tables in the existing Team SQLite database; immutable file bytes live under the Team root in `space-chat-files` and are included in whole-installation checkpoints. Uploads are at most 32 MiB each, eight per message, with a 1 GiB chat file pool; unattached stages expire after seven days and are swept on later uploads. No personal machine/native runtime is consulted. Every read/download/send checks current space membership; another participant cannot use or download an unpublished upload. Leaving/closing never changes personal Projects or chats.
+
+Initial/older history pages contain 20 messages. An open visible popup coalesces incremental reads every 2.5 seconds and on focus; hidden pages stop polling. Canonical read cursors are independent of send acknowledgements so simultaneous replies cannot skip intervening messages. Per-user read cursors advance monotonically only while the displayed history is at its end, with own posts excluded from unread. The catalog has one aggregate per space and the bell aggregates these with invitations/access requests, without a notification item per message.
+
+Draft text and uploaded attachment references use account-local storage. Send UUIDs and durable receipts make an explicit retry idempotent; a received canonical message also reconciles an acknowledgement lost in transit. Identical intentional consecutive messages have different UUIDs. Closing/reopening preserves the draft; no automatic native send or replay is introduced.
+
+Focused checks add real Hub file byte/download, sender binding, pagination, persistent independent unread and receipt cases to `tests/collaboration-spaces.test.mjs`. The two-user WebKit test covers human messages, links, uploaded PNG/text, live replies, unread clearing and popup draft continuity, plus theme/navigation and constrained-keyboard geometry. It uses disposable accounts/files only, with native RPC simulated. This is not physical owner/friend acceptance.
+
+## Earlier block verification
 
 - `tests/collaboration-spaces.test.mjs`: asymmetric grants, invite-only visibility, own-checkout identity, same-repository acceptance, existing idempotent receipts, stale revisions, leave/close, persistence, project/member removal and explicit access elevation; route tests use disposable real Git repositories.
 - `tests/queue.test.mjs` and `tests/project-delivery.test.mjs`: native instructions on turn/queue defaults, unchanged Steer and prepared publication rejected after access changes. Together with the store/routes checks: 17 focused cases.

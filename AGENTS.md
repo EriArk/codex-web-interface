@@ -5,6 +5,7 @@
 - New and changed UI must follow the active theme using existing components, semantic tokens and shared window/control materials. Do not introduce generic wizard styling that overrides the theme's casing, surfaces or buttons.
 - Check affected windows and navigation at phone and tablet widths, including placement, scrolling and keyboard-constrained height. Keep checks focused on the changed interface and preserve one functional implementation across themes.
 - Keep the collaboration mode toggle between Projects and Dialogs as a large raised rounded triangular key viewed straight on, with a collaboration icon. Its edges may slightly overlap the tabs, but never their text. Put Notifications in the lower workspace shortcut row alongside Tasks and Notes, with the same styling and a visible label.
+- In shared mode keep that same central key between “Пространства” and “Брейншторм”. The latter is a future rooms area. The owner requested another one-third size increase (85×80 CSS px), retaining clear adjacent labels.
 
 ## Owner-requested main-branch completion (2026-09-21)
 

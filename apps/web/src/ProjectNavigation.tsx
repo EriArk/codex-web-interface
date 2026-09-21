@@ -68,6 +68,7 @@ export function ProjectNavigation({
 }) {
   const openRequest = useRef(0);
   const [section, setSection] = useState<"projects" | "threads">("projects");
+  const [sharedSection, setSharedSection] = useState<"spaces" | "brainstorm">("spaces");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Set<string>>(new Set());
@@ -275,10 +276,23 @@ export function ProjectNavigation({
         }
       >
         {spaceMode ? (
-          <>
-            <strong className="navigation-header-title">Общие</strong>
+          <nav className="nav-mobile-switch" aria-label="Общая работа">
+            <button
+              type="button"
+              className={sharedSection === "spaces" ? "selected" : ""}
+              onClick={() => setSharedSection("spaces")}
+            >
+              <span className="nav-tab-title">Пространства</span>
+            </button>
             <SpaceModeControl spaces={spaces} />
-          </>
+            <button
+              type="button"
+              className={sharedSection === "brainstorm" ? "selected" : ""}
+              onClick={() => setSharedSection("brainstorm")}
+            >
+              <span className="nav-tab-title">Брейншторм</span>
+            </button>
+          </nav>
         ) : (
           <nav className="nav-mobile-switch" aria-label="Навигация по проектам">
             <button
@@ -333,8 +347,11 @@ export function ProjectNavigation({
         )}
       </NavigationHeader>
       <div className="nav-scroll">
-        {spaceMode && <SpaceCards spaces={spaces} query={query} />}
-        {(!spaceMode || selectedSpace) && (
+        {spaceMode && sharedSection === "spaces" && <SpaceCards spaces={spaces} query={query} />}
+        {spaceMode && sharedSection === "brainstorm" && (
+          <p className="nav-empty">Здесь появятся комнаты для совместного обсуждения идей.</p>
+        )}
+        {(!spaceMode || (selectedSpace && sharedSection === "spaces")) && (
           <section className="nav-projects">
             <div className="nav-label">
               {spaceMode ? "Мои рабочие проекты" : "Проекты"}{" "}

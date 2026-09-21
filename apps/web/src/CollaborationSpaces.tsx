@@ -8,6 +8,7 @@ import type {
 import { useEffect, useId, useRef, useState } from "react";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { Icon } from "./icons";
+import { SpaceChat } from "./SpaceChat";
 import { SpaceProjects } from "./SpaceProjects";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { TeamContactPicker } from "./TeamContactPicker";
@@ -62,6 +63,7 @@ export function SpaceBell({ spaces }: { spaces: SpacesController }) {
     spaces.catalog.spaces.reduce(
       (sum, s) =>
         sum +
+        s.unread +
         s.projects.reduce((n, p) => n + (p.ownerId === pageWorkspace ? p.requests.length : 0), 0),
       0,
     );
@@ -106,6 +108,7 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
         <div className="space-selected">
           <strong>{selected.title}</strong>
           <small>{selected.members.map((m) => m.name).join(" · ")}</small>
+          <SpaceChatButton space={selected} spaces={spaces} />
           {selected.pending.length > 0 && (
             <small>Приглашены: {selected.pending.map((p) => p.name).join(", ")}</small>
           )}
@@ -131,16 +134,14 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
                 .includes(query.toLocaleLowerCase()),
             )
             .map((s) => (
-              <button
-                type="button"
-                key={s.id}
-                className="space-card"
-                onClick={() => spaces.select(s.id)}
-              >
-                <strong>{s.title}</strong>
-                <span>{s.members.map((m) => m.name).join(" · ")}</span>
-                <small>{s.projects.map((p) => p.name).join(" / ")}</small>
-              </button>
+              <div className="space-card-row" key={s.id}>
+                <button type="button" className="space-card" onClick={() => spaces.select(s.id)}>
+                  <strong>{s.title}</strong>
+                  <span>{s.members.map((m) => m.name).join(" · ")}</span>
+                  <small>{s.projects.map((p) => p.name).join(" / ")}</small>
+                </button>
+                <SpaceChatButton space={s} spaces={spaces} />
+              </div>
             ))}
           {spaces.ready && !spaces.catalog.spaces.length && (
             <p className="nav-empty">Создай пространство и пригласи участника.</p>
@@ -148,6 +149,26 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
         </>
       )}
     </div>
+  );
+}
+function SpaceChatButton({
+  space,
+  spaces,
+}: {
+  space: CollaborationSpace;
+  spaces: SpacesController;
+}) {
+  return (
+    <button
+      type="button"
+      className="space-chat-shortcut"
+      aria-label={`Чат: ${space.title}${space.unread ? `, непрочитанных: ${space.unread}` : ""}`}
+      onClick={() => spaces.open({ kind: "chat", id: space.id })}
+    >
+      <Icon name="chat" size={19} />
+      <span>Чат</span>
+      {space.unread > 0 && <small>{space.unread}</small>}
+    </button>
   );
 }
 
@@ -172,7 +193,7 @@ export function CollaborationWindow({
     <dialog
       ref={dialog}
       tabIndex={-1}
-      className="space-dialog workspace-window"
+      className={`space-dialog workspace-window${target.kind === "chat" ? " space-chat-dialog" : ""}`}
       aria-label={target.kind === "create" ? "Новое пространство" : "Общее пространство"}
       onCancel={() => spaces.open(null)}
     >
@@ -193,13 +214,33 @@ export function CollaborationWindow({
           <Icon name="close" />
         </button>
       </header>
-      <div className="space-dialog-body shared-scroll">
+      <div
+        className={`space-dialog-body${target.kind === "chat" ? " space-chat-body" : " shared-scroll"}`}
+      >
+        {target.kind === "chat" && space && (
+          <SpaceChat key={space.id} space={space} spaces={spaces} />
+        )}
         {target.kind === "invitations" && (
           <>
             {spaces.catalog.invitations.length === 0 &&
-              !spaces.catalog.spaces.some((s) =>
-                s.projects.some((p) => p.ownerId === pageWorkspace && p.requests.length),
+              !spaces.catalog.spaces.some(
+                (s) =>
+                  s.unread > 0 ||
+                  s.projects.some((p) => p.ownerId === pageWorkspace && p.requests.length),
               ) && <p>Новых уведомлений нет.</p>}
+            {spaces.catalog.spaces
+              .filter((s) => s.unread > 0)
+              .map((s) => (
+                <button
+                  type="button"
+                  className="space-card"
+                  key={`chat:${s.id}`}
+                  onClick={() => spaces.open({ kind: "chat", id: s.id })}
+                >
+                  <strong>{s.title}</strong>
+                  <span>Новые сообщения: {s.unread}</span>
+                </button>
+              ))}
             {spaces.catalog.spaces.flatMap((s) =>
               s.projects
                 .filter((p) => p.ownerId === pageWorkspace)

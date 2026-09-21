@@ -2,11 +2,11 @@
 .navigation-header .nav-mobile-switch .space-mode-toggle {
   position: relative;
   z-index: 1;
-  flex: 0 0 64px;
-  width: 64px;
-  height: 60px;
-  min-width: 64px;
-  margin-inline: -9px;
+  flex: 0 0 85px;
+  width: 85px;
+  height: 80px;
+  min-width: 85px;
+  margin-inline: -20px;
   padding: 0;
   align-self: center;
   border: 0;
@@ -14,8 +14,8 @@
   box-shadow: none;
 }
 .space-triangle-cap {
-  width: 64px;
-  height: 60px;
+  width: 85px;
+  height: 80px;
   overflow: visible;
   filter: drop-shadow(0 2px 1px #0007);
 }
@@ -42,24 +42,24 @@
 }
 .space-cap-icon {
   position: absolute;
-  inset: 13px 0 auto;
+  inset: 17px 0 auto;
   display: flex;
   justify-content: center;
   color: var(--case-ink, var(--ink));
   pointer-events: none;
 }
 .navigation-header .space-cap-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
 }
 .space-mode-toggle[aria-pressed="true"] .space-cap-icon {
   color: var(--accent);
 }
 .nav-mobile-switch > button:has(+ .space-mode-toggle) {
-  padding-right: 13px;
+  padding-right: 21px;
 }
 .nav-mobile-switch > .space-mode-toggle + button {
-  padding-left: 13px;
+  padding-left: 21px;
 }
 .space-mode-toggle:active .space-triangle-cap {
   transform: translateY(1px);

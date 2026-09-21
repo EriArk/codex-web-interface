@@ -1,0 +1,170 @@
+:root[data-theme] dialog.space-dialog.space-chat-dialog.workspace-window {
+  height: min(720px, calc(var(--app-height, 100dvh) - 24px));
+  width: min(680px, calc(100vw - 20px));
+}
+.space-dialog-body.space-chat-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+.space-chat-messages {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+}
+.space-chat-message {
+  padding: 12px;
+  margin: 0 24px 12px 0;
+  border: 1px solid var(--window-edge);
+  border-radius: 10px;
+  background: var(--card-material, var(--surface));
+  box-shadow: var(--card-shadow, none);
+  overflow-wrap: anywhere;
+}
+.space-chat-message[data-own="true"] {
+  margin: 0 0 12px 24px;
+  border-color: var(--accent);
+}
+.space-chat-message header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.space-chat-message time,
+.space-chat-file small {
+  color: var(--muted);
+  font-size: 0.78em;
+}
+.space-chat-text p {
+  white-space: pre-wrap;
+  margin: 8px 0;
+}
+.space-chat-text pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.space-chat-text table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.space-chat-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-block: 8px;
+  min-height: 44px;
+  color: inherit;
+}
+.space-chat-file span {
+  min-width: 0;
+}
+.space-chat-file img {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.space-chat-file:has(img) {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.space-chat-composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--window-edge);
+  padding: 10px;
+  background: var(--surface);
+}
+.space-chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.space-chat-input-row textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 54px;
+  max-height: 120px;
+  resize: vertical;
+}
+.space-chat-input-row button {
+  min-height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
+}
+.space-chat-draft-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 90px;
+  overflow: auto;
+  margin-bottom: 8px;
+}
+.space-chat-draft-files button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+}
+.space-chat-draft-files span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.space-chat-composer .form-error {
+  margin: 0 0 8px;
+}
+.space-card-row {
+  position: relative;
+}
+.space-card-row > .space-card {
+  padding-right: 58px;
+}
+.space-chat-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+}
+.space-card-row > .space-chat-shortcut {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  border-radius: 50%;
+}
+.space-card-row > .space-chat-shortcut > span {
+  display: none;
+}
+.space-chat-shortcut small {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 11px;
+}

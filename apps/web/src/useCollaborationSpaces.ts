@@ -5,7 +5,7 @@ import { api } from "./api";
 
 export type SpaceWindow =
   | { kind: "create" | "invitations" }
-  | { kind: "accept" | "settings"; id: string };
+  | { kind: "accept" | "settings" | "chat"; id: string };
 export function useCollaborationSpaces() {
   const [catalog, setCatalog] = useState<CollaborationCatalog>({ spaces: [], invitations: [] });
   const [ready, setReady] = useState(false);
@@ -30,6 +30,7 @@ export function useCollaborationSpaces() {
         setCatalog(data);
         setReady(true);
         select((id) => (data.spaces.some((s) => s.id === id) ? id : ""));
+        open((w) => (w?.kind === "chat" && !data.spaces.some((s) => s.id === w.id) ? null : w));
       })
       .finally(() => {
         pending.current = null;
@@ -42,7 +43,7 @@ export function useCollaborationSpaces() {
       if (!document.hidden) void refresh().catch(() => {});
     };
     update();
-    const timer = globalThis.setInterval(update, 30_000);
+    const timer = globalThis.setInterval(update, 10_000);
     globalThis.addEventListener("focus", update);
     document.addEventListener("visibilitychange", update);
     return () => {

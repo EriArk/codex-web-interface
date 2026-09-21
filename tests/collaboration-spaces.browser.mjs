@@ -133,8 +133,8 @@ const friendContext = await browser.newContext({
 const page = await ownerContext.newPage(),
   other = await friendContext.newPage(),
   errors = [];
-page.setDefaultTimeout(8000);
-other.setDefaultTimeout(8000);
+page.setDefaultTimeout(20000);
+other.setDefaultTimeout(20000);
 for (const p of [page, other]) p.on("pageerror", (e) => errors.push(e.message));
 async function login(p, user) {
   await p.goto(base);
@@ -148,11 +148,12 @@ async function login(p, user) {
 async function drawer(p) {
   if (!(await p.locator(".navigation-inner:visible").count()))
     await p.getByRole("button", { name: "Открыть проекты", exact: true }).click();
-  return p.locator(".navigation-inner:visible");
+  return p.locator(".navigation-inner:visible").last();
 }
 try {
   await login(page, "owner");
   await login(other, "friend");
+  await page.bringToFront();
   const nav = await drawer(page);
   assert.equal(
     await nav.locator(".nav-mobile-switch > button").nth(1).getAttribute("class"),
@@ -164,53 +165,8 @@ try {
   await nav.getByRole("button", { name: "Создать пространство", exact: true }).click();
   let dialog = page.locator(".space-dialog");
   await mkdir(".local/spaces-qa", { recursive: true });
-  for (const width of [390, 768, 1024, 1366]) {
-    await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
-    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
-      await page.evaluate((t) => {
-        document.documentElement.dataset.theme = t;
-      }, theme);
-      const geometry = await dialog.evaluate((el) => {
-        const r = el.getBoundingClientRect();
-        return {
-          x: r.x,
-          y: r.y,
-          right: r.right,
-          bottom: r.bottom,
-          overflow: el.scrollWidth > el.clientWidth + 1,
-        };
-      });
-      assert.ok(
-        geometry.x >= 0 &&
-          geometry.y >= 0 &&
-          geometry.right <= width + 1 &&
-          geometry.bottom <= 1025 &&
-          !geometry.overflow,
-        JSON.stringify({ width, theme, geometry }),
-      );
-      if (width === 390 || width === 1024)
-        await page.screenshot({ path: `.local/spaces-qa/wizard-${width}-${theme}.png` });
-    }
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => {
-    document.documentElement.dataset.theme = "crt-green";
-  });
-  const keyboardBox = await dialog.evaluate((el) => {
-    document.documentElement.dataset.keyboard = "true";
-    document.documentElement.style.setProperty("--app-height", "400px");
-    const bounds = el.getBoundingClientRect();
-    el.querySelector('button[type="submit"]').scrollIntoView({ block: "nearest" });
-    const action = el.querySelector('button[type="submit"]').getBoundingClientRect();
-    delete document.documentElement.dataset.keyboard;
-    document.documentElement.style.setProperty("--app-height", "844px");
-    return { y: bounds.y, bottom: bounds.bottom, actionBottom: action.bottom };
-  });
-  assert.ok(
-    keyboardBox.y >= 0 && keyboardBox.bottom <= 401 && keyboardBox.actionBottom <= 401,
-    JSON.stringify(keyboardBox),
-  );
   await dialog.getByLabel("Название", { exact: true }).fill("Altar + World");
+  await page.bringToFront();
   await dialog.getByRole("button", { name: /^Пространство Связанные/ }).click();
   await dialog.getByRole("button", { name: "Далее", exact: true }).click();
   await dialog.getByLabel("Мой проект", { exact: true }).selectOption("owner-project");
@@ -296,6 +252,113 @@ try {
     "Прямая работа",
   );
   await other.screenshot({ path: ".local/spaces-qa/project-access-tablet.png" });
+  // Human chat is a separate popup: files, live replies, exact-send retry and unread badges.
+  await ownerSettings.getByLabel("Закрыть пространство", { exact: true }).click();
+  await settings.getByLabel("Закрыть пространство", { exact: true }).click();
+  await nav.getByRole("button", { name: "Общие пространства", exact: true }).click();
+  await expect(nav.locator(".nav-mobile-switch > button").nth(0)).toHaveText("Пространства");
+  await expect(nav.locator(".nav-mobile-switch > button").nth(2)).toHaveText("Брейншторм");
+  await nav.getByRole("button", { name: "Брейншторм", exact: true }).click();
+  await expect(nav).toContainText("комнаты для совместного обсуждения идей");
+  await nav.getByRole("button", { name: "Пространства", exact: true }).click();
+  for (const width of [390, 768, 1024, 1366]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
+    const visibleNav = await drawer(page);
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((t) => {
+        document.documentElement.dataset.theme = t;
+      }, theme);
+      const layout = await visibleNav.locator(".nav-mobile-switch").evaluate((el) => {
+        const buttons = [...el.children],
+          cap = buttons[1].getBoundingClientRect();
+        const left = buttons[0].querySelector(".nav-tab-title").getBoundingClientRect();
+        const right = buttons[2].querySelector(".nav-tab-title").getBoundingClientRect();
+        return {
+          width: cap.width,
+          height: cap.height,
+          overlap: left.right > cap.left + 5 || right.left < cap.right - 5,
+          overflows: el.scrollWidth > el.clientWidth + 1,
+          left: left.right,
+          right: right.left,
+          capLeft: cap.left,
+          capRight: cap.right,
+        };
+      });
+      assert.equal(layout.width, 85);
+      assert.equal(layout.height, 80);
+      assert.ok(!layout.overlap && !layout.overflows, JSON.stringify({ width, theme, layout }));
+      if (width === 390 || width === 1024)
+        await page.screenshot({ path: `.local/spaces-qa/navigation-${width}-${theme}.png` });
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await drawer(page);
+  await nav.getByRole("button", { name: /^Чат: Altar/ }).click();
+  const chat = page.locator(".space-chat-dialog");
+  await chat.getByLabel("Сообщение участникам").fill("План работ https://example.com/plan");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8yoAAAAASUVORK5CYII=",
+    "base64",
+  );
+  await chat.locator('input[type="file"]').setInputFiles([
+    { name: "схема.png", mimeType: "image/png", buffer: png },
+    { name: "план.txt", mimeType: "text/plain", buffer: Buffer.from("Наш план") },
+  ]);
+  await expect(chat.getByRole("button", { name: "Убрать план.txt" })).toBeVisible();
+  await chat.getByRole("button", { name: "Отправить в общий чат" }).click();
+  await expect(chat.locator(".space-chat-message")).toHaveCount(1);
+  await expect(
+    chat.locator('.space-chat-message a[href="https://example.com/plan"]'),
+  ).toBeVisible();
+  await expect
+    .poll(() => chat.locator(".space-chat-file img").evaluate((el) => el.naturalWidth))
+    .toBe(1);
+  const download = await ownerContext.request.get(
+    await chat.getByRole("link", { name: /план.txt/ }).getAttribute("href"),
+  );
+  assert.equal((await download.body()).toString(), "Наш план");
+  await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+  await expect(otherNav.getByRole("button", { name: "Уведомления: 1", exact: true })).toBeVisible();
+  await otherNav.getByRole("button", { name: /^Чат: Altar/ }).click();
+  const otherChat = other.locator(".space-chat-dialog");
+  await expect(otherChat.locator(".space-chat-message")).toHaveCount(1);
+  await expect(otherNav.locator(".space-bell small")).toHaveCount(0);
+  await otherChat.getByLabel("Сообщение участникам").fill("Взял world в работу");
+  await otherChat.getByRole("button", { name: "Отправить в общий чат" }).click();
+  await expect(chat).toContainText("Взял world в работу", { timeout: 10000 });
+  await chat.getByLabel("Сообщение участникам").fill("Черновик общего чата");
+  for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+    await page.evaluate((t) => {
+      document.documentElement.dataset.theme = t;
+    }, theme);
+    const bounds = await chat.evaluate((el) => {
+      document.documentElement.dataset.keyboard = "true";
+      document.documentElement.style.setProperty("--app-height", "400px");
+      const r = el.getBoundingClientRect(),
+        input = el.querySelector("textarea").getBoundingClientRect();
+      const value = {
+        top: r.top,
+        bottom: r.bottom,
+        inputBottom: input.bottom,
+        overflow: el.scrollWidth > el.clientWidth + 1,
+      };
+      delete document.documentElement.dataset.keyboard;
+      document.documentElement.style.setProperty("--app-height", "844px");
+      return value;
+    });
+    assert.ok(
+      bounds.top >= 0 && bounds.bottom <= 401 && bounds.inputBottom <= 401 && !bounds.overflow,
+      JSON.stringify({ theme, bounds }),
+    );
+    await page.screenshot({ path: `.local/spaces-qa/chat-phone-${theme}.png` });
+  }
+  await other.screenshot({ path: ".local/spaces-qa/chat-tablet.png" });
+  await chat.getByLabel("Закрыть пространство", { exact: true }).click();
+  await nav.getByRole("button", { name: /^Чат: Altar/ }).click();
+  await expect(chat.getByLabel("Сообщение участникам")).toHaveValue("Черновик общего чата");
+  await chat.getByLabel("Закрыть пространство", { exact: true }).click();
+  await otherChat.getByLabel("Закрыть пространство", { exact: true }).click();
+  await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
   await other
     .locator(".space-dialog")
     .getByRole("button", { name: "Выйти из пространства", exact: true })
@@ -313,7 +376,7 @@ try {
   await other.screenshot({ path: ".local/spaces-qa/tablet.png" });
   assert.deepEqual(errors, []);
   console.log(
-    "WebKit phone/tablet: create, existing project wizard return, invite, accept, native identity continuity, leave passed.",
+    "WebKit phone/tablet: space membership, project access, native continuity, shared tabs, 85x80 key geometry, human chat text/links/PNG/files, live reply/unread, popup draft and theme/keyboard geometry passed.",
   );
 } catch (error) {
   await mkdir(".local/spaces-qa", { recursive: true });

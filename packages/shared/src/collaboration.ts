@@ -21,6 +21,7 @@ export type CollaborationSpace = {
   members: CollaborationPerson[];
   projects: CollaborationProject[];
   pending: CollaborationPerson[];
+  unread: number;
 };
 export type CollaborationInvitation = {
   spaceId: string;
@@ -36,3 +37,13 @@ export type CollaborationCatalog = {
   spaces: CollaborationSpace[];
   invitations: CollaborationInvitation[];
 };
+export type SpaceChatFile = { id: string; name: string; mime: string; bytes: number };
+export type SpaceChatMessage = {
+  seq: number;
+  id: string;
+  author: CollaborationPerson;
+  text: string;
+  files: SpaceChatFile[];
+  createdAt: number;
+};
+export type SpaceChatPage = { messages: SpaceChatMessage[]; more: boolean };

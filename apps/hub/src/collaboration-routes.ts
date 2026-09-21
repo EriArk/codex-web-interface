@@ -57,6 +57,64 @@ export function registerCollaborationSpaces(
     return { personalProjectId, name: project.name, repository };
   };
   app.get("/api/team/spaces", (req) => spaces.catalog(actor(req)));
+  app.register(async (chat) => {
+    chat.addContentTypeParser(
+      "application/octet-stream",
+      { parseAs: "buffer", bodyLimit: 32 * 1024 * 1024 },
+      (_req, body, done) => done(null, body),
+    );
+    chat.get("/api/team/spaces/:id/chat", (req) => {
+      const cursor = z
+        .object({
+          before: z.coerce.number().int().positive().optional(),
+          after: z.coerce.number().int().nonnegative().optional(),
+        })
+        .strict()
+        .refine((v) => v.before === undefined || v.after === undefined)
+        .parse(req.query);
+      return spaces.chat.page(actor(req), id(req), cursor);
+    });
+    chat.post("/api/team/spaces/:id/chat", (req) => {
+      const input = z
+        .object({ text: z.string().trim().max(16000), files: z.array(z.string().uuid()).max(8) })
+        .strict()
+        .refine((v) => !!v.text || !!v.files.length)
+        .refine((v) => new Set(v.files).size === v.files.length)
+        .parse(req.body);
+      return spaces.chat.send(actor(req), id(req), key(req), input);
+    });
+    chat.post("/api/team/spaces/:id/chat/read", (req) =>
+      spaces.chat.markRead(
+        actor(req),
+        id(req),
+        z.object({ seq: z.number().int().positive() }).strict().parse(req.body).seq,
+      ),
+    );
+    chat.post("/api/team/spaces/:id/chat/files", { bodyLimit: 32 * 1024 * 1024 }, (req) => {
+      const { name, mime } = z
+        .object({ name: z.string().min(1).max(300), mime: z.string().max(100) })
+        .strict()
+        .parse(req.query);
+      if (!Buffer.isBuffer(req.body))
+        throw new HubError(400, "SPACE_FILE_REQUIRED", "Выбери файл.");
+      return spaces.chat.stage(actor(req), id(req), name, mime, req.body);
+    });
+    chat.get("/api/team/spaces/:id/chat/files/:fileId", (req, reply) => {
+      const params = z
+        .object({ id: z.string().uuid(), fileId: z.string().uuid() })
+        .parse(req.params);
+      const file = spaces.chat.readFile(actor(req), params.id, params.fileId);
+      return reply
+        .header("Cache-Control", "private, no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .header(
+          "Content-Disposition",
+          `${file.mime.startsWith("image/") ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        )
+        .type(file.mime)
+        .send(file.data);
+    });
+  });
   app.post("/api/team/spaces", async (req) => {
     const user = actor(req),
       receipt = key(req);
