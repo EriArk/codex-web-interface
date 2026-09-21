@@ -5,7 +5,7 @@ import type {
   CollaborationSpace,
   TeamContact,
 } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { Icon } from "./icons";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
@@ -21,31 +21,49 @@ const accessLabels = {
   direct: "Прямая работа",
 };
 export function SpaceModeControl({ spaces }: { spaces: SpacesController }) {
+  const cap = useId();
   if (!spaces.enabled) return null;
   return (
-    <>
-      <button
-        type="button"
-        className="icon-button space-mode-toggle"
-        aria-label={spaces.mode === "spaces" ? "Личные проекты" : "Общие пространства"}
-        aria-pressed={spaces.mode === "spaces"}
-        title={spaces.mode === "spaces" ? "Личные проекты" : "Общие пространства"}
-        onClick={() => spaces.setMode(spaces.mode === "spaces" ? "personal" : "spaces")}
-      >
-        <span aria-hidden="true">▽</span>
-      </button>
-      <button
-        type="button"
-        className="icon-button space-bell"
-        aria-label={`Приглашения${spaces.catalog.invitations.length ? `: ${spaces.catalog.invitations.length}` : ""}`}
-        onClick={() => spaces.open({ kind: "invitations" })}
-      >
-        <Icon name="bell" size={18} />
-        {spaces.catalog.invitations.length > 0 && (
-          <small>{spaces.catalog.invitations.length}</small>
-        )}
-      </button>
-    </>
+    <button
+      type="button"
+      className="icon-button space-mode-toggle"
+      aria-label={spaces.mode === "spaces" ? "Личные проекты" : "Общие пространства"}
+      aria-pressed={spaces.mode === "spaces"}
+      title={spaces.mode === "spaces" ? "Личные проекты" : "Общие пространства"}
+      onClick={() => spaces.setMode(spaces.mode === "spaces" ? "personal" : "spaces")}
+    >
+      <svg viewBox="0 0 44 44" aria-hidden="true" className="space-triangle-cap">
+        <defs>
+          <linearGradient id={cap} x1="0" y1="0" x2="0.2" y2="1">
+            <stop offset="0" className="space-cap-top" />
+            <stop offset="1" className="space-cap-bottom" />
+          </linearGradient>
+        </defs>
+        <path className="space-cap-rim" d="M10 5H34Q40 5 37 11L26 34Q22 42 18 34L7 11Q4 5 10 5Z" />
+        <path
+          className="space-cap-face"
+          fill={`url(#${cap})`}
+          d="M10 5H34Q38 5 36 9L25 32Q22 38 19 32L8 9Q6 5 10 5Z"
+        />
+        <path className="space-cap-shine" d="M10 7H34M10 9L20 30" />
+        <path className="space-cap-symbol" d="M16 15H28L22 27Z" />
+      </svg>
+    </button>
+  );
+}
+export function SpaceBell({ spaces }: { spaces: SpacesController }) {
+  if (!spaces.enabled) return null;
+  return (
+    <button
+      type="button"
+      className="space-bell"
+      aria-label={`Уведомления${spaces.catalog.invitations.length ? `: ${spaces.catalog.invitations.length}` : ""}`}
+      onClick={() => spaces.open({ kind: "invitations" })}
+    >
+      <Icon name="bell" size={17} />
+      <span>Уведомления</span>
+      {spaces.catalog.invitations.length > 0 && <small>{spaces.catalog.invitations.length}</small>}
+    </button>
   );
 }
 export function SpaceCards({ spaces, query }: { spaces: SpacesController; query: string }) {
@@ -151,7 +169,7 @@ export function CollaborationWindow({
           {target.kind === "create"
             ? "Новое пространство"
             : target.kind === "invitations"
-              ? "Приглашения"
+              ? "Уведомления"
               : (space?.title ?? invitation?.title ?? "Общее пространство")}
         </h2>
         <button

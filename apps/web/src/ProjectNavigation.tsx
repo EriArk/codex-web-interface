@@ -8,7 +8,7 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
-import { SpaceCards, SpaceModeControl } from "./CollaborationSpaces";
+import { SpaceBell, SpaceCards, SpaceModeControl } from "./CollaborationSpaces";
 import { openContentSearch } from "./ContentSearch";
 import { EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
@@ -275,7 +275,10 @@ export function ProjectNavigation({
         }
       >
         {spaceMode ? (
-          <strong className="navigation-header-title">Общие</strong>
+          <>
+            <strong className="navigation-header-title">Общие</strong>
+            <SpaceModeControl spaces={spaces} />
+          </>
         ) : (
           <nav className="nav-mobile-switch" aria-label="Навигация по проектам">
             <button
@@ -300,6 +303,7 @@ export function ProjectNavigation({
                 unread={folders.filter((p) => summary(p).unread > 0).length}
               />
             </button>
+            <SpaceModeControl spaces={spaces} />
             <button
               type="button"
               className={section === "threads" ? "selected" : ""}
@@ -327,7 +331,6 @@ export function ProjectNavigation({
             </button>
           </nav>
         )}
-        <SpaceModeControl spaces={spaces} />
       </NavigationHeader>
       <div className="nav-scroll">
         {spaceMode && <SpaceCards spaces={spaces} query={query} />}
@@ -542,7 +545,9 @@ export function ProjectNavigation({
           onNotes={onNotebook}
           onPlans={onPlans}
           onReports={onReports}
-        />
+        >
+          <SpaceBell spaces={spaces} />
+        </WorkspaceLinks>
         <NavigationFooter
           client="codex"
           captureScope={

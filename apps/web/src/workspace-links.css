@@ -1,6 +1,6 @@
 .workspace-shortcuts {
   display: grid;
-  grid-auto-columns: minmax(58px, 1fr);
+  grid-auto-columns: minmax(max-content, 1fr);
   grid-auto-flow: column;
   overflow-x: auto;
   gap: 3px;

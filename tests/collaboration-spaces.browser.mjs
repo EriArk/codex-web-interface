@@ -137,9 +137,62 @@ try {
   await login(page, "owner");
   await login(other, "friend");
   const nav = await drawer(page);
+  assert.equal(
+    await nav.locator(".nav-mobile-switch > button").nth(1).getAttribute("class"),
+    "icon-button space-mode-toggle",
+  );
+  await expect(nav.locator(".workspace-shortcuts .space-bell")).toHaveText("Уведомления");
+  await expect(nav.locator(".navigation-header .space-bell")).toHaveCount(0);
   await nav.getByRole("button", { name: "Общие пространства", exact: true }).click();
   await nav.getByRole("button", { name: "Создать пространство", exact: true }).click();
   let dialog = page.locator(".space-dialog");
+  await mkdir(".local/spaces-qa", { recursive: true });
+  for (const width of [390, 768, 1024, 1366]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1024 });
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((t) => {
+        document.documentElement.dataset.theme = t;
+      }, theme);
+      const geometry = await dialog.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          x: r.x,
+          y: r.y,
+          right: r.right,
+          bottom: r.bottom,
+          overflow: el.scrollWidth > el.clientWidth + 1,
+        };
+      });
+      assert.ok(
+        geometry.x >= 0 &&
+          geometry.y >= 0 &&
+          geometry.right <= width + 1 &&
+          geometry.bottom <= 1025 &&
+          !geometry.overflow,
+        JSON.stringify({ width, theme, geometry }),
+      );
+      if (width === 390 || width === 1024)
+        await page.screenshot({ path: `.local/spaces-qa/wizard-${width}-${theme}.png` });
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "crt-green";
+  });
+  const keyboardBox = await dialog.evaluate((el) => {
+    document.documentElement.dataset.keyboard = "true";
+    document.documentElement.style.setProperty("--app-height", "400px");
+    const bounds = el.getBoundingClientRect();
+    el.querySelector('button[type="submit"]').scrollIntoView({ block: "nearest" });
+    const action = el.querySelector('button[type="submit"]').getBoundingClientRect();
+    delete document.documentElement.dataset.keyboard;
+    document.documentElement.style.setProperty("--app-height", "844px");
+    return { y: bounds.y, bottom: bounds.bottom, actionBottom: action.bottom };
+  });
+  assert.ok(
+    keyboardBox.y >= 0 && keyboardBox.bottom <= 401 && keyboardBox.actionBottom <= 401,
+    JSON.stringify(keyboardBox),
+  );
   await dialog.getByLabel("Название", { exact: true }).fill("Altar + World");
   await dialog.getByRole("button", { name: /^Пространство Связанные/ }).click();
   await dialog.getByRole("button", { name: "Далее", exact: true }).click();
@@ -163,7 +216,7 @@ try {
   await expect(nav.locator('[data-project-id="owner-project"]')).toHaveCount(0);
   await other.reload();
   const otherNav = await drawer(other);
-  await otherNav.getByRole("button", { name: "Приглашения: 1", exact: true }).click();
+  await otherNav.getByRole("button", { name: "Уведомления: 1", exact: true }).click();
   await other
     .locator(".space-dialog")
     .getByRole("button", { name: /Altar \+ World/ })

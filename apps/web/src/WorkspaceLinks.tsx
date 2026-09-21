@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Icon } from "./icons";
 import "./workspace-links.css";
 export function WorkspaceLinks({
@@ -5,11 +6,13 @@ export function WorkspaceLinks({
   onNotes,
   onPlans,
   onReports,
+  children,
 }: {
   onTasks?: () => void;
   onNotes?: () => void;
   onPlans?: () => void;
   onReports?: () => void;
+  children?: ReactNode;
 }) {
   const links = [
     ["Задачи", "check", onTasks],
@@ -27,6 +30,7 @@ export function WorkspaceLinks({
             <span>{label}</span>
           </button>
         ))}
+      {children}
     </nav>
   );
 }

@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Owner-requested theme consistency (2026-09-21)
+
+- New and changed UI must follow the active theme using existing components, semantic tokens and shared window/control materials. Do not introduce generic wizard styling that overrides the theme's casing, surfaces or buttons.
+- Check affected windows and navigation at phone and tablet widths, including placement, scrolling and keyboard-constrained height. Keep checks focused on the changed interface and preserve one functional implementation across themes.
+- Keep the collaboration mode toggle between Projects and Dialogs as a raised rounded triangular key bearing a triangle. Put Notifications in the lower workspace shortcut row alongside Tasks and Notes, with the same styling and a visible label.
+
 ## Owner-requested main-branch completion (2026-09-21)
 
 - Keep `main` current with completed, verified work. Finishing a stage includes committing, pushing and integrating its changes into `main`; do not leave accepted releases accumulating only on a feature branch.
