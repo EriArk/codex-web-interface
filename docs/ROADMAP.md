@@ -1,5 +1,19 @@
 # Roadmap
 
+## Owner priority correction (2026-09-21)
+
+Preserve the remaining usage budget: pause installer/new-user bootstrap work and large new feature stages. First resolve or verify the recent user-visible defects and the updater regression, then make the existing Shared Projects workflow usable for the owner and the admitted friend. Do not rebuild the implemented Team foundation.
+
+Current live evidence: engine `d174bfd` and owner native image `26.915.31945-fast-3ac88dd` are installed. The deployment's native postcheck failed, so installation and functional acceptance remain separate. A subsequent read-only check returned healthy/send-ready GPT and three models. One of the two reported histories loaded in 1.9 seconds; the other still failed with `NATIVE_HISTORY_HEADERS_TIMEOUT` at 15 seconds. No messages were sent or replayed. The Shared Projects and invitations endpoints returned 200 and empty owner lists. This proves endpoint availability, not a completed two-person collaboration acceptance.
+
+Next bounded scope:
+
+1. Fix the remaining GPT history failure; verify sends/completion, raster Results and Remote only where affected. Confirm updater recovery without adding new layers.
+2. Exercise the existing shared-project path with disposable fixtures: create/publish a project, invitation acceptance, common task/note, assignee, independent checkout, and publication/review of a result. Fix concrete breaks and confusing navigation found in that path.
+3. Prioritize a simple existing-project sharing entry point, clear personal/shared context, visible invitations and task responsibility. Add only missing steps needed for one shared task through GitHub and a reviewable result.
+
+Defer installer consolidation, Brainstorm/voice, global AI helper, broad role-framework expansion and a large Inbox redesign. Project GPT/Intake may follow once ordinary two-person work is useful; they are not prerequisites for the first shared task.
+
 ## GPT reliability audit (2026-09-21)
 
 Follow-up `3ac88dd` is built and queued by `codex-web-gpt-fast-3ac88dd.service`, superseding the waiting `1a4d056` engine update and retaining its Results/Remote fixes. It adds priority/coalesced native reads, shared instance-bound readiness, reduced send prechecks, completion wakeup, cache-only Results misses and bounded history-body reads with diagnostic codes. Linux build, 80 focused GPT tests (79 together plus the new stalled-body test), Chromium/WebKit cache checks and isolated production-image smoke passed. Fresh public owner doctor confirmed Codex SSH/Companion and GPT readiness with zero active/unknown GPT jobs. Production engine is still `1568870` while active Codex work prevents the idle switch. The queued post-install action checkpoints and replaces the owner's idle native runtime with `codex-web-gpt-native:26.915.31945-fast-3ac88dd`; member native-runtime rollout is separate. Do not claim either the new engine or native runtime is installed until their receipts confirm it. The two live history failures still require post-install reads.
