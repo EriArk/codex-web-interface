@@ -16,6 +16,7 @@ import {
 } from "./accountStorage.ts";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
+import { CollaborationWindow } from "./CollaborationSpaces";
 import type { RecoveryOutcome } from "./ConnectionRecovery";
 import { ContentSearch, type SearchRequest } from "./ContentSearch";
 import { type LibraryChange, libraryEvent } from "./EntityMenu";
@@ -49,6 +50,7 @@ import type {
   TurnSettings,
   View,
 } from "./types";
+import { useCollaborationSpaces } from "./useCollaborationSpaces";
 import { useNavigation } from "./useNavigation";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
@@ -237,6 +239,9 @@ function Workspace({
     } catch {}
   }, [client]);
   const navigationState = useNavigation();
+  const spaces = useCollaborationSpaces();
+  const [spaceProjectCreated, setSpaceProjectCreated] = useState("");
+  const spaceProjectCreation = useRef(false);
   const [initialized, setInitialized] = useState(false),
     [wide, setWide] = useState(window.innerWidth >= 1100);
   const [projects, setProjects] = useState<Project[]>([]),
@@ -1033,6 +1038,7 @@ function Workspace({
   }, [navigationState.state.library, refreshCatalog]);
   const navigation = (
     <ProjectNavigation
+      spaces={spaces}
       onClient={(value) => {
         setDrawer(false);
         setOverviewId("");
@@ -1499,13 +1505,31 @@ function Workspace({
           {tab("chat", "Чат", "chat")}
           {tab("results", "Результаты", "results")}
         </nav>
+        {spaces.window && (
+          <CollaborationWindow
+            spaces={spaces}
+            projects={projects}
+            createdProjectId={spaceProjectCreated}
+            onNewProject={() => {
+              spaceProjectCreation.current = true;
+              setCreateProject(true);
+            }}
+          />
+        )}
         <ProjectDialog
           open={createProject}
           machines={machines}
-          onClose={() => setCreateProject(false)}
+          onClose={() => {
+            setCreateProject(false);
+            spaceProjectCreation.current = false;
+          }}
           onCreated={async (p) => {
             const data = await api<{ projects: Project[] }>("/projects?refresh=1");
             setProjects(data.projects);
+            if (spaceProjectCreation.current) {
+              setSpaceProjectCreated(p.id);
+              return;
+            }
             setProjectId(p.id);
             setThreads([]);
             setThreadId("");

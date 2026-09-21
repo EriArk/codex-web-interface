@@ -415,5 +415,6 @@ export interface NativePlanAction {
   message: string;
 }
 
+export * from "./collaboration.js";
 export * from "./file-limits.js";
 export * from "./github-work.js";

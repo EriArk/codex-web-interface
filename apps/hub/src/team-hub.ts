@@ -11,6 +11,7 @@ import Fastify, { type FastifyRequest } from "fastify";
 import { ZodError, z } from "zod";
 import { createApp } from "./app.js";
 import { tokenHash } from "./auth.js";
+import { registerCollaborationSpaces } from "./collaboration-routes.js";
 import { deploymentBlockers } from "./deployment-status.js";
 import { ENGINE_PROTOCOL, engineTerminalWork } from "./engine-client.js";
 import { prepareEngineSocket } from "./engine-socket.js";
@@ -493,6 +494,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
   registerTeamProjects(app, teamProjects, actor, personal);
+  registerCollaborationSpaces(app, teamProjects, actor, personal);
   registerTeamLinks(app, teamLinks, actor);
   registerTeamConsultations(app, teamConsultations, actor);
   registerTeamBridges(
