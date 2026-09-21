@@ -99,10 +99,10 @@ test("GPT results contain only assistant artifacts and inline HTML from the curr
     );
     cache.invalidate("native-123456789");
     current = [messages[0]];
-    assert.equal(
-      gptResults("native-123456789", await cache.messages("native-123456789"), previews).length,
-      0,
-    );
+    const replaced = gptResults("native-123456789", await cache.messages("native-123456789"), previews);
+    assert.equal(replaced.length, 1);
+    assert.equal(replaced[0].type, "reasoning");
+    assert.deepEqual(replaced[0].payload.steps, []);
     assert.throws(() => resultPage(results, "images", "missing"), { code: "RESULTS_CHANGED" });
   } finally {
     store.close();
