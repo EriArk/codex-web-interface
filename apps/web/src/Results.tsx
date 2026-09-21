@@ -111,7 +111,7 @@ export function Results({
     if (revealed.current !== selection.request) {
       revealed.current = selection.request;
       setInspecting(true);
-      setInitialPreview(false);
+      setInitialPreview(true);
     }
     setInspected(selection.item ?? null);
     setRevealNotice(selection.item ? null : selection.error || "Открываем результат…");
