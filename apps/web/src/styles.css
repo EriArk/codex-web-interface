@@ -386,7 +386,7 @@ time {
   top: var(--app-top);
   height: var(--app-height);
   display: grid;
-  grid-template-columns: 295px minmax(0, 1fr);
+  grid-template-columns: clamp(260px, var(--navigation-width, 295px), 420px) minmax(0, 1fr);
   grid-template-rows: 66px minmax(0, 1fr);
   background: var(--paper);
   overflow: hidden;
@@ -1910,7 +1910,7 @@ hr.pane-divider {
     display: inline-flex;
   }
   .workspace[data-right-hidden="true"] .support-pane,
-  .workspace[data-right-hidden="true"] .pane-divider {
+  .workspace[data-right-hidden="true"] .workspace-content > .pane-divider {
     display: none;
   }
 }

@@ -93,7 +93,6 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
         <div className="space-selected">
           <strong>{selected.title}</strong>
           <small>{selected.members.map((m) => m.name).join(" · ")}</small>
-          <SpaceChatButton space={selected} spaces={spaces} />
           {selected.pending.length > 0 && (
             <small>Приглашены: {selected.pending.map((p) => p.name).join(", ")}</small>
           )}
@@ -120,12 +119,23 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
             )
             .map((s) => (
               <div className="space-card-row" key={s.id}>
-                <button type="button" className="space-card" onClick={() => spaces.select(s.id)}>
+                <button
+                  type="button"
+                  className="nav-project space-entry"
+                  onClick={() => spaces.select(s.id)}
+                >
                   <strong>{s.title}</strong>
                   <span>{s.members.map((m) => m.name).join(" · ")}</span>
                   <small>{s.projects.map((p) => p.name).join(" / ")}</small>
                 </button>
-                <SpaceChatButton space={s} spaces={spaces} />
+                {s.unread > 0 && (
+                  <small
+                    className="space-card-unread"
+                    title={`Непрочитанных сообщений: ${s.unread}`}
+                  >
+                    {s.unread}
+                  </small>
+                )}
               </div>
             ))}
           {spaces.ready && !spaces.catalog.spaces.length && (
@@ -136,22 +146,31 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
     </div>
   );
 }
-function SpaceChatButton({
-  space,
+export function SpaceChatButton({
+  projectId,
   spaces,
 }: {
-  space: CollaborationSpace;
+  projectId: string;
   spaces: SpacesController;
 }) {
+  const space =
+    spaces.mode === "spaces"
+      ? spaces.catalog.spaces.find((s) => s.id === spaces.selectedId)
+      : spaces.catalog.spaces.find((s) =>
+          s.projects.some((p) => p.personalProjectId === projectId),
+        );
+  if (!space) return null;
   return (
     <button
       type="button"
-      className="space-chat-shortcut"
+      className="icon-button header-space-chat"
       aria-label={`Чат: ${space.title}${space.unread ? `, непрочитанных: ${space.unread}` : ""}`}
+      title={`Чат пространства: ${space.title}`}
+      aria-haspopup="dialog"
+      aria-expanded={spaces.window?.kind === "chat" && spaces.window.id === space.id}
       onClick={() => spaces.open({ kind: "chat", id: space.id })}
     >
-      <Icon name="chat" size={19} />
-      <span>Чат</span>
+      <Icon name="chat" />
       {space.unread > 0 && <small>{space.unread}</small>}
     </button>
   );

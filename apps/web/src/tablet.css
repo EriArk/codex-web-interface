@@ -31,6 +31,11 @@
 .pane-divider:focus-visible {
   outline-offset: -2px;
 }
+.desktop-nav > .navigation-divider {
+  position: absolute;
+  inset: 0 -4px 0 auto;
+  height: 100%;
+}
 .header-project:disabled {
   opacity: 1;
   cursor: default;
@@ -127,7 +132,10 @@
   }
   :root:not([data-layout="legacy"])
     .workspace:not(.nav-collapsed):not([data-remote-immersive="true"]) {
-    grid-template-columns: clamp(300px, 22vw, 356px) minmax(0, 1fr);
+    grid-template-columns: clamp(260px, var(--navigation-width, clamp(300px, 22vw, 356px)), 420px) minmax(
+        0,
+        1fr
+      );
   }
   :root:not([data-layout="legacy"]) .workspace:not([data-remote-immersive="true"]) {
     grid-template-rows: 60px minmax(0, 1fr);

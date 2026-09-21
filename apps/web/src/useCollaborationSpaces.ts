@@ -17,6 +17,7 @@ export function useCollaborationSpaces() {
     }
   });
   const [selectedId, select] = useState("");
+  const [entry, setEntry] = useState(0);
   const [window, open] = useState<SpaceWindow | null>(null);
   const pending = useRef<Promise<void> | null>(null);
   const live = useRef(true);
@@ -59,11 +60,13 @@ export function useCollaborationSpaces() {
     ready,
     mode,
     selectedId,
+    entry,
     select,
     window,
     open,
     refresh,
     setMode(value: "personal" | "spaces") {
+      if (value !== mode) setEntry((v) => v + 1);
       setMode(value);
       try {
         storage.setItem("codex-spaces-mode", value);

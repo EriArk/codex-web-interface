@@ -1,5 +1,9 @@
 # Collaboration Spaces — #215
 
+## Workspace navigation corrections
+
+The human chat opens as a separate popup from the central workspace header. Left navigation contains no chat-launch buttons, only unread counts. Entering Shared mode (and switching spaces) hides the previous personal conversation and Results until an explicit shared Project/chat selection; the prior mounted conversation, draft and background work are retained. A themed empty state prompts selection. Wide navigation uses the same draggable grip as Results, with a device-local 260–420 px width shared across Codex and GPT; compact phone drawers are unchanged.
+
 ## Completion block: additional invitations and personal recommendations
 
 The curator can now invite more Hub contacts from Space Settings. Each offered Project has an explicit grant from its own owner. The curator chooses grants only for their own Projects; other owners can grant a pending invitee access from their Project card before acceptance, or grant access after they join. A missing grant remains missing and cannot bind a checkout. A recipient contributing a new Project chooses access separately for every existing member. Cancelling, declining or removing an invitation/member clears its grants; reinviting never resurrects prior permissions.
@@ -35,7 +39,7 @@ Personal Project GPT and optional local CODEXWEB.md are implemented in the fourt
 
 ## Third block: human chat and shared navigation
 
-Each space has one human chat popup, opened from its small round card button or from aggregated unread Notifications. It contains text/Markdown links, files and inline uploaded images. Technical actions and native Codex/GPT messages are not inserted. Personal chat selection, native identity and composer remain behind the popup. Shared navigation retains the central collaboration key, enlarged another third to 85×80 px, between **Пространства** and **Брейншторм**. Brainstorm is only a themed future-room placeholder in this block.
+Each space has one human chat popup, opened from the chat icon in the central workspace header or from aggregated unread Notifications. The left navigation retains unread counts only. It contains text/Markdown links, files and inline uploaded images. Technical actions and native Codex/GPT messages are not inserted. Personal chat selection, native identity and composer remain behind the popup. Shared navigation retains the central collaboration key, enlarged another third to 85×80 px, between **Пространства** and **Брейншторм**. Brainstorm is only a themed future-room placeholder in this block.
 
 Chat uses additive tables in the existing Team SQLite database; immutable file bytes live under the Team root in `space-chat-files` and are included in whole-installation checkpoints. Uploads are at most 32 MiB each, eight per message, with a 1 GiB chat file pool; unattached stages expire after seven days and are swept on later uploads. No personal machine/native runtime is consulted. Every read/download/send checks current space membership; another participant cannot use or download an unpublished upload. Leaving/closing never changes personal Projects or chats.
 

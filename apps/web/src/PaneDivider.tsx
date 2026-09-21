@@ -4,43 +4,51 @@ import { useRef } from "react";
 export function PaneDivider({
   value,
   onChange,
+  navigation = false,
 }: {
   value: number;
   onChange: (value: number) => void;
+  navigation?: boolean;
 }) {
   const drag = useRef<{ pointer: number; x: number; width: number; value: number } | null>(null);
+  const min = navigation ? 260 : 28,
+    max = navigation ? 420 : 55,
+    step = navigation ? 16 : 2;
+  const clamp = (value: number) => Math.max(min, Math.min(max, value));
   return (
     <hr
-      className="pane-divider"
-      aria-label="Ширина результатов"
+      className={`pane-divider${navigation ? " navigation-divider" : ""}`}
+      aria-label={navigation ? "Ширина левой панели" : "Ширина результатов"}
       aria-orientation="vertical"
       aria-valuenow={Math.round(value)}
-      aria-valuemin={28}
-      aria-valuemax={55}
+      aria-valuemin={min}
+      aria-valuemax={max}
       tabIndex={0}
       onKeyDown={(event) => {
         const values: Record<string, number> = {
-          ArrowLeft: value + 2,
-          ArrowRight: value - 2,
-          Home: 28,
-          End: 55,
+          ArrowLeft: value + (navigation ? -step : step),
+          ArrowRight: value + (navigation ? step : -step),
+          Home: min,
+          End: max,
         };
         const next = values[event.key];
         if (next !== undefined) {
           event.preventDefault();
-          onChange(Math.max(28, Math.min(55, next)));
+          onChange(clamp(next));
         }
       }}
       onPointerDown={(event) => {
         if (!event.isPrimary || event.button !== 0) return;
         const width = event.currentTarget.parentElement?.clientWidth;
-        const pane = event.currentTarget.nextElementSibling?.getBoundingClientRect();
+        const pane = (
+          navigation ? event.currentTarget.parentElement : event.currentTarget.nextElementSibling
+        )?.getBoundingClientRect();
         if (!width || !pane) return;
         drag.current = {
           pointer: event.pointerId,
           x: event.clientX,
           width,
-          value: (100 * pane.width) / width,
+          value: navigation ? pane.width : (100 * pane.width) / width,
         };
         event.currentTarget.setPointerCapture(event.pointerId);
       }}
@@ -52,7 +60,12 @@ export function PaneDivider({
         )
           return;
         onChange(
-          Math.max(28, Math.min(55, start.value + (100 * (start.x - event.clientX)) / start.width)),
+          clamp(
+            start.value +
+              (navigation
+                ? event.clientX - start.x
+                : (100 * (start.x - event.clientX)) / start.width),
+          ),
         );
       }}
       onPointerUp={(event) => {

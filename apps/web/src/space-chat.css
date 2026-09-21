@@ -129,32 +129,20 @@
 .space-card-row {
   position: relative;
 }
-.space-card-row > .space-card {
-  padding-right: 58px;
+.space-card-row:has(> .space-card-unread) > .space-entry {
+  padding-right: 38px;
 }
-.space-chat-shortcut {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
+.header-space-chat {
   position: relative;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: inherit;
 }
-.space-card-row > .space-chat-shortcut {
+.space-card-row > .space-card-unread {
   position: absolute;
   right: 8px;
   top: 8px;
   border-radius: 50%;
 }
-.space-card-row > .space-chat-shortcut > span {
-  display: none;
-}
-.space-chat-shortcut small {
+.header-space-chat small,
+.space-card-unread {
   position: absolute;
   right: -4px;
   top: -4px;

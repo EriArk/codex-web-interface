@@ -14,6 +14,7 @@ import { projectContextEnd, projectContextStart } from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { NavigationDivider } from "./NavigationDivider";
 import { type ArtifactRequest, artifactComponents, artifactSource } from "./ArtifactMarkdown";
 import {
   accountLocalStorage as localStorage,
@@ -1540,7 +1541,12 @@ export function GptWorkspace({
       data-right-hidden={rightHidden}
       ref={root}
     >
-      {!projectChat && <aside className="desktop-nav">{navigation}</aside>}
+      {!projectChat && (
+        <aside className="desktop-nav">
+          {navigation}
+          <NavigationDivider />
+        </aside>
+      )}
       {!projectChat && (
         <header className="workspace-header">
           <button

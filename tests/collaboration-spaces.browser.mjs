@@ -150,6 +150,15 @@ async function drawer(p) {
     await p.getByRole("button", { name: "Открыть проекты", exact: true }).click();
   return p.locator(".navigation-inner:visible").last();
 }
+async function openSpaceChat(p) {
+  if (await p.locator(".project-sheet[open]").count()) await p.keyboard.press("Escape");
+  await expect(p.locator(".navigation-inner .space-chat-shortcut")).toHaveCount(0);
+  await p
+    .locator(".workspace-header")
+    .getByRole("button", { name: /^Чат: Altar/ })
+    .click();
+  await expect(p.locator("dialog.space-chat-dialog[open]")).toBeVisible();
+}
 try {
   await login(page, "owner");
   await login(other, "friend");
@@ -162,6 +171,8 @@ try {
   await expect(nav.locator(".workspace-shortcuts .space-bell")).toHaveText("Уведомления");
   await expect(nav.locator(".navigation-header .space-bell")).toHaveCount(0);
   await nav.getByRole("button", { name: "Общие пространства", exact: true }).click();
+  await expect(page.locator(".space-home")).toContainText("Выберите пространство и проект");
+  await expect(page.locator(".workspace-content")).toBeHidden();
   await nav.getByRole("button", { name: "Создать пространство", exact: true }).click();
   let dialog = page.locator(".space-dialog");
   await mkdir(".local/spaces-qa", { recursive: true });
@@ -223,11 +234,22 @@ try {
   );
   await expect(otherNav.locator('[data-project-id="friend-project"]')).toBeVisible();
   await otherNav.locator('[data-project-id="friend-project"]').click();
+  await expect(other.locator(".space-home")).toHaveCount(0);
+  await expect(other.locator(".workspace-content")).toBeVisible();
   await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
   assert.equal(
     runtimes.get("friend").store.thread(runtimes.get("friend").thread.id).codexThreadId,
     runtimes.get("friend").nativeId,
   );
+  await drawer(other);
+  await otherNav.getByRole("button", { name: "Личные проекты", exact: true }).click();
+  await expect(other.locator(".workspace-content")).toBeVisible();
+  await otherNav.getByRole("button", { name: "Общие пространства", exact: true }).click();
+  await expect(other.locator(".space-home")).toContainText("Выберите проект");
+  await expect(other.locator(".workspace-content")).toBeHidden();
+  await otherNav.locator('[data-project-id="friend-project"]').click();
+  await expect(other.locator(".space-home")).toHaveCount(0);
+  await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
   await drawer(other);
   await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
   const settings = other.locator(".space-dialog");
@@ -421,7 +443,7 @@ try {
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await drawer(page);
-  await nav.getByRole("button", { name: /^Чат: Altar/ }).click();
+  await openSpaceChat(page);
   const chat = page.locator(".space-chat-dialog");
   await chat.getByLabel("Сообщение участникам").fill("План работ https://example.com/plan");
   const png = Buffer.from(
@@ -447,7 +469,7 @@ try {
   assert.equal((await download.body()).toString(), "Наш план");
   await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
   await expect(otherNav.getByRole("button", { name: "Уведомления: 1", exact: true })).toBeVisible();
-  await otherNav.getByRole("button", { name: /^Чат: Altar/ }).click();
+  await openSpaceChat(other);
   const otherChat = other.locator(".space-chat-dialog");
   await expect(otherChat.locator(".space-chat-message")).toHaveCount(1);
   await expect(otherNav.locator(".space-bell small")).toHaveCount(0);
@@ -482,10 +504,38 @@ try {
   }
   await other.screenshot({ path: ".local/spaces-qa/chat-tablet.png" });
   await chat.getByLabel("Закрыть пространство", { exact: true }).click();
-  await nav.getByRole("button", { name: /^Чат: Altar/ }).click();
+  await openSpaceChat(page);
   await expect(chat.getByLabel("Сообщение участникам")).toHaveValue("Черновик общего чата");
   await chat.getByLabel("Закрыть пространство", { exact: true }).click();
   await otherChat.getByLabel("Закрыть пространство", { exact: true }).click();
+  for (const width of [390, 768, 1024, 1366]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((t) => {
+        document.documentElement.dataset.theme = t;
+      }, theme);
+      const header = page.locator(".workspace-header");
+      const geometry = await header.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const buttons = [...el.querySelectorAll(":scope > button")]
+          .map((b) => b.getBoundingClientRect())
+          .filter((b) => b.width > 0);
+        return {
+          overflow: el.scrollWidth > el.clientWidth + 1,
+          outside: buttons.some((b) => b.left < r.left || b.right > r.right + 1),
+          overlap: buttons.some((b, i) => i > 0 && b.left < buttons[i - 1].right - 1),
+        };
+      });
+      assert.ok(
+        !geometry.overflow && !geometry.outside && !geometry.overlap,
+        JSON.stringify({ width, theme, geometry }),
+      );
+      await expect(header.locator(".header-space-chat")).toBeVisible();
+      if (width === 390 || width === 1024)
+        await page.screenshot({ path: `.local/spaces-qa/header-chat-${width}-${theme}.png` });
+    }
+  }
+  await drawer(other);
   await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
   await other
     .locator(".space-dialog")
@@ -503,6 +553,29 @@ try {
   await page.screenshot({ path: ".local/spaces-qa/phone.png" });
   await other.screenshot({ path: ".local/spaces-qa/tablet.png" });
   assert.deepEqual(errors, []);
+  await page.setViewportSize({ width: 1366, height: 1024 });
+  const divider = page.getByRole("separator", { name: "Ширина левой панели", exact: true });
+  await expect(divider).toBeVisible();
+  const navWidth = () =>
+    page.locator(".desktop-nav").evaluate((el) => el.getBoundingClientRect().width);
+  const beforeWidth = await navWidth(),
+    grip = await divider.boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 50, grip.y + grip.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(navWidth).toBeGreaterThan(beforeWidth + 35);
+  await divider.focus();
+  await page.keyboard.press("Home");
+  await expect.poll(navWidth).toBe(260);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(navWidth).toBe(276);
+  await page.reload();
+  await expect.poll(navWidth).toBe(276);
+  await page.getByRole("button", { name: "Скрыть правую панель", exact: true }).click();
+  await expect(divider).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(divider).toBeHidden();
   console.log(
     "WebKit phone/tablet: space membership, project access, native continuity, shared tabs, left 58x58 round key geometry, human chat text/links/PNG/files, live reply/unread, popup draft and theme/keyboard geometry passed.",
   );

@@ -16,7 +16,7 @@ import {
 } from "./accountStorage.ts";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
-import { CollaborationWindow } from "./CollaborationSpaces";
+import { CollaborationWindow, SpaceChatButton } from "./CollaborationSpaces";
 import type { RecoveryOutcome } from "./ConnectionRecovery";
 import { ContentSearch, type SearchRequest } from "./ContentSearch";
 import { type LibraryChange, libraryEvent } from "./EntityMenu";
@@ -25,6 +25,7 @@ import { Icon } from "./icons";
 import { Login } from "./Login";
 import { MachineHealthPanel } from "./MachineHealth";
 import { MemberSetup } from "./MemberSetup";
+import { NavigationDivider } from "./NavigationDivider";
 import { NotebookPanel, type NotebookRequest, type WorkspaceDestination } from "./Notebook";
 import { type NotificationTarget, useNotificationPresence } from "./Notifications";
 import { PaneDivider } from "./PaneDivider";
@@ -263,6 +264,23 @@ function Workspace({
     [view, setView] = useState<View>("chat"),
     [theme, setTheme] = useState<Theme>(cachedTheme);
   const selectionRef = useRef({ projectId, threadId });
+  const [sharedSelection, setSharedSelection] = useState<{
+    entry: number;
+    space: string;
+    project: string;
+  } | null>(null);
+  const selectedSpace = spaces.catalog.spaces.find((s) => s.id === spaces.selectedId);
+  const spaceHome =
+    spaces.mode === "spaces" &&
+    (!selectedSpace ||
+      sharedSelection?.entry !== spaces.entry ||
+      sharedSelection.space !== selectedSpace.id ||
+      sharedSelection.project !== projectId ||
+      !selectedSpace.projects.some((p) => p.personalProjectId === projectId));
+  const chooseSharedProject = (id: string) => {
+    if (spaces.mode === "spaces" && selectedSpace?.projects.some((p) => p.personalProjectId === id))
+      setSharedSelection({ entry: spaces.entry, space: selectedSpace.id, project: id });
+  };
   selectionRef.current = { projectId, threadId };
   const [drawer, setDrawer] = useState(false),
     [settings, setSettings] = useState(false),
@@ -640,6 +658,7 @@ function Workspace({
     };
   }, [view, threadId, state.revision]);
   const selectThread = (id: string, owner = projectId) => {
+    chooseSharedProject(owner);
     if (owner !== projectId) {
       setProjectId(owner);
       setThreads(threadGroups[owner] ?? []);
@@ -675,6 +694,7 @@ function Workspace({
       });
       setProjectId(owner);
       setThreadId(thread.id);
+      chooseSharedProject(owner);
       setThreads((list) => [thread, ...list.filter((item) => item.projectId === owner)]);
       setThreadGroups((groups) => ({ ...groups, [owner]: [thread, ...(groups[owner] ?? [])] }));
       void loadThreads(owner, thread.id).catch(() => {});
@@ -792,6 +812,7 @@ function Workspace({
     setDrawer(false);
   };
   const selectOverviewProject = () => {
+    if (overviewProject) chooseSharedProject(overviewProject.id);
     if (!overviewProject || overviewProject.id === projectId) return;
     setProjectId(overviewProject.id);
     setThreadId("");
@@ -1136,11 +1157,15 @@ function Workspace({
         className={`workspace ${navCollapsed ? "nav-collapsed" : ""}`}
         data-view={view}
         data-right-hidden={rightHidden}
-        data-remote-immersive={remoteImmersive}
+        data-remote-immersive={!spaceHome && remoteImmersive}
+        data-space-home={spaceHome}
         ref={root}
         style={{ "--right-width": rightWidth ? `${rightWidth}%` : undefined } as CSSProperties}
       >
-        <aside className="desktop-nav">{navigation}</aside>
+        <aside className="desktop-nav">
+          {navigation}
+          <NavigationDivider />
+        </aside>
         <header className="workspace-header">
           <button
             type="button"
@@ -1156,16 +1181,28 @@ function Workspace({
           <button
             type="button"
             className="header-project overview-trigger"
-            aria-label="Обзор текущего проекта"
-            disabled={!project || project.unassigned}
-            onClick={() => project && openProjectOverview(project.id)}
+            aria-label={spaceHome ? "Обзор пространства" : "Обзор текущего проекта"}
+            disabled={!spaceHome && (!project || project.unassigned)}
+            onClick={() =>
+              spaceHome
+                ? selectedSpace
+                  ? spaces.open({ kind: "settings", id: selectedSpace.id })
+                  : setDrawer(true)
+                : project && openProjectOverview(project.id)
+            }
           >
             <span>
               <Icon name="folder" size={17} />
-              {project?.name ?? "Рабочее пространство"}
+              {spaceHome
+                ? (selectedSpace?.title ?? "Общие пространства")
+                : (project?.name ?? "Рабочее пространство")}
             </span>
             <small>
-              {view === "overview" ? "Обзор проекта" : (selectedThreadTitle ?? "Выбери диалог")}
+              {spaceHome
+                ? "Выберите проект"
+                : view === "overview"
+                  ? "Обзор проекта"
+                  : (selectedThreadTitle ?? "Выбери диалог")}
             </small>
           </button>
           <div className="header-connection">
@@ -1208,11 +1245,12 @@ function Workspace({
             type="button"
             className="icon-button"
             onClick={() => newThread()}
-            disabled={busy || !projectId}
+            disabled={spaceHome || busy || !projectId}
             aria-label="Создать диалог"
           >
             <Icon name="plus" />
           </button>
+          <SpaceChatButton spaces={spaces} projectId={projectId} />
           <button
             type="button"
             className="icon-button header-files"
@@ -1220,7 +1258,7 @@ function Workspace({
             title={project ? `Файлы: ${project.name}` : "Выбери проект"}
             aria-expanded={projectTool === "files"}
             aria-haspopup="dialog"
-            disabled={!project || project.unassigned}
+            disabled={spaceHome || !project || project.unassigned}
             onClick={() => {
               setProjectTool("files");
             }}
@@ -1234,7 +1272,7 @@ function Workspace({
             title={project ? `Git: ${project.name}` : "Выбери проект"}
             aria-expanded={projectTool === "git"}
             aria-haspopup="dialog"
-            disabled={!project || project.unassigned}
+            disabled={spaceHome || !project || project.unassigned}
             onClick={() => setProjectTool("git")}
           >
             <Icon name="branch" />
@@ -1253,38 +1291,55 @@ function Workspace({
             </button>
           </div>
         )}
-        <main className="workspace-content">
-          {overviewProject && !overviewProject.unassigned && (
-            <ProjectOverviewModal
-              key={overviewId}
-              onClose={() => setOverviewId("")}
-              scope={{ client: "codex", projectId: overviewId, name: overviewProject.name }}
-              onTarget={openNotebookTarget}
-              onNotebook={setNotebook}
-              onNew={() => newThread(overviewId)}
-              onProjectGpt={() => setProjectGpt({ id: overviewId, name: overviewProject.name })}
-              onFiles={() => {
-                selectOverviewProject();
-                setProjectTool("files", overviewId);
+        {spaceHome && (
+          <main className="space-home">
+            <Icon name="people" size={42} />
+            <h2>{selectedSpace ? "Выберите проект" : "Выберите пространство и проект"}</h2>
+            <p>Откройте проект в левой панели, чтобы продолжить работу.</p>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => {
+                setNavCollapsed(false);
+                if (!wide) setDrawer(true);
               }}
-              onGit={() => {
-                selectOverviewProject();
-                setProjectTool("git", overviewId);
-              }}
-              onResults={() => {
-                selectOverviewProject();
-                setFocusResult("");
-                setView("results");
-                setRightHidden(false);
-              }}
-              onMachines={() => setMachinePanel(true)}
-              onRemote={() => {
-                selectOverviewProject();
-                setView("remote");
-                setRightHidden(false);
-              }}
-            />
-          )}
+            >
+              Выбрать проект
+            </button>
+          </main>
+        )}
+        {overviewProject && !overviewProject.unassigned && (
+          <ProjectOverviewModal
+            key={overviewId}
+            onClose={() => setOverviewId("")}
+            scope={{ client: "codex", projectId: overviewId, name: overviewProject.name }}
+            onTarget={openNotebookTarget}
+            onNotebook={setNotebook}
+            onNew={() => newThread(overviewId)}
+            onProjectGpt={() => setProjectGpt({ id: overviewId, name: overviewProject.name })}
+            onFiles={() => {
+              selectOverviewProject();
+              setProjectTool("files", overviewId);
+            }}
+            onGit={() => {
+              selectOverviewProject();
+              setProjectTool("git", overviewId);
+            }}
+            onResults={() => {
+              selectOverviewProject();
+              setFocusResult("");
+              setView("results");
+              setRightHidden(false);
+            }}
+            onMachines={() => setMachinePanel(true)}
+            onRemote={() => {
+              selectOverviewProject();
+              setView("remote");
+              setRightHidden(false);
+            }}
+          />
+        )}
+        <main className="workspace-content" hidden={spaceHome}>
           <Chat
             onCapture={(message) =>
               setNotebook({
@@ -1320,7 +1375,7 @@ function Workspace({
             sending={sending}
             sendError={sendError}
             writeBlocked={writeBlocked}
-            visible={view !== "overview" && (wide || view === "chat")}
+            visible={!spaceHome && view !== "overview" && (wide || view === "chat")}
             speechVisible={
               !overviewId &&
               !projectGpt &&
@@ -1445,7 +1500,7 @@ function Workspace({
                 results.map((r) => r.id).join(",")
               }
               onOverlayChange={setResultOverlay}
-              visible={view === "results" || view === "chat"}
+              visible={!spaceHome && (view === "results" || view === "chat")}
               focusId={focusResult}
               reveal={artifactRequest?.scope === threadId ? artifactRequest : null}
               focusCategory={resultCategory}
@@ -1462,7 +1517,7 @@ function Workspace({
             <ActivityPane
               threadId={threadId}
               items={activity}
-              visible={view === "activity"}
+              visible={!spaceHome && view === "activity"}
               hasMore={!!activityCursor}
               onOlder={() =>
                 void action(async () => {
@@ -1477,7 +1532,7 @@ function Workspace({
             <Remote
               projectId={projectId}
               threadId={threadId}
-              visible={view === "remote" && (!wide || !rightHidden)}
+              visible={!spaceHome && view === "remote" && (!wide || !rightHidden)}
               available={!!project?.remoteAvailable}
               onImmersiveChange={setRemoteImmersive}
               onBack={() => setView("chat")}

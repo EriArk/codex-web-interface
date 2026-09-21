@@ -2,6 +2,9 @@
 
 ## Owner-requested theme consistency (2026-09-21)
 
+- Open the human Space chat from an icon button in the central workspace header, as a separate popup over the mounted Codex conversation. Do not put chat launch buttons in the left navigation; space cards may retain unread counts.
+- Entering Shared mode shows a project-selection empty state until the user explicitly chooses a shared Project/chat; do not display the previous personal conversation or its Results underneath. Preserve its draft and running work. Wide/tablet navigation has a draggable divider matching the Results divider, with device-local width persistence in both clients.
+
 - New and changed UI must follow the active theme using existing components, semantic tokens and shared window/control materials. Do not introduce generic wizard styling that overrides the theme's casing, surfaces or buttons.
 - Check affected windows and navigation at phone and tablet widths, including placement, scrolling and keyboard-constrained height. Keep checks focused on the changed interface and preserve one functional implementation across themes.
 - The latest owner update supersedes the triangular/central toggle: use a round matte collaboration key with the same material as the GPT/Codex selector, to the **left** of the navigation tabs in the former search position. Remove the navigation search button. Personal tabs remain Projects/Dialogs; shared tabs remain “Пространства”/“Брейншторм” (future rooms). Keep the labels unobstructed.
