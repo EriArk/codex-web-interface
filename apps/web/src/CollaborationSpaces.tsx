@@ -92,9 +92,24 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
       {selected ? (
         <div className="space-selected">
           <strong>{selected.title}</strong>
-          <small>{selected.members.map((m) => m.name).join(" · ")}</small>
+          <small className="space-entry-details">
+            {selected.members.map((m) => (
+              <span key={m.id}>
+                <Icon name="person" size={13} />
+                {m.name}
+              </span>
+            ))}
+          </small>
           {selected.pending.length > 0 && (
-            <small>Приглашены: {selected.pending.map((p) => p.name).join(", ")}</small>
+            <small className="space-entry-details">
+              Приглашены:{" "}
+              {selected.pending.map((p) => (
+                <span key={p.id}>
+                  <Icon name="person" size={13} />
+                  {p.name}
+                </span>
+              ))}
+            </small>
           )}
           {selected.projects
             .filter((p) => !p.personalProjectId)
@@ -118,15 +133,37 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
                 .includes(query.toLocaleLowerCase()),
             )
             .map((s) => (
-              <div className="space-card-row" key={s.id}>
+              <div className="nav-project-group space-card-row" key={s.id}>
                 <button
                   type="button"
                   className="nav-project space-entry"
                   onClick={() => spaces.select(s.id)}
                 >
-                  <strong>{s.title}</strong>
-                  <span>{s.members.map((m) => m.name).join(" · ")}</span>
-                  <small>{s.projects.map((p) => p.name).join(" / ")}</small>
+                  <span className="folder-icon">
+                    <Icon name="people" />
+                  </span>
+                  <span>
+                    {s.title}
+                    <small className="space-entry-details">
+                      {s.members.map((m) => (
+                        <span key={m.id}>
+                          <Icon name="person" size={13} />
+                          {m.name}
+                        </span>
+                      ))}
+                    </small>
+                    <small className="space-entry-details">
+                      {s.projects.map((p) => (
+                        <span key={p.id}>
+                          <Icon name="folder" size={13} />
+                          {p.name}
+                        </span>
+                      ))}
+                    </small>
+                  </span>
+                  <span className="project-chevron">
+                    <Icon name="chevron" size={15} />
+                  </span>
                 </button>
                 {s.unread > 0 && (
                   <small

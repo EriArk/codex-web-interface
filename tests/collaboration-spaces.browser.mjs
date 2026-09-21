@@ -202,6 +202,34 @@ try {
   await dialog.getByRole("button", { name: "Пригласить", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(nav.locator(".space-selected")).toContainText("Altar + World");
+  await nav.getByRole("button", { name: "Общие", exact: true }).click();
+  await mkdir(".local/spaces-qa", { recursive: true });
+  for (const width of [390, 1024]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+      const entry = nav.locator(".space-entry");
+      await expect(entry).toBeVisible();
+      const geometry = await entry.evaluate((el) => {
+        const icon = el.children[0].getBoundingClientRect(),
+          text = el.children[1].getBoundingClientRect();
+        return {
+          direction: getComputedStyle(el).flexDirection,
+          align: getComputedStyle(el).textAlign,
+          iconLeft: icon.left,
+          textLeft: text.left,
+        };
+      });
+      assert.equal(geometry.direction, "row");
+      assert.equal(geometry.align, "left");
+      assert.ok(geometry.textLeft > geometry.iconLeft);
+      await expect(entry.locator(".space-entry-details svg")).toHaveCount(2);
+      await page.screenshot({ path: `.local/spaces-qa/space-row-${width}-${theme}.png` });
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => (document.documentElement.dataset.theme = "organizer"));
+  await nav.locator(".space-entry").click();
   await nav.getByRole("button", { name: "Личные проекты", exact: true }).click();
   await expect(nav.locator('[data-project-id="owner-project"]')).toHaveCount(0);
   await other.reload();
