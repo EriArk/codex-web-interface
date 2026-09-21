@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested main-branch completion (2026-09-21)
+
+- Keep `main` current with completed, verified work. Finishing a stage includes committing, pushing and integrating its changes into `main`; do not leave accepted releases accumulating only on a feature branch.
+- Use temporary branches only when isolation serves the task. Prefer a fast-forward when possible, preserve existing history, and never force-push `main`. Deployment still follows the existing maintenance rules.
+
 ## Owner-requested root-cause fixes and quiet UI (2026-09-21)
 
 - Fix the underlying failure and verify the intended operation succeeds. Adding an error message, fallback card or retry control is not a substitute for fixing a reproducible bug.
