@@ -119,6 +119,9 @@ export async function controlDesktop(
       "-NoLogo",
       "-NoProfile",
       "-NonInteractive",
+      // Apply only to this fixed, installed control script; preserve the machine policy.
+      "-ExecutionPolicy",
+      "Bypass",
       "-EncodedCommand",
       Buffer.from(script, "utf16le").toString("base64"),
     ],
