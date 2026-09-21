@@ -2,11 +2,17 @@ import type { CollaborationAccess, CollaborationSpace } from "@codex-web/shared"
 import { useEffect, useRef, useState } from "react";
 import { pageWorkspace } from "./accountStorage";
 import { Icon } from "./icons";
+import { SpaceProjectRules } from "./ProjectRulesEditor";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import type { Project } from "./types";
 import type { SpacesController } from "./useCollaborationSpaces";
 
-const labels = { owner: "Владелец", collaborate: "Совместная работа", direct: "Прямая работа" };
+const labels = {
+  owner: "Владелец",
+  none: "Доступ не предоставлен",
+  collaborate: "Совместная работа",
+  direct: "Прямая работа",
+};
 export function SpaceProjects({
   spaces,
   space,
@@ -72,7 +78,7 @@ export function SpaceProjects({
             </a>
             {p.ownerId === pageWorkspace ? (
               <>
-                {space.members
+                {[...space.members, ...space.pending]
                   .filter((m) => m.id !== pageWorkspace)
                   .map((m) => (
                     <div className="space-form" key={m.id}>
@@ -81,7 +87,7 @@ export function SpaceProjects({
                         <select
                           aria-label={`Доступ: ${p.name} · ${m.name}`}
                           disabled={action.busy}
-                          value={p.grants.find((g) => g.userId === m.id)?.access ?? "collaborate"}
+                          value={p.grants.find((g) => g.userId === m.id)?.access ?? ""}
                           onChange={(e) =>
                             mutate("grant", {
                               projectId: p.id,
@@ -90,6 +96,9 @@ export function SpaceProjects({
                             })
                           }
                         >
+                          <option value="" disabled>
+                            Доступ не предоставлен
+                          </option>
                           <option value="collaborate">Совместная работа</option>
                           <option value="direct">Прямая работа</option>
                         </select>
@@ -140,12 +149,12 @@ export function SpaceProjects({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={action.busy}
+                  disabled={action.busy || p.access === "none"}
                   onClick={() => openPicker(p.id)}
                 >
                   {p.personalProjectId ? "Сменить рабочую копию" : "Подключить мою копию"}
                 </button>
-                {p.access === "collaborate" &&
+                {(p.access === "collaborate" || p.access === "none") &&
                   (p.requests.includes(pageWorkspace) ? (
                     <small className="muted">Прямой доступ запрошен</small>
                   ) : (
@@ -160,6 +169,7 @@ export function SpaceProjects({
                   ))}
               </>
             )}
+            {p.personalProjectId && <SpaceProjectRules projectId={p.personalProjectId} />}
           </div>
         </details>
       ))}

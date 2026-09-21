@@ -3,12 +3,15 @@ import type {
   CollaborationInvitation,
   CollaborationKind,
   CollaborationSpace,
+  ProjectRules,
   TeamContact,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { Icon } from "./icons";
+import { emptyProjectRules, ProjectRulesEditor } from "./ProjectRulesEditor";
 import { SpaceChat } from "./SpaceChat";
+import { SpaceInvite } from "./SpaceInvite";
 import { SpaceProjects } from "./SpaceProjects";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { TeamContactPicker } from "./TeamContactPicker";
@@ -18,6 +21,7 @@ import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./collaboration-spaces.css";
 
 const accessLabels = {
+  none: "Доступ не предоставлен",
   owner: "Владелец",
   collaborate: "Совместная работа",
   direct: "Прямая работа",
@@ -324,6 +328,10 @@ function SpaceWizard({
     invitation?.requestedAccess ?? "collaborate",
   );
   const [requestedAccess, setRequestedAccess] = useState<CollaborationAccess>("collaborate");
+  const [rules, setRules] = useState<ProjectRules>(
+    invitation?.recommendations ?? emptyProjectRules,
+  );
+  const [memberAccess, setMemberAccess] = useState<Record<string, CollaborationAccess>>({});
   const action = useSharedAction();
   const initialCreated = useRef(createdProjectId);
   useEffect(() => {
@@ -344,7 +352,21 @@ function SpaceWizard({
         await sharedMutation(`/team/spaces/${invitation.spaceId}/answer`, "POST", {
           revision: invitation.revision,
           accept,
-          ...(accept ? { personalProjectId: projectId, access } : {}),
+          ...(accept
+            ? {
+                personalProjectId: projectId,
+                access,
+                ...(kind === "space" && invitation.members
+                  ? {
+                      grants: invitation.members.map((m) => ({
+                        userId: m.id,
+                        access: memberAccess[m.id] ?? access,
+                      })),
+                    }
+                  : {}),
+                ...(invitation.recommendations ? { rules } : {}),
+              }
+            : {}),
         });
       else {
         const result = await sharedMutation<{ id: string }>("/team/spaces", "POST", {
@@ -354,6 +376,7 @@ function SpaceWizard({
           personalProjectId: projectId,
           access,
           requestedAccess,
+          ...(rules.enabled.length || rules.custom.trim() ? { recommendations: rules } : {}),
         });
         nextSpaceId = result.id;
       }
@@ -391,9 +414,7 @@ function SpaceWizard({
                 {kind === "project" ? "совместный проект" : "пространство"} <strong>{title}</strong>
                 .
               </p>
-              <p>
-                {invitation.project.name} · {accessLabels[invitation.access]}
-              </p>
+              <p>{invitation.project.name}</p>
               <a href={invitation.project.repository} target="_blank" rel="noreferrer">
                 {invitation.project.repository}
               </a>
@@ -467,7 +488,7 @@ function SpaceWizard({
         )}
         {step === 2 && (
           <>
-            {(!invitation || kind === "space") && (
+            {(!invitation || (kind === "space" && !invitation.members)) && (
               <AccessPicker
                 label={
                   invitation
@@ -478,6 +499,16 @@ function SpaceWizard({
                 onChange={setAccess}
               />
             )}
+            {invitation &&
+              kind === "space" &&
+              invitation.members?.map((m) => (
+                <AccessPicker
+                  key={m.id}
+                  label={`Доступ для ${m.name} к моему проекту`}
+                  value={memberAccess[m.id] ?? access}
+                  onChange={(v) => setMemberAccess((old) => ({ ...old, [m.id]: v }))}
+                />
+              ))}
             {!invitation && kind === "space" && (
               <AccessPicker
                 label="Запросить доступ к проекту участника"
@@ -485,12 +516,17 @@ function SpaceWizard({
                 onChange={setRequestedAccess}
               />
             )}
-            {invitation && (
+            {invitation && !invitation.projects && (
               <p>
                 Твой доступ к {invitation.project.name}:{" "}
                 <strong>{accessLabels[invitation.access]}</strong>.
               </p>
             )}
+            {invitation?.projects?.map((p) => (
+              <p key={p.id}>
+                {p.name}: <strong>{accessLabels[p.access]}</strong>
+              </p>
+            ))}
             <p className="muted">
               Совместная работа — рабочие ветки и PR. Прямая работа — разрешённые ветки напрямую.
               Права GitHub остаются верхней границей доступа.
@@ -502,6 +538,18 @@ function SpaceWizard({
         )}
         {step === 3 && (
           <>
+            {(!invitation || invitation.recommendations) && (
+              <details open={!!invitation?.recommendations}>
+                <summary>Настройка Codex для совместной работы</summary>
+                <p className="muted">
+                  {invitation
+                    ? "Это рекомендации, а не условия участия. Отключи ненужное. Выбранное добавим к твоим личным правилам проекта."
+                    : "Необязательные пожелания для себя и приглашённого. Он сможет отключить любое из них."}
+                </p>
+                <p className="muted">Завершённая работа — коммит и отправка в разрешённую ветку.</p>
+                <ProjectRulesEditor value={rules} onChange={setRules} />
+              </details>
+            )}
             <h3>{title}</h3>
             <p>
               {kind === "project" ? "Один проект" : "Связанные проекты"} ·{" "}
@@ -510,12 +558,25 @@ function SpaceWizard({
             <p>
               Мой проект: <strong>{project?.name}</strong>
             </p>
-            {(!invitation || kind === "space") && (
+            {(!invitation || (kind === "space" && !invitation.members)) && (
               <p>Доступ к моему проекту: {accessLabels[access]}</p>
             )}
-            {invitation ? (
+            {invitation &&
+              kind === "space" &&
+              invitation.members?.map((m) => (
+                <p key={m.id}>
+                  Доступ для {m.name}: {accessLabels[memberAccess[m.id] ?? access]}
+                </p>
+              ))}
+            {invitation?.projects?.map((p) => (
+              <p key={p.id}>
+                Мой доступ к {p.name}: {accessLabels[p.access]}
+              </p>
+            ))}
+            {invitation && !invitation.projects ? (
               <p>Мой доступ: {accessLabels[invitation.access]}</p>
             ) : (
+              !invitation &&
               kind === "space" && <p>Запрошен доступ: {accessLabels[requestedAccess]}</p>
             )}
             <p className="muted">
@@ -561,7 +622,9 @@ function SpaceWizard({
             ? "Сохраняем…"
             : step === 3
               ? invitation
-                ? "Присоединиться"
+                ? invitation.recommendations
+                  ? "Применить и присоединиться"
+                  : "Присоединиться"
                 : "Пригласить"
               : "Далее"}
         </button>
@@ -589,6 +652,7 @@ function SpaceSettings({
   return (
     <div className="space-form">
       <p>{space.members.map((p) => p.name).join(" · ")}</p>
+      {curator && <SpaceInvite space={space} spaces={spaces} />}
       <SpaceProjects
         spaces={spaces}
         space={space}

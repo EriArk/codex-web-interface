@@ -58,6 +58,166 @@ async function fixture(t) {
   return { root, registry, team, spaces, owner, friend, stranger, project, input };
 }
 
+test("Additional invitations require each project owner's grant and preserve individual acceptance choices", async (t) => {
+  const f = await fixture(t),
+    s = f.spaces;
+  const rules = { enabled: ["related", "tests"], custom: "API World" };
+  const { id } = s.create(
+    f.owner,
+    randomUUID(),
+    { ...f.input(), recommendations: rules },
+    f.project("altar"),
+  );
+  assert.deepEqual(s.catalog(f.friend).invitations[0].recommendations, rules);
+  s.answer(
+    f.friend,
+    id,
+    randomUUID(),
+    { revision: 1, accept: true, access: "direct" },
+    f.project("world", "https://github.com/example/world"),
+  );
+  const current = () => s.catalog(f.owner).spaces[0];
+  const [altar, world] = current().projects;
+  const invite = {
+    revision: current().revision,
+    userId: f.stranger,
+    grants: [{ projectId: world.id, access: "direct" }],
+    requestedAccess: "collaborate",
+    recommendations: rules,
+  };
+  assert.throws(() => s.invite(f.owner, id, randomUUID(), invite), {
+    code: "SPACE_PROJECT_OWNER_REQUIRED",
+  });
+  assert.throws(() => s.invite(f.friend, id, randomUUID(), { ...invite, grants: [] }));
+  const key = randomUUID(),
+    input = { ...invite, grants: [{ projectId: altar.id, access: "collaborate" }] };
+  s.invite(f.owner, id, key, input);
+  s.invite(f.owner, id, key, input);
+  assert.equal(current().pending.length, 1);
+  assert.deepEqual(
+    s.catalog(f.stranger).invitations[0].projects.map((p) => p.name),
+    ["altar"],
+  );
+  assert.throws(() => s.chat.page(f.stranger, id, {}));
+  // Owner may grant the pending member before acceptance; curator cannot do it for them.
+  assert.throws(() =>
+    s.grant(f.owner, id, randomUUID(), {
+      revision: current().revision,
+      projectId: world.id,
+      userId: f.stranger,
+      access: "direct",
+    }),
+  );
+  s.grant(f.friend, id, randomUUID(), {
+    revision: current().revision,
+    projectId: world.id,
+    userId: f.stranger,
+    access: "direct",
+  });
+  const offered = s.catalog(f.stranger).invitations[0];
+  assert.equal(offered.projects.find((p) => p.id === world.id).access, "direct");
+  const answerKey = randomUUID(),
+    answer = {
+      revision: offered.revision,
+      accept: true,
+      access: "collaborate",
+      grants: [
+        { userId: f.owner, access: "direct" },
+        { userId: f.friend, access: "collaborate" },
+      ],
+    };
+  s.answer(
+    f.stranger,
+    id,
+    answerKey,
+    answer,
+    f.project("assets", "https://github.com/example/assets"),
+  );
+  s.answer(
+    f.stranger,
+    id,
+    answerKey,
+    answer,
+    f.project("assets", "https://github.com/example/assets"),
+  );
+  assert.equal(current().members.length, 3);
+  const joined = s.catalog(f.stranger).spaces[0];
+  assert.equal(joined.projects[0].access, "collaborate");
+  assert.equal(joined.projects[1].access, "direct");
+  assert.equal(current().projects[2].access, "direct");
+  assert.equal(s.catalog(f.friend).spaces[0].projects[2].access, "collaborate");
+  s.removeMember(f.owner, id, randomUUID(), { revision: current().revision, userId: f.stranger });
+  s.invite(f.owner, id, randomUUID(), { ...input, revision: current().revision });
+  const again = s.catalog(f.stranger).invitations[0];
+  assert.deepEqual(
+    again.projects.map((p) => p.id),
+    [altar.id],
+    "removed participant does not recover a previous grant",
+  );
+  s.answer(
+    f.stranger,
+    id,
+    randomUUID(),
+    { ...answer, revision: again.revision },
+    f.project("assets", "https://github.com/example/assets"),
+  );
+  assert.equal(s.catalog(f.stranger).spaces[0].projects[1].access, "none");
+  assert.throws(() =>
+    s.bindCopy(
+      f.stranger,
+      id,
+      randomUUID(),
+      { revision: current().revision, projectId: world.id, personalProjectId: "copy" },
+      f.project("copy", world.repository),
+    ),
+  );
+});
+
+test("Single-project reinvitation and no-grant invitations do not inherit cancelled grants", async (t) => {
+  const f = await fixture(t),
+    s = f.spaces;
+  const { id } = s.create(f.owner, randomUUID(), f.input("project"), f.project("altar"));
+  s.answer(f.friend, id, randomUUID(), { revision: 1, accept: false });
+  const space = s.catalog(f.owner).spaces[0];
+  assert.equal(space.projects[0].grants.length, 0);
+  s.invite(f.owner, id, randomUUID(), {
+    revision: space.revision,
+    userId: f.friend,
+    grants: [{ projectId: space.projects[0].id, access: "direct" }],
+    requestedAccess: "collaborate",
+  });
+  const invitation = s.catalog(f.friend).invitations[0];
+  s.answer(
+    f.friend,
+    id,
+    randomUUID(),
+    { revision: invitation.revision, accept: true },
+    f.project("friend-copy"),
+  );
+  assert.equal(s.catalog(f.friend).spaces[0].projects[0].access, "direct");
+  const extra = s.create(
+    f.owner,
+    randomUUID(),
+    { ...f.input(), personalProjectId: "other", userId: f.stranger },
+    f.project("other"),
+  );
+  s.answer(f.stranger, extra.id, randomUUID(), { revision: 1, accept: false });
+  s.invite(f.owner, extra.id, randomUUID(), {
+    revision: 2,
+    userId: f.stranger,
+    grants: [],
+    requestedAccess: "collaborate",
+  });
+  s.answer(
+    f.stranger,
+    extra.id,
+    randomUUID(),
+    { revision: 3, accept: true, access: "collaborate" },
+    f.project("own", "https://github.com/example/own"),
+  );
+  assert.equal(s.catalog(f.stranger).spaces[0].projects[0].access, "none");
+});
+
 test("Human chat persists paged messages, exact retries and per-member unread cursors", async (t) => {
   const f = await fixture(t);
   const s = f.spaces.create(f.owner, randomUUID(), f.input(), f.project("altar"));

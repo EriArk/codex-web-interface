@@ -19,7 +19,7 @@ const nativeId = z
   .regex(/^[a-zA-Z0-9_-]{1,100}$/)
   .nullable();
 const revision = z.number().int().nonnegative();
-const rulesSchema = z
+export const rulesSchema = z
   .object({
     enabled: z.array(z.enum(["related", "tests", "focused", "dependencies", "issues"])).max(5),
     custom: z.string().trim().max(4000),
@@ -260,6 +260,31 @@ export class ProjectGpts {
     } finally {
       this.writingRules.delete(id);
     }
+  }
+  async invitationRules(id: string, receipt: string, raw: unknown) {
+    const db = this.sessions.store.db;
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS project_rule_receipts (id TEXT PRIMARY KEY, projectId TEXT NOT NULL)",
+    );
+    if (
+      db.prepare("SELECT 1 FROM project_rule_receipts WHERE id=? AND projectId=?").get(receipt, id)
+    )
+      return;
+    const selected = rulesSchema.parse(raw);
+    // Declining all suggestions must neither create a file nor erase existing preferences.
+    if (selected.enabled.length || selected.custom) {
+      const current = this.get(id).rules;
+      await this.rules(id, {
+        enabled: [...new Set([...current.enabled, ...selected.enabled])],
+        custom:
+          !selected.custom ||
+          current.custom === selected.custom ||
+          current.custom.endsWith("\n\n" + selected.custom)
+            ? current.custom
+            : [current.custom, selected.custom].filter(Boolean).join("\n\n"),
+      });
+    }
+    db.prepare("INSERT OR IGNORE INTO project_rule_receipts VALUES(?,?)").run(receipt, id);
   }
   instructions(id: string) {
     const row = this.sessions.store.db

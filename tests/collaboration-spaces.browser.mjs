@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -182,6 +182,12 @@ try {
   await dialog.getByRole("button", { name: "Далее", exact: true }).click();
   await dialog.getByLabel("Запросить доступ к проекту участника").selectOption("direct");
   await dialog.getByRole("button", { name: "Далее", exact: true }).click();
+  await dialog.getByText("Настройка Codex для совместной работы", { exact: true }).click();
+  await dialog
+    .getByLabel("Проверять влияние изменений на связанные проекты", { exact: true })
+    .check();
+  await dialog.getByLabel("Запускать подходящие тесты и сборку", { exact: true }).check();
+  await dialog.getByLabel("Свои правила проекта", { exact: true }).fill("Совместимость API World");
   await dialog.getByRole("button", { name: "Пригласить", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(nav.locator(".space-selected")).toContainText("Altar + World");
@@ -200,8 +206,21 @@ try {
   await dialog.getByRole("button", { name: "Далее", exact: true }).click();
   await dialog.getByLabel(/Доступ для .* к моему проекту/).selectOption("collaborate");
   await dialog.getByRole("button", { name: "Далее", exact: true }).click();
-  await dialog.getByRole("button", { name: "Присоединиться", exact: true }).click();
+  await dialog.getByLabel("Запускать подходящие тесты и сборку", { exact: true }).uncheck();
+  await dialog.getByLabel("Свои правила проекта", { exact: true }).fill("Совместимость World v2");
+  await dialog.getByRole("button", { name: "Применить и присоединиться", exact: true }).click();
   await expect(dialog).toHaveCount(0);
+  assert.deepEqual(runtimes.get("friend").projectGpts.get("friend-project").rules, {
+    enabled: ["related"],
+    custom: "Совместимость World v2",
+  });
+  assert.match(await readFile(join(root, "friend", "CODEXWEB.md"), "utf8"), /World v2/);
+  assert.equal(
+    execFileSync("git", ["-C", join(root, "friend"), "check-ignore", "CODEXWEB.md"], {
+      encoding: "utf8",
+    }).trim(),
+    "CODEXWEB.md",
+  );
   await expect(otherNav.locator('[data-project-id="friend-project"]')).toBeVisible();
   await otherNav.locator('[data-project-id="friend-project"]').click();
   await expect(other.locator(".project-sheet[open]")).toHaveCount(0);
@@ -252,6 +271,115 @@ try {
     "Прямая работа",
   );
   await other.screenshot({ path: ".local/spaces-qa/project-access-tablet.png" });
+  // A third member joins an existing space. Foreign grants are chosen by that project's owner.
+  const third = hub.registry.accept(
+    hub.registry.invite(hub.registry.ownerId, "Третий").token,
+    "third",
+    "Третий",
+    await teamPasswordHash(password),
+    10,
+  );
+  hub.registry.db
+    .prepare("INSERT INTO team_meta(key,value) VALUES(?,?)")
+    .run(`onboarding:${third.id}`, "deferred");
+  const thirdContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    serviceWorkers: "block",
+  });
+  const thirdPage = await thirdContext.newPage();
+  thirdPage.on("pageerror", (e) => errors.push(e.message));
+  await login(thirdPage, "third");
+  await ownerSettings.getByRole("button", { name: "Пригласить участника", exact: true }).click();
+  await ownerSettings
+    .getByRole("group", { name: "Пользователи Hub", exact: true })
+    .getByRole("button", { name: /Третий/ })
+    .click();
+  await ownerSettings.getByLabel("Приглашение: Altar", { exact: true }).selectOption("collaborate");
+  await ownerSettings.getByText("Рекомендации Codex", { exact: true }).click();
+  const inviteForm = ownerSettings.getByRole("form", { name: "Приглашение участника" });
+  await inviteForm.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).check();
+  // Focused theme/keyboard geometry on the changed invitation form.
+  for (const width of [390, 768, 1024, 1366]) {
+    await page.setViewportSize({ width, height: 400 });
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((t) => {
+        document.documentElement.dataset.theme = t;
+        document.documentElement.dataset.keyboard = "true";
+        document.documentElement.style.setProperty("--app-height", "400px");
+      }, theme);
+      await inviteForm
+        .getByRole("button", { name: "Пригласить", exact: true })
+        .scrollIntoViewIfNeeded();
+      const bounds = await ownerSettings.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const b = el
+          .querySelector('form[aria-label="Приглашение участника"] button[type="submit"]')
+          .getBoundingClientRect();
+        return {
+          top: r.top,
+          bottom: r.bottom,
+          buttonBottom: b.bottom,
+          overflow: el.scrollWidth > el.clientWidth + 1,
+        };
+      });
+      assert.ok(
+        bounds.top >= 0 && bounds.bottom <= 401 && bounds.buttonBottom <= 401 && !bounds.overflow,
+        JSON.stringify({ width, theme, bounds }),
+      );
+    }
+  }
+  await page.evaluate(() => {
+    delete document.documentElement.dataset.keyboard;
+    document.documentElement.style.setProperty("--app-height", "844px");
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: ".local/spaces-qa/additional-invite-phone.png" });
+  await inviteForm.getByRole("button", { name: "Пригласить", exact: true }).click();
+  await expect(inviteForm).toHaveCount(0);
+  await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+  await settings
+    .locator("summary")
+    .filter({ hasText: /^World/ })
+    .click();
+  await settings.getByLabel("Доступ: World · Третий", { exact: true }).selectOption("direct");
+  await expect(settings.getByLabel("Доступ: World · Третий", { exact: true })).toHaveValue(
+    "direct",
+  );
+  await thirdPage.reload();
+  const thirdNav = await drawer(thirdPage);
+  await thirdNav.getByRole("button", { name: "Уведомления: 1", exact: true }).click();
+  const thirdDialog = thirdPage.locator(".space-dialog");
+  await thirdDialog.getByRole("button", { name: /Altar \+ World/ }).click();
+  await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
+  await thirdDialog.getByLabel("Мой проект", { exact: true }).selectOption("third-project");
+  await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
+  await thirdDialog
+    .getByLabel("Доступ для Друг к моему проекту", { exact: true })
+    .selectOption("direct");
+  await thirdDialog.getByRole("button", { name: "Далее", exact: true }).click();
+  await thirdDialog.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).uncheck();
+  await thirdDialog
+    .getByRole("button", { name: "Применить и присоединиться", exact: true })
+    .click();
+  await expect(thirdDialog).toHaveCount(0);
+  await assert.rejects(readFile(join(root, "third", "CODEXWEB.md")));
+  await thirdNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
+  await thirdDialog
+    .locator("summary")
+    .filter({ hasText: /^World/ })
+    .last()
+    .click();
+  await thirdDialog.getByText("Мои настройки Codex", { exact: true }).click();
+  await thirdDialog.getByLabel("Не делать несвязанный рефакторинг", { exact: true }).check();
+  await thirdDialog.getByRole("button", { name: "Применить правила", exact: true }).click();
+  await expect
+    .poll(() => runtimes.get("third").projectGpts.get("third-project").rules.enabled)
+    .toEqual(["focused"]);
+  await thirdDialog.getByRole("button", { name: "Выйти из пространства", exact: true }).click();
+  await thirdDialog.getByRole("button", { name: "Выйти", exact: true }).click();
+  await expect(thirdDialog).toHaveCount(0);
+  await thirdContext.close();
   // Human chat is a separate popup: files, live replies, exact-send retry and unread badges.
   await ownerSettings.getByLabel("Закрыть пространство", { exact: true }).click();
   await settings.getByLabel("Закрыть пространство", { exact: true }).click();

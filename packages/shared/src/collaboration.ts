@@ -8,7 +8,7 @@ export type CollaborationProject = {
   name: string;
   repository: string;
   personalProjectId?: string;
-  access: "owner" | CollaborationAccess;
+  access: "owner" | "none" | CollaborationAccess;
   grants: { userId: string; access: CollaborationAccess }[];
   requests: string[];
 };
@@ -32,6 +32,9 @@ export type CollaborationInvitation = {
   project: { name: string; repository: string };
   access: CollaborationAccess;
   requestedAccess: CollaborationAccess;
+  projects?: { id: string; name: string; repository: string; access: CollaborationAccess }[];
+  members?: CollaborationPerson[];
+  recommendations?: import("./project-gpt.js").ProjectRules;
 };
 export type CollaborationCatalog = {
   spaces: CollaborationSpace[];

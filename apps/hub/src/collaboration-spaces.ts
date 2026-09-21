@@ -5,6 +5,7 @@ import {
   type CollaborationKind,
   type CollaborationSpace,
   HubError,
+  type ProjectRules,
 } from "@codex-web/shared";
 import { CollaborationChat } from "./collaboration-chat.js";
 import type { TeamProjects } from "./team-projects.js";
@@ -21,6 +22,8 @@ type Invitation = {
   userId: string;
   access: CollaborationAccess;
   requestedAccess: CollaborationAccess;
+  recommendations?: ProjectRules;
+  explicitGrants?: boolean;
 };
 type Space = {
   id: string;
@@ -108,7 +111,7 @@ export class CollaborationSpaces {
         name: p.name,
         repository: p.repository,
         ...(p.copies[actor] ? { personalProjectId: p.copies[actor] } : {}),
-        access: p.ownerId === actor ? "owner" : p.grants[actor]!,
+        access: p.ownerId === actor ? "owner" : (p.grants[actor] ?? "none"),
         grants: Object.entries(p.grants).map(([userId, access]) => ({ userId, access })),
         requests: (p.requests ?? []).filter((id) => p.ownerId === actor || id === actor),
       })),
@@ -130,8 +133,20 @@ export class CollaborationSpaces {
                 revision: s.revision,
                 from: this.person(s.curatorId),
                 project: { name: p.name, repository: p.repository },
-                access: i.access,
+                access: p.grants[actor] ?? i.access,
                 requestedAccess: i.requestedAccess,
+                projects: s.projects
+                  .filter(
+                    (p) => p.grants[actor] || (!i.explicitGrants && p.ownerId === s.curatorId),
+                  )
+                  .map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    repository: p.repository,
+                    access: p.grants[actor] ?? i.access,
+                  })),
+                members: s.members.map((id) => this.person(id)),
+                recommendations: i.recommendations,
               },
             ]
           : [];
@@ -170,6 +185,7 @@ export class CollaborationSpaces {
       access: CollaborationAccess;
       requestedAccess: CollaborationAccess;
       personalProjectId: string;
+      recommendations?: ProjectRules;
     },
     verified: VerifiedSpaceProject,
   ) {
@@ -188,11 +204,69 @@ export class CollaborationSpaces {
         members: [actor],
         projects: [this.project(actor, verified)],
         invitations: [
-          { userId: input.userId, access: input.access, requestedAccess: input.requestedAccess },
+          {
+            userId: input.userId,
+            access: input.access,
+            requestedAccess: input.requestedAccess,
+            recommendations: input.recommendations,
+            explicitGrants: true,
+          },
         ],
       };
+      space.projects[0]!.grants[input.userId] = input.access;
       this.save(space);
       return { id: space.id };
+    });
+  }
+  invite(
+    actor: string,
+    id: string,
+    key: string,
+    input: {
+      revision: number;
+      userId: string;
+      grants: { projectId: string; access: CollaborationAccess }[];
+      requestedAccess: CollaborationAccess;
+      recommendations?: ProjectRules;
+    },
+  ) {
+    return this.team.once(actor, "spaces.invite:" + id, key, input, () => {
+      const space = this.access(actor, id, input.revision);
+      if (space.curatorId !== actor) throw missing();
+      this.team.registry.active(input.userId);
+      if (
+        space.members.includes(input.userId) ||
+        space.invitations.some((i) => i.userId === input.userId)
+      )
+        throw new HubError(409, "SPACE_ALREADY_INVITED", "Участник уже добавлен или приглашён.");
+      if (!space.projects.length || space.members.length + space.invitations.length >= 30)
+        throw new HubError(
+          409,
+          "SPACE_MEMBER_LIMIT",
+          "Добавь проект или освободи место для участника.",
+        );
+      for (const grant of input.grants) {
+        const p = space.projects.find((p) => p.id === grant.projectId);
+        if (!p || p.ownerId !== actor)
+          throw new HubError(
+            403,
+            "SPACE_PROJECT_OWNER_REQUIRED",
+            "Доступ к проекту задаёт его владелец.",
+          );
+        p.grants[input.userId] = grant.access;
+      }
+      if (space.kind === "project" && !space.projects[0]!.grants[input.userId])
+        throw new HubError(400, "SPACE_ACCESS_REQUIRED", "Выбери доступ к проекту.");
+      space.invitations.push({
+        userId: input.userId,
+        access: space.projects[0]!.grants[input.userId] ?? "collaborate",
+        requestedAccess: input.requestedAccess,
+        recommendations: input.recommendations,
+        explicitGrants: true,
+      });
+      space.revision++;
+      this.save(space);
+      return { ok: true };
     });
   }
   answer(
@@ -204,6 +278,7 @@ export class CollaborationSpaces {
       accept: boolean;
       personalProjectId?: string;
       access?: CollaborationAccess;
+      grants?: { userId: string; access: CollaborationAccess }[];
     },
     verified?: VerifiedSpaceProject,
   ) {
@@ -225,13 +300,29 @@ export class CollaborationSpaces {
           if (!input.access)
             throw new HubError(400, "SPACE_ACCESS_REQUIRED", "Выбери доступ к своему проекту.");
           const p = this.project(actor, verified);
-          for (const member of space.members) p.grants[member] = input.access;
+          if (input.grants) {
+            if (
+              input.grants.length !== space.members.length ||
+              new Set(input.grants.map((g) => g.userId)).size !== space.members.length ||
+              input.grants.some((g) => !space.members.includes(g.userId))
+            )
+              throw conflict();
+            for (const g of input.grants) p.grants[g.userId] = g.access;
+          } else for (const member of space.members) p.grants[member] = input.access;
           space.projects.push(p);
         }
+        // Legacy pair invitations predate explicit project grants. Never extend that
+        // compatibility to another owner's project or later multi-member invites.
         for (const p of space.projects)
-          if (p.ownerId !== actor) p.grants[actor] ??= invitation.access;
+          if (
+            !invitation.explicitGrants &&
+            p.ownerId === space.curatorId &&
+            space.members.length === 1
+          )
+            p.grants[actor] ??= invitation.access;
         space.members.push(actor);
       }
+      if (!input.accept) for (const p of space.projects) delete p.grants[actor];
       space.invitations = space.invitations.filter((i) => i.userId !== actor);
       space.revision++;
       this.save(space);
@@ -288,7 +379,7 @@ export class CollaborationSpaces {
     return this.team.once(actor, "spaces.bind:" + id, key, input, () => {
       const space = this.access(actor, id, input.revision),
         project = space.projects.find((p) => p.id === input.projectId);
-      if (!project || project.ownerId === actor) throw missing();
+      if (!project || project.ownerId === actor || !project.grants[actor]) throw missing();
       if (project.repository !== verified.repository)
         throw new HubError(
           409,
@@ -333,7 +424,10 @@ export class CollaborationSpaces {
         !p ||
         p.ownerId !== actor ||
         actor === input.userId ||
-        !space.members.includes(input.userId)
+        !(
+          space.members.includes(input.userId) ||
+          space.invitations.some((i) => i.userId === input.userId)
+        )
       )
         throw missing();
       p.grants[input.userId] = input.access;

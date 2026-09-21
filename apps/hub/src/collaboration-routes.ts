@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { createApp } from "./app.js";
 import { CollaborationSpaces, type VerifiedSpaceProject } from "./collaboration-spaces.js";
+import { rulesSchema } from "./project-gpt.js";
 import type { TeamProjects } from "./team-projects.js";
 
 export function registerCollaborationSpaces(
@@ -126,15 +127,44 @@ export function registerCollaborationSpaces(
         personalProjectId: projectId,
         access,
         requestedAccess: access.default("collaborate"),
+        recommendations: rulesSchema.optional(),
       })
       .strict()
       .parse(req.body);
     const previous = replay(user, "spaces.create", receipt, input);
     if (previous) return previous;
     const verified = await verify(user, input.personalProjectId);
+    if (input.recommendations) {
+      const { runtime } = await personal(user);
+      await runtime.projectGpts.invitationRules(
+        input.personalProjectId,
+        receipt,
+        input.recommendations,
+      );
+    }
     actor(req);
     return spaces.create(user, receipt, input, verified);
   });
+  app.post("/api/team/spaces/:id/invite", (req) =>
+    spaces.invite(
+      actor(req),
+      id(req),
+      key(req),
+      z
+        .object({
+          revision,
+          userId: z.string().uuid(),
+          grants: z
+            .array(z.object({ projectId, access }).strict())
+            .max(30)
+            .refine((v) => new Set(v.map((g) => g.projectId)).size === v.length),
+          requestedAccess: access.default("collaborate"),
+          recommendations: rulesSchema.optional(),
+        })
+        .strict()
+        .parse(req.body),
+    ),
+  );
   app.post("/api/team/spaces/:id/answer", async (req) => {
     const user = actor(req),
       spaceId = id(req),
@@ -145,14 +175,33 @@ export function registerCollaborationSpaces(
         accept: z.boolean(),
         personalProjectId: projectId.optional(),
         access: access.optional(),
+        grants: z
+          .array(z.object({ userId: z.string().uuid(), access }).strict())
+          .max(30)
+          .optional(),
+        rules: rulesSchema.optional(),
       })
       .strict()
       .refine((v) => !v.accept || !!v.personalProjectId)
       .parse(req.body);
     const previous = replay(user, "spaces.answer:" + spaceId, receipt, input);
     if (previous) return previous;
-    spaces.invitation(user, spaceId, input.revision);
+    const pending = spaces.invitation(user, spaceId, input.revision);
     const verified = input.accept ? await verify(user, input.personalProjectId!) : undefined;
+    if (
+      verified &&
+      pending.space.kind === "project" &&
+      pending.space.projects[0]?.repository !== verified.repository
+    )
+      throw new HubError(
+        409,
+        "SPACE_REPOSITORY_MISMATCH",
+        "Выбери свою локальную копию того же репозитория.",
+      );
+    if (input.accept && input.rules) {
+      const { runtime } = await personal(user);
+      await runtime.projectGpts.invitationRules(input.personalProjectId!, receipt, input.rules);
+    }
     actor(req);
     return spaces.answer(user, spaceId, receipt, input, verified);
   });

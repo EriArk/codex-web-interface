@@ -190,3 +190,21 @@ test("Optional local rules preserve AGENTS/gitignore, stay outside Git and activ
   );
   assert.equal(await readFile(join(f.root, "CODEXWEB.md"), "utf8"), "Manual document");
 });
+
+test("Invitation preferences merge once, survive a retry and can be declined without a local file", async (t) => {
+  const f = await fixture(t);
+  const service = new ProjectGpts(f.sessions, { job: () => null });
+  await service.invitationRules("project", randomUUID(), { enabled: [], custom: "" });
+  await assert.rejects(access(join(f.root, "CODEXWEB.md")));
+  await service.rules("project", { enabled: ["focused"], custom: "Личные пожелания" });
+  const key = randomUUID(),
+    selected = { enabled: ["related"], custom: "Совместимость API" };
+  await service.invitationRules("project", key, selected);
+  const saved = service.get("project").rules;
+  assert.deepEqual(saved.enabled, ["focused", "related"]);
+  assert.equal(saved.custom, "Личные пожелания\n\nСовместимость API");
+  assert.match(await readFile(join(f.root, "CODEXWEB.md"), "utf8"), /Совместимость API/);
+  await service.rules("project", { enabled: ["tests"], custom: "Изменено позже" });
+  await new ProjectGpts(f.sessions, { job: () => null }).invitationRules("project", key, selected);
+  assert.deepEqual(service.get("project").rules, { enabled: ["tests"], custom: "Изменено позже" });
+});

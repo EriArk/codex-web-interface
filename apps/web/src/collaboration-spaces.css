@@ -171,6 +171,35 @@
 .space-form a {
   overflow-wrap: anywhere;
 }
+.space-form .project-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.space-form .project-rule input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  flex: 0 0 20px;
+  accent-color: var(--accent);
+}
+.space-form textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  color: var(--text);
+  background: var(--control-material, var(--surface));
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+}
+.space-form details > summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+}
 .space-form p {
   margin: 0;
 }

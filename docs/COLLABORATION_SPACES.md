@@ -1,5 +1,13 @@
 # Collaboration Spaces — #215
 
+## Completion block: additional invitations and personal recommendations
+
+The curator can now invite more Hub contacts from Space Settings. Each offered Project has an explicit grant from its own owner. The curator chooses grants only for their own Projects; other owners can grant a pending invitee access from their Project card before acceptance, or grant access after they join. A missing grant remains missing and cannot bind a checkout. A recipient contributing a new Project chooses access separately for every existing member. Cancelling, declining or removing an invitation/member clears its grants; reinviting never resurrects prior permissions.
+
+Creation and additional invitations offer optional Codex recommendations. The recipient can deselect any suggested preset and edit/remove the custom text in the final wizard step. Selected preferences merge into the user's existing local rules before membership is accepted; an installation failure leaves the invitation available to retry. A private receipt prevents a completed retry from overwriting later personal settings. Declining all suggestions creates no file and leaves any existing preferences unchanged. Space Settings → Project → **Мои настройки Codex** edits those same personal rules without opening GPT. Mandatory commit/push guidance remains in the existing native collaboration context.
+
+The completed implementation is checked with disposable Hub users and Git repositories. `collaboration-spaces.browser.mjs` now covers creation with recommendations, recipient opt-out, a third invitation, a foreign Project owner's grant, acceptance, local rules, settings changes and leaving, alongside the existing chat/files/unread/native-identity workflow. New invitation forms are checked at phone/tablet widths in four themes with a constrained keyboard viewport. Native transport is simulated; this does not claim the real owner/friend's GitHub credentials, permissions or physical devices have been accepted. Brainstorm remains outside #215.
+
 ## First block: membership and navigation
 
 The new Codex navigation mode groups **existing personal Projects**, without creating new native threads or moving files. A Project bound into a space appears under that space instead of personal navigation. Closing a space or leaving removes only collaboration metadata; personal Projects, native thread IDs, files, drafts and history remain intact. The creator curates the container but does not own another participant's Project or native session.
@@ -15,7 +23,7 @@ Storage uses the existing Team SQLite database and transaction/receipt services.
 
 ## Second block: projects and working agreements
 
-Space settings now provide adding/removing one's own Projects, connecting or replacing one's own copy of another Project, per-participant grants controlled by the Project owner, explicit Direct access requests, and curator removal of participants/pending invitations. Removing metadata restores personal navigation and leaves repositories and native history intact. Further invitations beyond the initial pair remain follow-up work; the curator must not silently grant a new participant access to someone else's Project.
+Space settings provide adding/removing one's own Projects, connecting or replacing one's own copy of another Project, per-participant grants controlled by the Project owner, explicit Direct access requests, and curator removal of participants/pending invitations. Removing metadata restores personal navigation and leaves repositories and native history intact. Additional invitations are implemented in the completion block above; the curator cannot grant access to someone else's Project.
 
 Existing Git delivery checks the current agreement when preparing and immediately before applying publication. Collaborative work uses a working branch and PR; publishing the default branch/main/master through these actions is rejected. Direct/Owner follows existing GitHub permissions and branch protections. Local commits remain available. There is no new credential flow or GitHub permission mutation.
 
