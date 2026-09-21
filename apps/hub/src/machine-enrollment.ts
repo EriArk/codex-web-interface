@@ -133,6 +133,8 @@ export function enrolledTransport(config: HubConfig, row: EnrollmentRow) {
     ssh: { target: alias, configFile: join(root, "ssh_config") },
     codex: {
       command: "auto",
+      // Enrollment installs Node; resolve the member's own installation through SSH PATH.
+      activityNode: "node.exe",
       shell: "powershell",
       launcher: win32.join(local, "companion", "CodexWebBridge.exe"),
       ...(report.readiness.desktop

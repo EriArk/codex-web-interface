@@ -2005,6 +2005,7 @@ test("computer enrollment uses a distinct token, reviewed identity and owner-onl
   );
   const selected = enrolledRuntime(f.config, f.registry, f.friendId);
   assert.equal(selected.machines.length, 1);
+  assert.equal(selected.machines[0].codex.activityNode, "node.exe");
   assert.equal(enrolledRuntime(f.config, f.registry, f.registry.ownerId).machines.length, 0);
   assert.deepEqual(selected.machines[0].allowedProjectRoots, report.roots);
   assert.equal(selected.machines[0].remote.host, report.address);
