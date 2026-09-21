@@ -1,0 +1,145 @@
+.project-gpt-window {
+  width: min(860px, calc(100vw - 24px));
+  height: min(960px, calc(var(--app-height, 100dvh) - 24px));
+  max-width: none;
+  max-height: calc(var(--app-height, 100dvh) - 12px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 18px 60px #0005;
+  overflow: hidden;
+}
+.project-gpt-window[open] {
+  display: flex;
+  flex-direction: column;
+}
+.project-gpt-window::backdrop {
+  background: #0005;
+}
+.project-gpt-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.project-gpt-heading > div {
+  flex: 1;
+  min-width: 0;
+}
+.project-gpt-heading small {
+  display: block;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-gpt-body {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+}
+.project-gpt-config {
+  overflow: auto;
+  padding: 12px 16px;
+  min-height: 0;
+}
+.project-gpt-config label {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+.project-gpt-config :is(select, textarea) {
+  width: 100%;
+  min-width: 0;
+}
+.project-gpt-config .project-rule {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.project-gpt-config .project-rule input {
+  width: auto;
+  flex: none;
+}
+.project-gpt-config details {
+  margin-top: 16px;
+}
+.project-gpt-config summary {
+  cursor: pointer;
+  min-height: 44px;
+}
+.project-gpt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.project-gpt-window pre,
+.project-gpt-envelope pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85em;
+  max-height: 260px;
+  overflow: auto;
+}
+.project-gpt-envelope {
+  color: var(--muted);
+  font-size: 0.85em;
+  margin-bottom: 6px;
+}
+:root .project-gpt-window .project-gpt-embedded {
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+:root .project-gpt-embedded .workspace-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+:root .project-gpt-embedded .gpt-results {
+  width: 100%;
+  flex: 1;
+}
+:root .project-gpt-embedded[data-view="chat"] .gpt-results,
+:root .project-gpt-embedded[data-view="results"] .gpt-chat,
+:root .project-gpt-window [hidden] {
+  display: none;
+}
+:root .project-gpt-embedded > .mobile-tabs {
+  display: flex;
+  flex-shrink: 0;
+}
+:root .project-gpt-embedded > .mobile-tabs button {
+  flex: 1;
+}
+@media (max-width: 700px) {
+  .project-gpt-window {
+    width: calc(100vw - 12px);
+    height: calc(
+      var(--app-height, 100dvh) -
+      max(12px, env(safe-area-inset-top)) -
+      max(12px, env(safe-area-inset-bottom))
+    );
+  }
+  .project-gpt-heading {
+    padding: 6px 10px;
+  }
+  .project-gpt-embedded .gpt-message-scroll {
+    padding: 12px;
+  }
+}

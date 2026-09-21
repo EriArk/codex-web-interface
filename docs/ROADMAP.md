@@ -2,6 +2,8 @@
 
 ## First priority: Collaboration Spaces (#215, 2026-09-21)
 
+Fourth block implemented in source: personal Project GPT popup from the Project overview, durable per-user/project chat binding, reuse of the existing GPT composer/history/results, current permitted collaboration metadata and optional local CODEXWEB.md preferences. The mode key is now round/matte and precedes the tabs, replacing the removed search button (latest owner correction). Next: additional participant invitations with explicit per-project grants and optional preferences during invitation acceptance, then actual owner/friend acceptance. Brainstorm remains deferred. See [current behavior and limits](COLLABORATION_SPACES.md).
+
 Third block implemented in source: one human chat popup per space, text/links/files/images, per-participant unread and aggregated Notifications, paged live history and account-local drafts. The larger central collaboration key remains between Spaces/Brainstorm in shared mode; Brainstorm rooms themselves are deferred. Next: personal Project GPT and optional local CODEXWEB.md, with additional invitations and final real two-user acceptance still outstanding. See [current behavior](COLLABORATION_SPACES.md).
 
 Second block implemented in source: own-project add/remove, own checkout binding, owner-controlled grants and access requests, participant removal, native Codex instructions/queue defaults and current-policy checks in existing Git delivery. UI stays within shared theme materials. Further member invitations beyond the initial pair remain follow-up work alongside the human space chat; no access to another owner's Project may be granted implicitly. See [implementation and limits](COLLABORATION_SPACES.md).

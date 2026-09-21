@@ -66,11 +66,25 @@
   --card-shadow: 0 2px 8px #00000014;
 }
 
-:root :is(.notebook-dialog, .project-overview-modal, .project-setup-dialog, .gpt-settings) {
+:root
+  :is(
+    .notebook-dialog,
+    .project-overview-modal,
+    .project-setup-dialog,
+    .gpt-settings,
+    .project-gpt-window
+  ) {
   background: var(--panel-material);
   border-radius: var(--radius-lg);
 }
-:root :is(.notebook-heading, .inspector-heading, .project-overview-heading, .core-footer) {
+:root
+  :is(
+    .notebook-heading,
+    .inspector-heading,
+    .project-overview-heading,
+    .core-footer,
+    .project-gpt-heading
+  ) {
   background: var(--panel-heading);
 }
 :root :is(.notebook-heading, .inspector-heading) strong {

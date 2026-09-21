@@ -23,7 +23,7 @@ Normal native turns receive the current public project context through native co
 
 The notifications shortcut now includes requests for access to one's own Projects. Project names, members and repository metadata refresh through the existing cheap catalog; no machine polling is added. The triangle control uses shared theme materials and a collaboration icon, with a front-facing cap and text-safe overlap of the adjacent tabs.
 
-Next deliver personal Project GPT and optional local CODEXWEB.md; the human chat is implemented below. Do not add technical event noise, a duplicate issue tracker, or automatically create GitHub issues. The full issue's final acceptance still needs the actual two users, separately from the disposable checks below.
+Personal Project GPT and optional local CODEXWEB.md are implemented in the fourth block below. Do not add technical event noise, a duplicate issue tracker, or automatically create GitHub issues. The full issue's final acceptance still needs the actual two users, separately from the disposable checks below.
 
 ## Third block: human chat and shared navigation
 
@@ -37,7 +37,21 @@ Draft text and uploaded attachment references use account-local storage. Send UU
 
 Focused checks add real Hub file byte/download, sender binding, pagination, persistent independent unread and receipt cases to `tests/collaboration-spaces.test.mjs`. The two-user WebKit test covers human messages, links, uploaded PNG/text, live replies, unread clearing and popup draft continuity, plus theme/navigation and constrained-keyboard geometry. It uses disposable accounts/files only, with native RPC simulated. This is not physical owner/friend acceptance.
 
-## Earlier block verification
+## Fourth block: personal Project GPT and optional preferences
+
+Open **GPT проекта** from a Codex Project overview. The themed popup leaves Codex mounted underneath and reuses the normal personal GPT composer, native send queue, history, public progress, files and categorized Results. Its settings bind an existing personal GPT chat or start a new one on the first explicit message. Closing the popup never cancels native work. Bindings persist per personal runtime database; opening another user's same-named Project never shares the binding or transcript. The ordinary GPT selection and blank draft are not changed; Project GPT has its own draft scope.
+
+Every explicit send includes a collapsed public project-context envelope: name, cached repository URL, a bounded brief from the personal Project core, current space/related repository names and effective agreement, plus the optional preferences. Only publicly shared space metadata is included, never another member's paths, chats or credentials. Own repository metadata refreshes at most once per five minutes when the popup is opened; an unavailable computer does not block opening GPT. This context grants no GitHub or file access. GPT can use the user's connected tools, and must not claim it has read code when it has not. Publishing issues remains an explicit user request. No automatic issue creation or separate Space GPT is added.
+
+Private binding/send-intent tables supplement the existing durable GPT outbox. Retries freeze the original context/native identity and reuse the exact receipt. A completed native chat identity is recovered from that receipt even after a process interruption. A pending first send cannot create a second chat; a stale device cannot silently send into a changed binding. Selecting another chat leaves the earlier chat and its work intact.
+
+Optional preferences are edited under the popup's settings. Applying selected preferences writes a managed **CODEXWEB.md** in that user's project root and excludes it through Git's local `info/exclude`, including linked worktrees; `AGENTS.md` and shared `.gitignore` stay intact. No file is created until preferences are selected. Disabling all preferences removes only the managed file. An existing unmanaged or tracked file is preserved. Subsequent Codex turns/queue defaults request reading CODEXWEB.md alongside AGENTS.md; active turns and Steer remain unchanged. GPT receives the same preferences in subsequent messages. Propagating optional defaults through new invitations is still follow-up scope, not implied acceptance by another participant.
+
+The latest navigation correction replaces the triangle with the existing matte round mode-key material. The key is now **left of** the tabs, in the former magnifier position; the navigation search button is removed in both clients. Notifications stays in the lower shortcuts. Earlier central/triangle geometry descriptions above record superseded stages.
+
+Focused verification: `tests/project-gpt.test.mjs` exercises actual native-provider/outbox routes, retry/context changes, late identity recovery, independent personal stores and real Git exclusion/rule removal. `tests/project-gpt.browser.mjs` uses WebKit and the actual Hub with simulated native transport for popup draft/binding/send/completion/reopen, rules, Results and phone/tablet/theme/keyboard geometry. The existing two-user space browser check covers the relocated round control and preserved shared navigation. These are disposable checks, not physical owner/friend acceptance.
+
+## Earlier block verification details
 
 - `tests/collaboration-spaces.test.mjs`: asymmetric grants, invite-only visibility, own-checkout identity, same-repository acceptance, existing idempotent receipts, stale revisions, leave/close, persistence, project/member removal and explicit access elevation; route tests use disposable real Git repositories.
 - `tests/queue.test.mjs` and `tests/project-delivery.test.mjs`: native instructions on turn/queue defaults, unchanged Steer and prepared publication rejected after access changes. Together with the store/routes checks: 17 focused cases.

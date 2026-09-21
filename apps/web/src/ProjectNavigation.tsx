@@ -9,7 +9,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
 import { SpaceBell, SpaceCards, SpaceModeControl } from "./CollaborationSpaces";
-import { openContentSearch } from "./ContentSearch";
 import { EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
 import { NavigationFooter } from "./NavigationFooter";
@@ -266,15 +265,7 @@ export function ProjectNavigation({
   };
   return (
     <div className="navigation-inner" data-section={spaceMode ? "projects" : section}>
-      <NavigationHeader
-        query={query}
-        onQuery={setQuery}
-        label="Поиск проектов и диалогов"
-        onClose={onClose}
-        onContentSearch={() =>
-          openContentSearch({ client: "codex", threadId: threadId || undefined, query })
-        }
-      >
+      <NavigationHeader leading={<SpaceModeControl spaces={spaces} />} onClose={onClose}>
         {spaceMode ? (
           <nav className="nav-mobile-switch" aria-label="Общая работа">
             <button
@@ -284,7 +275,6 @@ export function ProjectNavigation({
             >
               <span className="nav-tab-title">Пространства</span>
             </button>
-            <SpaceModeControl spaces={spaces} />
             <button
               type="button"
               className={sharedSection === "brainstorm" ? "selected" : ""}
@@ -317,7 +307,6 @@ export function ProjectNavigation({
                 unread={folders.filter((p) => summary(p).unread > 0).length}
               />
             </button>
-            <SpaceModeControl spaces={spaces} />
             <button
               type="button"
               className={section === "threads" ? "selected" : ""}

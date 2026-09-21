@@ -481,6 +481,7 @@
     .notebook-dialog,
     .project-overview-modal,
     .project-setup-dialog,
+    .project-gpt-window,
     .gpt-settings
   ) {
   background: var(--surface);

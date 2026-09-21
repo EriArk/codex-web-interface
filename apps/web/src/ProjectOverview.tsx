@@ -31,6 +31,7 @@ export function ProjectOverview({
   onMachines,
   onResults,
   onRemote,
+  onProjectGpt,
   cachedThreads,
   onClose,
 }: {
@@ -43,6 +44,7 @@ export function ProjectOverview({
   onMachines?: () => void;
   onResults?: () => void;
   onRemote?: () => void;
+  onProjectGpt?: () => void;
   cachedThreads?: OverviewThread[];
   onClose?: () => void;
 }) {
@@ -191,6 +193,16 @@ export function ProjectOverview({
         )}
       </header>
       <div className="project-overview-scroll">
+        {scope.client === "codex" && onProjectGpt && (
+          <button type="button" className="overview-row" onClick={onProjectGpt}>
+            <Icon name="chat" />
+            <span>
+              <strong>GPT проекта</strong>
+              <small>Личный чат для обсуждения проекта</small>
+            </span>
+            <Icon name="chevron" size={16} />
+          </button>
+        )}
         <SharedProjectsButton scope={scope} />
         {error && (
           <p className="notice" role="alert">

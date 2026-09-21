@@ -156,8 +156,8 @@ try {
   await page.bringToFront();
   const nav = await drawer(page);
   assert.equal(
-    await nav.locator(".nav-mobile-switch > button").nth(1).getAttribute("class"),
-    "icon-button space-mode-toggle",
+    await nav.locator(".navigation-header > button").first().getAttribute("class"),
+    "icon-button client-picker space-mode-toggle",
   );
   await expect(nav.locator(".workspace-shortcuts .space-bell")).toHaveText("Уведомления");
   await expect(nav.locator(".navigation-header .space-bell")).toHaveCount(0);
@@ -257,7 +257,7 @@ try {
   await settings.getByLabel("Закрыть пространство", { exact: true }).click();
   await nav.getByRole("button", { name: "Общие пространства", exact: true }).click();
   await expect(nav.locator(".nav-mobile-switch > button").nth(0)).toHaveText("Пространства");
-  await expect(nav.locator(".nav-mobile-switch > button").nth(2)).toHaveText("Брейншторм");
+  await expect(nav.locator(".nav-mobile-switch > button").nth(1)).toHaveText("Брейншторм");
   await nav.getByRole("button", { name: "Брейншторм", exact: true }).click();
   await expect(nav).toContainText("комнаты для совместного обсуждения идей");
   await nav.getByRole("button", { name: "Пространства", exact: true }).click();
@@ -268,15 +268,15 @@ try {
       await page.evaluate((t) => {
         document.documentElement.dataset.theme = t;
       }, theme);
-      const layout = await visibleNav.locator(".nav-mobile-switch").evaluate((el) => {
-        const buttons = [...el.children],
-          cap = buttons[1].getBoundingClientRect();
+      const layout = await visibleNav.locator(".navigation-header").evaluate((el) => {
+        const buttons = [...el.querySelector(".nav-mobile-switch").children],
+          cap = el.querySelector(".space-mode-toggle").getBoundingClientRect();
         const left = buttons[0].querySelector(".nav-tab-title").getBoundingClientRect();
-        const right = buttons[2].querySelector(".nav-tab-title").getBoundingClientRect();
+        const right = buttons[1].querySelector(".nav-tab-title").getBoundingClientRect();
         return {
           width: cap.width,
           height: cap.height,
-          overlap: left.right > cap.left + 5 || right.left < cap.right - 5,
+          overlap: left.left < cap.right || right.left < left.right,
           overflows: el.scrollWidth > el.clientWidth + 1,
           left: left.right,
           right: right.left,
@@ -284,8 +284,8 @@ try {
           capRight: cap.right,
         };
       });
-      assert.equal(layout.width, 85);
-      assert.equal(layout.height, 80);
+      assert.equal(layout.width, 58);
+      assert.equal(layout.height, 58);
       assert.ok(!layout.overlap && !layout.overflows, JSON.stringify({ width, theme, layout }));
       if (width === 390 || width === 1024)
         await page.screenshot({ path: `.local/spaces-qa/navigation-${width}-${theme}.png` });
@@ -376,7 +376,7 @@ try {
   await other.screenshot({ path: ".local/spaces-qa/tablet.png" });
   assert.deepEqual(errors, []);
   console.log(
-    "WebKit phone/tablet: space membership, project access, native continuity, shared tabs, 85x80 key geometry, human chat text/links/PNG/files, live reply/unread, popup draft and theme/keyboard geometry passed.",
+    "WebKit phone/tablet: space membership, project access, native continuity, shared tabs, left 58x58 round key geometry, human chat text/links/PNG/files, live reply/unread, popup draft and theme/keyboard geometry passed.",
   );
 } catch (error) {
   await mkdir(".local/spaces-qa", { recursive: true });

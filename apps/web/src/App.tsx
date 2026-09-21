@@ -31,6 +31,7 @@ import { PaneDivider } from "./PaneDivider";
 import { PcRemote } from "./PcRemote";
 import { ProjectDialog } from "./ProjectDialog";
 import { ProjectFiles } from "./ProjectFiles";
+import { ProjectGptWindow } from "./ProjectGptWindow";
 import { ProjectNavigation } from "./ProjectNavigation";
 import { ProjectOverviewModal } from "./ProjectOverviewModal";
 import { completePendingSend, pendingSendKey } from "./pendingSend";
@@ -371,6 +372,7 @@ function Workspace({
     setResultCategory("files");
   }, [threadId]);
   const [overviewId, setOverviewId] = useState("");
+  const [projectGpt, setProjectGpt] = useState<{ id: string; name: string } | null>(null);
   const overviewProject = projects.find((p) => p.id === overviewId);
   const legacyLayout = useLegacyLayout();
   const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "0")));
@@ -386,6 +388,7 @@ function Workspace({
       !pcRemote &&
       !createProject &&
       !overviewId &&
+      !projectGpt &&
       !resultOverlay,
     () => setDrawer(true),
   );
@@ -396,6 +399,7 @@ function Workspace({
     client === "codex" &&
       view === "chat" &&
       !overviewId &&
+      !projectGpt &&
       !settings &&
       !pcRemote &&
       !drawer &&
@@ -1258,6 +1262,7 @@ function Workspace({
               onTarget={openNotebookTarget}
               onNotebook={setNotebook}
               onNew={() => newThread(overviewId)}
+              onProjectGpt={() => setProjectGpt({ id: overviewId, name: overviewProject.name })}
               onFiles={() => {
                 selectOverviewProject();
                 setProjectTool("files", overviewId);
@@ -1318,6 +1323,7 @@ function Workspace({
             visible={view !== "overview" && (wide || view === "chat")}
             speechVisible={
               !overviewId &&
+              !projectGpt &&
               !drawer &&
               !settings &&
               !pcRemote &&
@@ -1329,6 +1335,7 @@ function Workspace({
             }
             canMarkSeen={
               !overviewId &&
+              !projectGpt &&
               view !== "overview" &&
               !pendingNotebookResult &&
               !drawer &&
@@ -1505,6 +1512,16 @@ function Workspace({
           {tab("chat", "Чат", "chat")}
           {tab("results", "Результаты", "results")}
         </nav>
+        {projectGpt && (
+          <ProjectGptWindow
+            key={projectGpt.id}
+            projectId={projectGpt.id}
+            name={projectGpt.name}
+            onClose={() => setProjectGpt(null)}
+            onSettings={() => setSettings(true)}
+            onRemote={() => setPcRemote(true)}
+          />
+        )}
         {spaces.window && (
           <CollaborationWindow
             spaces={spaces}

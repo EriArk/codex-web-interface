@@ -5,7 +5,7 @@ import type {
   CollaborationSpace,
   TeamContact,
 } from "@codex-web/shared";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { Icon } from "./icons";
 import { SpaceChat } from "./SpaceChat";
@@ -23,36 +23,17 @@ const accessLabels = {
   direct: "Прямая работа",
 };
 export function SpaceModeControl({ spaces }: { spaces: SpacesController }) {
-  const cap = useId();
   if (!spaces.enabled) return null;
   return (
     <button
       type="button"
-      className="icon-button space-mode-toggle"
+      className="icon-button client-picker space-mode-toggle"
       aria-label={spaces.mode === "spaces" ? "Личные проекты" : "Общие пространства"}
       aria-pressed={spaces.mode === "spaces"}
       title={spaces.mode === "spaces" ? "Личные проекты" : "Общие пространства"}
       onClick={() => spaces.setMode(spaces.mode === "spaces" ? "personal" : "spaces")}
     >
-      <svg viewBox="0 0 64 60" aria-hidden="true" className="space-triangle-cap">
-        <defs>
-          <linearGradient id={cap} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" className="space-cap-top" />
-            <stop offset="1" className="space-cap-bottom" />
-          </linearGradient>
-        </defs>
-        <path className="space-cap-rim" d="M10 4H54Q62 4 58 12L38 51Q32 62 26 51L6 12Q2 4 10 4Z" />
-        <path
-          className="space-cap-face"
-          fill={`url(#${cap})`}
-          transform="translate(32 28) scale(.85) translate(-32 -28)"
-          d="M10 4H54Q62 4 58 12L38 51Q32 62 26 51L6 12Q2 4 10 4Z"
-        />
-        <path className="space-cap-shine" d="M15 10H49" />
-      </svg>
-      <span className="space-cap-icon">
-        <Icon name="people" size={24} />
-      </span>
+      <Icon name="people" size={30} />
     </button>
   );
 }

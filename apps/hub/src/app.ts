@@ -51,6 +51,7 @@ import { assertPreviewFrame, previewCsp } from "./previews.js";
 import type { ProjectActionPolicy } from "./project-actions.js";
 import { registerProjectCores } from "./project-core.js";
 import { registerProjectDelivery } from "./project-delivery.js";
+import { registerProjectGpt } from "./project-gpt.js";
 import { registerProjectSetup } from "./project-setup.js";
 import { registerProjectWork } from "./project-work.js";
 import { registerProjectInspector } from "./projectInspector.js";
@@ -100,6 +101,7 @@ export async function createApp(
     authorizeExecution?: () => void;
     projectActionPolicy?: ProjectActionPolicy;
     collaborationPolicy?: {
+      gptContext?: (projectId: string) => unknown;
       instructions: (projectId: string) => string | null;
       delivery: NonNullable<Parameters<typeof registerProjectDelivery>[3]>;
     };
@@ -220,6 +222,7 @@ export async function createApp(
     });
   });
   const gpt = registerGpt(app, config, store, options.authorizeExecution, nativeGpt);
+  registerProjectGpt(app, sessions, gpt, options.collaborationPolicy?.gptContext);
   registerChunkUploads(app, config, store, sessions.attachments, gpt, options.authorizeExecution);
   registerContentSearch(app, sessions, gpt);
   const bridgeDoctor = registerBridgeDoctor(app, sessions, gpt);

@@ -1,69 +1,23 @@
-.navigation-header .space-mode-toggle,
-.navigation-header .nav-mobile-switch .space-mode-toggle {
+/* Same matte cap as the Codex/GPT selector, before the tabs. */
+:root .navigation-header button.client-picker.space-mode-toggle {
   position: relative;
   z-index: 1;
-  flex: 0 0 85px;
-  width: 85px;
-  height: 80px;
-  min-width: 85px;
-  margin-inline: -20px;
+  flex: 0 0 58px;
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  min-height: 58px;
+  margin-inline: 0;
   padding: 0;
   align-self: center;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  border-radius: 50%;
 }
-.space-triangle-cap {
-  width: 85px;
-  height: 80px;
-  overflow: visible;
-  filter: drop-shadow(0 2px 1px #0007);
-}
-.space-cap-top {
-  stop-color: var(--case-glint, var(--surface));
-}
-.space-cap-bottom {
-  stop-color: var(--case-low, var(--soft));
-}
-.space-cap-rim {
-  fill: var(--case-seam, var(--line));
-  stroke: var(--case-edge, var(--muted));
-  stroke-width: 0.7;
-}
-.space-cap-face {
-  stroke: var(--line);
-  stroke-width: 0.8;
-}
-.space-cap-shine {
-  fill: none;
-  stroke: #fff;
-  stroke-opacity: 0.38;
-  stroke-linecap: round;
-}
-.space-cap-icon {
-  position: absolute;
-  inset: 17px 0 auto;
-  display: flex;
-  justify-content: center;
-  color: var(--case-ink, var(--ink));
-  pointer-events: none;
-}
-.navigation-header .space-cap-icon svg {
+:root .space-mode-toggle > svg {
   width: 30px;
   height: 30px;
 }
-.space-mode-toggle[aria-pressed="true"] .space-cap-icon {
+:root .space-mode-toggle[aria-pressed="true"] > svg {
   color: var(--accent);
-}
-.nav-mobile-switch > button:has(+ .space-mode-toggle) {
-  padding-right: 21px;
-}
-.nav-mobile-switch > .space-mode-toggle + button {
-  padding-left: 21px;
-}
-.space-mode-toggle:active .space-triangle-cap {
-  transform: translateY(1px);
-  filter: drop-shadow(0 1px 0 #0005);
 }
 .space-bell {
   position: relative;

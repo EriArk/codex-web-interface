@@ -6,9 +6,11 @@ import type {
   GptModels,
   GptProject,
   NotebookLink,
+  ProjectGpt,
   ResultCategory,
   ResultItem,
 } from "@codex-web/shared";
+import { projectContextEnd, projectContextStart } from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -20,7 +22,6 @@ import {
 } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
-import { openContentSearch } from "./ContentSearch";
 import { CopyButton } from "./CopyButton";
 import { useDictation } from "./Dictation";
 import { DownloadLink } from "./DownloadLink";
@@ -93,25 +94,34 @@ const Text = memo(function Text({
   }, [onArtifact]);
   const openArtifact = useCallback((source: string) => artifactHandler.current?.(source), []);
   const hasArtifacts = !!onArtifact;
+  const contextEnd = value.startsWith(projectContextStart) ? value.indexOf(projectContextEnd) : -1;
   // Drawer, draft and job updates must not reparse unchanged replies. Keep the
   // latest handler separately so cached links still target the current message.
   return useMemo(
     () => (
-      <Markdown
-        urlTransform={(url) =>
-          hasArtifacts && artifactSource(url) ? url : defaultUrlTransform(url)
-        }
-        remarkPlugins={[remarkGfm]}
-        components={{
-          pre: CollapsibleCode,
-          table: MarkdownTable,
-          ...artifactComponents(hasArtifacts ? openArtifact : undefined),
-        }}
-      >
-        {value}
-      </Markdown>
+      <>
+        {contextEnd >= 0 && (
+          <details className="project-gpt-envelope">
+            <summary>Контекст проекта</summary>
+            <pre>{value.slice(projectContextStart.length, contextEnd)}</pre>
+          </details>
+        )}
+        <Markdown
+          urlTransform={(url) =>
+            hasArtifacts && artifactSource(url) ? url : defaultUrlTransform(url)
+          }
+          remarkPlugins={[remarkGfm]}
+          components={{
+            pre: CollapsibleCode,
+            table: MarkdownTable,
+            ...artifactComponents(hasArtifacts ? openArtifact : undefined),
+          }}
+        >
+          {contextEnd >= 0 ? value.slice(contextEnd + projectContextEnd.length) : value}
+        </Markdown>
+      </>
     ),
-    [value, hasArtifacts, openArtifact],
+    [value, hasArtifacts, openArtifact, contextEnd],
   );
 });
 function ResponseResults({
@@ -144,6 +154,8 @@ function cachedId() {
   }
 }
 export function GptWorkspace({
+  projectChat,
+  onProjectChatChange,
   notificationTarget,
   onNotificationHandled,
   onCodex,
@@ -157,6 +169,8 @@ export function GptWorkspace({
   onSettings,
   onRemote,
 }: {
+  projectChat?: ProjectGpt;
+  onProjectChatChange?: (value: ProjectGpt) => void;
   onCodex: () => void;
   onCodexProject?: (id: string, remote: boolean) => void;
   onWorkspaceTarget?: (target: NotebookLink) => void;
@@ -204,13 +218,16 @@ export function GptWorkspace({
     [projects, setProjects] = useState<GptProject[]>(gptCache.projects),
     [offset, setOffset] = useState<number | null>(gptCache.offset);
   const [createdJob, setCreatedJob] = useState(() => {
+    if (projectChat) return projectChat.jobId ?? "";
     try {
       return sessionStorage.getItem("gpt-created-job") || "";
     } catch {
       return "";
     }
   });
-  const [selected, setSelected] = useState(cachedId);
+  const [selected, setSelected] = useState(() =>
+    projectChat ? (projectChat.nativeId ?? "") : cachedId(),
+  );
   const reviews = useThreadReviews("gpt", selected);
   const [live, setLive] = useState<{
     jobId: string;
@@ -234,7 +251,7 @@ export function GptWorkspace({
   const [notice, setNotice] = useState(""),
     [drawer, setDrawer] = useState(false),
     [view, setView] = useState<"chat" | "results" | "overview">("chat");
-  const [search, setSearch] = useState(""),
+  const [search] = useState(""),
     [ready, setReady] = useState(false),
     [rightHidden, setRightHidden] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -249,7 +266,9 @@ export function GptWorkspace({
     draftLoaded = useRef(""),
     skipDraftSave = useRef(false),
     navigationVersion = useRef(0);
-  const draftScope = selected || (createdJob ? "job:" + createdJob : "");
+  const draftScope = projectChat
+    ? `project:${projectChat.projectId}:${projectChat.revision}`
+    : selected || (createdJob ? "job:" + createdJob : "");
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
   const previousJobs = useRef<GptJob[]>(gptCache.jobs);
@@ -275,13 +294,22 @@ export function GptWorkspace({
       if (selectedRef.current === id) void history(id, undefined, true).catch(() => {});
     },
     (id) => {
+      if (projectChat && id !== selectedRef.current) {
+        void api<ProjectGpt>(`/projects/${encodeURIComponent(projectChat.projectId)}/gpt`, {
+          method: "PUT",
+          body: { nativeId: id || null, revision: projectChat.revision },
+        })
+          .then((value) => onProjectChatChange?.(value))
+          .catch((e) => setNotice(messageOf(e)));
+        return;
+      }
       choose(id);
       void catalog().catch(() => {});
     },
   );
   selectedRef.current = selected;
   useProjectSwipe(drawerRef, drawer, () => setDrawer(false), "close");
-  useProjectSwipe(root, !drawer && !settings && !overlayOpen && !notebookOpen, () =>
+  useProjectSwipe(root, !projectChat && !drawer && !settings && !overlayOpen && !notebookOpen, () =>
     setDrawer(true),
   );
   const action = useCallback(async (fn: () => Promise<void>) => {
@@ -426,10 +454,13 @@ export function GptWorkspace({
       clearTimeout(retry);
     };
   }, [catalog]);
+  const projectEmbedded = !!projectChat;
   useLayoutEffect(() => {
     try {
-      if (selected) localStorage.setItem("gpt-conversation", selected);
-      else localStorage.removeItem("gpt-conversation");
+      if (!projectEmbedded) {
+        if (selected) localStorage.setItem("gpt-conversation", selected);
+        else localStorage.removeItem("gpt-conversation");
+      }
       const draft = JSON.parse(sessionStorage.getItem("gpt-draft-" + draftScope) ?? "{}");
       setText(typeof draft.text === "string" ? draft.text : "");
       setFiles(Array.isArray(draft.files) ? draft.files : []);
@@ -440,10 +471,12 @@ export function GptWorkspace({
     draftLoaded.current = draftScope;
     skipDraftSave.current = true;
     try {
-      if (!selected && createdJob) sessionStorage.setItem("gpt-created-job", createdJob);
-      else sessionStorage.removeItem("gpt-created-job");
+      if (!projectEmbedded) {
+        if (!selected && createdJob) sessionStorage.setItem("gpt-created-job", createdJob);
+        else sessionStorage.removeItem("gpt-created-job");
+      }
     } catch {}
-  }, [selected, createdJob, draftScope]);
+  }, [selected, createdJob, draftScope, projectEmbedded]);
   useEffect(() => {
     if (skipDraftSave.current) {
       skipDraftSave.current = false;
@@ -745,16 +778,22 @@ export function GptWorkspace({
         model,
         effort,
         ...(replaced ? { replacesJobId: replaced.id } : {}),
+        ...(projectChat ? { revision: projectChat.revision } : {}),
       },
       signature = JSON.stringify(body);
     const receiptScope = "gpt:" + sourceDraft;
     try {
       const key = pendingSendKey(receiptScope, signature);
-      const data = await api<{ job: GptJob }>("/gpt/send", {
-        method: "POST",
-        body,
-        key,
-      });
+      const data = await api<{ job: GptJob }>(
+        projectChat
+          ? `/projects/${encodeURIComponent(projectChat.projectId)}/gpt/send`
+          : "/gpt/send",
+        {
+          method: "POST",
+          body,
+          key,
+        },
+      );
       completePendingSend(receiptScope, key);
       try {
         const key = "gpt-draft-" + sourceDraft;
@@ -868,7 +907,11 @@ export function GptWorkspace({
   useEffect(() => {
     if (pendingNew?.nativeId) {
       try {
-        sessionStorage.setItem("gpt-draft-" + pendingNew.nativeId, JSON.stringify({ text, files }));
+        if (!projectChat)
+          sessionStorage.setItem(
+            "gpt-draft-" + pendingNew.nativeId,
+            JSON.stringify({ text, files }),
+          );
       } catch {}
       // Keep the live completion scope through late native identity assignment.
       // Explicit navigation clears createdJob in choose(); reload restores the native id.
@@ -987,7 +1030,13 @@ export function GptWorkspace({
   };
   const recoverJob = async (job: GptJob, replace = false) => {
     if (recoveryBusy) return;
-    const target = job.nativeId ?? "";
+    const target = projectChat ? draftScope : (job.nativeId ?? "");
+    const contextEnd =
+      projectChat && job.text.startsWith(projectContextStart)
+        ? job.text.indexOf(projectContextEnd)
+        : -1;
+    const restoredText =
+      contextEnd >= 0 ? job.text.slice(contextEnd + projectContextEnd.length) : job.text;
     let draft = { text, files };
     if (target !== draftScope) {
       try {
@@ -1001,7 +1050,7 @@ export function GptWorkspace({
     }
     const different = (value: { text: string; files: GptFile[] }) =>
       (!!value.text || !!value.files?.length) &&
-      (value.text !== job.text ||
+      (value.text !== restoredText ||
         JSON.stringify((value.files ?? []).map((f) => f.id)) !==
           JSON.stringify(job.files.map((f) => f.id)));
     if (!replace && (different(draft) || (target !== draftScope && different({ text, files })))) {
@@ -1013,14 +1062,14 @@ export function GptWorkspace({
     try {
       sessionStorage.setItem(
         "gpt-draft-" + target,
-        JSON.stringify({ text: job.text, files: job.files }),
+        JSON.stringify({ text: restoredText, files: job.files }),
       );
     } catch {
       setNotice("Не удалось сохранить черновик. Сообщение осталось в чате.");
       return;
     }
     if (target !== draftScope) choose(target);
-    setText(job.text);
+    setText(restoredText);
     setFiles(job.files);
     setRestoreConflict("");
     setRecoveryBusy(job.id);
@@ -1290,15 +1339,7 @@ export function GptWorkspace({
     ));
   const navigation = (
     <div className="navigation-inner">
-      <NavigationHeader
-        query={search}
-        onQuery={setSearch}
-        label="Найти чат GPT"
-        onClose={() => setDrawer(false)}
-        onContentSearch={() =>
-          openContentSearch({ client: "gpt", threadId: selected || undefined, query: search })
-        }
-      >
+      <NavigationHeader onClose={() => setDrawer(false)}>
         <strong className="navigation-header-title">Проекты и диалоги</strong>
       </NavigationHeader>
       <div className="gpt-nav-list">
@@ -1490,58 +1531,64 @@ export function GptWorkspace({
     );
   return (
     <div
-      className={"workspace gpt-workspace " + (navCollapsed ? "nav-collapsed" : "")}
+      className={
+        "workspace gpt-workspace " +
+        (projectChat ? "project-gpt-embedded " : "") +
+        (navCollapsed ? "nav-collapsed" : "")
+      }
       data-view={view}
       data-right-hidden={rightHidden}
       ref={root}
     >
-      <aside className="desktop-nav">{navigation}</aside>
-      <header className="workspace-header">
-        <button
-          type="button"
-          className="icon-button menu-button"
-          aria-label="Открыть проекты"
-          onClick={() => {
-            if (window.innerWidth >= 1100) setNavCollapsed((v) => !v);
-            else setDrawer(true);
-          }}
-        >
-          <Icon name="menu" />
-        </button>
-        <button
-          type="button"
-          className="header-project overview-trigger"
-          disabled={!selectedProject}
-          aria-label="Обзор проекта"
-          onClick={() => selectedProject && setOverviewProject(selectedProject)}
-        >
-          <span>
-            <Icon name="chat" size={17} />
-            {selectedProject?.name ?? "GPT"}
-          </span>
-          <small>{selectedTitle}</small>
-        </button>
-        {(active || awaitingReply || busy) && (
-          <span className="spinner" role="img" aria-label="Ожидаем ответ GPT" />
-        )}
-        <button
-          type="button"
-          className="icon-button wide-pane-control"
-          aria-label={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
-          aria-expanded={!rightHidden}
-          onClick={() => setRightHidden((v) => !v)}
-        >
-          <Icon name="panel-right" />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Новый чат GPT"
-          onClick={() => choose("")}
-        >
-          <Icon name="plus" />
-        </button>
-      </header>
+      {!projectChat && <aside className="desktop-nav">{navigation}</aside>}
+      {!projectChat && (
+        <header className="workspace-header">
+          <button
+            type="button"
+            className="icon-button menu-button"
+            aria-label="Открыть проекты"
+            onClick={() => {
+              if (window.innerWidth >= 1100) setNavCollapsed((v) => !v);
+              else setDrawer(true);
+            }}
+          >
+            <Icon name="menu" />
+          </button>
+          <button
+            type="button"
+            className="header-project overview-trigger"
+            disabled={!selectedProject}
+            aria-label="Обзор проекта"
+            onClick={() => selectedProject && setOverviewProject(selectedProject)}
+          >
+            <span>
+              <Icon name="chat" size={17} />
+              {selectedProject?.name ?? "GPT"}
+            </span>
+            <small>{selectedTitle}</small>
+          </button>
+          {(active || awaitingReply || busy) && (
+            <span className="spinner" role="img" aria-label="Ожидаем ответ GPT" />
+          )}
+          <button
+            type="button"
+            className="icon-button wide-pane-control"
+            aria-label={rightHidden ? "Показать правую панель" : "Скрыть правую панель"}
+            aria-expanded={!rightHidden}
+            onClick={() => setRightHidden((v) => !v)}
+          >
+            <Icon name="panel-right" />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Новый чат GPT"
+            onClick={() => choose("")}
+          >
+            <Icon name="plus" />
+          </button>
+        </header>
+      )}
       {(notice || loadNotice) && (
         <div className="global-notice" role="status">
           <span>{notice || loadNotice}</span>
@@ -2009,7 +2056,7 @@ export function GptWorkspace({
             focusId={workspaceResult}
             reveal={artifactRequest?.scope === (selected || createdJob) ? artifactRequest : null}
             onSaveLink={
-              selected
+              selected && onNotebook
                 ? (r) =>
                     onNotebook?.({
                       ...notebookContext(),

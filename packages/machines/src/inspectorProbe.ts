@@ -219,6 +219,68 @@ export async function inspectorProbe(
       child.on("close", (code) => finish(code ?? 1));
     });
 
+  if (request.op === "project-rules") {
+    const file = await scoped("CODEXWEB.md", true),
+      marker = "<!-- CodexWeb: personal project rules -->";
+    if (
+      Buffer.byteLength(request.content) > 16384 ||
+      (request.content && !request.content.startsWith(marker))
+    )
+      fail();
+    const existing = await fs.readFile(file, "utf8").catch((e) => {
+      if (e.code === "ENOENT") return "";
+      throw e;
+    });
+    if (existing && !existing.startsWith(marker)) throw Error("PROJECT_RULES_UNMANAGED");
+    if (!existing && !request.content) return { path: "CODEXWEB.md" };
+    const tracked = await git(["ls-files", "--", "CODEXWEB.md"]);
+    if (tracked.code || tracked.text.trim()) throw Error("PROJECT_RULES_TRACKED");
+    if (!request.content) {
+      await fs.unlink(file);
+      return { path: "CODEXWEB.md" };
+    }
+    const top = await git(["rev-parse", "--show-toplevel"]);
+    const exclude = await git([
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "info/exclude",
+    ]);
+    if (top.code || exclude.code) throw Error("GIT_UNAVAILABLE");
+    const excludePath = exclude.text.trim();
+    if (!paths.isAbsolute(excludePath)) fail();
+    const stat = await fs.lstat(excludePath).catch((e) => {
+      if (e.code === "ENOENT") return null;
+      throw e;
+    });
+    if (stat?.isSymbolicLink() || (stat && !stat.isFile())) fail();
+    const pattern =
+      "/" +
+      paths
+        .relative(top.text.trim(), file)
+        .split(paths.sep)
+        .join("/")
+        .replace(/([\\*?[\]#! ])/g, "\\$1");
+    const excluded = await fs.readFile(excludePath, "utf8").catch((e) => {
+      if (e.code === "ENOENT") return "";
+      throw e;
+    });
+    if (!excluded.split(/\r?\n/).includes(pattern)) {
+      await fs.mkdir(paths.dirname(excludePath), { recursive: true });
+      await fs.appendFile(
+        excludePath,
+        `${excluded.endsWith("\n") || !excluded ? "" : "\n"}${pattern}\n`,
+      );
+    }
+    const temp = file + "." + (await import("node:crypto")).randomUUID() + ".tmp";
+    try {
+      await fs.writeFile(temp, request.content, { flag: "wx" });
+      await fs.rename(temp, file);
+    } finally {
+      await fs.unlink(temp).catch(() => {});
+    }
+    return { path: "CODEXWEB.md" };
+  }
   if (request.op === "repository" || request.op === "releases") {
     const top = await git(["rev-parse", "--show-toplevel"]);
     if (top.code && !top.notRepository) throw Error("GIT_UNAVAILABLE");

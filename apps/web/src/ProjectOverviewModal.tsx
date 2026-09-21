@@ -47,6 +47,7 @@ export function ProjectOverviewModal({
         onMachines={action(props.onMachines)}
         onResults={action(props.onResults)}
         onRemote={action(props.onRemote)}
+        onProjectGpt={action(props.onProjectGpt)}
       />
     </dialog>
   );
