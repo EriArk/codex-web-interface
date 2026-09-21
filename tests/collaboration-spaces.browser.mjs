@@ -54,10 +54,27 @@ const hub = await createTeamHub(config, {
       "origin",
       `https://github.com/example/${who === "owner" ? "altar" : "world"}.git`,
     ]);
+    const extra = join(root, who + "-extra");
+    await mkdir(extra);
+    execFileSync("git", ["init", "-q", extra]);
+    execFileSync("git", [
+      "-C",
+      extra,
+      "remote",
+      "add",
+      "origin",
+      `https://github.com/example/${who === "owner" ? "assets" : "altar"}.git`,
+    ]);
     const cfg = configSchema.parse({
       ...selected,
       machines: [{ id: "pc", name: "Local", type: "local-linux", allowedRoots: [root] }],
       projects: [
+        {
+          id: who + "-extra",
+          name: who === "owner" ? "Assets" : "Altar copy",
+          machineId: "pc",
+          workingDirectory: extra,
+        },
         {
           id: who + "-project",
           name: who === "owner" ? "Altar" : "World",
@@ -238,6 +255,47 @@ try {
   );
   await drawer(other);
   await otherNav.getByRole("button", { name: "Настройки пространства", exact: true }).click();
+  const settings = other.locator(".space-dialog");
+  await settings.locator("summary").filter({ hasText: "Altar" }).click();
+  await settings.getByRole("button", { name: "Подключить мою копию", exact: true }).click();
+  await settings.getByLabel("Проект для подключения", { exact: true }).selectOption("friend-extra");
+  await settings.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(
+    settings.getByRole("button", { name: "Сменить рабочую копию", exact: true }),
+  ).toBeVisible();
+  await settings.getByRole("button", { name: "Запросить прямой доступ", exact: true }).click();
+  await expect(settings).toContainText("Прямой доступ запрошен");
+  await page.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+  await nav.getByRole("button", { name: "Уведомления: 1", exact: true }).click();
+  await page
+    .locator(".space-dialog")
+    .getByRole("button", { name: /Altar.*просит прямой доступ/ })
+    .click();
+  const ownerSettings = page.locator(".space-dialog");
+  await ownerSettings.locator("summary").filter({ hasText: "Altar" }).click();
+  await ownerSettings.getByRole("button", { name: "Разрешить", exact: true }).click();
+  await expect(ownerSettings.getByLabel("Доступ: Altar · Друг", { exact: true })).toHaveValue(
+    "direct",
+  );
+  await ownerSettings.getByRole("button", { name: "Добавить свой проект", exact: true }).click();
+  await ownerSettings
+    .getByLabel("Проект для подключения", { exact: true })
+    .selectOption("owner-extra");
+  await ownerSettings.getByRole("button", { name: "Подключить", exact: true }).click();
+  await ownerSettings.locator("summary").filter({ hasText: "Assets" }).click();
+  await ownerSettings
+    .locator("details")
+    .filter({ hasText: "Assets" })
+    .getByRole("button", { name: "Убрать из пространства" })
+    .click();
+  await ownerSettings.getByRole("button", { name: "Убрать", exact: true }).click();
+  await expect(ownerSettings.locator("summary").filter({ hasText: "Assets" })).toHaveCount(0);
+  await page.screenshot({ path: ".local/spaces-qa/project-access-phone.png" });
+  await other.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+  await expect(settings.locator("summary").filter({ hasText: "Altar" })).toContainText(
+    "Прямая работа",
+  );
+  await other.screenshot({ path: ".local/spaces-qa/project-access-tablet.png" });
   await other
     .locator(".space-dialog")
     .getByRole("button", { name: "Выйти из пространства", exact: true })

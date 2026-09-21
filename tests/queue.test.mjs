@@ -61,7 +61,7 @@ class Rpc extends EventEmitter {
     this.closed = true;
   }
 }
-async function setup() {
+async function setup(instructions = () => null) {
   const root = mkdtempSync(join(tmpdir(), "codex-queue-"));
   const config = configSchema.parse({
     hub: {
@@ -77,6 +77,7 @@ async function setup() {
     rpc = new Rpc(),
     sessions = new Sessions(config, store, () => rpc),
     queue = new QueueService(sessions, store);
+  sessions.projectInstructions = instructions;
   const t = await sessions.create("p", "Queue test");
   await sessions.startTurn(t.id, "Initial");
   return {
@@ -92,6 +93,40 @@ async function setup() {
     },
   };
 }
+
+test("collaboration instructions reach native turns and queue defaults without changing Steer", async () => {
+  let context = "Shared repository: working branch and PR";
+  const f = await setup(() => context);
+  try {
+    assert.equal(
+      f.rpc.calls.find((c) => c.method === "turn/start").p.collaborationMode.settings
+        .developer_instructions,
+      context,
+    );
+    context = "Direct publication permitted";
+    const q = await f.queue.add(f.t.id, "Next", [], randomUUID());
+    assert.equal(
+      f.rpc.calls.findLast((c) => c.method === "thread/settings/update").p.collaborationMode
+        .settings.developer_instructions,
+      context,
+    );
+    const turn = f.store.thread(f.t.id).activeTurnId;
+    await f.queue.change(f.t.id, q.id, q.revision, "steer", undefined, turn);
+    assert.equal(
+      f.rpc.calls.findLast((c) => c.method === "turn/steer").p.collaborationMode,
+      undefined,
+    );
+    context = null;
+    await f.queue.add(f.t.id, "After leaving", [], randomUUID());
+    assert.equal(
+      f.rpc.calls.findLast((c) => c.method === "thread/settings/update").p.collaborationMode
+        .settings.developer_instructions,
+      null,
+    );
+  } finally {
+    await f.close();
+  }
+});
 test("effort changes configure subsequent native queue turns while Steer retains the active turn", async () => {
   const f = await setup();
   try {

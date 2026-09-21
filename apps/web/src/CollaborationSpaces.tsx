@@ -8,6 +8,7 @@ import type {
 import { useEffect, useId, useRef, useState } from "react";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { Icon } from "./icons";
+import { SpaceProjects } from "./SpaceProjects";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { TeamContactPicker } from "./TeamContactPicker";
 import type { Project } from "./types";
@@ -32,37 +33,48 @@ export function SpaceModeControl({ spaces }: { spaces: SpacesController }) {
       title={spaces.mode === "spaces" ? "Личные проекты" : "Общие пространства"}
       onClick={() => spaces.setMode(spaces.mode === "spaces" ? "personal" : "spaces")}
     >
-      <svg viewBox="0 0 44 44" aria-hidden="true" className="space-triangle-cap">
+      <svg viewBox="0 0 64 60" aria-hidden="true" className="space-triangle-cap">
         <defs>
-          <linearGradient id={cap} x1="0" y1="0" x2="0.2" y2="1">
+          <linearGradient id={cap} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" className="space-cap-top" />
             <stop offset="1" className="space-cap-bottom" />
           </linearGradient>
         </defs>
-        <path className="space-cap-rim" d="M10 5H34Q40 5 37 11L26 34Q22 42 18 34L7 11Q4 5 10 5Z" />
+        <path className="space-cap-rim" d="M10 4H54Q62 4 58 12L38 51Q32 62 26 51L6 12Q2 4 10 4Z" />
         <path
           className="space-cap-face"
           fill={`url(#${cap})`}
-          d="M10 5H34Q38 5 36 9L25 32Q22 38 19 32L8 9Q6 5 10 5Z"
+          transform="translate(32 28) scale(.85) translate(-32 -28)"
+          d="M10 4H54Q62 4 58 12L38 51Q32 62 26 51L6 12Q2 4 10 4Z"
         />
-        <path className="space-cap-shine" d="M10 7H34M10 9L20 30" />
-        <path className="space-cap-symbol" d="M16 15H28L22 27Z" />
+        <path className="space-cap-shine" d="M15 10H49" />
       </svg>
+      <span className="space-cap-icon">
+        <Icon name="people" size={24} />
+      </span>
     </button>
   );
 }
 export function SpaceBell({ spaces }: { spaces: SpacesController }) {
   if (!spaces.enabled) return null;
+  const count =
+    spaces.catalog.invitations.length +
+    spaces.catalog.spaces.reduce(
+      (sum, s) =>
+        sum +
+        s.projects.reduce((n, p) => n + (p.ownerId === pageWorkspace ? p.requests.length : 0), 0),
+      0,
+    );
   return (
     <button
       type="button"
       className="space-bell"
-      aria-label={`Уведомления${spaces.catalog.invitations.length ? `: ${spaces.catalog.invitations.length}` : ""}`}
+      aria-label={`Уведомления${count ? `: ${count}` : ""}`}
       onClick={() => spaces.open({ kind: "invitations" })}
     >
       <Icon name="bell" size={17} />
       <span>Уведомления</span>
-      {spaces.catalog.invitations.length > 0 && <small>{spaces.catalog.invitations.length}</small>}
+      {count > 0 && <small>{count}</small>}
     </button>
   );
 }
@@ -184,7 +196,29 @@ export function CollaborationWindow({
       <div className="space-dialog-body shared-scroll">
         {target.kind === "invitations" && (
           <>
-            {spaces.catalog.invitations.length === 0 && <p>Новых приглашений нет.</p>}
+            {spaces.catalog.invitations.length === 0 &&
+              !spaces.catalog.spaces.some((s) =>
+                s.projects.some((p) => p.ownerId === pageWorkspace && p.requests.length),
+              ) && <p>Новых уведомлений нет.</p>}
+            {spaces.catalog.spaces.flatMap((s) =>
+              s.projects
+                .filter((p) => p.ownerId === pageWorkspace)
+                .flatMap((p) =>
+                  p.requests.map((userId) => (
+                    <button
+                      type="button"
+                      className="space-card"
+                      key={p.id + userId}
+                      onClick={() => spaces.open({ kind: "settings", id: s.id })}
+                    >
+                      <strong>{p.name}</strong>
+                      <span>
+                        {s.members.find((m) => m.id === userId)?.name} просит прямой доступ
+                      </span>
+                    </button>
+                  )),
+                ),
+            )}
             {spaces.catalog.invitations.map((i) => (
               <button
                 type="button"
@@ -210,7 +244,14 @@ export function CollaborationWindow({
           />
         )}
         {target.kind === "settings" && space && (
-          <SpaceSettings key={space.id} spaces={spaces} space={space} />
+          <SpaceSettings
+            key={space.id}
+            spaces={spaces}
+            space={space}
+            projects={projects}
+            onNewProject={onNewProject}
+            createdProjectId={createdProjectId}
+          />
         )}
       </div>
     </dialog>
@@ -506,7 +547,19 @@ function SpaceWizard({
     </form>
   );
 }
-function SpaceSettings({ spaces, space }: { spaces: SpacesController; space: CollaborationSpace }) {
+function SpaceSettings({
+  spaces,
+  space,
+  projects,
+  onNewProject,
+  createdProjectId,
+}: {
+  spaces: SpacesController;
+  space: CollaborationSpace;
+  projects: Project[];
+  onNewProject: () => void;
+  createdProjectId: string;
+}) {
   const [title, setTitle] = useState(space.title),
     [confirm, setConfirm] = useState(false);
   const action = useSharedAction(),
@@ -514,20 +567,13 @@ function SpaceSettings({ spaces, space }: { spaces: SpacesController; space: Col
   return (
     <div className="space-form">
       <p>{space.members.map((p) => p.name).join(" · ")}</p>
-      {space.projects.map((p) => (
-        <div className="space-related" key={p.id}>
-          <Icon name="repository" />
-          <span>
-            <strong>{p.name}</strong>
-            <small>
-              {space.members.find((m) => m.id === p.ownerId)?.name} · {accessLabels[p.access]}
-            </small>
-            <a href={p.repository} target="_blank" rel="noreferrer">
-              GitHub
-            </a>
-          </span>
-        </div>
-      ))}
+      <SpaceProjects
+        spaces={spaces}
+        space={space}
+        projects={projects}
+        onNewProject={onNewProject}
+        createdProjectId={createdProjectId}
+      />
       {space.pending.length > 0 && <p>Приглашены: {space.pending.map((p) => p.name).join(", ")}</p>}
       {curator && (
         <form

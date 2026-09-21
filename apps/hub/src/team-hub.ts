@@ -11,7 +11,9 @@ import Fastify, { type FastifyRequest } from "fastify";
 import { ZodError, z } from "zod";
 import { createApp } from "./app.js";
 import { tokenHash } from "./auth.js";
+import { collaborationPolicy } from "./collaboration-policy.js";
 import { registerCollaborationSpaces } from "./collaboration-routes.js";
+import { CollaborationSpaces } from "./collaboration-spaces.js";
 import { deploymentBlockers } from "./deployment-status.js";
 import { ENGINE_PROTOCOL, engineTerminalWork } from "./engine-client.js";
 import { prepareEngineSocket } from "./engine-socket.js";
@@ -123,6 +125,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const enrollments = new MachineEnrollmentStore(registry);
   const teamGpt = new TeamGpt(config, registry);
   const teamProjects = new TeamProjects(registry);
+  const collaboration = new CollaborationSpaces(teamProjects);
   const teamLinks = new TeamLinks(teamProjects);
   const auth = new TeamAuth(config, ownerStore, registry);
   const app = Fastify({
@@ -193,6 +196,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
           await prepareEngineSocket(socket);
           runtime = await (options.personalFactory ?? createApp)(selected, {
             ...options,
+            collaborationPolicy: collaborationPolicy(collaboration, userId),
             nativeGpt: userId === registry.ownerId ? options.nativeGpt : undefined,
             webRoot: undefined,
             store,
@@ -494,7 +498,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
   registerTeamProjects(app, teamProjects, actor, personal);
-  registerCollaborationSpaces(app, teamProjects, actor, personal);
+  registerCollaborationSpaces(app, teamProjects, actor, personal, collaboration);
   registerTeamLinks(app, teamLinks, actor);
   registerTeamConsultations(app, teamConsultations, actor);
   registerTeamBridges(

@@ -17,6 +17,7 @@ export function registerProjectDelivery(
   app: FastifyInstance,
   sessions: Sessions,
   probe = runProjectDelivery,
+  policy: (projectId: string, receipt: DeliveryMachineReceipt) => void = () => {},
 ) {
   const db = sessions.store.db,
     running = new Map<string, Promise<void>>(),
@@ -175,6 +176,7 @@ export function registerProjectDelivery(
       })) as DeliveryMachineReceipt;
       if (!r || r.id !== key || hash(r.input) !== hash(input) || !r.fingerprint)
         throw new HubError(503, "DELIVERY_UNAVAILABLE", deliveryMessage("DELIVERY_UNAVAILABLE"));
+      policy(id, r);
       return put(
         { ...r, projectId: id, projectName: c.project.name, machineId: c.machine.id },
         c.binding,
@@ -212,6 +214,7 @@ export function registerProjectDelivery(
     )
       throw new HubError(409, "DELIVERY_BUSY", deliveryMessage("DELIVERY_BUSY"));
     await sessions.externalActivity.refresh();
+    policy(id, op);
     const release = sessions.beginProjectDelivery(id);
     put({ ...op, state: "running", error: undefined });
     const job = (async () => {

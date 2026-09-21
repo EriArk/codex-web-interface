@@ -99,6 +99,10 @@ export async function createApp(
     auth?: Auth;
     authorizeExecution?: () => void;
     projectActionPolicy?: ProjectActionPolicy;
+    collaborationPolicy?: {
+      instructions: (projectId: string) => string | null;
+      delivery: NonNullable<Parameters<typeof registerProjectDelivery>[3]>;
+    };
     keepStoreOpen?: boolean;
   } = {},
 ) {
@@ -121,6 +125,8 @@ export async function createApp(
   const store = options.store ?? new Store(config.hub.databasePath);
   const sessions = options.sessions ?? new Sessions(config, store);
   if (options.authorizeExecution) sessions.authorizeExecution = options.authorizeExecution;
+  if (options.collaborationPolicy)
+    sessions.projectInstructions = options.collaborationPolicy.instructions;
   const releaseAuthorities = options.authorizeExecution
     ? config.machines.map((machine) => bindMachineAuthority(machine, options.authorizeExecution!))
     : [];
@@ -158,7 +164,10 @@ export async function createApp(
   auth.install(app);
   registerCommandOutput(app, sessions);
   const devices = registerDevices(app, config, store, auth, options.devices);
-  registerDeploymentStatus(app, store, () => devices.maintenance(), { auth, databasePath: config.hub.databasePath });
+  registerDeploymentStatus(app, store, () => devices.maintenance(), {
+    auth,
+    databasePath: config.hub.databasePath,
+  });
   if (options.executionService) {
     app.get("/internal/terminals/maintenance", () => devices.maintenance());
     app.post("/internal/terminals/maintenance", () => devices.maintenance(true));
@@ -708,7 +717,12 @@ export async function createApp(
   registerFilePreviews(app, auth);
   registerProjectInspector(app, sessions);
   registerProjectSetup(app, sessions, options.projectSetupProbe);
-  registerProjectDelivery(app, sessions, options.projectDeliveryProbe);
+  registerProjectDelivery(
+    app,
+    sessions,
+    options.projectDeliveryProbe,
+    options.collaborationPolicy?.delivery,
+  );
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerStagingStorage(app, config, options.stagingProbe);
   registerNotebook(app, sessions);

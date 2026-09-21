@@ -149,6 +149,7 @@ export class QueueService {
         clientUserMessageId: clientId,
         input: [{ type: "text", text }, ...prepared.input],
       };
+      await this.sessions.syncQueueInstructions(id);
       try {
         this.sessions.assertWritable(t.projectId);
         this.sessions.attachments.bind(id, clientId, prepared.files);
@@ -238,6 +239,7 @@ export class QueueService {
         }
       } else if (action === "restore") {
         if (!held) throw new HubError(409, "QUEUE_CHANGED", "Сообщение уже в очереди");
+        await this.sessions.syncQueueInstructions(id);
         await rpc.request("thread/queue/add", {
           threadId: t.codexThreadId,
           clientUserMessageId: q.clientUserMessageId,

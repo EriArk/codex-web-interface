@@ -2,6 +2,8 @@
 
 ## First priority: Collaboration Spaces (#215, 2026-09-21)
 
+Second block implemented in source: own-project add/remove, own checkout binding, owner-controlled grants and access requests, participant removal, native Codex instructions/queue defaults and current-policy checks in existing Git delivery. UI stays within shared theme materials. Further member invitations beyond the initial pair remain follow-up work alongside the human space chat; no access to another owner's Project may be granted implicitly. See [implementation and limits](COLLABORATION_SPACES.md).
+
 The owner selected [issue #215](https://github.com/EriArk/codex-web-interface/issues/215) as the next primary task. It supersedes the older Shared Projects/Links/Bridges UX plan below. The legacy sidebar “Общие” shortcut is removed now; the new ▼ workspace-mode switch belongs to the implementation of #215.
 
 Reuse the existing team isolation, project, GitHub and integration services. Build a space around real Projects and users: existing native chats move in navigation without duplication, each participant keeps their own checkout, and Collaborative/Direct access is decided separately for every Project × User. GitHub remains authoritative for code, Issues and PR; no duplicate issue system or mandatory task/report workflow.
@@ -10,7 +12,7 @@ Implement in coherent stages: (1) spaces and invitation membership, consented pe
 
 First block implemented in source: ▼ personal/shared mode, a space card list, the two creation templates, existing Project/contact selection, return from the ordinary Project wizard, invitations in the bell, acceptance using one's own Project, per-project consent choices, rename, leave/close and restoration to personal navigation. Local/native project and thread identifiers remain unchanged. One-project acceptance verifies the same GitHub repository; linked-project acceptance records the recipient's own explicit grant rather than treating the creator's request as authority. Catalog reads use Team SQLite only, never native history or machine polling.
 
-This is the membership/navigation block, not completed GitHub collaboration: access choices are recorded agreements, not a newly enforced GitHub/native execution policy yet. Additional projects/members, changing grants, binding a local copy of a related project, native instructions (including commit/push), the human chat and Project GPT remain in the following blocks. Existing GitHub permissions and personal execution remain unchanged. Do not describe #215 as finished or claim real owner/friend acceptance based on the disposable tests. See [implementation notes](COLLABORATION_SPACES.md).
+The second block makes these agreements operational in native context and Hub Git delivery; it does not change GitHub permissions or add a shell sandbox. The human chat, additional invitations, Project GPT and optional local instructions remain next. Do not describe #215 as finished or claim real owner/friend acceptance based on disposable tests. See [implementation notes](COLLABORATION_SPACES.md).
 
 Installer work remains deferred. This priority record does not claim #215 is implemented; the complete requirements and acceptance checklist remain in the issue.
 

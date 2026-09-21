@@ -9,6 +9,8 @@ export type CollaborationProject = {
   repository: string;
   personalProjectId?: string;
   access: "owner" | CollaborationAccess;
+  grants: { userId: string; access: CollaborationAccess }[];
+  requests: string[];
 };
 export type CollaborationSpace = {
   id: string;

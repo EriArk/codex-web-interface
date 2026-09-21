@@ -14,6 +14,7 @@ type Project = VerifiedSpaceProject & {
   ownerId: string;
   grants: Record<string, CollaborationAccess>;
   copies: Record<string, string>;
+  requests?: string[];
 };
 type Invitation = {
   userId: string;
@@ -104,6 +105,8 @@ export class CollaborationSpaces {
         repository: p.repository,
         ...(p.copies[actor] ? { personalProjectId: p.copies[actor] } : {}),
         access: p.ownerId === actor ? "owner" : p.grants[actor]!,
+        grants: Object.entries(p.grants).map(([userId, access]) => ({ userId, access })),
+        requests: (p.requests ?? []).filter((id) => p.ownerId === actor || id === actor),
       })),
     };
   }
@@ -222,7 +225,7 @@ export class CollaborationSpaces {
           space.projects.push(p);
         }
         for (const p of space.projects)
-          if (p.ownerId !== actor) p.grants[actor] = invitation.access;
+          if (p.ownerId !== actor) p.grants[actor] ??= invitation.access;
         space.members.push(actor);
       }
       space.invitations = space.invitations.filter((i) => i.userId !== actor);
@@ -246,18 +249,157 @@ export class CollaborationSpaces {
       return { ok: true };
     });
   }
+  addProject(
+    actor: string,
+    id: string,
+    key: string,
+    input: { revision: number; personalProjectId: string; access: CollaborationAccess },
+    verified: VerifiedSpaceProject,
+  ) {
+    return this.team.once(actor, "spaces.add-project:" + id, key, input, () => {
+      const space = this.access(actor, id, input.revision);
+      if ((space.kind === "project" && space.projects.length) || space.projects.length >= 30)
+        throw new HubError(
+          409,
+          "SPACE_PROJECT_LIMIT",
+          "В этом пространстве нельзя добавить ещё один проект.",
+        );
+      const project = this.project(actor, verified);
+      for (const member of space.members)
+        if (member !== actor) project.grants[member] = input.access;
+      for (const invited of space.invitations) project.grants[invited.userId] = input.access;
+      space.projects.push(project);
+      space.revision++;
+      this.save(space);
+      return { ok: true };
+    });
+  }
+  bindCopy(
+    actor: string,
+    id: string,
+    key: string,
+    input: { revision: number; projectId: string; personalProjectId: string },
+    verified: VerifiedSpaceProject,
+  ) {
+    return this.team.once(actor, "spaces.bind:" + id, key, input, () => {
+      const space = this.access(actor, id, input.revision),
+        project = space.projects.find((p) => p.id === input.projectId);
+      if (!project || project.ownerId === actor) throw missing();
+      if (project.repository !== verified.repository)
+        throw new HubError(
+          409,
+          "SPACE_REPOSITORY_MISMATCH",
+          "Выбери свою копию того же репозитория.",
+        );
+      this.available(actor, verified.personalProjectId);
+      project.copies[actor] = verified.personalProjectId;
+      space.revision++;
+      this.save(space);
+      return { ok: true };
+    });
+  }
+  removeProject(
+    actor: string,
+    id: string,
+    key: string,
+    input: { revision: number; projectId: string },
+  ) {
+    return this.team.once(actor, "spaces.remove-project:" + id, key, input, () => {
+      const space = this.access(actor, id, input.revision),
+        project = space.projects.find((p) => p.id === input.projectId);
+      if (!project || project.ownerId !== actor) throw missing();
+      // A pending invitation names a concrete repository; do not silently change its subject.
+      if (space.projects[0]?.id === project.id) space.invitations = [];
+      space.projects = space.projects.filter((p) => p.id !== project.id);
+      space.revision++;
+      this.save(space);
+      return { ok: true };
+    });
+  }
+  grant(
+    actor: string,
+    id: string,
+    key: string,
+    input: { revision: number; projectId: string; userId: string; access: CollaborationAccess },
+  ) {
+    return this.team.once(actor, "spaces.grant:" + id, key, input, () => {
+      const space = this.access(actor, id, input.revision),
+        p = space.projects.find((p) => p.id === input.projectId);
+      if (
+        !p ||
+        p.ownerId !== actor ||
+        actor === input.userId ||
+        !space.members.includes(input.userId)
+      )
+        throw missing();
+      p.grants[input.userId] = input.access;
+      p.requests = p.requests?.filter((u) => u !== input.userId);
+      space.revision++;
+      this.save(space);
+      return { ok: true };
+    });
+  }
+  requestAccess(
+    actor: string,
+    id: string,
+    key: string,
+    input: { revision: number; projectId: string },
+  ) {
+    return this.team.once(actor, "spaces.request-access:" + id, key, input, () => {
+      const space = this.access(actor, id, input.revision),
+        p = space.projects.find((p) => p.id === input.projectId);
+      if (!p || p.ownerId === actor) throw missing();
+      p.requests = [...new Set([...(p.requests ?? []), actor])];
+      space.revision++;
+      this.save(space);
+      return { ok: true };
+    });
+  }
+  removeMember(
+    actor: string,
+    id: string,
+    key: string,
+    input: { revision: number; userId: string },
+  ) {
+    return this.team.once(actor, "spaces.remove-member:" + id, key, input, () => {
+      const space = this.access(actor, id, input.revision);
+      if (space.curatorId !== actor || input.userId === actor) throw missing();
+      this.detach(space, input.userId);
+      space.revision++;
+      this.save(space);
+      return { ok: true };
+    });
+  }
+  private detach(space: Space, userId: string) {
+    space.members = space.members.filter((u) => u !== userId);
+    space.invitations = space.invitations.filter((i) => i.userId !== userId);
+    space.projects = space.projects.filter((p) => p.ownerId !== userId);
+    for (const p of space.projects) {
+      delete p.grants[userId];
+      delete p.copies[userId];
+      p.requests = p.requests?.filter((u) => u !== userId);
+    }
+  }
+  binding(actor: string, personalProjectId: string) {
+    for (const space of this.all(actor)) {
+      if (!space.members.includes(actor)) continue;
+      const project = space.projects.find((p) => p.copies[actor] === personalProjectId);
+      if (project)
+        return {
+          space,
+          project,
+          access: project.ownerId === actor ? ("owner" as const) : project.grants[actor]!,
+        };
+    }
+    return null;
+  }
   leave(actor: string, id: string, key: string, input: { revision: number }) {
     return this.team.once(actor, "spaces.leave:" + id, key, input, () => {
       const space = this.access(actor, id, input.revision);
       if (space.curatorId === actor) {
         this.team.db.prepare("DELETE FROM collaboration_spaces WHERE id=?").run(id);
       } else {
-        space.members = space.members.filter((u) => u !== actor);
-        space.projects = space.projects.filter((p) => p.ownerId !== actor);
-        for (const p of space.projects) {
-          delete p.grants[actor];
-          delete p.copies[actor];
-        }
+        this.detach(space, actor);
         space.revision++;
         this.save(space);
       }

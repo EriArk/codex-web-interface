@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { collaborationPolicy } from "../apps/hub/dist/collaboration-policy.js";
 import { registerCollaborationSpaces } from "../apps/hub/dist/collaboration-routes.js";
 import { CollaborationSpaces } from "../apps/hub/dist/collaboration-spaces.js";
 import { Store } from "../apps/hub/dist/store.js";
@@ -214,4 +215,98 @@ test("Routes inspect only the actor's selected checkout, survive lost acknowledg
   const acceptedAgain = await send(f.friend, `/api/team/spaces/${id}/answer`, answer, answerKey);
   assert.equal(acceptedAgain.statusCode, 200, acceptedAgain.body);
   assert.equal(f.spaces.catalog(f.friend).spaces[0].projects[0].personalProjectId, f.friend);
+});
+
+test("Project management, explicit elevation and Git publication follow the owning participant's current grant", async (t) => {
+  const f = await fixture(t),
+    { spaces: s, owner, friend } = f;
+  const { id } = s.create(owner, randomUUID(), f.input(), f.project("altar"));
+  s.answer(
+    friend,
+    id,
+    randomUUID(),
+    { revision: 1, accept: true, personalProjectId: "world", access: "collaborate" },
+    f.project("world", "https://github.com/example/world"),
+  );
+  const current = () => s.catalog(owner).spaces[0];
+  const altar = current().projects[0];
+  assert.throws(() =>
+    s.bindCopy(
+      friend,
+      id,
+      randomUUID(),
+      { revision: current().revision, projectId: altar.id, personalProjectId: "wrong" },
+      f.project("wrong", "https://github.com/example/wrong"),
+    ),
+  );
+  s.bindCopy(
+    friend,
+    id,
+    randomUUID(),
+    { revision: current().revision, projectId: altar.id, personalProjectId: "friend-altar" },
+    f.project("friend-altar"),
+  );
+  const policy = collaborationPolicy(s, friend);
+  assert.match(policy.instructions("friend-altar"), /working branch and a pull request/);
+  assert.equal(policy.instructions("private"), null);
+  const receipt = (branch = "main") => ({
+    kind: "push",
+    snapshot: { branch, github: { repository: "example/altar", defaultBranch: "main" } },
+  });
+  assert.throws(() => policy.delivery("friend-altar", receipt()), {
+    code: "SPACE_WORKING_BRANCH_REQUIRED",
+  });
+  policy.delivery("friend-altar", receipt("feature/world"));
+  assert.throws(() =>
+    s.grant(friend, id, randomUUID(), {
+      revision: current().revision,
+      projectId: altar.id,
+      userId: friend,
+      access: "direct",
+    }),
+  );
+  s.requestAccess(friend, id, randomUUID(), { revision: current().revision, projectId: altar.id });
+  assert.deepEqual(current().projects[0].requests, [friend]);
+  assert.throws(() => policy.delivery("friend-altar", receipt()), "a request alone grants nothing");
+  s.grant(owner, id, randomUUID(), {
+    revision: current().revision,
+    projectId: altar.id,
+    userId: friend,
+    access: "direct",
+  });
+  policy.delivery("friend-altar", receipt());
+  assert.match(policy.instructions("friend-altar"), /Direct publication/);
+  assert.deepEqual(current().projects[0].requests, []);
+  s.grant(owner, id, randomUUID(), {
+    revision: current().revision,
+    projectId: altar.id,
+    userId: friend,
+    access: "collaborate",
+  });
+  assert.throws(
+    () => policy.delivery("friend-altar", receipt()),
+    "existing prepared publication uses the current grant",
+  );
+  const add = { revision: current().revision, personalProjectId: "assets", access: "direct" },
+    key = randomUUID();
+  s.addProject(owner, id, key, add, f.project("assets", "https://github.com/example/assets"));
+  s.addProject(owner, id, key, add, f.project("assets", "https://github.com/example/assets"));
+  const asset = current().projects.find((p) => p.personalProjectId === "assets");
+  assert.equal(
+    s.catalog(friend).spaces[0].projects.find((p) => p.id === asset.id).access,
+    "direct",
+  );
+  assert.throws(() =>
+    s.removeProject(friend, id, randomUUID(), {
+      revision: current().revision,
+      projectId: asset.id,
+    }),
+  );
+  s.removeProject(owner, id, randomUUID(), { revision: current().revision, projectId: asset.id });
+  assert.equal(s.binding(owner, "assets"), null);
+  s.removeMember(owner, id, randomUUID(), { revision: current().revision, userId: friend });
+  assert.equal(s.binding(friend, "friend-altar"), null);
+  assert.equal(policy.instructions("friend-altar"), null);
+  assert.deepEqual(s.catalog(friend), { spaces: [], invitations: [] });
+  assert.equal(current().projects.length, 1);
 });

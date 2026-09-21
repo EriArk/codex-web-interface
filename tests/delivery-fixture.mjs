@@ -55,13 +55,14 @@ export function deliveryState() {
     },
   };
 }
-export async function deliveryFixture(origin = "https://handoff.test") {
+export async function deliveryFixture(origin = "https://handoff.test", options = {}) {
   const receipts = new Map(),
     calls = [];
   let state = deliveryState(),
     pending,
     lose = false;
   const f = await handoffFixture(origin, undefined, {
+    ...options,
     projectDeliveryProbe: async (machine, root, req) => {
       calls.push({ machine: machine.id, root, request: req });
       if (req.op === "inspect") return structuredClone(state);

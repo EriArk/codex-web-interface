@@ -1,9 +1,12 @@
 .navigation-header .space-mode-toggle,
 .navigation-header .nav-mobile-switch .space-mode-toggle {
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 60px;
+  min-width: 64px;
+  margin-inline: -9px;
   padding: 0;
   align-self: center;
   border: 0;
@@ -11,20 +14,20 @@
   box-shadow: none;
 }
 .space-triangle-cap {
-  width: 44px;
-  height: 44px;
+  width: 64px;
+  height: 60px;
   overflow: visible;
   filter: drop-shadow(0 2px 1px #0007);
 }
 .space-cap-top {
-  stop-color: var(--surface);
+  stop-color: var(--case-glint, var(--surface));
 }
 .space-cap-bottom {
-  stop-color: var(--soft);
+  stop-color: var(--case-low, var(--soft));
 }
 .space-cap-rim {
-  fill: var(--line);
-  stroke: var(--muted);
+  fill: var(--case-seam, var(--line));
+  stroke: var(--case-edge, var(--muted));
   stroke-width: 0.7;
 }
 .space-cap-face {
@@ -37,16 +40,26 @@
   stroke-opacity: 0.38;
   stroke-linecap: round;
 }
-.space-cap-symbol {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.8;
-  stroke-linejoin: round;
+.space-cap-icon {
+  position: absolute;
+  inset: 13px 0 auto;
+  display: flex;
+  justify-content: center;
+  color: var(--case-ink, var(--ink));
+  pointer-events: none;
 }
-.space-mode-toggle[aria-pressed="true"] .space-cap-symbol {
-  stroke: var(--accent);
-  fill: var(--accent);
-  fill-opacity: 0.2;
+.navigation-header .space-cap-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.space-mode-toggle[aria-pressed="true"] .space-cap-icon {
+  color: var(--accent);
+}
+.nav-mobile-switch > button:has(+ .space-mode-toggle) {
+  padding-right: 13px;
+}
+.nav-mobile-switch > .space-mode-toggle + button {
+  padding-left: 13px;
 }
 .space-mode-toggle:active .space-triangle-cap {
   transform: translateY(1px);
@@ -189,6 +202,18 @@
   min-width: 0;
   min-height: 44px;
 }
+:root .space-dialog select {
+  appearance: none;
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
 .space-form a {
   overflow-wrap: anywhere;
 }
@@ -211,6 +236,47 @@
 }
 .space-actions button {
   min-height: 44px;
+}
+.space-project-card {
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  background: var(--card-material, var(--surface));
+  box-shadow: var(--card-shadow, none);
+  padding: 10px;
+  min-width: 0;
+}
+.space-project-card summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+.space-project-card summary::-webkit-details-marker {
+  display: none;
+}
+.space-project-card summary span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.space-project-card summary small {
+  display: block;
+  color: var(--muted);
+}
+.space-project-card > .space-form {
+  padding-top: 12px;
+}
+.space-project-settings .space-actions {
+  flex-wrap: wrap;
+}
+.space-member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 :root[data-keyboard="true"] dialog.space-dialog.workspace-window[open] {
   top: calc(var(--app-top, 0px) + 4px);

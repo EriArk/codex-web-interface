@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { HubError } from "../packages/shared/dist/index.js";
 import { deliveryFixture, deliveryInput } from "./delivery-fixture.mjs";
 
 const request = async (f, method, path, body) => {
@@ -8,6 +9,43 @@ const request = async (f, method, path, body) => {
   return { status: r.statusCode, data: r.json() };
 };
 const base = "/projects/project/delivery";
+test("publication rechecks collaboration policy after preparation before any apply", async (t) => {
+  let allowed = true;
+  const f = await deliveryFixture(undefined, {
+    collaborationPolicy: {
+      instructions: () => null,
+      delivery: () => {
+        if (!allowed)
+          throw new HubError(409, "SPACE_WORKING_BRANCH_REQUIRED", "Use a working branch");
+      },
+    },
+  });
+  t.after(() => f.close());
+  const op = await prepare(f);
+  allowed = false;
+  assert.equal(
+    (
+      await request(f, "POST", base + "/" + op.id + "/execute", {
+        confirm: true,
+        fingerprint: op.fingerprint,
+      })
+    ).status,
+    409,
+  );
+  assert.equal(f.deliveryCalls.filter((c) => c.request.op === "apply").length, 0);
+  assert.equal((await request(f, "GET", base + "/" + op.id)).data.state, "prepared");
+  allowed = true;
+  assert.equal(
+    (
+      await request(f, "POST", base + "/" + op.id + "/execute", {
+        confirm: true,
+        fingerprint: op.fingerprint,
+      })
+    ).status,
+    202,
+  );
+  assert.equal((await settle(f, op)).state, "completed");
+});
 async function prepare(f) {
   const id = randomUUID(),
     r = await request(f, "PUT", base + "/" + id, deliveryInput);

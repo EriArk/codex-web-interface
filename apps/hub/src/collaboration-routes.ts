@@ -11,8 +11,8 @@ export function registerCollaborationSpaces(
   team: TeamProjects,
   actor: (req: FastifyRequest) => string,
   personal: (userId: string) => Promise<{ runtime: Awaited<ReturnType<typeof createApp>> }>,
+  spaces = new CollaborationSpaces(team),
 ) {
-  const spaces = new CollaborationSpaces(team);
   const id = (req: FastifyRequest) => z.object({ id: z.string().uuid() }).parse(req.params).id;
   const key = (req: FastifyRequest) => z.string().uuid().parse(req.headers["idempotency-key"]);
   const projectId = z.string().min(1).max(100),
@@ -104,6 +104,60 @@ export function registerCollaborationSpaces(
       id(req),
       key(req),
       z.object({ revision, title }).strict().parse(req.body),
+    ),
+  );
+  for (const operation of ["add-project", "bind"] as const) {
+    app.post(`/api/team/spaces/:id/${operation}`, async (req) => {
+      const user = actor(req),
+        spaceId = id(req),
+        receipt = key(req);
+      const input = (
+        operation === "add-project"
+          ? z.object({ revision, personalProjectId: projectId, access })
+          : z.object({ revision, personalProjectId: projectId, projectId })
+      )
+        .strict()
+        .parse(req.body);
+      const previous = replay(user, `spaces.${operation}:` + spaceId, receipt, input);
+      if (previous) return previous;
+      spaces.access(user, spaceId, input.revision);
+      const verified = await verify(user, input.personalProjectId);
+      actor(req);
+      return "access" in input
+        ? spaces.addProject(user, spaceId, receipt, input, verified)
+        : spaces.bindCopy(user, spaceId, receipt, input, verified);
+    });
+  }
+  app.post("/api/team/spaces/:id/remove-project", (req) =>
+    spaces.removeProject(
+      actor(req),
+      id(req),
+      key(req),
+      z.object({ revision, projectId }).strict().parse(req.body),
+    ),
+  );
+  app.post("/api/team/spaces/:id/grant", (req) =>
+    spaces.grant(
+      actor(req),
+      id(req),
+      key(req),
+      z.object({ revision, projectId, userId: z.string().uuid(), access }).strict().parse(req.body),
+    ),
+  );
+  app.post("/api/team/spaces/:id/request-access", (req) =>
+    spaces.requestAccess(
+      actor(req),
+      id(req),
+      key(req),
+      z.object({ revision, projectId }).strict().parse(req.body),
+    ),
+  );
+  app.post("/api/team/spaces/:id/remove-member", (req) =>
+    spaces.removeMember(
+      actor(req),
+      id(req),
+      key(req),
+      z.object({ revision, userId: z.string().uuid() }).strict().parse(req.body),
     ),
   );
   app.post("/api/team/spaces/:id/leave", (req) =>

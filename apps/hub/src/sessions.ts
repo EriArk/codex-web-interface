@@ -68,6 +68,34 @@ interface Approval {
 }
 export class Sessions extends EventEmitter {
   authorizeExecution: () => void = () => {};
+  projectInstructions: (projectId: string) => string | null = () => null;
+  private readonly collaborationThreads = new Set<string>();
+  private turnInstructions(thread: ThreadRecord) {
+    const instructions = this.projectInstructions(thread.projectId);
+    if (instructions) this.collaborationThreads.add(thread.id);
+    return instructions;
+  }
+  async syncQueueInstructions(id: string) {
+    const thread = this.thread(id),
+      instructions = this.turnInstructions(thread);
+    if (!instructions && !this.collaborationThreads.has(id)) return;
+    const r = await this.runtime(thread.projectId);
+    if (!r.nativeModes) return;
+    const value =
+      this.store.threadSettings(id) ?? (await this.capabilities(thread.projectId)).defaults;
+    await r.rpc.request("thread/settings/update", {
+      threadId: thread.codexThreadId,
+      collaborationMode: {
+        mode: value.mode,
+        settings: {
+          model: value.model,
+          reasoning_effort: value.effort,
+          developer_instructions: instructions,
+        },
+      },
+    });
+    if (!instructions) this.collaborationThreads.delete(id);
+  }
   relayTools: Record<string, unknown>[] = [];
   relayTool?: (
     thread: ThreadRecord,
@@ -847,7 +875,7 @@ export class Sessions extends EventEmitter {
                   settings: {
                     model: value.model,
                     reasoning_effort: value.effort,
-                    developer_instructions: null,
+                    developer_instructions: this.turnInstructions(thread),
                   },
                 },
               }
@@ -1252,7 +1280,7 @@ export class Sessions extends EventEmitter {
                       reasoning_effort: selection.effort,
                       developer_instructions: diagnostic
                         ? "Read-only diagnosis. Never edit files, execute project code, change services, credentials, browser state or send external messages. Report findings only."
-                        : null,
+                        : this.turnInstructions(t),
                     },
                   },
                 }
