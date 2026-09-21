@@ -1,5 +1,11 @@
 # Private ChatGPT profiles
 
+## Login gateway host configuration (2026-09-21)
+
+The systemd login gateway requires both `HUB_ENGINE_SOCKET` (the host-side engine socket) and `GPT_TEAM_ROOT` (the host-side Team directory). For the current installation these are `/home/abysscloud/services/codex-web/engine/engine.sock` and `/home/abysscloud/services/codex-web/data/team`. Set both in the persistent service environment, including when a native-owner drop-in replaces `ExecStart`.
+
+Without the engine socket the gateway only has the legacy owner recovery flow and rejects ready members before login. An unactivated member must still be able to open their own ready profile: ChatGPT activation follows login, not vice versa. After changing the gateway environment restart only `codex-web-gpt-login.service`; no engine, Companion or native chat restart is required. The production correction was checked with a short-lived member diagnostic session: the native connection page returned 200 with that member's workspace binding; the diagnostic session was removed immediately.
+
 ## Revocation follow-up (2026-09-20)
 
 An in-flight member activation checks its initiating Hub session before native dispatch and after the reply. Disable/re-enable changes the access epoch, so old activation and profile preparation cannot become valid again just because the user is active. A revoked activation may have recorded its own native binding before acknowledgement; that private binding is retained and cannot switch accounts. The user signs in to the Hub again before retrying. No new checks are added to ordinary message delivery.
