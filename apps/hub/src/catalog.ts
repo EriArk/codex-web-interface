@@ -642,6 +642,8 @@ export class Catalog {
       type = str(item.type),
       turnId = str(entry.turnId, 100);
     if (!["userMessage", "agentMessage", "plan"].includes(type)) return;
+    // Import exports from already existing native history as well as live events.
+    if (type === "agentMessage") this.artifacts.observe(thread, turnId || null, item);
     let content = str(item.text);
     const inputs = array(item.content);
     const messageId =

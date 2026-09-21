@@ -539,3 +539,7 @@ The reader-case ZIP (414,735,777 bytes) requires lifting the **Codex captured-ex
 ## 2026-09-11 — Configured native project previews
 
 The owner-approved #38 preview uses a separate fixed `CodexWebGuiPreview` interactive Scheduled Task over existing SSH and a private local file mailbox. This is the smallest compatible extension while keeping the currently running Companion untouched. Only a trusted machine-local action allowlist supplies executable/cwd/arguments; browser requests identify an action and an existing project chat. Each launch owns an unnamed Windows Job Object and captures only its own visible windows. Hub schema 25 persists exact operation/result/thread identity; uncertain launches are never repeated automatically. See [GUI previews](GUI_PREVIEW.md) for setup, capture limits, lifecycle and verification.
+
+## 2026-09-21 — Codex file links outside the checkout
+
+Explicit file links observed in authenticated native assistant messages may name exports outside the project directory on that same execution machine. Capture those exact paths through the existing private transport and bind snapshots to thread, turn and message. The browser cannot request arbitrary machine paths. Project Files keeps its existing root boundary. Import file links while reading historical native messages as well as live completion events; preserve existing snapshots and avoid duplicates. Files without extensions are supported as explicit links too.

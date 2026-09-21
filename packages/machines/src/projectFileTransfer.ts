@@ -2,12 +2,12 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants, createWriteStream } from "node:fs";
 import { open, realpath, rm } from "node:fs/promises";
-import { posix } from "node:path";
+import { posix, win32 } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 import { quotePowerShell, stopProcess } from "./index.js";
-import { projectFilePath } from "./projectFile.js";
+import { codexArtifactPath, projectFilePath } from "./projectFile.js";
 import { verifyProjectRoot } from "./projectRoots.js";
 
 export const ARTIFACT_FILE_LIMIT = 512 * 1024 * 1024;
@@ -34,10 +34,34 @@ export async function copyProjectFile(
   destination: string,
   limit = ARTIFACT_FILE_LIMIT,
 ): Promise<{ bytes: number; sha256: string }> {
+  return transferFile(machine, root, input, destination, limit, false);
+}
+
+export async function copyCodexArtifact(
+  machine: MachineConfig,
+  root: string,
+  input: string,
+  destination: string,
+  limit = ARTIFACT_FILE_LIMIT,
+) {
+  return transferFile(machine, root, input, destination, limit, true);
+}
+
+async function transferFile(
+  machine: MachineConfig,
+  root: string,
+  input: string,
+  destination: string,
+  limit: number,
+  nativeLink: boolean,
+) {
   if (!Number.isSafeInteger(limit) || limit < 0 || limit > ARTIFACT_FILE_LIMIT)
     throw new Error("INVALID_TRANSFER_LIMIT");
   await verifyProjectRoot(machine, root);
-  const path = projectFilePath(machine, root, input);
+  const path = nativeLink
+    ? codexArtifactPath(machine, root, input)
+    : projectFilePath(machine, root, input);
+  if (nativeLink) root = (machine.type === "local-linux" ? posix : win32).dirname(path);
   const hash = createHash("sha256");
   let bytes = 0;
   const meter = new Transform({
@@ -64,6 +88,7 @@ export async function copyProjectFile(
         actual = await realpath(path);
       const relative = posix.relative(actualRoot, actual);
       if (
+        (nativeLink && (actualRoot !== root || actual !== path)) ||
         !relative ||
         relative === ".." ||
         relative.startsWith("../") ||

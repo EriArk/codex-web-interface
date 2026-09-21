@@ -4,7 +4,17 @@ import { open, realpath } from "node:fs/promises";
 import { posix, win32 } from "node:path";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 import { quotePowerShell, stopProcess } from "./index.js";
-import { assertProjectRoot, verifyProjectRoot } from "./projectRoots.js";
+import { assertProjectRoot, normalizedProjectPath, verifyProjectRoot } from "./projectRoots.js";
+
+// For paths recorded in native assistant messages only, never a browser-supplied
+// filesystem request. Generated exports may live outside the working directory.
+export function codexArtifactPath(machine: MachineConfig, root: string, input: string): string {
+  let value = decodeURIComponent(input);
+  if (/^\/[a-z]:[\\/]/i.test(value)) value = value.slice(1);
+  const absolute =
+    machine.type === "local-linux" ? value.startsWith("/") : /^[a-z]:[\\/]/i.test(value);
+  return absolute ? normalizedProjectPath(machine, value) : projectFilePath(machine, root, input);
+}
 
 export const PROJECT_FILE_LIMIT = 32 * 1024 * 1024;
 export function projectFilePath(machine: MachineConfig, root: string, input: string): string {

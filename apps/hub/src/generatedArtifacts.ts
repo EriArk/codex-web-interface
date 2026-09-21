@@ -1,5 +1,5 @@
 ﻿import { createHash } from "node:crypto";
-import { copyProjectFile, projectFilePath, type readProjectFile } from "@codex-web/machines";
+import { codexArtifactPath, copyCodexArtifact, type readProjectFile } from "@codex-web/machines";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 import type { Artifacts } from "./artifacts.js";
 import type { Store, ThreadRecord } from "./store.js";
@@ -23,7 +23,6 @@ const mimeTypes: Record<string, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
-const explicitTypes = /\.[a-z0-9]{1,12}$/i;
 const generatedTypes =
   /\.(?:png|jpe?g|webp|gif|svg|pdf|stl|step|stp|3mf|obj|glb|gltf|docx|xlsx|pptx)$/i;
 const secretPath =
@@ -39,7 +38,13 @@ export function artifactSources(item: Record<string, unknown>): string[] {
       /(?<!!)\[[^\]\n]{1,200}\]\((?:<([^>\n]+)>|([^\s)]+))\)/g,
     )) {
       const path = (match[1] || match[2] || "").replace(/:\d+(?::\d+)?$/, "");
-      if (explicitTypes.test(path) && !/^[a-z][a-z0-9+.-]*:\/\//i.test(path)) paths.push(path);
+      if (
+        path &&
+        !path.startsWith("#") &&
+        !path.startsWith("/api/") &&
+        !/^[a-z][a-z0-9+.-]*:/i.test(path.replace(/^[a-z]:[\\/]/i, ""))
+      )
+        paths.push(path);
     }
   } else if (item.type === "fileChange" && Array.isArray(item.changes)) {
     for (const c of item.changes) {
@@ -132,7 +137,7 @@ export class GeneratedArtifacts {
     for (const source of artifactSources(item)) {
       let path: string;
       try {
-        path = projectFilePath(target.machine, target.root, source);
+        path = codexArtifactPath(target.machine, target.root, source);
       } catch {
         continue;
       }
@@ -200,7 +205,7 @@ export class GeneratedArtifacts {
                 c.path,
                 mime,
                 (destination, limit) =>
-                  copyProjectFile(target.machine, target.root, c.path, destination, limit),
+                  copyCodexArtifact(target.machine, target.root, c.path, destination, limit),
               );
           this.store.db.exec("SAVEPOINT artifact_capture_commit");
           try {

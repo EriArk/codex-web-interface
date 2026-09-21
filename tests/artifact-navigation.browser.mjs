@@ -27,7 +27,7 @@ for (const [engine, type] of [
       machineClients: { pc: "web" },
     });
     const text =
-      "[Первая версия](report.md)\n\n![Точное изображение](C:/Project/exact.png)\n\n[Нет файла](missing.md)\n\n[Архив](case.zip)\n\n[Внешний сайт](https://example.com/file.zip)";
+      "[Первая версия](C:/Users/Test/AppData/Local/report.md)\n\n![Точное изображение](C:/Project/exact.png)\n\n[Нет файла](missing.md)\n\n[Архив](case.zip)\n\n[Внешний сайт](https://example.com/file.zip)";
     f.store.append(f.thread.id, "assistant.completed", { id: "answer", text }, "turn");
     const captures = f.sessions.catalog.artifacts;
     captures.read = async (_m, _root, path) =>
@@ -35,7 +35,7 @@ for (const [engine, type] of [
     captures.observe(f.thread, "turn", {
       id: "answer",
       type: "agentMessage",
-      text: "[First](report.md) [Archive](case.zip)",
+      text: "[First](C:/Users/Test/AppData/Local/report.md) [Archive](case.zip)",
     });
     await captures.close();
     const archive = f.store.db
@@ -55,7 +55,7 @@ for (const [engine, type] of [
     captures.observe(f.thread, "later", {
       id: "later-answer",
       type: "agentMessage",
-      text: "[Later](report.md)",
+      text: "[Later](C:/Users/Test/AppData/Local/report.md)",
     });
     await captures.close();
     await f.app.listen({ port: 18859, host: "127.0.0.1" });

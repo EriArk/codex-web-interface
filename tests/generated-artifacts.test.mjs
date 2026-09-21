@@ -7,6 +7,7 @@ import test from "node:test";
 import { Artifacts } from "../apps/hub/dist/artifacts.js";
 import { artifactSources, GeneratedArtifacts } from "../apps/hub/dist/generatedArtifacts.js";
 import { createSnapshot, verifySnapshot } from "../apps/hub/dist/maintenance.js";
+import { resolveResultReference } from "../apps/hub/dist/result-references.js";
 import { storageReport } from "../apps/hub/dist/storage.js";
 import { Store } from "../apps/hub/dist/store.js";
 import {
@@ -18,6 +19,76 @@ import { configSchema } from "../packages/shared/dist/index.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
 const machine = { id: "local", type: "local-linux" };
+test("native export outside the checkout is captured, revealed and kept private to its message", async () => {
+  const f = await fixture();
+  try {
+    const source = join(f.root, "export with spaces.md");
+    await writeFile(source, "# Export outside the repository\n");
+    const item = { id: "outside-answer", type: "agentMessage", text: `[Export](<${source}>)` };
+    f.generated.observe(f.thread, "turn", item);
+    await f.generated.close();
+    const result = resolveResultReference(f.store, f.thread, machine, f.source, {
+      source,
+      messageId: item.id,
+      turnId: "turn",
+    });
+    const capture = f.store.db.prepare("SELECT * FROM artifact_captures").get();
+    assert.equal(capture.status, "captured");
+    assert.equal(result.type, "artifact");
+    assert.equal(
+      f.artifacts.get(capture.artifactId).data.toString(),
+      "# Export outside the repository\n",
+    );
+    assert.throws(() =>
+      resolveResultReference(f.store, f.thread, machine, f.source, {
+        source,
+        messageId: "different-answer",
+        turnId: "turn",
+      }),
+    );
+    await assert.rejects(readProjectFile(machine, f.source, source));
+    f.generated.observe(f.thread, "turn", item);
+    await f.generated.close();
+    assert.equal(f.store.db.prepare("SELECT count(*) n FROM artifacts").get().n, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("opening old native history discovers file links without requiring a new response", async () => {
+  const f = await handoffFixture();
+  try {
+    const collector = f.sessions.catalog.artifacts;
+    collector.read = async () => Buffer.from("existing export");
+    const entry = {
+      turnId: "old-turn",
+      item: {
+        id: "old-answer",
+        type: "agentMessage",
+        text: "[Export](C:/Users/Test/AppData/Local/export.md)",
+      },
+    };
+    f.sessions.catalog.message(f.thread, entry, 0);
+    await collector.close();
+    const response = await f.app.inject({
+      method: "POST",
+      url: `/api/threads/${f.thread.id}/results/reveal`,
+      headers: f.headers,
+      payload: {
+        source: "C:/Users/Test/AppData/Local/export.md",
+        messageId: "old-answer",
+        turnId: "old-turn",
+      },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().type, "artifact");
+    f.sessions.catalog.message(f.thread, entry, 0);
+    await collector.close();
+    assert.equal(f.store.db.prepare("SELECT count(*) n FROM artifact_captures").get().n, 1);
+  } finally {
+    await f.close();
+  }
+});
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "artifact-test-"));
   const source = join(root, "project");
@@ -52,6 +123,13 @@ async function fixture() {
   };
 }
 test("artifact discovery requires explicit output evidence and excludes secret-like paths", () => {
+  assert.deepEqual(
+    artifactSources({
+      type: "agentMessage",
+      text: "[Build](Dockerfile) [Section](#build) [Email](mailto:test@example.com)",
+    }),
+    ["Dockerfile"],
+  );
   assert.deepEqual(
     artifactSources({
       type: "agentMessage",

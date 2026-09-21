@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { projectFilePath } from "@codex-web/machines";
+import { codexArtifactPath } from "@codex-web/machines";
 import { HubError, type MachineConfig } from "@codex-web/shared";
 import { z } from "zod";
 import type { Store, ThreadRecord } from "./store.js";
@@ -47,7 +47,7 @@ export function resolveResultReference(
   if (!row && !ref.sourceHash) {
     let path: string;
     try {
-      path = projectFilePath(machine, root, ref.source.replace(/:\d+(?::\d+)?$/, ""));
+      path = codexArtifactPath(machine, root, ref.source.replace(/:\d+(?::\d+)?$/, ""));
     } catch {
       throw missing();
     }
