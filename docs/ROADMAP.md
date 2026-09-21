@@ -4,11 +4,15 @@
 
 Preserve the remaining usage budget: pause installer/new-user bootstrap work and large new feature stages. First resolve or verify the recent user-visible defects and the updater regression, then make the existing Shared Projects workflow usable for the owner and the admitted friend. Do not rebuild the implemented Team foundation.
 
-Current live evidence: engine `d174bfd` and owner native image `26.915.31945-fast-3ac88dd` are installed. The deployment's native postcheck failed, so installation and functional acceptance remain separate. A subsequent read-only check returned healthy/send-ready GPT and three models. One of the two reported histories loaded in 1.9 seconds; the other still failed with `NATIVE_HISTORY_HEADERS_TIMEOUT` at 15 seconds. No messages were sent or replayed. The Shared Projects and invitations endpoints returned 200 and empty owner lists. This proves endpoint availability, not a completed two-person collaboration acceptance.
+Current live evidence: engine `d174bfd` and owner native image `26.915.31945-fast-3ac88dd` are installed. The native post-install check hit transient `NATIVE_WINDOW_AMBIGUOUS`; subsequent checks returned healthy/send-ready GPT and three models. A disposable real send was acknowledged in 413 ms and completed with the exact expected answer in 5.55 seconds; its test chat was submitted for background deletion. One reported history loaded in 1.9 seconds. The owner will delete the other failing chat, “Оценка репозитория CodexWeb”; further diagnosis of that chat is out of scope. The Shared Projects and invitations endpoints returned 200 and empty owner lists. This proves endpoint availability, not a completed two-person collaboration acceptance.
+
+The reported `wizard.png.json` download was the 116-byte `INVALID_IMAGE_PATH` response: saved native image paths had `/D:/` instead of `D:/`. Both affected rows were backed up and corrected on the live Hub; authenticated reads now return `200 image/png` with valid PNG bytes for `wizard.png` and `onboarding-tablet.png`. Read-time normalization for future and previously stored Windows paths is covered by a focused SSH test. The public Remote WebSocket completed the actual Guacamole handshake without desktop input. No additional error UI was added.
+
+Updater follow-up: an unavailable existing Bridge Doctor chat must not count as an unfinished chat creation. The narrowed blocker retains active creation and uncertain send receipts; its regression test and owner-force authorization checks pass. These source fixes still need the next guarded engine release; the two image records are already repaired live.
 
 Next bounded scope:
 
-1. Fix the remaining GPT history failure; verify sends/completion, raster Results and Remote only where affected. Confirm updater recovery without adding new layers.
+1. Finish the guarded release of the verified image-path and updater fixes. Do not revisit the chat the owner elected to delete. Keep checking only concrete regressions, without extra diagnostic UI or new recovery layers.
 2. Exercise the existing shared-project path with disposable fixtures: create/publish a project, invitation acceptance, common task/note, assignee, independent checkout, and publication/review of a result. Fix concrete breaks and confusing navigation found in that path.
 3. Prioritize a simple existing-project sharing entry point, clear personal/shared context, visible invitations and task responsibility. Add only missing steps needed for one shared task through GitHub and a reviewable result.
 

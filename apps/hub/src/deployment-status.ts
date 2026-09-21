@@ -95,9 +95,11 @@ export function deploymentBlockers(
     "SELECT count(*) n FROM bridge_doctor_incidents WHERE json_extract(value,'$.delivery') IN ('dispatching','unknown')",
     "Диагностическая отправка ещё не подтверждена",
   );
+  // An unavailable/archived existing doctor chat is not an in-flight creation.
+  // Its uncertain sends remain guarded by the incident/command receipts above.
   add(
     "doctor_creation",
-    "SELECT count(*) n FROM bridge_doctor_config WHERE json_extract(value,'$.state') IN ('creating','unknown')",
+    "SELECT count(*) n FROM bridge_doctor_config WHERE json_extract(value,'$.state')='creating' OR (json_extract(value,'$.state')='unknown' AND json_extract(value,'$.threadId') IS NULL)",
     "Создание диагностического чата ещё не подтверждено",
   );
   add(

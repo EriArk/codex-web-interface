@@ -7,6 +7,9 @@ import { quotePowerShell, stopProcess } from "./index.js";
 const limit = 8 * 1024 * 1024;
 export async function readMachineImage(machine: MachineConfig, path: string): Promise<Buffer> {
   authorizeMachine(machine);
+  // Native Markdown/file URLs may preserve the leading slash before a Windows
+  // drive. Normalize at read time so already stored Results work as well.
+  if (machine.type !== "local-linux" && /^\/[a-z]:[\\/]/i.test(path)) path = path.slice(1);
   if (
     !/\.(png|jpe?g|webp|gif|avif|tiff?|heic|heif)$/i.test(path) ||
     !(machine.type === "local-linux" ? path.startsWith("/") : /^[a-z]:[\\/]/i.test(path))

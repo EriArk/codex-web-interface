@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested root-cause fixes and quiet UI (2026-09-21)
+
+- Fix the underlying failure and verify the intended operation succeeds. Adding an error message, fallback card or retry control is not a substitute for fixing a reproducible bug.
+- Keep the interface uncluttered. Do not add diagnostic notices or extra failure UI as incidental bug-fix scope; use existing feedback where necessary.
+
 ## Temporary owner-requested forced updates (2026-09-21)
 
 - Expose an additional “Обновить жёстко” action only to the original installation owner while the host updater enables it. Other users, including administrators, cannot invoke it.
