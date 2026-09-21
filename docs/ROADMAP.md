@@ -1,5 +1,15 @@
 # Roadmap
 
+## First priority: Collaboration Spaces (#215, 2026-09-21)
+
+The owner selected [issue #215](https://github.com/EriArk/codex-web-interface/issues/215) as the next primary task. It supersedes the older Shared Projects/Links/Bridges UX plan below. The legacy sidebar “Общие” shortcut is removed now; the new ▼ workspace-mode switch belongs to the implementation of #215.
+
+Reuse the existing team isolation, project, GitHub and integration services. Build a space around real Projects and users: existing native chats move in navigation without duplication, each participant keeps their own checkout, and Collaborative/Direct access is decided separately for every Project × User. GitHub remains authoritative for code, Issues and PR; no duplicate issue system or mandatory task/report workflow.
+
+Implement in coherent stages: (1) space/project membership, per-project policy, existing Project/user pickers and creation/acceptance wizards; (2) personal/shared navigation, space cards and compact overview/settings preserving native context; (3) one human chat per space with attachments and invitation/unread-only bell; (4) personal Project GPT popup, permitted linked-project context and optional local CODEXWEB.md instructions, followed by the issue's real two-user acceptance. Reuse the existing Create Project popup. Do not expose internal Link/Bridge/Relay entities as the user workflow or rewrite users' AGENTS.md.
+
+Installer work remains deferred. This priority record does not claim #215 is implemented; the complete requirements and acceptance checklist remain in the issue.
+
 ## Owner priority correction (2026-09-21)
 
 Preserve the remaining usage budget: pause installer/new-user bootstrap work and large new feature stages. First resolve or verify the recent user-visible defects and the updater regression, then make the existing Shared Projects workflow usable for the owner and the admitted friend. Do not rebuild the implemented Team foundation.

@@ -2,6 +2,10 @@
 
 This file records decisions that should be treated as fixed unless the owner explicitly changes them.
 
+## 2026-09-21 — Collaboration Spaces take priority
+
+The owner selected [#215](https://github.com/EriArk/codex-web-interface/issues/215) as the authoritative next collaboration UX. A Space organizes existing Projects, people and repositories; it is not a second synthetic code project. Per-project Collaborative/Direct policy, individual checkouts, preserved native threads, personal Project GPT and a simple human chat replace the earlier user-facing Links/Bridges workflow. GitHub owns Issues/PR; optional Codex instructions use local CODEXWEB.md, never managed rewrites of user AGENTS.md. Keep the current lower-level implementation where useful. See the issue for the full creation/acceptance/settings and real two-user acceptance requirements.
+
 ## 2026-09-19 — Native Linux ChatGPT evaluation first
 
 The owner approved #193 as the immediate priority and completed sign-in to the official combined Linux ChatGPT/Codex application. That combined UI is acceptable if ordinary consumer GPT works. Evaluate a private Hub-local native runtime, preferring local IPC and considering a native renderer adapter where necessary. Keep the old connector/profile and all Codex recovery available during evaluation. A supported package and successful login do not alone prove a viable replacement; authenticated reads, exact-once disposable sends, media and lifecycle evidence are required. Findings and remaining gates: [GPT_NATIVE_LINUX.md](GPT_NATIVE_LINUX.md).

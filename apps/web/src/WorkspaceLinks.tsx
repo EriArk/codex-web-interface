@@ -1,5 +1,4 @@
 import { Icon } from "./icons";
-import { SharedProjectsButton } from "./TeamProjectsHost";
 import "./workspace-links.css";
 export function WorkspaceLinks({
   onTasks,
@@ -28,7 +27,6 @@ export function WorkspaceLinks({
             <span>{label}</span>
           </button>
         ))}
-      <SharedProjectsButton compact />
     </nav>
   );
 }
