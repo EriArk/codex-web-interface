@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,7 +25,7 @@ test("public fenced blocks retain exact CRLF, identity and frozen versions; repl
       previews = new Previews(root, store, () => {
         throw Error();
       });
-    const body = "Привет 👍\r\n  spaces\r\n\r\n";
+    const body = "Привет 👍\r\n  spaces\r\n" + "line\r\n".repeat(19);
     const text = "Ordinary prose\r\n\r\n```markdown\r\n" + body + "```\r\n";
     const blocks = gptResultContent(text).blocks;
     assert.equal(blocks.length, 1);
@@ -88,7 +89,7 @@ test("public fenced blocks retain exact CRLF, identity and frozen versions; repl
   }
 });
 
-test("authenticated routes stream frozen files, reject revocation/cross-account IDs and coalesce Canvas metadata", async () => {
+test("authenticated routes stream frozen files and reveal only the exact long message block", async () => {
   const root = mkdtempSync(join(tmpdir(), "gpt-text-http-"));
   const stores = [new Store(":memory:"), new Store(":memory:")],
     apps = [];
@@ -135,41 +136,67 @@ test("authenticated routes stream frozen files, reject revocation/cross-account 
     revoked = true;
     assert.equal((await apps[0].inject(item.payload.url)).statusCode, 403);
     revoked = false;
-    let calls = 0;
-    services[0].workspaceWork.canvases = async (id) => {
-      calls++;
-      await Promise.resolve();
-      return {
-        items: [
-          {
-            id: "doc",
-            conversationId: id,
-            title: "Notes",
-            type: "document",
-            content: "private body",
-            version: 3,
-            revision: "r",
-          },
-        ],
-      };
+    const body = "long\r\n".repeat(21),
+      text = "Before\r\n\r\n```md\r\n" + body + "```\r\nAfter";
+    const message = {
+      id: "reply",
+      role: "assistant",
+      text,
+      files: [],
+      createdAt: 1,
+      complete: true,
     };
-    const [a, b] = await Promise.all([
-      services[0].canvasResults("chat"),
-      services[0].canvasResults("chat"),
-    ]);
-    assert.equal(calls, 1);
-    assert.deepEqual(a, b);
-    assert.equal(a[0].payload.canvas.id, "doc");
-    assert(!JSON.stringify(a).includes("private body"));
-    assert.equal((await services[0].canvasResults("chat"))[0].id, a[0].id);
-    assert.equal(calls, 1);
-    assert.deepEqual(await services[1].canvasResults("chat", true), []);
-    const exact = await apps[0].inject("/api/gpt/conversations/chat/results/" + a[0].id);
+    services[0].historyCache.messages = async (id) => (id === "chat" ? [message] : []);
+    const block = gptResultContent(text).blocks[0];
+    const reference = {
+      source: `text-block:${block.offset}:${createHash("sha256").update(body).digest("hex")}`,
+      messageId: "reply",
+    };
+    const reveal = (ref, chat = "chat") =>
+      apps[0].inject({
+        method: "POST",
+        url: `/api/gpt/conversations/${chat}/results/reveal`,
+        payload: ref,
+      });
+    const exact = await reveal(reference);
     assert.equal(exact.statusCode, 200);
-    assert.equal(exact.json().payload.canvas.id, "doc");
+    assert.equal((await apps[0].inject(exact.json().payload.url)).body, body);
+    assert.equal((await reveal({ ...reference, messageId: "other" })).statusCode, 404);
+    assert.equal((await reveal(reference, "other")).statusCode, 404);
+    message.text = text.replace("long", "changed");
+    assert.equal((await reveal(reference)).statusCode, 404);
   } finally {
     for (const app of apps) await app.close();
     for (const store of stores) store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("1 to 20 lines remain in chat; 21 lines export without renumbering or losing images/links", () => {
+  const root = mkdtempSync(join(tmpdir(), "gpt-block-policy-")),
+    store = new Store(":memory:");
+  try {
+    const artifacts = new GptTextArtifacts(root, store),
+      previews = new Previews(root, store, () => {
+        throw Error();
+      });
+    const text =
+      [1, 20, 21].map((n) => "```md\r\n" + "line\r\n".repeat(n) + "```").join("\r\n\r\n") +
+      "\n\n![Web](https://example.org/image.png)\n\n[Source](https://example.org/page)";
+    const items = gptResults(
+      "chat",
+      [{ id: "m", role: "assistant", text, files: [], createdAt: 1, complete: true }],
+      previews,
+      undefined,
+      artifacts,
+    );
+    assert.equal(items.filter((x) => x.id.startsWith("text-")).length, 1);
+    assert.equal(store.db.prepare("SELECT blockIndex FROM gpt_text_artifacts").get().blockIndex, 2);
+    assert.equal(items.find((x) => x.type === "image").title, "Web");
+    assert.equal(items.filter((x) => x.type === "link").length, 1);
+    assert.equal(gptResultContent("```md\nunfinished\n".repeat(1)).blocks.length, 0);
+  } finally {
+    store.close();
     rmSync(root, { recursive: true, force: true });
   }
 });

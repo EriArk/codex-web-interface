@@ -1,6 +1,7 @@
 ﻿import { createHash } from "node:crypto";
 import { codexArtifactPath, copyCodexArtifact, type readProjectFile } from "@codex-web/machines";
-import { HubError, type MachineConfig } from "@codex-web/shared";
+import { CHAT_BLOCK_LINES, textBlockLines, HubError, type MachineConfig } from "@codex-web/shared";
+import { gptResultContent } from "./gpt-result-content.js";
 import type { Artifacts } from "./artifacts.js";
 import type { Store, ThreadRecord } from "./store.js";
 
@@ -128,6 +129,43 @@ export class GeneratedArtifacts {
     if (id && notify) this.onChange(c.threadId, id, c.turnId);
   }
   observe(thread: ThreadRecord, turnId: string | null, item: Record<string, unknown>): void {
+    if (item.type === "agentMessage" && item.phase !== "commentary") {
+      for (const block of gptResultContent(text(item.text)).blocks) {
+        if (textBlockLines(block.text) <= CHAT_BLOCK_LINES) continue;
+        const key =
+          "text-block:" +
+          JSON.stringify([
+            turnId,
+            item.id,
+            block.offset,
+            createHash("sha256").update(block.text).digest("hex"),
+          ]);
+        if (
+          this.store.db
+            .prepare("SELECT 1 FROM results WHERE threadId=? AND sourceKey=?")
+            .get(thread.id, key)
+        )
+          continue;
+        try {
+          const name = `block-${block.index + 1}.txt`;
+          const file = this.artifacts.putFile(
+            thread.id,
+            turnId,
+            name,
+            key,
+            "text/plain",
+            Buffer.from(block.text),
+          );
+          const id = this.store.result(thread.id, turnId, key, "artifact", name, {
+            ...file,
+            language: block.language,
+          });
+          if (id) this.onChange(thread.id, id, turnId);
+        } catch {
+          // The canonical message remains available if artifact storage is full.
+        }
+      }
+    }
     let target: { machine: MachineConfig; root: string };
     try {
       target = this.target(thread.id);

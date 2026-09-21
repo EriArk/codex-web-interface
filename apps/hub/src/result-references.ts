@@ -27,13 +27,26 @@ export function resolveResultReference(
       "Этот файл или изображение не найдены в результатах сообщения. Возможно, они ещё не сохранены или уже удалены.",
     );
   // Direct Hub links still have to belong to the authorized source conversation.
-  let row = /^\/api\/(?:artifacts|native-images|previews)\/[a-zA-Z0-9_-]+$/.test(ref.source)
+  let row = /^text-block:\d+:[a-f0-9]{64}$/.test(ref.source)
     ? store.db
-        .prepare(
-          "SELECT id FROM results WHERE threadId=? AND json_extract(payload,'$.url')=? LIMIT 1",
+        .prepare("SELECT id FROM results WHERE threadId=? AND sourceKey=?")
+        .get(
+          thread.id,
+          "text-block:" +
+            JSON.stringify([
+              ref.turnId ?? null,
+              ref.messageId,
+              Number(ref.source.split(":")[1]),
+              ref.source.split(":")[2],
+            ]),
         )
-        .get(thread.id, ref.source)
-    : undefined;
+    : /^\/api\/(?:artifacts|native-images|previews)\/[a-zA-Z0-9_-]+$/.test(ref.source)
+      ? store.db
+          .prepare(
+            "SELECT id FROM results WHERE threadId=? AND json_extract(payload,'$.url')=? LIMIT 1",
+          )
+          .get(thread.id, ref.source)
+      : undefined;
   if (!row) {
     const sourceKey = ref.sourceHash || createHash("sha256").update(ref.source).digest("hex");
     const image = store.db

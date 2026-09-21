@@ -11,11 +11,15 @@ import {
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccessPicker } from "./AccessPicker";
-import { type ArtifactRequest, artifactComponents, artifactSource } from "./ArtifactMarkdown";
+import {
+  type ArtifactRequest,
+  artifactComponents,
+  artifactSource,
+  messageCode,
+} from "./ArtifactMarkdown";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
-import { accountSessionStorage as sessionStorage } from "./accountStorage.ts";
+import { accountSessionStorage as sessionStorage, workspaceMediaUrl } from "./accountStorage.ts";
 import { api } from "./api";
-import { CollapsibleCode } from "./CollapsibleCode";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { ContextUsage } from "./ContextUsage";
@@ -42,18 +46,22 @@ const positions = new Map<string, number>();
 const MessageText = memo(function MessageText({
   text,
   onArtifact,
+  resolveImage,
+  complete,
 }: {
   text: string;
   onArtifact?: (source: string) => void;
+  resolveImage?: (source: string) => Promise<string | undefined>;
+  complete?: boolean;
 }) {
   return (
     <Markdown
       urlTransform={(url) => (onArtifact && artifactSource(url) ? url : defaultUrlTransform(url))}
       remarkPlugins={[remarkGfm]}
       components={{
-        pre: CollapsibleCode,
+        pre: messageCode(text, onArtifact, complete),
         table: MarkdownTable,
-        ...artifactComponents(onArtifact),
+        ...artifactComponents(onArtifact, resolveImage),
       }}
     >
       {text}
@@ -632,6 +640,28 @@ export function Chat({
                     <div className="message-body">
                       <MessageText
                         text={message.text}
+                        complete={
+                          message.phase !== "commentary" &&
+                          message.turnId !== state.thread.activeTurnId
+                        }
+                        resolveImage={
+                          message.role === "assistant"
+                            ? async (source) =>
+                                (
+                                  await api<Result>(
+                                    `/threads/${encodeURIComponent(threadId)}/results/reveal`,
+                                    {
+                                      method: "POST",
+                                      body: {
+                                        source,
+                                        messageId: message.id,
+                                        turnId: message.turnId,
+                                      },
+                                    },
+                                  )
+                                ).payload.url
+                            : undefined
+                        }
                         onArtifact={
                           message.role === "assistant" && onArtifact
                             ? (source) =>
@@ -665,6 +695,52 @@ export function Chat({
                           })),
                         ]}
                       />
+                      {message.role === "assistant" &&
+                        message.phase !== "commentary" &&
+                        !/!\[[^\]]*\]\(/.test(message.text) &&
+                        !state.messages
+                          .slice(index + 1)
+                          .some(
+                            (next) => next.role === "assistant" && next.turnId === message.turnId,
+                          ) && (
+                          <div className="message-file-links">
+                            {results
+                              .filter(
+                                (result) =>
+                                  result.type === "image" &&
+                                  result.turnId === message.turnId &&
+                                  (!result.threadId || result.threadId === threadId) &&
+                                  result.payload.url,
+                              )
+                              .map((result) => (
+                                <span
+                                  key={result.id}
+                                  className={
+                                    /^https?:\/\//i.test(result.payload.url!)
+                                      ? "message-web-image"
+                                      : "message-generated-image"
+                                  }
+                                >
+                                  <button
+                                    type="button"
+                                    aria-label={result.title}
+                                    onClick={() =>
+                                      onArtifact
+                                        ? onArtifact({ scope: threadId, result })
+                                        : onResult(result.id)
+                                    }
+                                  >
+                                    <img
+                                      src={workspaceMediaUrl(result.payload.url)}
+                                      alt={result.title}
+                                      loading="lazy"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </button>
+                                </span>
+                              ))}
+                          </div>
+                        )}
                     </div>
                     {message.role === "assistant" &&
                       message.phase === "plan" &&

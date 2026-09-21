@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import type { GptMessage, ResultCategory, ResultItem, ResultPage } from "@codex-web/shared";
-import { emptyResultCounts, HubError, resultCategory } from "@codex-web/shared";
+import {
+  CHAT_BLOCK_LINES,
+  textBlockLines,
+  emptyResultCounts,
+  HubError,
+  resultCategory,
+} from "@codex-web/shared";
 import { gptResultContent } from "./gpt-result-content.js";
 import type { GptTextArtifacts } from "./gpt-text-artifacts.js";
 import type { Previews } from "./previews.js";
@@ -54,6 +60,7 @@ export function gptResults(
     if (message.role !== "assistant") continue;
     if (textArtifacts && message.complete !== false && message.phase !== "commentary") {
       for (const block of content.blocks) {
+        if (textBlockLines(block.text) <= CHAT_BLOCK_LINES) continue;
         const item = textArtifacts.put(
           nativeId,
           message.id,
@@ -62,6 +69,22 @@ export function gptResults(
         );
         results.set(item.id, item);
       }
+    }
+    for (const [url, title] of content.images) {
+      if (message.files.some((file) => file.url === url)) continue;
+      const id =
+        "web-image-" +
+        createHash("sha256")
+          .update(JSON.stringify([nativeId, message.id, url]))
+          .digest("hex");
+      results.set(id, {
+        id,
+        turnId: message.id,
+        type: "image",
+        title,
+        createdAt: new Date(message.createdAt * 1000 || 0).toISOString(),
+        payload: { url },
+      });
     }
     for (const file of message.files) {
       const id = file.id;

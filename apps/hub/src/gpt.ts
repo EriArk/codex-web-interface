@@ -4,6 +4,8 @@ import { copyFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import {
+  CHAT_BLOCK_LINES,
+  textBlockLines,
   type GptConnection,
   type GptFile,
   type GptJob,
@@ -42,6 +44,7 @@ import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
 import { GptReadBackoff } from "./gpt-read-backoff.js";
 import { gptResults, resultPage } from "./gpt-results.js";
+import { gptResultContent } from "./gpt-result-content.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 import { GptTextArtifacts } from "./gpt-text-artifacts.js";
 import { GptWorkspaceWork, workspaceId, workspaceInput } from "./gpt-workspace.js";
@@ -2038,6 +2041,29 @@ export function registerGpt(
     const matches = messages
       .filter((item) => ids.has(item.id) && item.role === "assistant")
       .flatMap((message) => {
+        if (/^text-block:\d+:[a-f0-9]{64}$/.test(ref.source)) {
+          const [, offset, hash] = ref.source.split(":");
+          const block = gptResultContent(message.text).blocks.find(
+            (block) =>
+              block.offset === Number(offset) &&
+              createHash("sha256").update(block.text).digest("hex") === hash,
+          );
+          if (
+            !block ||
+            textBlockLines(block.text) <= CHAT_BLOCK_LINES ||
+            message.complete === false ||
+            message.phase === "commentary"
+          )
+            return [];
+          return [
+            service.textArtifacts.put(
+              p.id,
+              message.id,
+              block,
+              new Date(message.createdAt * 1000 || 0).toISOString(),
+            ),
+          ];
+        }
         const source = ref.source.startsWith("sandbox:")
           ? gptSandboxFiles(`[file](<${ref.source}>)`, p.id, message.id).files[0]?.url
           : ref.source;

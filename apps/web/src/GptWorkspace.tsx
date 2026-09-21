@@ -15,14 +15,18 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { NavigationDivider } from "./NavigationDivider";
-import { type ArtifactRequest, artifactComponents, artifactSource } from "./ArtifactMarkdown";
+import {
+  type ArtifactRequest,
+  artifactComponents,
+  artifactSource,
+  messageCode,
+} from "./ArtifactMarkdown";
 import {
   accountLocalStorage as localStorage,
   accountSessionStorage as sessionStorage,
   workspaceMediaUrl,
 } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
-import { CollapsibleCode } from "./CollapsibleCode";
 import { CopyButton } from "./CopyButton";
 import { useDictation } from "./Dictation";
 import { DownloadLink } from "./DownloadLink";
@@ -85,14 +89,21 @@ const Files = memo(function Files({ files }: { files: GptFile[] }) {
 const Text = memo(function Text({
   value,
   onArtifact,
+  resolveImage,
+  complete = true,
 }: {
   value: string;
   onArtifact?: (source: string) => void;
+  resolveImage?: (source: string) => Promise<string | undefined>;
+  complete?: boolean;
 }) {
   const artifactHandler = useRef(onArtifact);
+  const imageResolver = useRef(resolveImage);
   useLayoutEffect(() => {
     artifactHandler.current = onArtifact;
-  }, [onArtifact]);
+    imageResolver.current = resolveImage;
+  }, [onArtifact, resolveImage]);
+  const resolve = useCallback(async (source: string) => imageResolver.current?.(source), []);
   const openArtifact = useCallback((source: string) => artifactHandler.current?.(source), []);
   const hasArtifacts = !!onArtifact;
   const contextEnd = value.startsWith(projectContextStart) ? value.indexOf(projectContextEnd) : -1;
@@ -113,26 +124,28 @@ const Text = memo(function Text({
           }
           remarkPlugins={[remarkGfm]}
           components={{
-            pre: CollapsibleCode,
+            pre: messageCode(value, hasArtifacts ? openArtifact : undefined, complete),
             table: MarkdownTable,
-            ...artifactComponents(hasArtifacts ? openArtifact : undefined),
+            ...artifactComponents(hasArtifacts ? openArtifact : undefined, resolve),
           }}
         >
           {contextEnd >= 0 ? value.slice(contextEnd + projectContextEnd.length) : value}
         </Markdown>
       </>
     ),
-    [value, hasArtifacts, openArtifact, contextEnd],
+    [value, hasArtifacts, openArtifact, contextEnd, complete, resolve],
   );
 });
 function ResponseResults({
   text,
   files,
   onOpen,
+  onArtifact,
 }: {
   text: string;
   files: GptFile[];
   onOpen: (category: ResultCategory) => void;
+  onArtifact: (source: string) => void;
 }) {
   const demo = /(?:^|\n)(?:\x60{3}|~{3})html[ \t]*\r?\n[\s\S]*?\r?\n(?:\x60{3}|~{3})(?=\s|$)/i.test(
     text,
@@ -140,11 +153,39 @@ function ResponseResults({
   if (!files.length && !demo) return null;
   const category = files.some((file) => !file.image) ? "files" : files.length ? "images" : "demos";
   return (
-    <button type="button" className="result-chip" onClick={() => onOpen(category)}>
-      <Icon name="results" size={16} />
-      Результаты ответа
-      <Icon name="chevron" size={14} />
-    </button>
+    <>
+      <div className="message-file-links">
+        {files
+          .filter((file) => !text.includes(file.url))
+          .map((file) =>
+            file.image ? (
+              <span className="message-generated-image" key={file.id}>
+                <button type="button" onClick={() => onArtifact(file.url)} aria-label={file.name}>
+                  <img src={workspaceMediaUrl(file.url)} alt={file.name} loading="lazy" />
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                key={file.id}
+                className="result-chip"
+                onClick={() => onArtifact(file.url)}
+              >
+                <Icon name="file" size={16} />
+                {file.name}
+                <Icon name="chevron" size={14} />
+              </button>
+            ),
+          )}
+      </div>
+      {demo && (
+        <button type="button" className="result-chip" onClick={() => onOpen(category)}>
+          <Icon name="results" size={16} />
+          Результаты ответа
+          <Icon name="chevron" size={14} />
+        </button>
+      )}
+    </>
   );
 }
 function cachedId() {
@@ -1147,7 +1188,12 @@ export function GptWorkspace({
                     value={job.answer}
                     onArtifact={(source) => openArtifact(source, job.assets, job.id)}
                   />
-                  <ResponseResults text={job.answer} files={job.assets} onOpen={openResults} />
+                  <ResponseResults
+                    text={job.answer}
+                    files={job.assets}
+                    onOpen={openResults}
+                    onArtifact={(source) => openArtifact(source, job.assets, job.id)}
+                  />
                 </div>
               </article>
             )}
@@ -1820,6 +1866,15 @@ export function GptWorkspace({
                     <div className="message-body">
                       <Text
                         value={message.text}
+                        complete={message.complete !== false && message.phase !== "commentary"}
+                        resolveImage={async (source) =>
+                          (
+                            await api<ResultItem>(
+                              `/gpt/conversations/${encodeURIComponent(selected)}/results/reveal`,
+                              { method: "POST", body: { source, messageId: message.id } },
+                            )
+                          ).payload.url
+                        }
                         onArtifact={
                           message.role === "assistant"
                             ? (source) => openArtifact(source, message.files, message.id)
@@ -1858,6 +1913,7 @@ export function GptWorkspace({
                           text={message.text}
                           files={message.files}
                           onOpen={openResults}
+                          onArtifact={(source) => openArtifact(source, message.files, message.id)}
                         />
                       )}
                     </div>

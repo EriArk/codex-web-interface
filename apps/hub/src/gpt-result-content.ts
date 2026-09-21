@@ -9,6 +9,7 @@ type Node = {
   identifier?: string;
   value?: string;
   lang?: string | null;
+  alt?: string | null;
   children?: Node[];
   position?: { start: { offset?: number; column: number }; end: { offset?: number } };
 };
@@ -20,7 +21,8 @@ export function gptResultContent(text: string, publicBaseUrl?: string) {
   const definitions = new Map<string, string>();
   const links = new Map<string, string>();
   const demos: string[] = [];
-  const blocks: { index: number; text: string; language: string }[] = [];
+  const blocks: { index: number; offset: number; text: string; language: string }[] = [];
+  const images = new Map<string, string>();
   let blockIndex = 0;
   const origin = publicBaseUrl ? new URL(publicBaseUrl).origin : undefined;
   function collect(node: Node) {
@@ -45,6 +47,7 @@ export function gptResultContent(text: string, publicBaseUrl?: string) {
           const end = closing.index + (raw[closing.index] === "\n" ? 1 : 0);
           blocks.push({
             index,
+            offset: node.position?.start.offset ?? 0,
             text: raw.slice(opening[0].length, end),
             language: (node.lang ?? "").slice(0, 80),
           });
@@ -58,17 +61,21 @@ export function gptResultContent(text: string, publicBaseUrl?: string) {
         demos.push(node.value!);
       return;
     }
+    const image = node.type === "image" || node.type === "imageReference";
     const raw =
-      node.type === "link"
+      node.type === "link" || node.type === "image"
         ? node.url
-        : node.type === "linkReference"
+        : node.type === "linkReference" || node.type === "imageReference"
           ? definitions.get(node.identifier ?? "")
           : undefined;
     if (raw && /^https?:\/\//i.test(raw) && raw.length <= 8192 && !/[\x00-\x20\x7f]/.test(raw)) {
       try {
         const url = new URL(raw);
         if (!url.username && !url.password && url.origin !== origin)
-          links.set(url.href, label(node).trim().slice(0, 400) || url.hostname);
+          (image ? images : links).set(
+            url.href,
+            (image ? (node.alt ?? "") : label(node)).trim().slice(0, 400) || url.hostname,
+          );
       } catch {
         /* Invalid destinations are not actionable links. */
       }
@@ -76,5 +83,5 @@ export function gptResultContent(text: string, publicBaseUrl?: string) {
     for (const child of node.children ?? []) visit(child);
   }
   visit(tree);
-  return { links, demos, blocks };
+  return { links, demos, blocks, images };
 }

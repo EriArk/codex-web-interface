@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested message/result continuity (2026-09-21)
+
+- Keep text/code blocks of up to 20 logical lines inclusive visible in Codex/GPT messages; do not turn them into Results files. Longer completed blocks belong in Results with an exact clickable reference at their original message position. Keep copy controls and original text bytes.
+- Files, images, links and exported blocks retain actionable places in the source chat. Web images use small thumbnails; generated images appear in chat as well as Results. Preserve exact source identities and existing private download boundaries.
+
 ## Owner-requested linked project entry (2026-09-21)
 
 - Linked Projects in Spaces open the normal Project tools through the participant's own working copy. Offer connecting/creating that copy directly from the Project row.

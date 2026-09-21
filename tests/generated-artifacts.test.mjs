@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +19,36 @@ import { configSchema } from "../packages/shared/dist/index.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
 const machine = { id: "local", type: "local-linux" };
+test("Codex exports long blocks once, keeps short blocks inline and binds exact source bytes", async () => {
+  const f = await fixture();
+  try {
+    const short = "```md\n" + "short\n".repeat(20) + "```\n\n",
+      body = "long\r\n".repeat(21);
+    const item = {
+      id: "block-answer",
+      type: "agentMessage",
+      text: short + "```md\r\n" + body + "```",
+    };
+    f.generated.observe(f.thread, "turn", item);
+    f.generated.observe(f.thread, "turn", item);
+    assert.equal(f.store.db.prepare("SELECT count(*) n FROM artifacts").get().n, 1);
+    const ref = {
+      source: `text-block:${short.length}:${createHash("sha256").update(body).digest("hex")}`,
+      messageId: item.id,
+      turnId: "turn",
+    };
+    const result = resolveResultReference(f.store, f.thread, machine, f.source, ref);
+    assert.equal(f.artifacts.get(result.payload.url.split("/").at(-1)).data.toString(), body);
+    assert.throws(() =>
+      resolveResultReference(f.store, f.thread, machine, f.source, { ...ref, messageId: "other" }),
+    );
+    assert.throws(() =>
+      resolveResultReference(f.store, f.thread, machine, f.source, { ...ref, turnId: "other" }),
+    );
+  } finally {
+    await f.close();
+  }
+});
 test("native export outside the checkout is captured, revealed and kept private to its message", async () => {
   const f = await fixture();
   try {

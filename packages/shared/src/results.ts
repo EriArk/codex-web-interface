@@ -1,4 +1,9 @@
 import { z } from "zod";
+/** The fence's terminating newline does not add an extra displayed line. */
+export function textBlockLines(text: string): number {
+  return text.replace(/\r?\n$/, "").split(/\r?\n/).length;
+}
+export const CHAT_BLOCK_LINES = 20;
 export const resultCategorySchema = z.enum([
   "all",
   "images",

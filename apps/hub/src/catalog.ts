@@ -740,6 +740,15 @@ export class Catalog {
   observeLinks(thread: ThreadRecord, turnId: string | null, item: Record<string, unknown>) {
     if (item.type !== "agentMessage" || typeof item.text !== "string") return [];
     const results: string[] = [];
+    for (const [url, title] of gptResultContent(item.text, this.config.hub.publicBaseUrl).images) {
+      const key =
+        "web-image:" +
+        createHash("sha256")
+          .update(JSON.stringify([item.id, url]))
+          .digest("hex");
+      const id = this.store.result(thread.id, turnId, key, "image", title, { url });
+      if (id) results.push(id);
+    }
     for (const [url, title] of gptResultContent(item.text, this.config.hub.publicBaseUrl).links) {
       const key = "external-link:" + createHash("sha256").update(url).digest("hex");
       const id = this.store.result(thread.id, turnId, key, "link", title, { url });
