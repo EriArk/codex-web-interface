@@ -23,7 +23,7 @@ test("activity exposes a bounded category, never tool arguments, output or thoug
   assert.doesNotMatch(JSON.stringify(nativeActivity(message)), /SECRET|args|path/);
 });
 
-test("Results groups public intermediate output by request and keeps final/media separate", () => {
+test("Results groups public intermediate output and the final answer by exact request", () => {
   const user = (id) => ({ id, role: "user", text: "Question " + id, files: [], createdAt: 1 });
   const step = {
     id: "step",
@@ -45,7 +45,10 @@ test("Results groups public intermediate output by request and keeps final/media
   assert.equal(page.items[0].turnId, "u2");
   assert.deepEqual(page.items[0].payload.steps, []);
   assert.equal(page.items[1].payload.steps[0].text, "Public explanation");
-  assert.doesNotMatch(JSON.stringify(page), /Final answer/);
+  assert.deepEqual(page.items[1].payload.steps.map(({ id, text, state }) => ({ id, text, state })), [
+    { id: "step", text: "Public explanation", state: "completed" },
+    { id: "final", text: "Final answer", state: "completed" },
+  ]);
   const parsed = gptHistory({
     current_node: "s",
     mapping: {

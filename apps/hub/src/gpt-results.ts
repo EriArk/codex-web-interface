@@ -25,12 +25,12 @@ export function gptResults(
         payload: { text: message.text, steps: [] },
       };
       results.set(request.id, request);
-    } else if (request && (message.phase === "commentary" || message.complete === false)) {
+    } else if (request && message.role === "assistant") {
       request.payload.steps!.push({
         id: message.id,
         text: message.text,
         activity: message.activity,
-        state: message.complete ? "completed" : "active",
+        state: message.complete === false ? "active" : "completed",
       });
     }
     const content = gptResultContent(message.text, publicBaseUrl);

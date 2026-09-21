@@ -82,7 +82,7 @@ test("GPT results contain only assistant artifacts and inline HTML from the curr
     );
     assert.equal(loads, 1);
     assert(!results.some((r) => r.id === "file-user"));
-    assert.equal(results.length, 46);
+    assert.equal(results.length, 47); // 45 files, one demo and the request's response history.
     const first = resultPage(results, "images"),
       second = resultPage(results, "images", first.nextBefore);
     assert.equal(first.items.length, 20);
@@ -175,7 +175,8 @@ test("GPT links use visible Markdown, exact public URLs, stable identities and s
   assert.equal(page.counts.demos, 1);
   assert.deepEqual(demoHtml, ["<div>Real demo</div>"]);
   assert.equal(page.counts.work, 0);
-  assert.equal(page.counts.all, 5);
+  assert.equal(page.counts.reasoning, 1);
+  assert.equal(page.counts.all, 6);
   assert.equal(page.items[0].title, "Latest documentation");
   assert.equal(page.items[0].turnId, "latest");
   assert.equal(

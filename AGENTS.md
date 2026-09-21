@@ -49,6 +49,7 @@
 ## Owner-requested public GPT progress and warm active history (2026-09-20)
 
 - GPT chat shows user messages and completed final responses. Public commentary and recognized public tool-action categories belong in Results → Reasoning, grouped by the exact native user message, and in the expanded running progress panel.
+- Results → Reasoning → response history also includes the final public answer after its intermediate messages (owner update 2026-09-21).
 - The collapsed progress control shows only a short action with its icon, never a scrolling answer. Keep live public text in the expanded panel. Never expose hidden analysis, raw tool arguments/results or internal diagnostics.
 - Keep active native chats warm on the Hub independently of the open browser page. Reuse canonical reads, coalesce concurrent loads and bound refresh frequency/cache size. Refresh completion immediately; never replay sends or preload the entire catalog. Returning viewers see available cached history while background work continues.
 - Retain recently viewed GPT history for 30 minutes after use. Pins and the ten latest unpinned catalog chats have no time expiry in memory, subject to a shared 32-chat / 32 MiB per-user budget. Prefer active work, pins, then the recent ten during eviction. Restore available private disk snapshots without polling inactive native chats; refresh an opened chat quietly.
