@@ -25,7 +25,7 @@ For the short current-status map, including what is implemented versus installed
 - Invitation-only member admission and owner-enabled multi-user infrastructure with isolated personal runtimes.
 - [Collaboration Spaces](docs/COLLABORATION_SPACES.md): explicit per-project access agreements, invitations, one human chat per Space, personal Project GPT, linked-project entry through each participant's own checkout and collaboration-aware Codex/Git delivery.
 
-The Collaboration Spaces source implementation has extensive disposable/two-user browser coverage, but real owner/friend acceptance with actual machines, native accounts and GitHub permissions is still a separate gate. Implementation, verification, installation and real acceptance are deliberately tracked as different states.
+Collaboration Spaces also has real two-user usage now: a second user is connected, the basic shared flow works, and their own project copy can be created/connected and used for work. Disposable browser checks still cover regression/edge cases; broader polish remains separate from this basic real-user acceptance.
 
 ## Deployment
 
