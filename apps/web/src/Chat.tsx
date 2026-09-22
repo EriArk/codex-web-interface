@@ -530,7 +530,13 @@ export function Chat({
               <span className="small muted">
                 {state.contextTurn ? "Фрагмент диалога" : "В Codex появились новые сообщения"}
               </span>
-              <button type="button" className="secondary" onClick={() => void onLatest()}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  void Promise.resolve(onLatest()).catch(() => {});
+                }}
+              >
                 К последним сообщениям
               </button>
             </div>
