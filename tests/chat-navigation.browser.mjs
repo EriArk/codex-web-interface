@@ -69,20 +69,27 @@ try {
         el.scrollIntoView({ block: "start" }),
       );
       await page.getByRole("button", { name: "Предыдущее сообщение" }).click();
+      await expect.poll(() => top("m2")).toBeGreaterThanOrEqual(-1);
       await expect.poll(() => top("m2")).toBeLessThan(12);
 
       // The hidden/internal row is not a navigation stop. At the first loaded
       // public message, Previous loads older canonical history and lands on m1.
       await page.getByRole("button", { name: "Предыдущее сообщение" }).click();
       await expect(page.getByTestId("older-calls")).toHaveText("1");
+      await expect.poll(() => top("m1")).toBeGreaterThanOrEqual(-1);
       await expect.poll(() => top("m1")).toBeLessThan(12);
 
       await page.getByRole("button", { name: "Следующее сообщение" }).click();
+      await expect.poll(() => top("m2")).toBeGreaterThanOrEqual(-1);
       await expect.poll(() => top("m2")).toBeLessThan(12);
+      await page.getByRole("button", { name: "Следующее сообщение" }).click();
+      await expect.poll(() => top("m3")).toBeGreaterThanOrEqual(-1);
+      await page.getByRole("button", { name: "Предыдущее сообщение" }).click();
+      await expect.poll(() => top("m2")).toBeGreaterThanOrEqual(-1);
 
       await page.getByRole("button", { name: "Fragment", exact: true }).click();
       await expect(page.getByTestId("newer-calls")).toHaveText("0");
-      await page.getByRole("button", { name: "К последним сообщениям" }).click();
+      await page.getByRole("button", { name: "В конец чата" }).click();
       await expect(page.getByTestId("newer-calls")).toHaveText("1");
       await expect.poll(() =>
         scroller.evaluate(
@@ -91,6 +98,18 @@ try {
       ).toBeLessThan(2);
 
       await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue("Keep draft");
+      await expect(page.getByTestId("attachment")).toHaveText("report.txt");
+      await expect(page.getByRole("button", { name: "В конец чата" })).toBeDisabled();
+
+      const widthBefore = await scroller.evaluate((el) => el.clientWidth);
+      for (const width of [390, 1024, 1280]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+        const controls = page.getByRole("navigation", { name: "Навигация по сообщениям" });
+        await expect(controls).toBeVisible();
+        const box = await controls.boundingBox();
+        assert(box && box.x >= 0 && box.x + box.width <= width);
+        assert.equal(await scroller.evaluate((el) => el.clientWidth), widthBefore);
+      }
       assert.deepEqual(errors, []);
       console.log(
         engine +
