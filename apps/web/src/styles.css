@@ -935,13 +935,6 @@ time {
 .stop-button {
   background: var(--danger);
 }
-.new-message-button {
-  position: absolute;
-  bottom: 135px;
-  align-self: center;
-  z-index: 2;
-  box-shadow: var(--shadow);
-}
 .error-notice {
   display: flex;
   align-items: center;
@@ -1875,9 +1868,6 @@ dialog::backdrop {
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
-}
-.new-message-button {
-  bottom: 190px;
 }
 @media (max-width: 1099px) {
   .composer-options select {
