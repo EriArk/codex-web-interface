@@ -88,6 +88,7 @@ export function ChatNavigation({
     el.addEventListener("scroll", changed, { passive: true });
     mutation.observe(el, { childList: true, subtree: true });
     resize.observe(el);
+    if (el.firstElementChild instanceof HTMLElement) resize.observe(el.firstElementChild);
     measure();
     return () => {
       el.removeEventListener("scroll", changed);
@@ -126,6 +127,7 @@ export function ChatNavigation({
       return;
     }
     await afterPaint();
+    if (scroller.current !== el) return;
     nodes = messages(el);
     index = currentId ? nodes.findIndex((node) => node.dataset.message === currentId) : -1;
     reveal(index > 0 ? nodes[index - 1] : nodes[0]);
@@ -146,6 +148,7 @@ export function ChatNavigation({
       try {
         await loadNewer();
         await afterPaint();
+        if (scroller.current !== el) return;
       } catch {
         measure();
         return;
