@@ -35,7 +35,7 @@ Execution stays on the user's configured machine/runtime. The public browser tal
 
 The Team foundation is implemented around isolated personal runtimes. Each user keeps separate private stores, native identities, Codex/GPT sessions, machines, artifacts and background work. Shared membership never implies access to another user's private runtime.
 
-Invitation-only member admission exists. Real owner/friend end-to-end acceptance remains a separate gate from disposable browser/native-transport checks.
+Invitation-only member admission exists. A real second user is already connected, the basic two-user Collaboration Space flow works in normal use, and the participant can create/connect and work in their own project copy. Disposable browser/native-transport checks still remain useful for regression coverage, but the product is no longer waiting for its first real second-user acceptance.
 
 [Collaboration Spaces](COLLABORATION_SPACES.md) is the current user-facing collaboration model. Current source includes:
 
@@ -50,17 +50,17 @@ Invitation-only member admission exists. Real owner/friend end-to-end acceptance
 - collaboration context injected into normal native Codex work;
 - Git delivery checks that respect the current agreement.
 
-The remaining #215 gate is real owner/friend use with actual machines, native accounts and GitHub permissions. Automated/disposable tests do not satisfy that physical acceptance.
+#215 has passed the basic real owner/friend path with actual user accounts and a usable participant copy. Keep it open only for concrete polish/edge acceptance gaps found in continued use; do not treat basic second-user collaboration as missing.
 
 ## Open collaboration work after #215 source completion
 
 Several older issues remain broader than the current Collaboration Spaces implementation and must not be considered complete merely because their basic UX now exists:
 
-- **#195** — complete owner-authoritative read boundaries and writable integration-copy model across every relevant route.
+- **#195** — basic per-user checkout/collaboration policy is already working; only remaining authoritative-read/enforcement gaps found in real use should stay here.
 - **#197** — make GitHub Issues/PRs/Reviews the canonical team engineering surface inside CodexWeb.
-- **#198** — managed integration-copy lifecycle, sync/provenance and optional isolated test environments.
+- **#198** — copy creation/use already works; remaining scope is managed provenance/status, upstream sync/reconciliation and optional isolated test environments.
 - **#196** — broader participant orchestration/readiness flow where capabilities beyond the current Space invite are required.
-- **#199/#205** — Work Reports/feedback loop and a minimal unified Inbox after the canonical GitHub cycle is solid.
+- **#218/#205** — Activity Timeline for awareness/reactions plus a minimal attention-only Inbox. Automatic Work Reports are superseded.
 
 ## Project GPT and CODEXWEB.md
 
@@ -71,7 +71,7 @@ The current source already implements the useful core of **#200**:
 - bounded Project/Space context;
 - draft isolation and retry-safe first-send binding.
 
-#200 stays open for the broader GitHub/Work Report analysis and exact-source tooling described by that issue.
+#200 stays open only for broader GitHub/Activity exact-source analysis/tooling beyond the already-implemented persistent Project GPT binding.
 
 The current source also implements only part of **#207**. Personal collaboration preferences can be managed in a local `CODEXWEB.md` without touching `AGENTS.md`, but the full issue also covers automatic project-creation contracts, version/conflict management and a richer authenticated Runtime Access manifest. Those remain open.
 
