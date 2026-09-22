@@ -131,28 +131,13 @@ export function ChatNavigation({
     reveal(index > 0 ? nodes[index - 1] : nodes[0]);
   }, [scroller, loadingOlder, hasOlder, loadOlder, onNavigate, reveal]);
 
-  const next = useCallback(async () => {
+  const next = useCallback(() => {
     const el = scroller.current;
-    if (!el || loadingNewer) return;
-    let nodes = messages(el);
+    if (!el) return;
+    const nodes = messages(el);
     const index = currentMessage(el, nodes);
-    if (index >= 0 && index < nodes.length - 1) {
-      reveal(nodes[index + 1]);
-      return;
-    }
-    if (!hasNewer || !loadNewer) return;
-
-    onNavigate?.();
-    try {
-      await loadNewer();
-    } catch {
-      measure();
-      return;
-    }
-    await afterPaint();
-    nodes = messages(el);
-    reveal(nodes[0]);
-  }, [scroller, loadingNewer, hasNewer, loadNewer, onNavigate, reveal]);
+    if (index >= 0 && index < nodes.length - 1) reveal(nodes[index + 1]);
+  }, [scroller, reveal]);
 
   const end = useCallback(async () => {
     const el = scroller.current;
@@ -172,7 +157,7 @@ export function ChatNavigation({
   }, [scroller, onEnd, hasNewer, loadNewer, measure]);
 
   const canPrevious = state.current > 0 || hasOlder;
-  const canNext = (state.current >= 0 && state.current < state.messages - 1) || hasNewer;
+  const canNext = state.current >= 0 && state.current < state.messages - 1;
   const useful = state.messages > 1 || hasOlder || hasNewer || !state.atEnd;
   if (!visible || !useful) return null;
 
@@ -191,15 +176,15 @@ export function ChatNavigation({
         type="button"
         className="icon-button chat-navigation-next"
         aria-label="Следующее сообщение"
-        disabled={!canNext || loadingNewer}
-        onClick={() => void next()}
+        disabled={!canNext}
+        onClick={next}
       >
         <Icon name="arrow-up" size={17} />
       </button>
       <button
         type="button"
         className="icon-button chat-navigation-end"
-        aria-label="К последним сообщениям"
+        aria-label="В конец чата"
         disabled={state.atEnd && !hasNewer}
         onClick={() => void end()}
       >
