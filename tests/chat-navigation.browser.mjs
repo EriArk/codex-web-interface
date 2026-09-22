@@ -89,6 +89,10 @@ try {
 
       await page.getByRole("button", { name: "Fragment", exact: true }).click();
       await expect(page.getByTestId("newer-calls")).toHaveText("0");
+      await page.getByRole("button", { name: "Следующее сообщение" }).click();
+      await expect.poll(() => top("m3")).toBeGreaterThanOrEqual(-1);
+      await expect(page.getByRole("button", { name: "Следующее сообщение" })).toBeDisabled();
+      await expect(page.getByTestId("newer-calls")).toHaveText("0");
       await page.getByRole("button", { name: "В конец чата" }).click();
       await expect(page.getByTestId("newer-calls")).toHaveText("1");
       await expect.poll(() =>
