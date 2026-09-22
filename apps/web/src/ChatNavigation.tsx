@@ -141,8 +141,7 @@ export function ChatNavigation({
 
   const end = useCallback(async () => {
     const el = scroller.current;
-    if (!el) return;
-    onEnd?.();
+    if (!el || loadingNewer) return;
     if (hasNewer && loadNewer) {
       try {
         await loadNewer();
@@ -152,9 +151,10 @@ export function ChatNavigation({
         return;
       }
     }
+    onEnd?.();
     el.scrollTop = el.scrollHeight;
     requestAnimationFrame(measure);
-  }, [scroller, onEnd, hasNewer, loadNewer, measure]);
+  }, [scroller, loadingNewer, hasNewer, loadNewer, onEnd, measure]);
 
   const canPrevious = state.current > 0 || hasOlder;
   const canNext = state.current >= 0 && state.current < state.messages - 1;
@@ -185,7 +185,7 @@ export function ChatNavigation({
         type="button"
         className="icon-button chat-navigation-end"
         aria-label="В конец чата"
-        disabled={state.atEnd && !hasNewer}
+        disabled={loadingNewer || (state.atEnd && !hasNewer)}
         onClick={() => void end()}
       >
         <Icon name="arrow-up" size={17} />
