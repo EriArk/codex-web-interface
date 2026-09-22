@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { type CSSProperties, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatNavigation } from "../../src/ChatNavigation";
 
@@ -38,7 +38,7 @@ function Fixture() {
           "--line": "#999",
           "--shadow": "0 2px 8px #0002",
           "--ink": "#111",
-        } as React.CSSProperties
+        } as CSSProperties
       }
     >
       <input aria-label="Draft" defaultValue="Keep draft" />
