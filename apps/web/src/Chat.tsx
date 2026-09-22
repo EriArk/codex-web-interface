@@ -279,7 +279,7 @@ export function Chat({
   onResult: (id: string, category?: ResultCategory) => void;
   onArtifact?: (request: ArtifactRequest) => void;
   onReconnect: () => Promise<RecoveryOutcome>;
-  onLatest: () => void;
+  onLatest: () => void | Promise<void>;
 }) {
   const speechScope = `codex:${threadId}`;
   const reviews = useThreadReviews("codex", threadId);
@@ -530,7 +530,7 @@ export function Chat({
               <span className="small muted">
                 {state.contextTurn ? "Фрагмент диалога" : "В Codex появились новые сообщения"}
               </span>
-              <button type="button" className="secondary" onClick={onLatest}>
+              <button type="button" className="secondary" onClick={() => void onLatest()}>
                 К последним сообщениям
               </button>
             </div>
@@ -797,7 +797,9 @@ export function Chat({
         loadingOlder={state.loadingOlder}
         loadOlder={older}
         hasNewer={!!(state.contextTurn || state.hasNewer)}
-        loadNewer={async () => onLatest()}
+        loadNewer={async () => {
+          await onLatest();
+        }}
         onNavigate={() => {
           atBottom.current = false;
         }}
