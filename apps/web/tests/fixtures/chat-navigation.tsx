@@ -42,6 +42,7 @@ function Fixture() {
       }
     >
       <input aria-label="Draft" defaultValue="Keep draft" />
+      <span data-testid="attachment">report.txt</span>
       <button
         type="button"
         onClick={() => {
