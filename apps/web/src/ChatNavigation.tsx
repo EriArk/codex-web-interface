@@ -32,7 +32,7 @@ function messages(scroller: HTMLDivElement): HTMLElement[] {
 function currentMessage(scroller: HTMLDivElement, nodes: HTMLElement[]): number {
   if (!nodes.length) return -1;
   const box = scroller.getBoundingClientRect();
-  const anchor = box.top + Math.min(48, Math.max(12, scroller.clientHeight * 0.08));
+  const anchor = box.top + 8;
   const firstVisible = nodes.findIndex((node) => node.getBoundingClientRect().bottom > anchor);
   return firstVisible < 0 ? nodes.length - 1 : firstVisible;
 }
@@ -119,7 +119,12 @@ export function ChatNavigation({
 
     const currentId = nodes[index]?.dataset.message;
     onNavigate?.();
-    await loadOlder();
+    try {
+      await loadOlder();
+    } catch {
+      measure();
+      return;
+    }
     await afterPaint();
     nodes = messages(el);
     index = currentId ? nodes.findIndex((node) => node.dataset.message === currentId) : -1;
@@ -138,19 +143,33 @@ export function ChatNavigation({
     if (!hasNewer || !loadNewer) return;
 
     onNavigate?.();
-    await loadNewer();
+    try {
+      await loadNewer();
+    } catch {
+      measure();
+      return;
+    }
     await afterPaint();
     nodes = messages(el);
     reveal(nodes[0]);
   }, [scroller, loadingNewer, hasNewer, loadNewer, onNavigate, reveal]);
 
-  const end = useCallback(() => {
+  const end = useCallback(async () => {
     const el = scroller.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
     onEnd?.();
+    if (hasNewer && loadNewer) {
+      try {
+        await loadNewer();
+        await afterPaint();
+      } catch {
+        measure();
+        return;
+      }
+    }
+    el.scrollTop = el.scrollHeight;
     requestAnimationFrame(measure);
-  }, [scroller, onEnd, measure]);
+  }, [scroller, onEnd, hasNewer, loadNewer, measure]);
 
   const canPrevious = state.current > 0 || hasOlder;
   const canNext = (state.current >= 0 && state.current < state.messages - 1) || hasNewer;
@@ -182,7 +201,7 @@ export function ChatNavigation({
         className="icon-button chat-navigation-end"
         aria-label="К последним сообщениям"
         disabled={state.atEnd && !hasNewer}
-        onClick={end}
+        onClick={() => void end()}
       >
         <Icon name="arrow-up" size={17} />
       </button>
