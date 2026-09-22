@@ -86,7 +86,7 @@ Current source includes exact generated-file/image reveal behavior and the newer
 - generated images remain visible in chat and Results;
 - external web images use bounded thumbnails.
 
-#168/#183/#184 should be judged against their full acceptance criteria before closing; the recent source work covers substantial parts but #184 still deliberately excludes the unfinished Technical Viewer work tracked in #167.
+#168 (exact generated file/image reveal) and #183 (durable GPT text-block artifacts) were reconciled against their current regression coverage and closed as completed on 2026-09-22. #184 remains broader: its explicit Preview/responsive-format audit is separate from the unfinished Technical Viewer work tracked in #167.
 
 ## Bounded personal improvements still open
 
