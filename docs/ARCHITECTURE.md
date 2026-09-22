@@ -135,12 +135,12 @@ interface MachineTransport {
 }
 ```
 
-Initial implementations:
+Core implementations:
 
 - `LocalMachineTransport`
 - `SshWindowsTransport`
 
-Future:
+A dedicated remote SSH-Linux transport remains a separate extension:
 
 - `SshLinuxTransport`
 - Tailnet-backed hosts use the same SSH transport with a different address.
@@ -319,7 +319,7 @@ build
 check
 diff-summary
 error
-note (future/manual)
+text/document where promoted from a public artifact source
 ```
 
 Each Result should reference:
