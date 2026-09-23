@@ -275,6 +275,87 @@ try {
   await expect(popup).toHaveURL("https://github.com/example/altar/commit/" + "1".repeat(40));
   await popup.close();
   assert.equal(activityCalls, reads + 1, "opening rechecks access");
+  // Real HTTP + durable receipts: a lost acknowledgement and reopening must not duplicate a reply.
+  let lostReply = false;
+  await page.route("**/api/team/spaces/*/activity/reply", async (route) => {
+    if (!lostReply) {
+      lostReply = true;
+      await route.fetch();
+      await route.abort("failed");
+    } else await route.continue();
+  });
+  await dialog.getByRole("button", { name: "Нравится", exact: true }).first().click();
+  await expect(
+    dialog.getByRole("button", { name: "Нравится", exact: true }).first(),
+  ).toHaveAttribute("aria-pressed", "true");
+  const discussion = () => dialog.locator(".activity-discussion").first();
+  await dialog.getByRole("button", { name: "Обсуждение", exact: true }).first().click();
+  await discussion()
+    .getByRole("textbox", { name: "Короткий ответ" })
+    .fill("Проверь совместимость старых сохранений.");
+  await discussion().getByLabel("Кому ответ").selectOption(friend.id);
+  await discussion().getByRole("button", { name: "Отправить ответ", exact: true }).click();
+  await expect(dialog.locator(".activity-social [role=status]").first()).toBeVisible();
+  assert.equal(hub.teamProjects.db.prepare("SELECT count(*) n FROM activity_replies").get().n, 1);
+  await dialog.getByRole("button", { name: "Закрыть пространство" }).click();
+  const reopenedNav = await drawer(page);
+  await reopenedNav.getByRole("button", { name: "Активность", exact: true }).click();
+  await dialog.getByRole("button", { name: "Обсуждение · 1", exact: true }).first().click();
+  await expect(discussion().getByRole("textbox", { name: "Короткий ответ" })).toHaveValue(
+    "Проверь совместимость старых сохранений.",
+  );
+  await discussion().getByRole("button", { name: "Отправить ответ", exact: true }).click();
+  await expect(discussion().getByRole("textbox", { name: "Короткий ответ" })).toHaveValue("");
+  assert.equal(hub.teamProjects.db.prepare("SELECT count(*) n FROM activity_replies").get().n, 1);
+  await dialog.getByLabel("Коммит для обсуждения").selectOption("commit:" + "2".repeat(40));
+  await expect(
+    dialog
+      .locator(".activity-card")
+      .first()
+      .getByRole("button", { name: "Обсуждение", exact: true }),
+  ).toBeVisible();
+  await dialog.getByLabel("Коммит для обсуждения").selectOption("commit:" + "1".repeat(40));
+  await dialog.getByRole("button", { name: "Обсуждение · 1", exact: true }).first().click();
+  await login(other, "friend");
+  const friendNav = await drawer(other);
+  await friendNav.getByRole("button", { name: /^Уведомления/ }).click();
+  await other.getByRole("button", { name: /обращается к тебе в обсуждении события/ }).click();
+  const replyDialog = other.locator("dialog.activity-dialog[open]");
+  await expect(replyDialog.locator(".activity-reply")).toContainText(
+    "Проверь совместимость старых сохранений.",
+  );
+  await expect
+    .poll(() => hub.teamProjects.db.prepare("SELECT count(*) n FROM activity_attention").get().n)
+    .toBe(0);
+  await replyDialog.getByRole("button", { name: "Ответить", exact: true }).click();
+  await replyDialog.getByRole("textbox", { name: "Короткий ответ" }).fill("Проверил: совместимо.");
+  await replyDialog.getByRole("button", { name: "Отправить ответ", exact: true }).click();
+  await expect(replyDialog.getByRole("textbox", { name: "Короткий ответ" })).toHaveValue("");
+  assert.equal(
+    hub.teamProjects.db.prepare("SELECT userId FROM activity_attention").get().userId,
+    hub.registry.ownerId,
+  );
+  await mkdir(".local/activity-social-qa", { recursive: true });
+  for (const viewport of [
+    { width: 390, height: 500 },
+    { width: 1024, height: 768 },
+  ]) {
+    await other.setViewportSize(viewport);
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await other.evaluate((v) => (document.documentElement.dataset.theme = v), theme);
+      await replyDialog.getByRole("textbox", { name: "Короткий ответ" }).scrollIntoViewIfNeeded();
+      await expect(
+        replyDialog.getByRole("button", { name: "Закрыть пространство" }),
+      ).toBeInViewport();
+      assert(await replyDialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
+      await other.screenshot({
+        path: `.local/activity-social-qa/${process.env.BROWSER || "webkit"}-${theme}-${viewport.width}.png`,
+      });
+    }
+  }
+  await replyDialog.getByRole("button", { name: "Закрыть пространство" }).click();
+  // Keep the original feed check below scoped to its collapsed initial presentation.
+  await dialog.getByRole("button", { name: "Обсуждение · 1", exact: true }).first().click();
   // Existing personal GPT binding, including a saved draft, is reused.
   const ownerRuntime = runtimes.get("owner");
   await ownerRuntime.gpt.catalog();
@@ -375,10 +456,29 @@ try {
         .toBe(true);
       await expect(dialog.getByRole("button", { name: "Закрыть пространство" })).toBeInViewport();
       await expect(dialog.getByLabel("Проект активности")).toBeInViewport();
+      await page.screenshot({
+        path: `.local/activity-social-qa/feed-${process.env.BROWSER || "webkit"}-${theme}-${viewport.width}.png`,
+      });
       assert(
         await dialog
           .locator(".activity-feed")
           .evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+        JSON.stringify({
+          theme,
+          viewport,
+          overflow: await dialog.locator(".activity-feed").evaluate((el) =>
+            [el, ...el.querySelectorAll("*")]
+              .filter((n) => n.scrollWidth > n.clientWidth + 1)
+              .map((n) => ({
+                tag: n.tagName,
+                class: n.className,
+                width: n.getBoundingClientRect().width,
+                client: n.clientWidth,
+                scroll: n.scrollWidth,
+              }))
+              .slice(0, 15),
+          ),
+        }),
       );
       await page.screenshot({
         path: `.local/activity-qa/${process.env.BROWSER || "webkit"}-${theme}-${viewport.width}.png`,

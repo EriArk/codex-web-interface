@@ -7,6 +7,7 @@ import {
   HubError,
   type ProjectRules,
 } from "@codex-web/shared";
+import { ActivitySocial } from "./activity-social.js";
 import { CollaborationChat } from "./collaboration-chat.js";
 import type { TeamProjects } from "./team-projects.js";
 
@@ -42,6 +43,7 @@ const conflict = () =>
 /** Small, atomic metadata aggregate. Personal runtime state is never moved or copied. */
 export class CollaborationSpaces {
   readonly chat: CollaborationChat;
+  readonly social: ActivitySocial;
   constructor(readonly team: TeamProjects) {
     team.db.exec(`
       CREATE TABLE IF NOT EXISTS collaboration_spaces(id TEXT PRIMARY KEY,data TEXT NOT NULL);
@@ -51,6 +53,7 @@ export class CollaborationSpaces {
       CREATE INDEX IF NOT EXISTS collaboration_people_user ON collaboration_space_people(userId);
     `);
     this.chat = new CollaborationChat(this);
+    this.social = new ActivitySocial(this);
   }
   private read(id: string): Space {
     const row = this.team.db.prepare("SELECT data FROM collaboration_spaces WHERE id=?").get(id);
@@ -105,6 +108,7 @@ export class CollaborationSpaces {
       members: s.members.map((id) => this.person(id)),
       pending: s.invitations.map((i) => this.person(i.userId)),
       unread: this.chat.unread(actor, s.id),
+      activityAttention: this.social.attention(actor, s.id),
       projects: s.projects.map((p) => ({
         id: p.id,
         ownerId: p.ownerId,

@@ -5,6 +5,7 @@ import type {
   SpaceActivityPage,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
+import { ActivityDiscussion } from "./ActivityDiscussion";
 import { accountSessionStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -60,6 +61,7 @@ export function SpaceActivity({
   const [opening, setOpening] = useState(""),
     [openError, setOpenError] = useState("");
   const generation = useRef(0);
+  const [sources, setSources] = useState<Record<string, string>>({});
   const eligible = space.projects.filter((p) => p.access !== "none");
   const scope = JSON.stringify([
     space.id,
@@ -247,13 +249,16 @@ export function SpaceActivity({
               </p>
             ) : null,
           )}
-        {!busy && !filtered.length && (
+        {!busy && !filtered.length && !Object.keys(errors).length && (
           <p className="activity-empty">Пока нет событий по этому выбору.</p>
         )}
         {openError && <p role="status">{openError}</p>}
         {filtered.slice(0, limit).map((batch, index) => {
           const first = batch[0]!,
             day = date(first.at);
+          const groupId = first.projectId + first.key;
+          const selected = batch.find((v) => v.key === sources[groupId]) ?? first;
+          const page = pages.find((p) => p.projectId === first.projectId)!;
           return (
             <div className="activity-group" key={first.projectId + first.key}>
               {(index === 0 || date(filtered[index - 1]![0]!.at) !== day) && (
@@ -315,6 +320,39 @@ export function SpaceActivity({
                     <Icon name="chat" size={15} />
                     {opening === "discuss" ? "Готовим контекст…" : "Обсудить в GPT"}
                   </button>
+                  {batch.length > 1 && (
+                    <label className="activity-source-picker">
+                      Обсуждение коммита
+                      <select
+                        aria-label="Коммит для обсуждения"
+                        value={selected.key}
+                        onChange={(e) => setSources((v) => ({ ...v, [groupId]: e.target.value }))}
+                      >
+                        {batch.map((v) => (
+                          <option key={v.key} value={v.key}>
+                            {v.sha!.slice(0, 7)} · {v.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <ActivityDiscussion
+                    key={selected.key}
+                    space={space}
+                    projectId={selected.projectId}
+                    repositoryId={page.repositoryId}
+                    source={selected}
+                    summary={page.social?.[selected.key] ?? { replies: 0, reactions: [] }}
+                    onSummary={(summary) =>
+                      setPages((old) =>
+                        old.map((p) =>
+                          p.projectId === selected.projectId
+                            ? { ...p, social: { ...p.social, [selected.key]: summary } }
+                            : p,
+                        ),
+                      )
+                    }
+                  />
                 </div>
               </article>
             </div>

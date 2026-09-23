@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Owner-requested complete Windows helper updates (2026-09-23)
+
+- Treat Hub and installed PC helpers as one release when their contracts change. Update the affected Windows helper in the same stage, preserving private state, task configuration and active work.
+- Verify the actual installed helper through Hub -> SSH -> Scheduled Task/Companion, not just a freshly compiled module in a temporary directory. Retain a backup and verify matching hashes; wait for helper idle before replacement.
+- Activity and Project GPT evidence use `CodexWeb/delivery/githubWorkProbe.js` on Windows. Hub image replacement alone does not upgrade that file.
+
 ## Owner-requested message/result continuity (2026-09-21)
 
 - Keep text/code blocks of up to 20 logical lines inclusive visible in Codex/GPT messages; do not turn them into Results files. Longer completed blocks belong in Results with an exact clickable reference at their original message position. Keep copy controls and original text bytes.

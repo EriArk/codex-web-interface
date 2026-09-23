@@ -8,6 +8,7 @@ import type {
   TeamContact,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
+import { ActivityAttentionWindow } from "./ActivityDiscussion";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { Icon } from "./icons";
 import { emptyProjectRules, ProjectRulesEditor } from "./ProjectRulesEditor";
@@ -52,6 +53,7 @@ export function SpaceBell({ spaces }: { spaces: SpacesController }) {
       (sum, s) =>
         sum +
         s.unread +
+        (s.activityAttention?.length ?? 0) +
         s.projects.reduce((n, p) => n + (p.ownerId === pageWorkspace ? p.requests.length : 0), 0),
       0,
     );
@@ -260,7 +262,7 @@ export function CollaborationWindow({
     <dialog
       ref={dialog}
       tabIndex={-1}
-      className={`space-dialog workspace-window${target.kind === "chat" ? " space-chat-dialog" : target.kind === "activity" ? " activity-dialog" : ""}`}
+      className={`space-dialog workspace-window${target.kind === "chat" ? " space-chat-dialog" : target.kind === "activity" || target.kind === "activity-reply" ? " activity-dialog" : ""}`}
       aria-label={target.kind === "create" ? "Новое пространство" : "Общее пространство"}
       onCancel={() => spaces.open(null)}
     >
@@ -270,7 +272,7 @@ export function CollaborationWindow({
             ? "Новое пространство"
             : target.kind === "invitations"
               ? "Уведомления"
-              : target.kind === "activity"
+              : target.kind === "activity" || target.kind === "activity-reply"
                 ? `Активность · ${space?.title ?? "Пространство"}`
                 : (space?.title ?? invitation?.title ?? "Общее пространство")}
         </h2>
@@ -292,6 +294,14 @@ export function CollaborationWindow({
             space={space}
             onDiscuss={onDiscuss}
             onProject={(projectId) => spaces.open({ kind: "project", id: space.id, projectId })}
+          />
+        )}
+        {target.kind === "activity-reply" && space && (
+          <ActivityAttentionWindow
+            key={target.seq}
+            space={space}
+            seq={target.seq}
+            onRead={spaces.refresh}
           />
         )}
         {target.kind === "chat" && space && (
@@ -316,8 +326,22 @@ export function CollaborationWindow({
               !spaces.catalog.spaces.some(
                 (s) =>
                   s.unread > 0 ||
+                  !!s.activityAttention?.length ||
                   s.projects.some((p) => p.ownerId === pageWorkspace && p.requests.length),
               ) && <p>Новых уведомлений нет.</p>}
+            {spaces.catalog.spaces.flatMap((s) =>
+              (s.activityAttention ?? []).map((n) => (
+                <button
+                  type="button"
+                  className="space-card"
+                  key={`activity:${n.id}`}
+                  onClick={() => spaces.open({ kind: "activity-reply", id: s.id, seq: n.id })}
+                >
+                  <strong>{s.projects.find((p) => p.id === n.projectId)?.name ?? s.title}</strong>
+                  <span>{n.author.name} обращается к тебе в обсуждении события</span>
+                </button>
+              )),
+            )}
             {spaces.catalog.spaces
               .filter((s) => s.unread > 0)
               .map((s) => (

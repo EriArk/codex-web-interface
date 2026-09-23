@@ -154,6 +154,99 @@
   display: block;
   margin: 18px auto 0;
 }
+.activity-social {
+  margin-top: 6px;
+}
+.activity-social-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.activity-social-actions button.activity-reaction {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: none;
+}
+.activity-social-actions button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.activity-social-actions > .activity-open {
+  margin-left: 6px;
+}
+.activity-source-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-block: 10px;
+}
+.activity-source-picker select {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.activity-discussion {
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+  margin-top: 8px;
+}
+.activity-reply-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.activity-reply {
+  border-bottom: 1px solid var(--line);
+  padding-top: 12px;
+}
+.activity-reply p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+  line-height: 1.5;
+  font-size: 14px;
+}
+.activity-reply-form {
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+}
+.activity-recipient {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.activity-recipient select {
+  min-width: 0;
+  flex: 1;
+  min-height: 44px;
+}
+.activity-reply-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+}
+.activity-reply-form > button {
+  justify-self: end;
+  min-height: 44px;
+}
 @media (max-width: 520px) {
   .activity-feed {
     padding-inline: 10px;

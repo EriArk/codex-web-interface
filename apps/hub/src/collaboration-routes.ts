@@ -18,6 +18,114 @@ export function registerCollaborationSpaces(
   githubProbe?: GitHubProbe,
 ) {
   const activity = new SpaceActivity(spaces, personal, githubProbe);
+  const socialSource = z.object({
+    projectId: z.string().uuid(),
+    repositoryId: z.number().int().positive(),
+    source: z.string().regex(/^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/),
+  });
+  const socialReadLimit = { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } };
+  app.post("/api/team/spaces/:id/activity/replies", socialReadLimit, async (req, reply) => {
+    const body = socialSource
+        .extend({ before: z.number().int().positive().optional() })
+        .strict()
+        .parse(req.body),
+      user = actor(req);
+    const scope = await activity.socialScope(
+      user,
+      id(req),
+      body.projectId,
+      body.repositoryId,
+      body.source,
+    );
+    actor(req);
+    return reply
+      .header("Cache-Control", "no-store")
+      .send(spaces.social.page(user, scope, body.before));
+  });
+  app.post(
+    "/api/team/spaces/:id/activity/reply",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const body = socialSource
+          .extend({
+            text: z.string().trim().min(1).max(2000),
+            replyTo: z.number().int().positive().optional(),
+            recipientId: z.string().uuid().optional(),
+          })
+          .strict()
+          .parse(req.body),
+        user = actor(req);
+      const scope = await activity.socialScope(
+        user,
+        id(req),
+        body.projectId,
+        body.repositoryId,
+        body.source,
+      );
+      actor(req);
+      const result = spaces.social.reply(user, scope, key(req), {
+        text: body.text,
+        ...(body.replyTo ? { replyTo: body.replyTo } : {}),
+        ...(body.recipientId ? { recipientId: body.recipientId } : {}),
+      });
+      return reply.header("Cache-Control", "no-store").send(result);
+    },
+  );
+  app.post(
+    "/api/team/spaces/:id/activity/react",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const body = socialSource
+          .extend({ kind: z.enum(["like", "seen", "thanks", "question"]).nullable() })
+          .strict()
+          .parse(req.body),
+        user = actor(req);
+      const scope = await activity.socialScope(
+        user,
+        id(req),
+        body.projectId,
+        body.repositoryId,
+        body.source,
+      );
+      actor(req);
+      return reply
+        .header("Cache-Control", "no-store")
+        .send(spaces.social.react(user, scope, key(req), body.kind));
+    },
+  );
+  app.post("/api/team/spaces/:id/activity/read", socialReadLimit, async (req, reply) => {
+    const body = socialSource
+        .extend({ seqs: z.array(z.number().int().positive()).max(20) })
+        .strict()
+        .parse(req.body),
+      user = actor(req);
+    const scope = await activity.socialScope(
+      user,
+      id(req),
+      body.projectId,
+      body.repositoryId,
+      body.source,
+    );
+    actor(req);
+    spaces.social.markRead(user, scope, body.seqs);
+    return reply.send({ ok: true });
+  });
+  app.post("/api/team/spaces/:id/activity/attention", socialReadLimit, async (req, reply) => {
+    const body = z.object({ seq: z.number().int().positive() }).strict().parse(req.body),
+      user = actor(req);
+    const s = spaces.social.notification(user, id(req), body.seq);
+    const scope = await activity.socialScope(
+      user,
+      s.spaceId,
+      s.projectId,
+      s.repositoryId,
+      s.source.key,
+    );
+    actor(req);
+    return reply
+      .header("Cache-Control", "no-store")
+      .send(spaces.social.page(user, scope, body.seq + 1));
+  });
   app.post(
     "/api/team/spaces/:id/activity/discuss",
     { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
@@ -81,7 +189,18 @@ export function registerCollaborationSpaces(
       const result = await activity.page(user, id(req), body.projectId, body.source);
       actor(req);
       spaces.access(user, id(req));
-      return reply.header("Cache-Control", "no-store").send(result);
+      const social = Object.fromEntries(
+        result.items.map((source) => [
+          source.key,
+          spaces.social.summary(user, {
+            spaceId: id(req),
+            projectId: body.projectId,
+            repositoryId: result.repositoryId,
+            source,
+          }),
+        ]),
+      );
+      return reply.header("Cache-Control", "no-store").send({ ...result, social });
     },
   );
   const id = (req: FastifyRequest) => z.object({ id: z.string().uuid() }).parse(req.params).id;

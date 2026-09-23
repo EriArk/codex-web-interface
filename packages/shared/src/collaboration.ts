@@ -22,6 +22,7 @@ export type CollaborationSpace = {
   projects: CollaborationProject[];
   pending: CollaborationPerson[];
   unread: number;
+  activityAttention?: ActivityAttention[];
 };
 export type CollaborationInvitation = {
   spaceId: string;
@@ -50,3 +51,31 @@ export type SpaceChatMessage = {
   createdAt: number;
 };
 export type SpaceChatPage = { messages: SpaceChatMessage[]; more: boolean };
+export type ActivityAttention = {
+  id: number;
+  projectId: string;
+  author: CollaborationPerson;
+  at: number;
+};
+export type ActivityReaction = "like" | "seen" | "thanks" | "question";
+export type ActivitySocialSummary = {
+  replies: number;
+  reactions: { kind: ActivityReaction; count: number; mine: boolean }[];
+};
+export type ActivityReply = {
+  seq: number;
+  id: string;
+  author: CollaborationPerson;
+  text: string;
+  at: number;
+  replyTo: number | null;
+  recipient: CollaborationPerson | null;
+};
+export type ActivityDiscussionPage = {
+  projectId: string;
+  repositoryId: number;
+  source: import("./github-work.js").GitHubActivitySource;
+  summary: ActivitySocialSummary;
+  replies: ActivityReply[];
+  more: boolean;
+};

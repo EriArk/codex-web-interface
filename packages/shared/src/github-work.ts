@@ -129,6 +129,7 @@ export interface SpaceActivityPage {
   repositoryId: number;
   checkedAt: number;
   items: GitHubActivitySource[];
+  social?: Record<string, import("./collaboration.js").ActivitySocialSummary>;
 }
 export interface GitHubWorkReceipt {
   id: string;

@@ -109,7 +109,7 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   let access = "read",
     repositoryId = 42,
     during;
-  let evidenceBody="Exact patch: + nullable field";
+  let evidenceBody = "Exact patch: + nullable field";
   const source = (kind, n, author) => ({
     kind,
     key: kind + ":" + (kind === "commit" ? String(n).repeat(40) : n),
@@ -138,7 +138,7 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
         request.query.kind === "evidence"
           ? {
               source: request.query.source,
-            text: evidenceBody,
+              text: evidenceBody,
               truncated: false,
             }
           : undefined,
@@ -165,6 +165,78 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   assert.equal(calls.at(-1).request.query.kind, "identity");
   const opened = await activity.page(f.friend, id, projectId, a.items[0].key);
   assert.equal(opened.items.length, 1);
+  // Local social state stays attached to exact sources and authorizes every content operation.
+  const socialReads = calls.length;
+  const [scope, duplicateScope] = await Promise.all([
+    activity.socialScope(f.friend, id, projectId, 42, a.items[0].key),
+    activity.socialScope(f.friend, id, projectId, 42, a.items[0].key),
+  ]);
+  assert.deepEqual(scope, duplicateScope);
+  assert.equal(calls.length, socialReads + 1);
+  const scope2 = await activity.socialScope(f.friend, id, projectId, 42, a.items[1].key);
+  const reactionKey = randomUUID();
+  s.social.react(f.friend, scope, reactionKey, "like");
+  s.social.react(f.friend, scope, reactionKey, "like");
+  assert.deepEqual(s.social.summary(f.friend, scope).reactions, [
+    { kind: "like", count: 1, mine: true },
+  ]);
+  assert.equal(s.social.summary(f.friend, scope2).reactions.length, 0);
+  assert.equal(s.social.attention(f.owner, id).length, 0, "reactions are silent");
+  const replyKey = randomUUID(),
+    replyInput = { text: "Check the old saves", recipientId: f.owner };
+  const reply = s.social.reply(f.friend, scope, replyKey, replyInput);
+  assert.deepEqual(s.social.reply(f.friend, scope, replyKey, replyInput), reply);
+  assert.equal(s.social.page(f.friend, scope).replies.length, 1);
+  assert.throws(() => s.social.reply(f.friend, scope, replyKey, { text: "changed" }), {
+    code: "SHARED_REQUEST_REUSED",
+  });
+  assert.throws(() =>
+    s.social.reply(f.friend, scope2, randomUUID(), { text: "Wrong source", replyTo: reply.seq }),
+  );
+  assert.throws(() =>
+    s.social.reply(f.friend, scope, randomUUID(), {
+      text: "Foreign recipient",
+      recipientId: f.stranger,
+    }),
+  );
+  assert.equal(s.social.attention(f.owner, id).length, 1);
+  assert(!JSON.stringify(s.social.attention(f.owner, id)).includes(replyInput.text));
+  assert.throws(() => s.social.notification(f.stranger, id, reply.seq));
+  const addressed = s.social.notification(f.owner, id, reply.seq);
+  assert.equal(addressed.source.key, scope.source.key);
+  const response = s.social.reply(f.owner, scope, randomUUID(), {
+    text: "Will check",
+    replyTo: reply.seq,
+  });
+  assert.equal(s.social.attention(f.friend, id)[0].id, response.seq);
+  s.social.reply(f.friend, scope, randomUUID(), { text: "Ordinary quiet reply" });
+  assert.equal(s.social.attention(f.owner, id).length, 1);
+  s.social.markRead(f.owner, scope2, [reply.seq]);
+  assert.equal(s.social.attention(f.owner, id).length, 1, "wrong source cannot acknowledge");
+  s.social.markRead(f.owner, scope, [reply.seq]);
+  assert.equal(s.social.attention(f.owner, id).length, 0);
+  for (let i = 0; i < 21; i++)
+    s.social.reply(f.friend, scope, randomUUID(), { text: "Reply " + i });
+  const latest = s.social.page(f.friend, scope);
+  assert.equal(latest.replies.length, 20);
+  assert(latest.more);
+  const older = s.social.page(f.friend, scope, latest.replies[0].seq);
+  assert.equal(older.replies.length, 4);
+  assert(!older.more);
+  f.team.db.prepare("DELETE FROM space_activity_index").run();
+  activity = new SpaceActivity(s, personal, probe);
+  assert.equal(
+    (await activity.socialScope(f.friend, id, projectId, 42, scope.source.key)).source.key,
+    scope.source.key,
+    "discussion survives index expiry and service recreation",
+  );
+  access = "unavailable";
+  await assert.rejects(activity.socialScope(f.friend, id, projectId, 42, scope.source.key));
+  access = "read";
+  repositoryId = 99;
+  await assert.rejects(activity.socialScope(f.friend, id, projectId, 42, scope.source.key));
+  repositoryId = 42;
+  await activity.page(f.friend, id, projectId);
   const handoffId = randomUUID(),
     sources = a.items.map((v) => v.key);
   const prepared = await activity.prepare(f.friend, id, projectId, handoffId, sources);
@@ -187,12 +259,16 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   activity = new SpaceActivity(s, personal, probe);
   assert.equal((await activity.sendHandoff(f.friend, handoffId, sendKey, body)).id, first.id);
   assert.equal(sends.size, 1);
-  evidenceBody="Большой патч ".repeat(10000);
-  const large=await activity.prepare(f.friend,id,projectId,randomUUID(),sources);
-  assert.equal(large.truncated,true);
-  const largeSnapshot=JSON.parse(String(f.team.db.prepare("SELECT data FROM activity_gpt_handoffs WHERE id=?").get(large.id).data));
-  assert(Buffer.byteLength(largeSnapshot.text)<16384);
-  for(const source of sources)assert(largeSnapshot.text.includes(source));
+  evidenceBody = "Большой патч ".repeat(10000);
+  const large = await activity.prepare(f.friend, id, projectId, randomUUID(), sources);
+  assert.equal(large.truncated, true);
+  const largeSnapshot = JSON.parse(
+    String(
+      f.team.db.prepare("SELECT data FROM activity_gpt_handoffs WHERE id=?").get(large.id).data,
+    ),
+  );
+  assert(Buffer.byteLength(largeSnapshot.text) < 16384);
+  for (const source of sources) assert(largeSnapshot.text.includes(source));
   await assert.rejects(activity.sendHandoff(f.friend, handoffId, randomUUID(), body), {
     code: "ACTIVITY_ALREADY_SENT",
   });
@@ -220,6 +296,7 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
       userId: f.friend,
     });
   await assert.rejects(activity.page(f.friend, id, projectId));
+  await assert.rejects(activity.socialScope(f.friend, id, projectId, 42, scope.source.key));
   assert.equal(f.team.db.prepare("SELECT count(*) AS n FROM space_activity_index").get().n, 0);
   assert.equal(s.chat.unread(f.owner, id), 0);
 });

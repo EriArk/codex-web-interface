@@ -31,8 +31,51 @@ empty repository is supported. New repositories without a personal checkout
 offer the existing connection flow.
 
 Routine activity creates no notifications, writes no reports and sends no
-GitHub mutations. Reactions/replies and attention routing remain the subsequent
-approved stage of #218. Project GPT handoff is implemented as described below.
+GitHub mutations. Local reactions, replies and addressed notifications are described below.
+
+## Local discussion and attention
+
+Each exact source has one local Space discussion, keyed by Space, Project,
+numeric repository identity and commit SHA / Issue / PR number. Grouped commits
+offer a source selector; changing grouping or filters cannot move replies.
+Four optional reactions express interest, reading, thanks or a question. They
+are not GitHub reviews or workflow approvals and create no notifications.
+
+Replies are limited to 2,000 characters, with pages of 20. Answer a particular
+reply or choose an explicit recipient from the current project participants.
+Only that recipient receives an Activity entry in the existing Notifications
+window. Unaddressed replies remain quiet. No guessed GitHub-to-Hub identity,
+automatic subscription or native GitHub comment is created.
+
+The cheap Space catalog includes generic addressed-notification metadata only.
+Reading content, reacting, replying and opening an exact notification recheck
+the viewer's own checkout and current native GitHub access. Stored topics remain
+openable after the bounded source index expires, under the same checks. A
+recreated repository cannot inherit discussions. Only displayed reply IDs are
+acknowledged. Drafts and unacknowledged operation keys survive window closure
+in account-local storage; transactional receipts prevent duplicate replies.
+Replies refresh on opening, explicit refresh and after sending; there is no
+background GitHub poll for closed discussions.
+
+Verification: 20 focused Activity, Spaces and GitHub-worker tests pass, including
+exact-source isolation, silent reactions, addressed notifications, pagination,
+lost acknowledgements, revoked access and repository replacement. Chromium and
+WebKit exercise two separate authenticated participants, reply routing from the
+bell, private draft restoration and a dropped reply acknowledgement followed by
+close/reopen/retry with one stored reply. Four themes are checked at phone and
+tablet widths, including a 390×500 keyboard-constrained viewport. This is browser
+simulation; no messages were sent to the owner's real collaborators as tests.
+
+## Installed Windows helper acceptance
+
+The initial live release left the installed Windows GitHub probe at its
+September 13 version. It rejected `activity` / `evidence`, although tests of the
+new compiled module passed. On September 23 the helper was backed up and updated
+while the delivery task was idle; SHA-256 matched the installed Hub release.
+Actual Hub -> SSH -> installed Scheduled Task reads succeeded for AltarAppsReborn
+(30 commits / 28 Issues / 30 PRs) and World (12 commits / 2 Issues), including
+evidence reads. Counts are a point-in-time acceptance sample, not product limits.
+Future protocol changes must verify the installed helper, not a temporary copy.
 
 ## Discuss in Project GPT
 

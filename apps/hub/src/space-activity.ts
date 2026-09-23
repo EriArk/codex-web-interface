@@ -6,6 +6,7 @@ import {
   HubError,
   type SpaceActivityPage,
 } from "@codex-web/shared";
+import type { ActivityScope } from "./activity-social.js";
 import type { createApp } from "./app.js";
 import type { CollaborationSpaces } from "./collaboration-spaces.js";
 import type { GitHubProbe } from "./team-github.js";
@@ -14,6 +15,7 @@ const missing = () => new HubError(404, "ACTIVITY_UNAVAILABLE", "Активно�
 /** A bounded, viewer-private source index; membership never substitutes for GitHub access. */
 export class SpaceActivity {
   private pending = new Map<string, Promise<SpaceActivityPage>>();
+  private socialPending = new Map<string, Promise<ActivityScope>>();
   constructor(
     private spaces: CollaborationSpaces,
     private personal: (id: string) => Promise<{ runtime: Awaited<ReturnType<typeof createApp>> }>,
@@ -62,6 +64,70 @@ export class SpaceActivity {
       machine,
       root: local.workingDirectory,
       repository: p.repository.replace("https://github.com/", ""),
+    };
+  }
+  async socialScope(
+    actor: string,
+    spaceId: string,
+    projectId: string,
+    repositoryId: number,
+    source: string,
+  ) {
+    this.spaces.access(actor, spaceId);
+    const key = JSON.stringify([actor, spaceId, projectId, repositoryId, source]);
+    const existing = this.socialPending.get(key);
+    if (existing) return existing;
+    if (this.pending.size + this.socialPending.size >= 12)
+      throw new HubError(429, "ACTIVITY_BUSY", "Повтори чуть позже.");
+    const task = this.authorizeSocialScope(actor, spaceId, projectId, repositoryId, source);
+    this.socialPending.set(key, task);
+    try {
+      return await task;
+    } finally {
+      this.socialPending.delete(key);
+    }
+  }
+  private async authorizeSocialScope(
+    actor: string,
+    spaceId: string,
+    projectId: string,
+    repositoryId: number,
+    source: string,
+  ): Promise<ActivityScope> {
+    const c = await this.context(actor, spaceId, projectId);
+    const value = (await this.probe(c.machine, c.root, {
+      op: "observe",
+      repository: c.repository,
+      query: { kind: "identity" },
+    })) as GitHubWorkObservation;
+    if (
+      value.access === "unavailable" ||
+      value.repositoryId !== repositoryId ||
+      value.repository.toLowerCase() !== c.repository.toLowerCase() ||
+      (await this.context(actor, spaceId, projectId)).binding !== c.binding
+    )
+      throw missing();
+    const row = this.spaces.team.db
+      .prepare(
+        "SELECT binding,data FROM space_activity_index WHERE userId=? AND spaceId=? AND projectId=?",
+      )
+      .get(actor, spaceId, projectId);
+    const page =
+      row?.binding === c.binding ? (JSON.parse(String(row.data)) as SpaceActivityPage) : null;
+    const item =
+      (page?.repositoryId === repositoryId
+        ? page.items.find((v) => v.key === source)
+        : undefined) ?? this.spaces.social.source(spaceId, projectId, repositoryId, source);
+    if (!item) throw missing();
+    const suffix =
+      item.kind === "commit"
+        ? `commit/${item.key.slice(7)}`
+        : `${item.kind === "pr" ? "pull" : "issues"}/${item.key.split(":")[1]}`;
+    return {
+      spaceId,
+      projectId,
+      repositoryId,
+      source: { ...item, url: `https://github.com/${c.repository}/${suffix}` },
     };
   }
   async prepare(
@@ -258,7 +324,8 @@ export class SpaceActivity {
     const key = JSON.stringify([actor, spaceId, projectId, source]);
     const existing = this.pending.get(key);
     if (existing) return existing;
-    if (this.pending.size >= 12) throw new HubError(429, "ACTIVITY_BUSY", "Повтори чуть позже.");
+    if (this.pending.size + this.socialPending.size >= 12)
+      throw new HubError(429, "ACTIVITY_BUSY", "Повтори чуть позже.");
     const task = this.read(actor, spaceId, projectId, source);
     this.pending.set(key, task);
     try {

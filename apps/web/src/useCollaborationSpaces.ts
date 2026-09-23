@@ -6,6 +6,7 @@ import { api } from "./api";
 export type SpaceWindow =
   | { kind: "create" | "invitations" }
   | { kind: "project"; id: string; projectId: string }
+  | { kind: "activity-reply"; id: string; seq: number }
   | { kind: "accept" | "settings" | "chat" | "activity"; id: string };
 export function useCollaborationSpaces() {
   const [catalog, setCatalog] = useState<CollaborationCatalog>({ spaces: [], invitations: [] });
@@ -33,7 +34,8 @@ export function useCollaborationSpaces() {
         setReady(true);
         select((id) => (data.spaces.some((s) => s.id === id) ? id : ""));
         open((w) =>
-          (w?.kind === "chat" || w?.kind === "activity") && !data.spaces.some((s) => s.id === w.id)
+          (w?.kind === "chat" || w?.kind === "activity" || w?.kind === "activity-reply") &&
+          !data.spaces.some((s) => s.id === w.id)
             ? null
             : w,
         );
