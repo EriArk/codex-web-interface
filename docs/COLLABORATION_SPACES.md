@@ -1,5 +1,11 @@
 # Collaboration Spaces — #215
 
+## Current status (2026-09-23)
+
+The owner confirmed on 22 September in [#215](https://github.com/EriArk/codex-web-interface/issues/215), [#195](https://github.com/EriArk/codex-web-interface/issues/195) and [#198](https://github.com/EriArk/codex-web-interface/issues/198) that the friend is connected, the real two-user Space flow works and the participant's own checkout is usable. That live report supersedes pending first-friend acceptance language in the implementation history below. Automated tests remain fixture evidence, not physical-device verification.
+
+Keep #215 for concrete polish/edge cases and #198 for managed provenance, synchronization, conflicts and optional test environments. [#218](https://github.com/EriArk/codex-web-interface/issues/218) adds Activity as a separate layer, replacing automatic Work Reports. Follow the current [Roadmap](ROADMAP.md); do not rebuild Space membership, checkout creation or Project GPT bindings. Earlier geometry/follow-up statements below are historical; the round key and current AGENTS.md navigation rules take precedence.
+
 ## Workspace navigation corrections
 
 The human chat opens as a separate popup from the central workspace header. Left navigation contains no chat-launch buttons, only unread counts. Entering Shared mode (and switching spaces) hides the previous personal conversation and Results until an explicit shared Project/chat selection; the prior mounted conversation, draft and background work are retained. A themed empty state prompts selection. Wide navigation uses the same draggable grip as Results, with a device-local 260–420 px width shared across Codex and GPT; compact phone drawers are unchanged.

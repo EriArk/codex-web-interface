@@ -2,6 +2,14 @@
 
 This file records decisions that should be treated as fixed unless the owner explicitly changes them.
 
+## 2026-09-23 — Activity-based collaboration and confirmed session boundaries
+
+The owner approved the sequence in [Roadmap](ROADMAP.md#current-owner-approved-sequence-2026-09-23): review existing unfinished work, deliver a useful Activity slice, add exact evidence handoff to Project GPT, then reactions/replies/attention and Intake/Issue Drawer. Before each substantial session recommend the exact reasoning selector level and wait for the owner's confirmation that it is set.
+
+The 22 September issue updates replace automatic prose Work Reports (#199, closed) with [Activity Timeline #218](https://github.com/EriArk/codex-web-interface/issues/218). Git/GitHub/Result/Review objects remain authoritative; the Timeline indexes exact source events. Notifications represent attention-worthy replies/requests rather than mirroring every event. Ordinary user-created Reports are unaffected. Project GPT stays personal; no new Space GPT is introduced.
+
+The owner has confirmed actual friend admission, Collaboration Spaces and usable personal checkouts in #215/#195/#198. Do not rebuild that base or retain first-friend admission as an unfinished feature. Extend current services for concrete remaining gaps. This owner-reported evidence does not assert every edge-case or physical-device acceptance item has passed.
+
 ## 2026-09-21 — Collaboration Spaces take priority
 
 The owner selected [#215](https://github.com/EriArk/codex-web-interface/issues/215) as the authoritative next collaboration UX. A Space organizes existing Projects, people and repositories; it is not a second synthetic code project. Per-project Collaborative/Direct policy, individual checkouts, preserved native threads, personal Project GPT and a simple human chat replace the earlier user-facing Links/Bridges workflow. GitHub owns Issues/PR; optional Codex instructions use local CODEXWEB.md, never managed rewrites of user AGENTS.md. Keep the current lower-level implementation where useful. See the issue for the full creation/acceptance/settings and real two-user acceptance requirements.
