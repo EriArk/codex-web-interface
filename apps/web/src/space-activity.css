@@ -121,9 +121,13 @@
   text-align: start;
   margin-block: 6px;
   padding: 8px;
+  white-space: normal;
 }
 .activity-content li span {
   flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .activity-content li code {
   font-size: 12px;
