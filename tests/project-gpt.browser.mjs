@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, webkit } from "@playwright/test";
+import { chromium, expect, webkit } from "@playwright/test";
 import { nativeWorkspaceFixture } from "./fixtures/native-workspace.mjs";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
@@ -33,7 +33,7 @@ const f = await handoffFixture(origin, undefined, {
     cfg.projects[0].workingDirectory = root;
   },
 });
-const browser = await webkit.launch(),
+const browser = await (process.env.BROWSER === "chromium" ? chromium : webkit).launch(),
   context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
@@ -157,7 +157,7 @@ try {
   assert.equal(native.state.sends, 1);
   assert.deepEqual(errors, []);
   console.log(
-    "Project GPT WebKit: own binding, native send/completion, close/reopen/reload, draft, rules, compact Results and theme/phone/tablet/keyboard geometry passed.",
+    "Project GPT: own binding, native send/completion, close/reopen/reload, draft, rules, compact Results and theme/phone/tablet/keyboard geometry passed.",
   );
 } catch (error) {
   console.log(

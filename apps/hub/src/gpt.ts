@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import {
   CHAT_BLOCK_LINES,
-  textBlockLines,
   type GptConnection,
   type GptFile,
   type GptJob,
@@ -18,6 +17,7 @@ import {
   normalizeGptConnection,
   type ResultItem,
   resultCategorySchema,
+  textBlockLines,
   uploadMime,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
@@ -43,8 +43,8 @@ import { GptOperations, gptOperationInput } from "./gpt-operations.js";
 import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
 import { GptReadBackoff } from "./gpt-read-backoff.js";
-import { gptResults, resultPage } from "./gpt-results.js";
 import { gptResultContent } from "./gpt-result-content.js";
+import { gptResults, resultPage } from "./gpt-results.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 import { GptTextArtifacts } from "./gpt-text-artifacts.js";
 import { GptWorkspaceWork, workspaceId, workspaceInput } from "./gpt-workspace.js";
@@ -76,6 +76,7 @@ type Json = Record<string, any>;
 const active = ["queued", "preparing", "running"];
 const error = (code: string, message: string, status = 409) => new HubError(status, code, message);
 export class GptService {
+  authorizeJob: (id: string) => void = () => {};
   private readonly native?: NativeGptProvider;
   private readonly nativeJobs?: NativeGptJobs;
   readonly nativeLibrary?: NativeGptLibrary;
@@ -425,6 +426,7 @@ export class GptService {
             throw Error("NATIVE_UPLOAD_CHANGED");
           return join(this.root, file.id);
         },
+        (id) => this.authorizeJob(id),
       );
     // Never replay an ambiguous native submission after a Hub restart.
     store.db
@@ -1432,6 +1434,7 @@ export class GptService {
       const job = this.job(jobId);
       // The owner may cancel while the asynchronous connection/model checks are pending.
       if (job.status !== "queued" || job.dismissed) return;
+      this.authorizeJob(jobId);
       this.update(jobId, { status: "preparing" });
       preparing = "session";
       if (job.nativeId) await this.json("/bridge/sessions/select", { sessionId: job.nativeId });
@@ -1467,6 +1470,7 @@ export class GptService {
           .run(jobId, data.file.id, Date.now());
       }
       if (this.job(jobId).status === "cancelled") return;
+      this.authorizeJob(jobId);
       dispatched = true;
       monitor = setInterval(() => {
         void (async () => {

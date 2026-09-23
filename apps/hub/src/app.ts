@@ -99,9 +99,11 @@ export async function createApp(
     nativeGpt?: NativeGptWorkspace;
     auth?: Auth;
     authorizeExecution?: () => void;
+    ownerUserId?: string;
     projectActionPolicy?: ProjectActionPolicy;
     collaborationPolicy?: {
       gptContext?: (projectId: string) => unknown;
+      gptScope?: (projectId: string) => unknown;
       instructions: (projectId: string) => string | null;
       delivery: NonNullable<Parameters<typeof registerProjectDelivery>[3]>;
     };
@@ -227,6 +229,8 @@ export async function createApp(
     sessions,
     gpt,
     options.collaborationPolicy?.gptContext,
+    options.ownerUserId,
+    options.collaborationPolicy?.gptScope,
   );
   registerChunkUploads(app, config, store, sessions.attachments, gpt, options.authorizeExecution);
   registerContentSearch(app, sessions, gpt);

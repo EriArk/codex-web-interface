@@ -1319,6 +1319,11 @@ test("team dispatch preserves owner state and isolates real personal routes even
   });
   assert.equal(spoof.body.body, "FRIEND_PRIVATE");
   const privateRuntime = await f.personal(f.friendId);
+  assert.equal(privateRuntime.runtime.projectGpts.bindings.ownerUserId, f.friendId);
+  assert.equal(
+    (await f.personal(f.registry.ownerId)).runtime.projectGpts.bindings.ownerUserId,
+    f.registry.ownerId,
+  );
   assert.deepEqual(privateRuntime.runtime.sessions.config.machines, []);
   assert.deepEqual(privateRuntime.runtime.sessions.config.devices, []);
   assert.equal(privateRuntime.runtime.sessions.config.gpt, undefined);

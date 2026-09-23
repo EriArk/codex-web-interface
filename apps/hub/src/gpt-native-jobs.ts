@@ -31,6 +31,7 @@ export class NativeGptJobs {
     private readonly allowed: { has(id: string): boolean },
     private readonly creationKeys: { has(id: string): boolean } = new Set(),
     private readonly readUpload?: (file: GptFile) => Promise<Buffer | string>,
+    private readonly authorizeJob: (id: string) => void = () => {},
   ) {
     store.db.exec(
       "PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS gpt_native_receipts(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id),payload TEXT NOT NULL,messages TEXT NOT NULL DEFAULT '[]')",
@@ -105,6 +106,7 @@ export class NativeGptJobs {
         .get(id);
       if (receipt) return await this.readReceipt(id);
       if (row.status !== "queued") fail("JOB_NOT_QUEUED");
+      this.authorizeJob(id);
       if (
         row.nativeId == null ? !this.creationKeys.has(id) : !this.allowed.has(String(row.nativeId))
       )
@@ -266,6 +268,8 @@ export class NativeGptJobs {
         ...(attachments.length ? { attachments } : {}),
       };
       // Atomic receipt + existing queue transition. A crash from this point means readback only.
+      this.authorize();
+      this.authorizeJob(id);
       this.store.db.exec("BEGIN IMMEDIATE");
       try {
         if (this.project(id) !== input.projectId) fail("PROJECT_CHANGED");

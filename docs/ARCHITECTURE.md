@@ -10,6 +10,8 @@ The current public service is a replaceable web/API gateway. The persistent engi
 
 ### Team composition
 
+Persistent AI role identity has a shared private-runtime [conversation binding registry](CONVERSATION_BINDINGS.md). Its first consumer is existing Project GPT; exact owner/provider/scope/role/native IDs, revision provenance and dispatch-time authorization checks replace that feature's ad-hoc binding fields. Other role integrations remain explicit subsequent work; ordinary native conversations and Current/Previous selection are not rediscovered or migrated by title.
+
 Resolve a durable authenticated principal before dispatching a private API. Each user owns one personal runtime containing their Store/artifacts, machine configuration, catalog, native sessions, GPT connector/profile and background jobs. Reuse the same functional route/UI implementations with scoped dependencies; never fall back to the first configured owner or machine.
 
 Personal SQLite/artifact namespaces keep native IDs and existing private module contracts independent. A shared installation/collaboration registry holds users, pairings, logical projects, memberships, checkouts, published objects, Links/Bridges and access audit records. The original owner's database and native file/thread identities remain the migration baseline. Shared project permission never implies access to a personal runtime, native conversation or machine.

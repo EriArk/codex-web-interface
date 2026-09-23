@@ -3,6 +3,17 @@ import type { CollaborationSpaces } from "./collaboration-spaces.js";
 
 export function collaborationPolicy(spaces: CollaborationSpaces, actor: string) {
   return {
+    gptScope(projectId: string) {
+      const binding = spaces.binding(actor, projectId);
+      return binding
+        ? {
+            spaceId: binding.space.id,
+            projectId: binding.project.id,
+            repository: binding.project.repository,
+            access: binding.access,
+          }
+        : null;
+    },
     gptContext(projectId: string) {
       const binding = spaces.binding(actor, projectId);
       return binding

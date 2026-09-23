@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { inspectProject } from "@codex-web/machines";
 import {
+  type ConversationBindingSpec,
   HubError,
   type ProjectGpt,
   type ProjectRepository,
@@ -11,6 +12,7 @@ import {
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { ConversationBindings } from "./conversation-bindings.js";
 import type { GptService } from "./gpt.js";
 import type { Sessions } from "./sessions.js";
 
@@ -40,12 +42,26 @@ const fail = (code: string, message: string) => new HubError(409, code, message)
 
 /** Lives in each personal runtime database, including the owner's runtime. */
 export class ProjectGpts {
+  readonly bindings: ConversationBindings;
+  private scope(id: string): ConversationBindingSpec {
+    return {
+      provider: "gpt",
+      scope: "project",
+      scopeId: id,
+      role: "companion",
+      lifecycle: "persistent",
+      visibility: "normal",
+      execution: null,
+    };
+  }
   private writingRules = new Set<string>();
   private readingRepository = new Set<string>();
   constructor(
     private sessions: Sessions,
     private gpt: GptService,
     private sharedContext?: (id: string) => unknown,
+    ownerUserId = "local-owner",
+    private authorizationScope?: (id: string) => unknown,
   ) {
     sessions.store.db.exec(`
       CREATE TABLE IF NOT EXISTS project_gpt_bindings (
@@ -58,7 +74,26 @@ export class ProjectGpts {
       );
       CREATE TABLE IF NOT EXISTS project_gpt_sources (projectId TEXT PRIMARY KEY, root TEXT NOT NULL, repository TEXT, checkedAt INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS project_gpt_sends_scope ON project_gpt_sends(projectId,revision);
+      CREATE TABLE IF NOT EXISTS project_gpt_send_authority (id TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
+    this.bindings = new ConversationBindings(sessions.store.db, ownerUserId);
+    const db = sessions.store.db;
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const row of db
+        .prepare("SELECT projectId,nativeId,jobId,revision FROM project_gpt_bindings")
+        .all()) {
+        this.bindings.ensure(this.scope(String(row.projectId)), {
+          nativeId: row.nativeId ? String(row.nativeId) : null,
+          jobId: row.jobId ? String(row.jobId) : null,
+          revision: Number(row.revision),
+        });
+      }
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   }
   private project(id: string) {
     const p = this.sessions.project(id);
@@ -72,28 +107,24 @@ export class ProjectGpts {
       db = this.sessions.store.db;
     db.prepare("INSERT OR IGNORE INTO project_gpt_bindings(projectId) VALUES(?)").run(id);
     const row = db.prepare("SELECT * FROM project_gpt_bindings WHERE projectId=?").get(id)!;
+    const binding = this.bindings.ensure(this.scope(id));
     // Recover an acknowledged durable send even if the process stopped before updating the binding.
     const intent = db
       .prepare(
         "SELECT s.id FROM project_gpt_sends s JOIN gpt_jobs j ON j.id=s.id WHERE s.projectId=? AND s.revision=? ORDER BY j.createdAt DESC LIMIT 1",
       )
-      .get(id, Number(row.revision));
-    const jobId = intent ? String(intent.id) : row.jobId ? String(row.jobId) : null;
-    let chat = row.nativeId ? String(row.nativeId) : null;
+      .get(id, binding.revision);
+    const jobId = intent ? String(intent.id) : binding.jobId;
+    let chat = binding.nativeId;
     if (!chat && jobId) chat = this.gpt.job(jobId).nativeId;
-    if (chat !== row.nativeId || jobId !== row.jobId)
-      db.prepare("UPDATE project_gpt_bindings SET nativeId=?,jobId=? WHERE projectId=?").run(
-        chat,
-        jobId,
-        id,
-      );
+    this.bindings.recover(this.scope(id), binding.revision, chat, jobId);
     const rules = JSON.parse(String(row.rules)) as ProjectRules;
     return {
       projectId: id,
       name: p.name,
       nativeId: chat,
       jobId,
-      revision: Number(row.revision),
+      revision: binding.revision,
       rules,
       context: this.context(id, p.name, rules),
     };
@@ -154,9 +185,11 @@ export class ProjectGpts {
     }
   }
   bind(id: string, chat: string | null, expected: number) {
+    this.sessions.authorizeExecution();
     const current = this.get(id);
     if (current.revision !== expected)
       throw fail("PROJECT_GPT_CHANGED", "Привязка уже изменилась. Открой окно проекта снова.");
+    this.assertCreationSettled(current);
     if (chat) {
       if (!this.gpt.library.get("thread", chat))
         throw fail("PROJECT_GPT_CHAT_MISSING", "Выбери чат из своего списка GPT.");
@@ -164,14 +197,46 @@ export class ProjectGpts {
       if (this.gpt.library.get("thread", chat)?.archived)
         throw fail("GPT_ARCHIVED", "Сначала разархивируй чат.");
     }
-    this.sessions.store.db
-      .prepare(
-        "UPDATE project_gpt_bindings SET nativeId=?,jobId=NULL,revision=revision+1 WHERE projectId=?",
-      )
-      .run(chat, id);
+    if (current.nativeId === chat) return current;
+    this.bindings.replace(this.scope(id), expected, chat);
     return this.get(id);
   }
+  private assertCreationSettled(current: ProjectGpt) {
+    if (
+      !current.nativeId &&
+      current.jobId &&
+      ["queued", "preparing", "running", "unknown"].includes(this.gpt.job(current.jobId).status)
+    )
+      throw fail("PROJECT_GPT_STARTING", "Первый запрос ещё создаёт чат. Дождись его появления.");
+  }
+  authorizeJob(key: string) {
+    const send = this.sessions.store.db
+      .prepare("SELECT projectId,revision,value FROM project_gpt_sends WHERE id=?")
+      .get(key);
+    if (!send) return;
+    this.sessions.authorizeExecution();
+    const authority = this.sessions.store.db
+      .prepare("SELECT value FROM project_gpt_send_authority WHERE id=?")
+      .get(key);
+    if (
+      authority &&
+      authority.value !== JSON.stringify(this.authorizationScope?.(String(send.projectId)) ?? null)
+    )
+      throw fail(
+        "PROJECT_GPT_CHANGED",
+        "Доступ к проекту изменился. Открой окно проекта снова; черновик сохранён.",
+      );
+    const current = this.get(String(send.projectId));
+    if (
+      current.revision !== Number(send.revision) ||
+      current.nativeId !== JSON.parse(String(send.value)).nativeId
+    )
+      throw fail("PROJECT_GPT_CHANGED", "Привязка уже изменилась. Черновик сохранён.");
+    this.bindings.assertExclusive(this.bindings.ensure(this.scope(current.projectId)));
+    if (current.nativeId) this.gpt.library.assertExists("thread", current.nativeId);
+  }
   send(id: string, key: string, raw: unknown, evidence = "") {
+    this.sessions.authorizeExecution();
     this.project(id);
     const body = projectGptSendSchema.parse(raw),
       db = this.sessions.store.db;
@@ -182,18 +247,15 @@ export class ProjectGpts {
     if (previous) {
       if (previous.projectId !== id || previous.fingerprint !== fingerprint)
         throw fail("GPT_KEY_REUSED", "Эта отправка уже содержит другое сообщение.");
-      if (
-        !db.prepare("SELECT 1 FROM gpt_jobs WHERE id=?").get(key) &&
-        this.get(id).revision !== body.revision
-      )
-        throw fail(
-          "PROJECT_GPT_CHANGED",
-          "Привязка уже изменилась. Открой окно проекта снова; черновик сохранён.",
-        );
+      if (!db.prepare("SELECT 1 FROM gpt_jobs WHERE id=?").get(key)) {
+        this.authorizeJob(key);
+        this.assertCreationSettled(this.get(id));
+      }
       // Retry the frozen envelope, never a changed context or another selected chat.
       return this.gpt.enqueue(key, JSON.parse(String(previous.value)));
     }
     const current = this.get(id);
+    this.bindings.assertExclusive(this.bindings.ensure(this.scope(id)));
     if (current.revision !== body.revision || current.nativeId !== body.nativeId)
       throw fail(
         "PROJECT_GPT_CHANGED",
@@ -201,12 +263,7 @@ export class ProjectGpts {
       );
     if (!body.text.trim() && !body.files.length)
       throw new HubError(400, "GPT_EMPTY_MESSAGE", "Добавь текст или файл.");
-    if (
-      !current.nativeId &&
-      current.jobId &&
-      ["queued", "preparing", "running", "unknown"].includes(this.gpt.job(current.jobId).status)
-    )
-      throw fail("PROJECT_GPT_STARTING", "Первый запрос ещё создаёт чат. Дождись его появления.");
+    this.assertCreationSettled(current);
     const { revision: _revision, ...input } = body;
     const value = {
       ...input,
@@ -217,21 +274,34 @@ export class ProjectGpts {
         projectContextEnd +
         body.text,
     };
-    db.prepare("INSERT INTO project_gpt_sends VALUES(?,?,?,?,?)").run(
-      key,
-      id,
-      current.revision,
-      fingerprint,
-      JSON.stringify(value),
-    );
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare("INSERT INTO project_gpt_sends VALUES(?,?,?,?,?)").run(
+        key,
+        id,
+        current.revision,
+        fingerprint,
+        JSON.stringify(value),
+      );
+      db.prepare("INSERT INTO project_gpt_send_authority VALUES(?,?)").run(
+        key,
+        JSON.stringify(this.authorizationScope?.(id) ?? null),
+      );
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
     try {
       const job = this.gpt.enqueue(key, value);
-      db.prepare("UPDATE project_gpt_bindings SET jobId=? WHERE projectId=?").run(key, id);
+      this.bindings.recover(this.scope(id), current.revision, current.nativeId, key);
       return job;
     } catch (error) {
       // Failed validation has no native side effect and must not pin obsolete settings/context.
-      if (!db.prepare("SELECT 1 FROM gpt_jobs WHERE id=?").get(key))
+      if (!db.prepare("SELECT 1 FROM gpt_jobs WHERE id=?").get(key)) {
         db.prepare("DELETE FROM project_gpt_sends WHERE id=?").run(key);
+        db.prepare("DELETE FROM project_gpt_send_authority WHERE id=?").run(key);
+      }
       throw error;
     }
   }
@@ -314,8 +384,11 @@ export function registerProjectGpt(
   sessions: Sessions,
   gpt: GptService,
   sharedContext?: (id: string) => unknown,
+  ownerUserId?: string,
+  authorizationScope?: (id: string) => unknown,
 ) {
-  const service = new ProjectGpts(sessions, gpt, sharedContext);
+  const service = new ProjectGpts(sessions, gpt, sharedContext, ownerUserId, authorizationScope);
+  gpt.authorizeJob = (key) => service.authorizeJob(key);
   const projectId = (params: unknown) =>
     z.object({ id: z.string().min(1).max(100) }).parse(params).id;
   app.get("/api/projects/:id/gpt", (req) => {

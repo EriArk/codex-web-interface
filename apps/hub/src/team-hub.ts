@@ -196,6 +196,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
           await prepareEngineSocket(socket);
           runtime = await (options.personalFactory ?? createApp)(selected, {
             ...options,
+            ownerUserId: userId,
             collaborationPolicy: collaborationPolicy(collaboration, userId),
             nativeGpt: userId === registry.ownerId ? options.nativeGpt : undefined,
             webRoot: undefined,

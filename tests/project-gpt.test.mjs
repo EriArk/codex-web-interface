@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +34,10 @@ async function fixture(t) {
       cfg.projects[0].workingDirectory = root;
     },
     collaborationPolicy: {
+      gptScope: () =>
+        collaboration
+          ? { spaceId: "space", projectId: "shared-project", access: "collaborate" }
+          : null,
       instructions: () => "Shared agreement",
       gptContext: () => collaboration,
       delivery: () => {},
@@ -159,6 +163,9 @@ test("New-chat identity survives binding-write interruption; pending first send 
     () => service.send("project", randomUUID(), { ...f.native.input, nativeId: null, revision: 0 }),
     /Первый запрос/,
   );
+  db.prepare("UPDATE gpt_jobs SET status='unknown' WHERE id=?").run(id);
+  assert.throws(() => service.bind("project", null, 0), /Первый запрос/);
+  assert.equal(service.get("project").revision, 0);
   db.prepare("UPDATE gpt_jobs SET nativeId=?,status='running' WHERE id=?").run("created-chat", id);
   assert.equal(new ProjectGpts(f.sessions, jobs).get("project").nativeId, "created-chat");
   const other = await fixture(t);
@@ -171,6 +178,134 @@ test("New-chat identity survives binding-write interruption; pending first send 
     /Привязка/,
   );
 });
+
+test("an unaccepted pre-crash intent cannot create another chat after a different first send settles", async (t) => {
+  const f = await fixture(t),
+    db = f.store.db;
+  const body = { ...f.native.input, nativeId: null, revision: 0 };
+  const key = randomUUID();
+  db.prepare("INSERT INTO project_gpt_sends VALUES(?,?,?,?,?)").run(
+    key,
+    "project",
+    0,
+    createHash("sha256").update(JSON.stringify(body)).digest("hex"),
+    JSON.stringify(body),
+  );
+  f.projectGpts.bindings.ensure(
+    {
+      provider: "gpt",
+      scope: "project",
+      scopeId: "project",
+      role: "companion",
+      lifecycle: "persistent",
+      visibility: "normal",
+      execution: null,
+    },
+    { nativeId: f.native.conversationId, jobId: null, revision: 0 },
+  );
+  assert.throws(() => f.projectGpts.send("project", key, body), { code: "PROJECT_GPT_CHANGED" });
+  assert.equal(db.prepare("SELECT 1 FROM gpt_jobs WHERE id=?").get(key), undefined);
+  assert.equal(f.native.state.sends, 0);
+});
+
+test("legacy Project GPT migration retains native history, rules, revision and receipts across restart", async (t) => {
+  const f = await fixture(t),
+    db = f.store.db;
+  const rules = JSON.stringify({ enabled: ["tests"], custom: "Keep my rules" });
+  db.prepare("INSERT INTO project_gpt_bindings VALUES(?,?,?,?,?)").run(
+    "project",
+    f.native.conversationId,
+    null,
+    7,
+    rules,
+  );
+  const service = new ProjectGpts(f.sessions, f.gpt);
+  assert.equal(service.get("project").nativeId, f.native.conversationId);
+  assert.equal(service.get("project").revision, 7);
+  assert.equal(service.get("project").rules.custom, "Keep my rules");
+  assert.equal(service.bind("project", f.native.conversationId, 7).revision, 7);
+  service.bind("project", null, 7);
+  const restarted = new ProjectGpts(f.sessions, f.gpt);
+  assert.equal(restarted.get("project").nativeId, null);
+  assert.equal(restarted.get("project").revision, 8);
+  assert.equal(
+    db.prepare("SELECT nativeId FROM project_gpt_bindings WHERE projectId='project'").get()
+      .nativeId,
+    f.native.conversationId,
+  );
+  assert.equal(f.native.state.sends, 0);
+});
+
+test("Project GPT prevents cross-project reuse, preserves missing native identity and rechecks revoked execution", async (t) => {
+  const f = await fixture(t);
+  f.sessions.config.projects.push({ ...f.sessions.config.projects[0], id: "other", name: "Other" });
+  const service = f.projectGpts;
+  service.bind("project", f.native.conversationId, 0);
+  assert.throws(() => service.bind("other", f.native.conversationId, 0), {
+    code: "CONVERSATION_ALREADY_BOUND",
+  });
+  service.bind("project", null, 1);
+  assert.throws(() => service.bind("other", f.native.conversationId, 0), {
+    code: "CONVERSATION_ALREADY_BOUND",
+  });
+  service.bind("project", f.native.conversationId, 2);
+  f.gpt.library.save("thread", f.native.conversationId, { deleted: true });
+  assert.equal(service.get("project").nativeId, f.native.conversationId);
+  assert.throws(() => service.send("project", randomUUID(), { ...f.native.input, revision: 3 }));
+  assert.equal(f.native.state.sends, 0);
+  f.sessions.authorizeExecution = () => {
+    throw Error("REVOKED");
+  };
+  assert.throws(() => service.bind("project", null, 3), /REVOKED/);
+  assert.throws(
+    () => service.send("project", randomUUID(), { ...f.native.input, revision: 3 }),
+    /REVOKED/,
+  );
+  assert.equal(service.get("project").revision, 3);
+});
+
+for (const change of ["binding", "project", "user", "membership"]) {
+  test(`Project GPT rechecks ${change} after asynchronous preparation, before the native send`, async (t) => {
+    const f = await fixture(t);
+    f.projectGpts.bind("project", f.native.conversationId, 0);
+    let release,
+      entered = false;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    t.after(() => release());
+    const prepare = f.native.client.prepareDispatch;
+    f.native.client.prepareDispatch = async (input) => {
+      const result = await prepare(input);
+      entered = true;
+      await gate;
+      return result;
+    };
+    const key = randomUUID(),
+      input = { ...f.native.input, revision: 1 };
+    const accepted = await f.request("POST", "/send", input, key);
+    assert.equal(accepted.statusCode, 202, accepted.body);
+    await until(() => entered);
+    if (change === "binding") f.projectGpts.bind("project", null, 1);
+    if (change === "project")
+      f.sessions.catalog.library.save("project", "project", { archived: true });
+    if (change === "membership") f.changeContext();
+    if (change === "user")
+      f.sessions.authorizeExecution = () => {
+        throw Error("REVOKED");
+      };
+    release();
+    await until(
+      () =>
+        f.store.db.prepare("SELECT status FROM gpt_jobs WHERE id=?").get(key)?.status === "failed",
+    );
+    assert.equal(f.native.state.sends, 0);
+    assert.equal(
+      f.store.db.prepare("SELECT 1 FROM gpt_native_receipts WHERE jobId=?").get(key),
+      undefined,
+    );
+  });
+}
 
 test("Optional local rules preserve AGENTS/gitignore, stay outside Git and activate only on subsequent native turns", async (t) => {
   const f = await fixture(t);
