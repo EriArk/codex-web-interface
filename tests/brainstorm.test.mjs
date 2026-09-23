@@ -456,6 +456,13 @@ test("Audio worklet emits bounded 16 kHz PCM, default mute sends nothing and pla
       audio.port.onmessage({ data: { type: "pcm", id, buffer: new Int16Array(640).buffer } });
   assert.equal(audio.peers.size, 8);
   assert([...audio.peers.values()].every((p) => p.frames.length <= 6));
+  audio.port.onmessage({ data: { type: "peers", ids: [7, 20] } });
+  audio.port.onmessage({ data: { type: "pcm", id: 20, buffer: new Int16Array(640).buffer } });
+  assert.deepEqual(
+    [...audio.peers.keys()],
+    [7, 20],
+    "departed peers release playback slots for later participants",
+  );
   audio.port.onmessage({ data: { type: "state", muted: true, deafened: true } });
   assert.equal(audio.peers.size, 0);
 });

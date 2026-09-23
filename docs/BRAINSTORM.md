@@ -37,3 +37,9 @@ Focused Node tests cover public discovery/owner controls, user preferences, opti
 Browser fixtures use actual React components in Chromium and WebKit. They check mounted board/chat continuity, unchanged image requests, drafts, exact card edits, internal conversion windows, private GPT entry, four themes, phone/keyboard/tablet layouts, plus synthetic audio and microphone resource cleanup. Screenshots are inspected as well as measured. Native accounts, real repositories, the owner's microphone and active work are not used by these tests. Physical-device acceptance remains pending.
 
 Not claimed complete: optional board arrows/grouping, a full collaborative drawing editor, transcript/audio recording, bulk historic room-chat selection, automatic binary ingestion into GPT, or automatic private-summary extraction. Advanced room workflows can be extended after real usage; the stage does not close every acceptance detail of the umbrella issues.
+
+### Follow-up verification, 24 September
+
+The room-to-project wizard now restores its exact server receipt before enabling edits, including on a device without a saved wizard draft. Applying initial room defaults no longer clears that recovery identity. A lost completion acknowledgement retains the completed setup and retries only the handoff, without preparing or executing another project. Browser fixtures exercise this through the actual room and Project wizard in Chromium and WebKit.
+
+Voice connection can be cancelled while permission or module loading is pending. Pending audio contexts/tracks and late permission responses are released without connecting. Playback drops departed participants' queues so later participants remain audible after repeated joins/leaves. Synthetic browser audio and worklet tests cover these cases; screenshots also cover active voice at keyboard height and compact-tablet layouts. Physical-device sound/routing acceptance remains pending.

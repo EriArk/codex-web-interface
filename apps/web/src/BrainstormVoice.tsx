@@ -19,10 +19,20 @@ export function BrainstormVoice({ roomId, closed }: { roomId: string; closed: bo
     } | null>(null),
     generation = useRef(0),
     live = useRef(true);
+  const pending = useRef<AudioContext | null>(null);
+  const pendingStream = useRef<MediaStream | null>(null);
   const leave = useCallback(() => {
     generation.current++;
     const current = active.current;
     active.current = null;
+    pendingStream.current?.getTracks().forEach((t) => {
+      t.stop();
+    });
+    pendingStream.current = null;
+    if (pending.current) {
+      if (pending.current.state !== "closed") void pending.current.close();
+      pending.current = null;
+    }
     if (current) {
       current.stream.getTracks().forEach((t) => {
         t.stop();
@@ -58,11 +68,19 @@ export function BrainstormVoice({ roomId, closed }: { roomId: string; closed: bo
       socket: WebSocket | null = null;
     try {
       context = new AudioContext();
+      pending.current = context;
       await context.resume();
+      if (serial !== generation.current) throw Error("cancelled");
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         video: false,
       });
+      // Stop late permission responses before starting any further asynchronous work.
+      if (serial !== generation.current) throw Error("cancelled");
+      stream.getAudioTracks().forEach((t) => {
+        t.enabled = false;
+      });
+      pendingStream.current = stream;
       await context.audioWorklet.addModule("/brainstorm-audio.js");
       if (serial !== generation.current) throw Error("cancelled");
       const node = new AudioWorkletNode(context, "brainstorm-audio", {
@@ -78,6 +96,8 @@ export function BrainstormVoice({ roomId, closed }: { roomId: string; closed: bo
       socket.binaryType = "arraybuffer";
       const current = { socket, context, stream, node };
       active.current = current;
+      pending.current = null;
+      pendingStream.current = null;
       let opened = false;
       const timeout = setTimeout(() => {
         if (!opened && active.current === current) {
@@ -117,8 +137,13 @@ export function BrainstormVoice({ roomId, closed }: { roomId: string; closed: bo
         } else {
           try {
             const value = JSON.parse(e.data);
-            if (value.type === "peers" && Array.isArray(value.peers))
+            if (value.type === "peers" && Array.isArray(value.peers)) {
               setPeers(value.peers.slice(0, 8));
+              node.port.postMessage({
+                type: "peers",
+                ids: value.peers.slice(0, 8).map((p: { id: number }) => p.id),
+              });
+            }
           } catch {}
         }
       };
@@ -137,6 +162,8 @@ export function BrainstormVoice({ roomId, closed }: { roomId: string; closed: bo
         };
       });
     } catch (e) {
+      if (pending.current === context) pending.current = null;
+      if (pendingStream.current === stream) pendingStream.current = null;
       stream?.getTracks().forEach((t) => {
         t.stop();
       });
@@ -166,7 +193,16 @@ export function BrainstormVoice({ roomId, closed }: { roomId: string; closed: bo
   };
   return (
     <div className="brainstorm-voice">
-      {!connected ? (
+      {busy ? (
+        <button
+          className="secondary"
+          type="button"
+          onClick={leave}
+          aria-label="Отменить подключение к голосу"
+        >
+          Отмена
+        </button>
+      ) : !connected ? (
         <button
           className="secondary"
           type="button"

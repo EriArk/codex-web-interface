@@ -5,6 +5,10 @@ class RoomAudio extends AudioWorkletProcessor {
     this.peers = new Map(); this.muted = true; this.deafened = false;
     this.port.onmessage = ({ data }) => {
       if (data.type === "state") { this.muted = data.muted; this.deafened = data.deafened; if (this.deafened) this.peers.clear(); }
+      if (data.type === "peers") {
+        const present = new Set(data.ids);
+        for (const id of this.peers.keys()) if (!present.has(id)) this.peers.delete(id);
+      }
       if (data.type === "pcm" && !this.deafened) {
         if (!this.peers.has(data.id) && this.peers.size >= 8) return;
         const peer = this.peers.get(data.id) || { frames: [], offset: 0, phase: 0 };

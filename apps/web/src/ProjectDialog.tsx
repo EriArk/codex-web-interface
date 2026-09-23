@@ -1,7 +1,7 @@
 import type { ProjectSetupInput, ProjectSetupOperation, SetupRepository } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
-import { api, messageOf } from "./api";
+import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import type { Machine, Project } from "./types";
 import "./project-setup.css";
@@ -132,10 +132,12 @@ function ProjectDialogContent({
   }, [open]);
   const delivering = useRef(false),
     persistedOperation = useRef<string>(restored.current?.operationId || seed?.receiptId || "");
+  const [restoringOperation, setRestoringOperation] = useState(!!persistedOperation.current);
   openRef.current = open;
   const machine = machines.find((m) => m.id === input.machineId) ?? machines[0];
   const locked =
     busy ||
+    restoringOperation ||
     operation?.state === "running" ||
     operation?.state === "unknown" ||
     operation?.state === "complete";
@@ -207,26 +209,32 @@ function ProjectDialogContent({
     }
     dialog.current?.showModal();
     const controller = new AbortController();
+    const receipt = seed?.receiptId || persistedOperation.current;
+    setRestoringOperation(!!receipt);
     void api<{ operations: ProjectSetupOperation[] }>("/project-setup", {
       signal: controller.signal,
     })
-      .then((v) =>
-        setPending(v.operations.filter((row) => !seed || row.id === persistedOperation.current)),
-      )
+      .then((v) => setPending(v.operations.filter((row) => !seed || row.id === receipt)))
       .catch(() => {});
-    if (persistedOperation.current)
-      void api<ProjectSetupOperation>(`/project-setup/${persistedOperation.current}`, {
+    if (receipt)
+      void api<ProjectSetupOperation>(`/project-setup/${receipt}`, {
         signal: controller.signal,
       })
         .then((v) => {
-          if (!controller.signal.aborted && matchesSeed(v.input)) {
+          if (!controller.signal.aborted && v.id === receipt && matchesSeed(v.input)) {
+            persistedOperation.current = receipt;
             setOperation(v);
             setInput(v.input);
             setEditedPath(true);
             setStep(3);
+            setRestoringOperation(false);
           }
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (controller.signal.aborted) return;
+          if (e instanceof ApiError && e.status === 404) setRestoringOperation(false);
+          else setError(messageOf(e));
+        });
     return () => controller.abort();
   }, [open, seed, matchesSeed]);
   const operationId = operation?.id,
@@ -876,6 +884,7 @@ function ProjectDialogContent({
             className="primary"
             disabled={
               busy ||
+              restoringOperation ||
               repoBusy ||
               !machine ||
               machine.canCreateProjects === false ||

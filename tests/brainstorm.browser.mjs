@@ -85,6 +85,26 @@ try {
         projects: [],
       };
       let version = 1;
+      let snapshot = null,
+        completeAttempts = 0;
+      const receiptId = "66666666-6666-4666-8666-666666666666";
+      const project = {
+        id: "room-project",
+        name: "Recovered project",
+        machineId: "pc",
+        workingDirectory: "D:\\Projects\\Recovered",
+      };
+      const operation = {
+        id: receiptId,
+        state: "complete",
+        project,
+        input: {
+          ...project,
+          createDirectory: true,
+          repository: { mode: "none", owner: "", name: "", visibility: "private", description: "" },
+        },
+        inspection: { fingerprint: "review-1", git: false, steps: [] },
+      };
       const cards = [
         {
           id: "33333333-3333-4333-8333-333333333333",
@@ -174,7 +194,42 @@ try {
           imageReads++;
           return route.fulfill({ contentType: "image/png", body: png });
         }
-        if (p.endsWith("/snapshots")) return json({ items: [] });
+        if (p.endsWith("/snapshots")) {
+          if (req.method() === "POST") {
+            snapshot = {
+              ...req.postDataJSON(),
+              id: receiptId,
+              roomId,
+              projectId: null,
+              spaceId: null,
+              snapshot: { room, cards, messages: [] },
+            };
+            return json(snapshot);
+          }
+          return json({ items: snapshot ? [snapshot] : [] });
+        }
+        if (p === `/api/team/brainstorm-conversions/${receiptId}`) return json(snapshot);
+        if (p === `/api/team/brainstorm-conversions/${receiptId}/complete`) {
+          completeAttempts++;
+          snapshot.projectId = project.id;
+          room.projects = [{ id: project.id, name: project.name, repository: null, spaceId: null }];
+          if (completeAttempts === 1) return route.abort("failed");
+          return json(snapshot);
+        }
+        if (p === "/api/machines")
+          return json({
+            machines: [
+              {
+                id: "pc",
+                name: "PC",
+                type: "ssh-windows",
+                projectsDirectory: "D:\\Projects",
+                canCreateProjects: true,
+              },
+            ],
+          });
+        if (p === "/api/project-setup") return json({ operations: [operation] });
+        if (p === `/api/project-setup/${receiptId}`) return json(operation);
         if (p === "/api/team/contacts") return json({ items: [], nextOffset: null });
         if (p.endsWith("/gpt"))
           return json({
@@ -268,6 +323,8 @@ try {
         for (const [label, width, height] of [
           ["phone", 390, 844],
           ["keyboard", 390, 430],
+          ["compact-tablet", 768, 1024],
+          ["tablet-landscape", 1024, 768],
           ["tablet", 1366, 1024],
         ]) {
           await page.setViewportSize({ width, height });
@@ -301,6 +358,22 @@ try {
       await expect(page.getByRole("textbox", { name: "Личное резюме", exact: true })).toHaveValue(
         "Private conclusion",
       );
+      await page.getByRole("button", { name: "Сохранить снимок", exact: true }).click();
+      await page.getByRole("button", { name: "Продолжить создание проекта", exact: true }).click();
+      await page.getByRole("button", { name: "Открыть проект", exact: true }).waitFor();
+      await page.screenshot({ path: join(screens, `${engine}-recovered-project.png`) });
+      assert.equal(
+        requests.filter((r) => r.path.endsWith("/prepare") || r.path.endsWith("/execute")).length,
+        0,
+        "fresh device restores completed receipt without replay",
+      );
+      await page.getByRole("button", { name: "Открыть проект", exact: true }).click();
+      await page.locator(".project-setup-dialog [role=alert]").waitFor();
+      await page.getByRole("button", { name: "Открыть проект", exact: true }).click();
+      await page
+        .getByText("Проект создан. Ссылка находится на доске комнаты.", { exact: true })
+        .waitFor();
+      assert.equal(completeAttempts, 2, "lost handoff acknowledgement retries same receipt");
       await page
         .getByRole("dialog", { name: "Проект из комнаты", exact: true })
         .getByRole("button", { name: "Закрыть", exact: true })
@@ -315,9 +388,9 @@ try {
             return add.call(this, module);
           };
           Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+            configurable: true,
             value: async () => {
               const context = new AudioContext();
-              await context.resume();
               const source = context.createOscillator(),
                 dest = context.createMediaStreamDestination();
               source.connect(dest);
@@ -338,6 +411,14 @@ try {
           throw Error(await page.locator(".brainstorm-voice").innerText(), { cause: e });
         });
       await expect.poll(() => voiceFrames).toBeGreaterThan(0);
+      for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+        await page.evaluate((theme) => {
+          document.documentElement.dataset.theme = theme;
+        }, theme);
+        await page.setViewportSize({ width: 390, height: 430 });
+        await page.screenshot({ path: join(screens, `${engine}-${theme}-voice-keyboard.png`) });
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
       await page.getByRole("button", { name: "Выключить звук", exact: true }).click();
       await page.getByRole("button", { name: "Выйти", exact: true }).click();
       assert.equal(
@@ -347,6 +428,37 @@ try {
         true,
       );
       await page.evaluate(() => window.__roomTestAudio.close());
+      await page.evaluate(() => {
+        Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+          configurable: true,
+          value: () =>
+            new Promise((resolve) => {
+              window.__latePermission = resolve;
+            }),
+        });
+      });
+      await page.getByRole("button", { name: "Голосовой разговор", exact: true }).click();
+      await expect.poll(() => page.evaluate(() => !!window.__latePermission)).toBe(true);
+      await page
+        .getByRole("button", { name: "Отменить подключение к голосу", exact: true })
+        .click();
+      await page.evaluate(async () => {
+        const context = new AudioContext();
+        const stream = context.createMediaStreamDestination().stream;
+        window.__lateStream = stream;
+        window.__latePermission(stream);
+        await context.close();
+      });
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            window.__lateStream.getTracks().every((t) => t.readyState === "ended"),
+          ),
+        )
+        .toBe(true);
+      await expect(
+        page.getByRole("button", { name: "Голосовой разговор", exact: true }),
+      ).toBeEnabled();
       await page.getByRole("button", { name: "Мой GPT", exact: true }).click();
       await page
         .getByText("Личный чат. На общую доску попадает только то, что вы опубликуете.", {
@@ -379,7 +491,7 @@ try {
       );
       assert.deepEqual(errors, []);
       console.log(
-        `${engine}: room board/chat continuity, exact edits, private GPT, snapshots, all four themes and constrained layouts passed.`,
+        `${engine}: room board/chat continuity, exact edits, private GPT, snapshots, all four themes and constrained layouts passed. Recovered Project receipt, lost completion acknowledgement and cancelled late microphone permission passed.`,
       );
     } finally {
       await browser.close();
