@@ -147,27 +147,35 @@ export default function App() {
     return () => window.removeEventListener("hashchange", update);
   }, []);
   const login = useCallback((value: Session) => {
-    if (!admitWorkspace(value)) return;
+    if (!admitWorkspace(value)) {
+      setLoading(true);
+      return false;
+    }
     configureApi(value.csrf, () => setSession(null));
     setSession(value);
+    return true;
   }, []);
   useEffect(() => {
     void (async () => {
+      let replacingPage = false;
       try {
         const status = await api<{ requiresSetup: boolean; team?: boolean }>("/auth/status");
         setRequiresSetup(status.requiresSetup);
         setTeam(!!status.team);
         if (!status.requiresSetup && !/(?:^|&)(?:recover|join)=/.test(location.hash.slice(1))) {
           try {
-            login(await api<Session>("/auth/session"));
-          } catch {
-            /* The password form handles a missing session. */
+            replacingPage = !login(await api<Session>("/auth/session"));
+          } catch (e) {
+            // A failed read is not evidence that the user has signed out.
+            if (!(e instanceof ApiError && e.status === 401)) throw e;
           }
         }
       } catch (e) {
         setError(messageOf(e));
       } finally {
-        setLoading(false);
+        // Account admission reloads to bind private storage. Keep the boot screen
+        // until that navigation completes instead of briefly mounting Login.
+        if (!replacingPage) setLoading(false);
       }
     })();
   }, [login]);
