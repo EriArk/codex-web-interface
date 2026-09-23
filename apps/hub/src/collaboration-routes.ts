@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { createApp } from "./app.js";
 import { CollaborationSpaces, type VerifiedSpaceProject } from "./collaboration-spaces.js";
 import { rulesSchema } from "./project-gpt.js";
+import { SpaceActivity } from "./space-activity.js";
+import type { GitHubProbe } from "./team-github.js";
 import type { TeamProjects } from "./team-projects.js";
 
 export function registerCollaborationSpaces(
@@ -13,7 +15,30 @@ export function registerCollaborationSpaces(
   actor: (req: FastifyRequest) => string,
   personal: (userId: string) => Promise<{ runtime: Awaited<ReturnType<typeof createApp>> }>,
   spaces = new CollaborationSpaces(team),
+  githubProbe?: GitHubProbe,
 ) {
+  const activity = new SpaceActivity(spaces, personal, githubProbe);
+  app.post(
+    "/api/team/spaces/:id/activity",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const user = actor(req);
+      const body = z
+        .object({
+          projectId: z.string().uuid(),
+          source: z
+            .string()
+            .regex(/^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/)
+            .optional(),
+        })
+        .strict()
+        .parse(req.body);
+      const result = await activity.page(user, id(req), body.projectId, body.source);
+      actor(req);
+      spaces.access(user, id(req));
+      return reply.header("Cache-Control", "no-store").send(result);
+    },
+  );
   const id = (req: FastifyRequest) => z.object({ id: z.string().uuid() }).parse(req.params).id;
   const key = (req: FastifyRequest) => z.string().uuid().parse(req.headers["idempotency-key"]);
   const projectId = z.string().min(1).max(100),

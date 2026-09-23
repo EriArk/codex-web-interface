@@ -1,4 +1,5 @@
 import type {
+  GitHubActivitySource,
   GitHubIdentity,
   GitHubRepositoryAccess,
   GitHubWorkComment,
@@ -285,7 +286,7 @@ export async function githubWorkProbe(
   };
   const validateQuery = (q: GitHubWorkQuery) => {
     valid(object(q));
-    if (q.kind === "identity") exact(q, ["kind"]);
+    if (q.kind === "identity" || q.kind === "activity") exact(q, ["kind"]);
     else if (q.kind === "collaborators") {
       exact(q, ["kind", "page"]);
       valid(number(q.page) && q.page <= 50);
@@ -307,7 +308,54 @@ export async function githubWorkProbe(
       result: GitHubWorkObservation = { ...access, query: q };
     if (q.kind === "identity") return result;
     if (access.access === "unavailable") fail("GITHUB_WORK_ACCESS");
-    if (q.kind === "list") {
+    if (q.kind === "activity") {
+      // Default-branch commits and recent Issues/PRs only; no repository event
+      // stream, private native work, patches or comment bodies in the index.
+      const commitResponse = await http(`${prefix}/commits?per_page=30`);
+      if (![200, 409].includes(commitResponse.status)) fail("GITHUB_WORK_UNAVAILABLE");
+      const commits = commitResponse.status === 409 ? [] : commitResponse.value;
+      const issues = access.issues
+        ? await must(`${prefix}/issues?state=all&sort=updated&direction=desc&per_page=30`)
+        : [];
+      const pulls = await must(`${prefix}/pulls?state=all&sort=updated&direction=desc&per_page=30`);
+      if (![commits, issues, pulls].every(Array.isArray)) fail("GITHUB_WORK_DATA");
+      const activity: GitHubActivitySource[] = commits.slice(0, 30).map((v: any) => {
+        if (!/^[a-f0-9]{40,64}$/.test(v.sha) || typeof v.commit?.message !== "string")
+          fail("GITHUB_WORK_DATA");
+        const author = v.author ? identity(v.author) : null;
+        return {
+          kind: "commit" as const,
+          key: `commit:${v.sha}`,
+          sha: v.sha,
+          title: v.commit.message.split(/\r?\n/)[0].slice(0, 200),
+          author,
+          authorName: author?.login ?? String(v.commit.author?.name ?? "Git author").slice(0, 100),
+          at: String(v.commit.committer?.date ?? ""),
+          url: `${url}/commit/${v.sha}`,
+        };
+      });
+      for (const [type, list] of [
+        ["issue", issues.filter((v: any) => !v.pull_request)],
+        ["pr", pulls],
+      ] as const) {
+        for (const v of list.slice(0, 30)) {
+          const item = record(v, type);
+          activity.push({
+            kind: type,
+            key: `${type}:${item.number}`,
+            number: item.number,
+            title: item.title,
+            author: item.author,
+            authorName: item.author.login,
+            at: item.updatedAt,
+            state: item.state,
+            url: item.url,
+            ...(item.head ? { sha: item.head.sha } : {}),
+          });
+        }
+      }
+      result.activity = activity.filter((v) => Number.isFinite(Date.parse(v.at)));
+    } else if (q.kind === "list") {
       // Quoted plain words cannot inject repo/org/author qualifiers or escape the bound repository.
       const words =
         q.query

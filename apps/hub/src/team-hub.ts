@@ -498,7 +498,14 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
   registerTeamProjects(app, teamProjects, actor, personal);
-  registerCollaborationSpaces(app, teamProjects, actor, personal, collaboration);
+  registerCollaborationSpaces(
+    app,
+    teamProjects,
+    actor,
+    personal,
+    collaboration,
+    options.githubProbe,
+  );
   registerTeamLinks(app, teamLinks, actor);
   registerTeamConsultations(app, teamConsultations, actor);
   registerTeamBridges(

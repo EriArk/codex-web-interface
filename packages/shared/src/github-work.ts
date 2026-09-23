@@ -23,6 +23,7 @@ export const githubWorkInputSchema = z.discriminatedUnion("kind", [
 ]);
 export type GitHubWorkInput = z.infer<typeof githubWorkInputSchema>;
 export const githubWorkQuerySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("activity") }).strict(),
   z.object({ kind: z.literal("identity") }).strict(),
   z
     .object({
@@ -89,6 +90,7 @@ export interface GitHubWorkComment {
   url: string;
 }
 export type GitHubWorkObservation = GitHubRepositoryAccess & {
+  activity?: GitHubActivitySource[];
   query: GitHubWorkQuery;
   items?: GitHubWorkRecord[];
   record?: GitHubWorkRecord;
@@ -101,6 +103,25 @@ export type GitHubWorkObservation = GitHubRepositoryAccess & {
     invitationId?: number;
   }[];
 };
+export interface GitHubActivitySource {
+  kind: "commit" | "issue" | "pr";
+  key: string;
+  title: string;
+  author: GitHubIdentity | null;
+  authorName: string;
+  at: string;
+  state?: "open" | "closed" | "merged";
+  number?: number;
+  sha?: string;
+  url: string;
+}
+export interface SpaceActivityPage {
+  projectId: string;
+  repository: string;
+  repositoryId: number;
+  checkedAt: number;
+  items: GitHubActivitySource[];
+}
 export interface GitHubWorkReceipt {
   id: string;
   state: "prepared" | "running" | "completed" | "failed" | "unknown";

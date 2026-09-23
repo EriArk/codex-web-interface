@@ -6,7 +6,7 @@ import { api } from "./api";
 export type SpaceWindow =
   | { kind: "create" | "invitations" }
   | { kind: "project"; id: string; projectId: string }
-  | { kind: "accept" | "settings" | "chat"; id: string };
+  | { kind: "accept" | "settings" | "chat" | "activity"; id: string };
 export function useCollaborationSpaces() {
   const [catalog, setCatalog] = useState<CollaborationCatalog>({ spaces: [], invitations: [] });
   const [ready, setReady] = useState(false);
@@ -32,7 +32,11 @@ export function useCollaborationSpaces() {
         setCatalog(data);
         setReady(true);
         select((id) => (data.spaces.some((s) => s.id === id) ? id : ""));
-        open((w) => (w?.kind === "chat" && !data.spaces.some((s) => s.id === w.id) ? null : w));
+        open((w) =>
+          (w?.kind === "chat" || w?.kind === "activity") && !data.spaces.some((s) => s.id === w.id)
+            ? null
+            : w,
+        );
       })
       .finally(() => {
         pending.current = null;

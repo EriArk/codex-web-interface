@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { Icon } from "./icons";
 import { emptyProjectRules, ProjectRulesEditor } from "./ProjectRulesEditor";
+import { SpaceActivity } from "./SpaceActivity";
 import { SpaceChat } from "./SpaceChat";
 import { SpaceInvite } from "./SpaceInvite";
 import { SpaceProjectOverview } from "./SpaceProjectOverview";
@@ -93,6 +94,13 @@ export function SpaceCards({ spaces, query }: { spaces: SpacesController; query:
       {selected ? (
         <div className="space-selected">
           <strong>{selected.title}</strong>
+          <button
+            type="button"
+            className="space-back"
+            onClick={() => spaces.open({ kind: "activity", id: selected.id })}
+          >
+            <Icon name="history" size={18} /> Активность
+          </button>
           <small className="space-entry-details">
             {selected.members.map((m) => (
               <span key={m.id}>
@@ -249,7 +257,7 @@ export function CollaborationWindow({
     <dialog
       ref={dialog}
       tabIndex={-1}
-      className={`space-dialog workspace-window${target.kind === "chat" ? " space-chat-dialog" : ""}`}
+      className={`space-dialog workspace-window${target.kind === "chat" ? " space-chat-dialog" : target.kind === "activity" ? " activity-dialog" : ""}`}
       aria-label={target.kind === "create" ? "Новое пространство" : "Общее пространство"}
       onCancel={() => spaces.open(null)}
     >
@@ -259,7 +267,9 @@ export function CollaborationWindow({
             ? "Новое пространство"
             : target.kind === "invitations"
               ? "Уведомления"
-              : (space?.title ?? invitation?.title ?? "Общее пространство")}
+              : target.kind === "activity"
+                ? `Активность · ${space?.title ?? "Пространство"}`
+                : (space?.title ?? invitation?.title ?? "Общее пространство")}
         </h2>
         <button
           type="button"
@@ -273,6 +283,13 @@ export function CollaborationWindow({
       <div
         className={`space-dialog-body${target.kind === "chat" ? " space-chat-body" : " shared-scroll"}`}
       >
+        {target.kind === "activity" && space && (
+          <SpaceActivity
+            key={space.id}
+            space={space}
+            onProject={(projectId) => spaces.open({ kind: "project", id: space.id, projectId })}
+          />
+        )}
         {target.kind === "chat" && space && (
           <SpaceChat key={space.id} space={space} spaces={spaces} />
         )}

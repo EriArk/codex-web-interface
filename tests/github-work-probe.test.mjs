@@ -95,6 +95,8 @@ if(s.unavailable){answer(503,{});return;}
 if(endpoint==='user'){answer(200,s.identity);return;}
 if(raw===base){answer(s.access==='unavailable'?404:200,{id:s.repositoryId,full_name:'Owner/Project',has_issues:true,permissions:{admin:s.access==='admin',maintain:s.access==='maintain',push:s.access==='write',triage:s.access==='triage',pull:true}});return;}
 if(endpoint?.startsWith('search/issues')){const q=new URLSearchParams(endpoint.split('?')[1]);answer(200,{items:q.get('q').includes('is:pr')?s.prs:s.issues});return;}
+if(parts[3]==='commits'&&parts.length===4){answer(200,[{sha:'b'.repeat(40),commit:{message:'Exact commit\\nPrivate body not indexed',author:{name:'Unlinked author'},committer:{date:'2026-09-23T10:00:00Z'}},author:null}]);return;}
+if(parts[3]==='pulls'&&parts.length===4){answer(200,s.prs);return;}
 if(parts[3]==='issues'&&parts.length===4){if(method==='POST'){const value={...s.issues[0],number:100+s.issues.length,title:body.title,body:body.body,user:s.identity};s.issues.unshift(value);changed(value);}else answer(200,s.issues);return;}
 if(parts[3]==='issues'&&parts[5]==='comments'){if(method==='POST'){const value={id:3000000000+s.comments.length,body:body.body,user:s.identity,created_at:'2026-09-13T01:00:00Z'};s.comments.push(value);changed(value);}else answer(200,s.comments);return;}
 if(parts[3]==='issues'&&parts.length===5){const value=s.issues.find(x=>x.number===n)||s.prs.find(x=>x.number===n);if(!value){answer(404,{});return;}if(method==='PATCH'){value.state=body.state;changed(value);}else answer(200,value);return;}
@@ -137,6 +139,25 @@ answer(400,{unexpected:endpoint});
     get: async () => JSON.parse(await readFile(statePath, "utf8")),
   };
 }
+test("activity reads exact commits and Issue/PR status without bodies or mutations", async (t) => {
+  const f = await fixture(t);
+  const data = await f.probe({ op: "observe", query: { kind: "activity" } });
+  assert.deepEqual(
+    data.activity.map((v) => v.kind),
+    ["commit", "issue", "pr"],
+  );
+  assert.equal(data.activity[0].author, null);
+  assert.equal(data.activity[0].url, "https://github.com/Owner/Project/commit/" + "b".repeat(40));
+  assert.equal(data.activity[0].title, "Exact commit");
+  assert(!JSON.stringify(data.activity).includes("Private body"));
+  assert(!JSON.stringify(data.activity).includes("Exact original text"));
+  assert((await f.calls()).every((v) => v.method === "GET"));
+  await f.save({ access: "unavailable" });
+  await assert.rejects(
+    f.probe({ op: "observe", query: { kind: "activity" } }),
+    /GITHUB_WORK_ACCESS/,
+  );
+});
 test("machine-local GitHub identity, bounded issue search and exact PR SHA/reviews/checks are normalized", async (t) => {
   const f = await fixture(t);
   assert.equal(
