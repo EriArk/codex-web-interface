@@ -13,9 +13,9 @@ import remarkGfm from "remark-gfm";
 import { AccessPicker } from "./AccessPicker";
 import {
   type ArtifactRequest,
-  artifactComponents,
   artifactSource,
   messageCode,
+  useArtifactComponents,
 } from "./ArtifactMarkdown";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
 import { accountSessionStorage as sessionStorage, workspaceMediaUrl } from "./accountStorage.ts";
@@ -54,6 +54,7 @@ const MessageText = memo(function MessageText({
   resolveImage?: (source: string) => Promise<string | undefined>;
   complete?: boolean;
 }) {
+  const artifacts = useArtifactComponents(onArtifact, resolveImage);
   return (
     <Markdown
       urlTransform={(url) => (onArtifact && artifactSource(url) ? url : defaultUrlTransform(url))}
@@ -61,7 +62,7 @@ const MessageText = memo(function MessageText({
       components={{
         pre: messageCode(text, onArtifact, complete),
         table: MarkdownTable,
-        ...artifactComponents(onArtifact, resolveImage),
+        ...artifacts,
       }}
     >
       {text}

@@ -14,12 +14,11 @@ import { projectContextEnd, projectContextStart } from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { NavigationDivider } from "./NavigationDivider";
 import {
   type ArtifactRequest,
-  artifactComponents,
   artifactSource,
   messageCode,
+  useArtifactComponents,
 } from "./ArtifactMarkdown";
 import {
   accountLocalStorage as localStorage,
@@ -39,6 +38,7 @@ import { mergeGptJobs, showGptJob, waitingGptJob } from "./gptState";
 import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import { SpeechButton, useSpeechScope } from "./MessageSpeech";
+import { NavigationDivider } from "./NavigationDivider";
 import { NavigationFooter } from "./NavigationFooter";
 import { NavigationHeader } from "./NavigationHeader";
 import type { NotebookRequest, WorkspaceDestination } from "./Notebook";
@@ -98,14 +98,12 @@ const Text = memo(function Text({
   complete?: boolean;
 }) {
   const artifactHandler = useRef(onArtifact);
-  const imageResolver = useRef(resolveImage);
   useLayoutEffect(() => {
     artifactHandler.current = onArtifact;
-    imageResolver.current = resolveImage;
-  }, [onArtifact, resolveImage]);
-  const resolve = useCallback(async (source: string) => imageResolver.current?.(source), []);
+  }, [onArtifact]);
   const openArtifact = useCallback((source: string) => artifactHandler.current?.(source), []);
   const hasArtifacts = !!onArtifact;
+  const artifacts = useArtifactComponents(onArtifact, resolveImage);
   const contextEnd = value.startsWith(projectContextStart) ? value.indexOf(projectContextEnd) : -1;
   // Drawer, draft and job updates must not reparse unchanged replies. Keep the
   // latest handler separately so cached links still target the current message.
@@ -126,14 +124,14 @@ const Text = memo(function Text({
           components={{
             pre: messageCode(value, hasArtifacts ? openArtifact : undefined, complete),
             table: MarkdownTable,
-            ...artifactComponents(hasArtifacts ? openArtifact : undefined, resolve),
+            ...artifacts,
           }}
         >
           {contextEnd >= 0 ? value.slice(contextEnd + projectContextEnd.length) : value}
         </Markdown>
       </>
     ),
-    [value, hasArtifacts, openArtifact, contextEnd, complete, resolve],
+    [value, hasArtifacts, openArtifact, contextEnd, complete, artifacts],
   );
 });
 function ResponseResults({

@@ -63,7 +63,15 @@ for (const [engine, type] of [
     await context.addCookies([{ name, value, url: origin, httpOnly: true, sameSite: "Strict" }]);
     const page = await context.newPage();
     const png = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXsQAAAAASUVORK5CYII=",
+      await page.evaluate(() => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 320;
+        canvas.height = 180;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#57a";
+        ctx.fillRect(0, 0, 320, 180);
+        return canvas.toDataURL("image/png").split(",")[1];
+      }),
       "base64",
     );
     await page.route("**/api/native-images/*", (route) =>
@@ -80,6 +88,41 @@ for (const [engine, type] of [
     await page.goto(origin);
     const editor = page.getByRole("textbox", { name: "Сообщение Codex" });
     await expect(editor).toBeVisible();
+    const inlineImage = page.locator(".message-generated-image img").first();
+    await expect(inlineImage).toBeVisible();
+    await expect
+      .poll(() => inlineImage.evaluate((node) => node.complete && node.naturalWidth > 0))
+      .toBe(true);
+    await inlineImage.evaluate((node) => {
+      window.originalInlineImage = node;
+    });
+    let imageReveals = 0;
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith("/results/reveal") &&
+        request.postDataJSON()?.source === "C:/Project/exact.png"
+      )
+        imageReveals++;
+    });
+    // Exercise fresh callback props, unrelated live output and changed Markdown.
+    // All must preserve the loaded image, including across completion updates.
+    for (let i = 0; i < 5; i++) {
+      const updated = f.store.append(
+        f.thread.id,
+        "assistant.completed",
+        {
+          id: "answer",
+          text: text + `\n\nUpdate ${i}`,
+        },
+        "turn",
+      );
+      f.sessions.emit("event", updated);
+      await expect(page.locator(".message-body").filter({ hasText: `Update ${i}` })).toBeAttached();
+      assert(
+        await inlineImage.evaluate((node) => node === window.originalInlineImage && node.complete),
+      );
+    }
+    assert.equal(imageReveals, 0, "updates must not resolve an unchanged image again");
     await editor.fill("Черновик остаётся здесь");
     await page
       .locator('input[type="file"]')

@@ -1,5 +1,5 @@
-import { CHAT_BLOCK_LINES, textBlockLines, type ResultItem } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import { CHAT_BLOCK_LINES, type ResultItem, textBlockLines } from "@codex-web/shared";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import { pageWorkspace, workspaceMediaUrl } from "./accountStorage";
 import { CollapsibleCode, textOf } from "./CollapsibleCode";
@@ -51,7 +51,14 @@ function MessageImage({
     };
   }, [source, direct, remote]);
   const content = url ? (
-    <img src={workspaceMediaUrl(url)} alt={alt} loading="lazy" referrerPolicy="no-referrer" />
+    <img
+      src={workspaceMediaUrl(url)}
+      alt={alt}
+      // Native resolution is already visibility-gated. A second lazy gate can
+      // stall zero-sized, not-yet-decoded images in WebKit.
+      loading={direct || remote ? "lazy" : "eager"}
+      referrerPolicy="no-referrer"
+    />
   ) : (
     <>
       <Icon name="image" size={16} />
@@ -137,6 +144,7 @@ export function messageCode(
     return <CollapsibleCode>{children}</CollapsibleCode>;
   };
 }
+
 import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { Icon } from "./icons";
 
@@ -217,4 +225,24 @@ export function artifactComponents(
       );
     },
   };
+}
+
+/** Markdown component types must survive parent updates and streamed text. */
+export function useArtifactComponents(
+  onOpen?: (source: string) => void,
+  resolveImage?: (source: string) => Promise<string | undefined>,
+): Components {
+  const handlers = useRef({ onOpen, resolveImage });
+  useLayoutEffect(() => {
+    handlers.current = { onOpen, resolveImage };
+  }, [onOpen, resolveImage]);
+  const enabled = !!onOpen;
+  return useMemo(
+    () =>
+      artifactComponents(
+        enabled ? (source) => handlers.current.onOpen?.(source) : undefined,
+        async (source) => handlers.current.resolveImage?.(source),
+      ),
+    [enabled],
+  );
 }
