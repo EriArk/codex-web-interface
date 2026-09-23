@@ -14,6 +14,16 @@ Files additionally supports creating files/folders, renaming, copying, moving an
 
 ## Write boundary and recovery
 
+### Multiple selection and batch actions
+
+After unlocking Files, **Выбрать несколько** exposes touch checkboxes. Up to 100 entries can be selected across folders, sorting, filters and pages; **Выбрать на странице** adds only loaded entries. The filename still opens its file/folder. Relocking, closing Files, or changing Project clears this transient selection. Selecting a folder includes its contents; selected descendants are excluded from the execution list to avoid acting twice.
+
+**Копировать** and **Вырезать** capture current source fingerprints, then **Вставить сюда** opens a review for the current destination folder. **Удалить** opens a source list and requires **Подтвердить удаление**, including folder contents. The queue executes existing authenticated file operations sequentially, reports each result, and refreshes the list without losing the conversation. Existing destinations remain intact: batch copy/move offers another name or skipping, including duplication into the same folder. Folder merging and destination replacement are not added to copy/move by this pass; upload replacement remains available as described below.
+
+Before each request, account-local storage records its exact ID, source fingerprint and destination. A transport/unknown result stops the queue; after reopening or reload, **Проверить результат** uses that same operation identity, including moves whose source has disappeared. Successful entries are not rerun. Definitive conflicts remain individually actionable; changed sources require a new selection and review. **Остановить после текущего** and closing the review stop before the next entry; an already sent filesystem operation is not interrupted. Cancelling remaining entries cannot erase an unresolved pending receipt. Failure to persist recovery metadata blocks the write. Batches are not filesystem transactions: completed entries remain completed if a later one fails or is cancelled.
+
+This is a web-only extension of the installed file-tools contract. Hub grants, per-project work guards, machine-local receipts, path rules and tree limits are unchanged; no new Windows helper is required.
+
 ### Uploads from the device
 
 Unlocked Files exposes **Загрузить файлы** for the selected folder. The queue holds up to 32 files, retains individual destination folders, and sends files sequentially in 4 MiB chunks. Binary and empty files are supported. Names can be changed before starting. Conflict choices are **Заменить старый**, **Другое имя**, and **Пропустить**; choosing another name preserves both files. Replacement binds the exact inspected old fingerprint and checks it again before committing. A changed destination requires a new choice; folders cannot be replaced by files.
@@ -43,6 +53,7 @@ An unresolved save receipt requires close handling even if the user undoes text 
 
 ## Verification (2026-09-23)
 
+- Batch follow-up: Chromium and WebKit against disposable Hub/file fixtures verify cross-folder selection, parent/child deduplication, copy collisions, same-folder duplication, lost move acknowledgement and exact-ID recovery after reload, confirmed deletion, changed-source refusal, cancellation, stop-after-current and browser storage failure before writing. Long project names and selection/review controls are checked in all four themes at phone, constrained phone and tablet widths; screenshots inspected. No backend/Windows helper changes; physical-device acceptance remains pending.
 - Upload follow-up: 16 focused upload/chunk/file-operation tests and 8 selected Team isolation checks passed. Chromium and WebKit exercise multi-file/empty/binary uploads, replace/rename/skip, changed replacement baselines, final acknowledgement loss across reload, interrupted chunk recovery and wrong-source rejection, cancellation, system picker cancellation, preserved chat drafts and all four themes with long titles and constrained phone height. Real Hub → SSH/SFTP → Windows tests verified binary/empty files, exact replacement and repeated receipt reads in a disposable fixture. Production packaging and guarded installation are tracked separately.
 - Linux TypeScript and production web build.
 - Focused file-helper/Hub checks: exact bytes/mode, stale baselines, move/delete receipts, exclusive destination races, directory operations, unsafe paths, binary/size rejection, interrupted save reconciliation, changed source capture and session/root/relock/active-work boundaries.

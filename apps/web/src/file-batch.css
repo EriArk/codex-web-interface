@@ -1,0 +1,140 @@
+.file-batch-controls {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  flex: none;
+}
+.file-batch-pair,
+.file-batch-trio {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.file-batch-pair > :only-child {
+  grid-column: 1 / -1;
+}
+.project-files[data-selecting="true"] > .project-tool-actions > :not(:first-child) {
+  display: none;
+}
+.file-batch-trio {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.file-batch-controls button,
+.file-batch-dialog button {
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+}
+.file-batch-check {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+.file-batch-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+:root[data-theme] dialog.workspace-window.file-batch-dialog {
+  height: auto;
+  min-height: 0;
+  gap: 12px;
+  width: min(720px, calc(100vw - 16px));
+  max-width: none;
+  max-height: calc(var(--app-height, 100dvh) - 16px);
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  bottom: auto;
+  inset-inline: 0;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  padding: 12px;
+  color: var(--window-ink);
+  overflow: hidden;
+}
+.file-batch-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.file-batch-dialog:focus {
+  outline: none;
+}
+.file-batch-dialog .panel-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  flex: none;
+}
+.file-batch-dialog .panel-heading small {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-batch-dialog .panel-heading button {
+  width: 44px;
+  height: 44px;
+}
+.file-batch-summary {
+  margin: 0;
+  overflow-wrap: anywhere;
+  flex: none;
+  max-height: 4.5em;
+  overflow: auto;
+}
+.file-batch-items {
+  min-height: 0;
+  overflow: auto;
+  max-height: 55vh;
+  background: var(--window-screen);
+  color: var(--ink);
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  padding: 12px;
+}
+.file-batch-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.file-batch-item:first-child {
+  padding-top: 0;
+}
+.file-batch-item:last-child {
+  border: 0;
+  padding-bottom: 0;
+}
+.file-batch-item p {
+  margin: 0;
+}
+.file-batch-item small {
+  color: var(--muted);
+}
+.file-batch-rename {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.5fr);
+  align-items: end;
+  gap: 8px;
+}
+.file-batch-rename label {
+  display: grid;
+  gap: 4px;
+}
+.file-batch-rename input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.file-batch-dialog footer {
+  flex: none;
+}
+@media (max-width: 600px) {
+  .file-batch-rename {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

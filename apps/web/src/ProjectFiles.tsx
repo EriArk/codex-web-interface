@@ -8,6 +8,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink } from "./DownloadLink";
+import { FileBatchActions } from "./FileBatchActions";
 import { FileManagerActions } from "./FileManagerActions";
 import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
@@ -58,6 +59,13 @@ export function ProjectFiles({
   const [capability, setCapability] = useState(""),
     [checkout, setCheckout] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [selecting, setSelecting] = useState(false),
+    [selection, setSelection] = useState<string[]>([]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Selection belongs to this project and write grant.
+  useEffect(() => {
+    setSelecting(false);
+    setSelection([]);
+  }, [projectId, capability]);
   const grant = useRef("");
   const scopeRevision = useRef(0);
   const scopeActive = useRef(visible);
@@ -331,6 +339,7 @@ export function ProjectFiles({
       tabIndex={-1}
       className="project-files notebook-dialog workspace-window project-tool-window"
       data-tool={mode}
+      data-selecting={selecting && mode === "files"}
       aria-label={mode === "files" ? "Файлы проекта" : "Git проекта"}
       onCancel={(e) => {
         e.preventDefault();
@@ -440,6 +449,36 @@ export function ProjectFiles({
       </div>
       <div className="inspector-workspace">
         <div className="inspector-scroll" ref={scroller}>
+          {mode === "files" && visible && capability && (
+            <FileBatchActions
+              key={`${projectId}:${checkout}`}
+              projectId={projectId}
+              projectName={projectName}
+              capability={capability}
+              checkout={checkout}
+              folder={path}
+              selection={selection}
+              selecting={selecting}
+              visiblePaths={directory?.entries.map((entry) => entry.path) ?? []}
+              onSelection={setSelection}
+              onSelecting={setSelecting}
+              onDone={(operation) => {
+                if (!scopeActive.current) return;
+                setRevision((n) => n + 1);
+                setSelection((values) =>
+                  values.filter(
+                    (value) => value !== operation.path && !value.startsWith(operation.path + "/"),
+                  ),
+                );
+                if (operation.op !== "copy") {
+                  if (path === operation.path || path.startsWith(operation.path + "/"))
+                    open(operation.path.split("/").slice(0, -1).join("/"));
+                  if (selected === operation.path || selected.startsWith(operation.path + "/"))
+                    setSelected("");
+                }
+              }}
+            />
+          )}
           {mode === "files" && (
             <>
               {editingPath ? (
@@ -596,6 +635,23 @@ export function ProjectFiles({
                     className={selected === entry.path ? "selected" : ""}
                   >
                     <div className="inspector-row">
+                      {capability && selecting && (
+                        <label className="file-batch-check">
+                          <input
+                            type="checkbox"
+                            aria-label={`Выбрать: ${entry.path}`}
+                            checked={selection.includes(entry.path)}
+                            disabled={!selection.includes(entry.path) && selection.length >= 100}
+                            onChange={(e) =>
+                              setSelection((values) =>
+                                e.target.checked
+                                  ? [...new Set([...values, entry.path])].slice(0, 100)
+                                  : values.filter((value) => value !== entry.path),
+                              )
+                            }
+                          />
+                        </label>
+                      )}
                       <button
                         type="button"
                         className="inspector-entry"
@@ -616,8 +672,10 @@ export function ProjectFiles({
                         </span>
                         {entry.kind === "directory" && <Icon name="chevron" size={15} />}
                       </button>
-                      <CopyButton text={entry.path} label={`Копировать путь ${entry.name}`} />
-                      {capability && (
+                      {!selecting && (
+                        <CopyButton text={entry.path} label={`Копировать путь ${entry.name}`} />
+                      )}
+                      {capability && !selecting && (
                         <button
                           type="button"
                           className="icon-button"
