@@ -2,10 +2,24 @@ import { createHash } from "node:crypto";
 import type { GptHistoryPage, GptMessage } from "@codex-web/shared";
 import { HubError } from "@codex-web/shared";
 import type { GptHistoryDisk } from "./gpt-history-disk.js";
+import type { GptResultIndex } from "./gpt-result-index.js";
 
-const hash = (items: GptMessage[]) =>
-  createHash("sha256").update(JSON.stringify(items)).digest("hex");
-type Entry = {
+const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+const emptyPrefix = digest("gpt-public-history-v2");
+type Change = {
+  base: string;
+  revision: string;
+  from: number;
+  replaceFrom: string | null;
+  after: string | null;
+};
+export type GptHistorySnapshot = {
+  fingerprints: string[];
+  prefixes: string[];
+  changes: Change[];
+  results?: GptResultIndex;
+  resultBytes?: number;
+  persistedAt: number;
   items: GptMessage[];
   revision: string;
   checkedAt: number;
@@ -16,9 +30,9 @@ type Entry = {
   refreshMessage?: string;
 };
 export class GptHistoryCache {
-  private entries = new Map<string, Entry>();
+  private entries = new Map<string, GptHistorySnapshot>();
   private nextLineage = 0;
-  private pending = new Map<string, Promise<Entry>>();
+  private pending = new Map<string, Promise<GptHistorySnapshot>>();
   private removed = new Map<string, number>();
   private warming = new Map<string, number>();
   private pinned = new Set<string>();
@@ -44,11 +58,11 @@ export class GptHistoryCache {
     const oldest = [...this.entries].sort(
       ([a, av], [b, bv]) => priority(a) - priority(b) || av.usedAt - bv.usedAt,
     );
-    let bytes = oldest.reduce((sum, [, entry]) => sum + entry.bytes, 0);
+    let bytes = oldest.reduce((sum, [, entry]) => sum + entry.bytes + (entry.resultBytes ?? 0), 0);
     for (const [id, entry] of oldest) {
       if (this.entries.size <= 32 && bytes <= 32 * 1024 ** 2) break;
       this.entries.delete(id);
-      bytes -= entry.bytes;
+      bytes -= entry.bytes + (entry.resultBytes ?? 0);
     }
   }
   /** Pins retain already saved history; discovering a pin never fetches its conversation. */
@@ -77,21 +91,68 @@ export class GptHistoryCache {
   }
   seed(id: string, items: GptMessage[], checkedAt = this.now(), persist = true) {
     const previous = this.entries.get(id);
+    const fingerprints: string[] = [],
+      prefixes = [emptyPrefix];
+    let from = Math.min(previous?.items.length ?? 0, items.length),
+      bytes = 0;
+    const stable = items.map((message, index) => {
+      const serialized = JSON.stringify(message),
+        fingerprint = digest(serialized);
+      bytes += serialized.length * 2 + 160;
+      fingerprints.push(fingerprint);
+      const unchanged = previous?.fingerprints[index] === fingerprint;
+      if (!unchanged) from = Math.min(from, index);
+      prefixes.push(
+        unchanged && from > index
+          ? previous!.prefixes[index + 1]!
+          : digest(prefixes[index]! + fingerprint),
+      );
+      return unchanged ? previous!.items[index]! : structuredClone(message);
+    });
+    const revision = prefixes.at(-1)!;
+    const changed = previous?.revision !== revision;
     const sameBranch =
-      previous && previous.items.every((message, index) => items[index]?.id === message.id);
-    const value = {
+      previous && previous.items.every((message, index) => stable[index]?.id === message.id);
+    const changes =
+      previous && changed
+        ? [
+            ...previous.changes,
+            {
+              base: previous.revision,
+              revision,
+              from,
+              replaceFrom: previous.items[from]?.id ?? null,
+              after: previous.items[from - 1]?.id ?? null,
+            },
+          ].slice(-16)
+        : (previous?.changes ?? []);
+    const value: GptHistorySnapshot = {
       lineage: sameBranch ? previous.lineage : ++this.nextLineage,
-      items,
-      revision: hash(items),
+      items: changed ? stable : previous!.items,
+      fingerprints,
+      prefixes,
+      changes,
+      revision,
       checkedAt,
       usedAt: this.now(),
-      bytes: JSON.stringify(items).length * 2,
+      bytes,
+      results: previous?.results,
+      resultBytes: previous?.resultBytes,
+      persistedAt: previous?.persistedAt ?? checkedAt,
     };
     this.entries.delete(id);
     this.entries.set(id, value);
-    if (persist) this.disk?.write(id, items, checkedAt);
+    // An unchanged poll updates freshness in memory, not the whole disk snapshot.
+    if (persist && (changed || checkedAt - value.persistedAt >= 3600000)) {
+      this.disk?.write(id, value.items, checkedAt);
+      value.persistedAt = checkedAt;
+    }
     this.trim();
     return value;
+  }
+  accountResults(entry: GptHistorySnapshot, bytes: number) {
+    entry.resultBytes = bytes;
+    this.trim();
   }
   invalidate(id: string) {
     const entry = this.entries.get(id);
@@ -141,7 +202,7 @@ export class GptHistoryCache {
       this.pending.delete(id);
     }
   }
-  private async readable(id: string, ttl: number): Promise<Entry> {
+  private async readable(id: string, ttl: number): Promise<GptHistorySnapshot> {
     try {
       return await this.get(id, ttl);
     } catch (error) {
@@ -175,7 +236,18 @@ export class GptHistoryCache {
     // A cache-only miss must not occupy the native queue. The caller follows
     // this immediately with its canonical request; do not persist an empty chat.
     if (immediate)
-      return { items: [], revision: "", checkedAt: 0, bytes: 0, lineage: 0, usedAt: this.now() };
+      return {
+        items: [],
+        fingerprints: [],
+        prefixes: [emptyPrefix],
+        changes: [],
+        revision: "",
+        checkedAt: 0,
+        persistedAt: 0,
+        bytes: 0,
+        lineage: 0,
+        usedAt: this.now(),
+      } as GptHistorySnapshot;
     return this.readable(id, ttl);
   }
   async messages(id: string, ttl = 60000): Promise<GptMessage[]> {
@@ -184,6 +256,7 @@ export class GptHistoryCache {
   async page(
     id: string,
     query: {
+      delta?: string;
       before?: string;
       known?: string;
       anchor?: string;
@@ -210,6 +283,29 @@ export class GptHistoryCache {
         stale: entry.stale,
         refreshMessage: entry.refreshMessage,
       };
+    if (query.delta === "1" && query.known && !query.before && !query.messageId) {
+      const index = entry.changes.findIndex((change) => change.base === query.known);
+      if (index >= 0) {
+        const changes = entry.changes.slice(index);
+        const earliest = changes.reduce((a, b) => (b.from < a.from ? b : a));
+        if (list.length - earliest.from <= 20)
+          return {
+            items: list.slice(earliest.from),
+            nextBefore: null,
+            revision: entry.revision,
+            prefix: "",
+            notModified: false,
+            retainOlder: true,
+            delta: {
+              baseRevision: query.known,
+              replaceFrom: earliest.replaceFrom,
+              after: earliest.after,
+            },
+            stale: entry.stale,
+            refreshMessage: entry.refreshMessage,
+          };
+      }
+    }
     const focus = query.messageId ? list.findIndex((m) => m.id === query.messageId) : -1;
     if (query.messageId && focus < 0)
       throw new HubError(
@@ -231,9 +327,9 @@ export class GptHistoryCache {
       hasNewer: !!query.messageId && end < list.length,
       nextBefore: start > 0 ? list[start]!.id : null,
       revision: entry.revision,
-      prefix: hash(list.slice(0, start)),
+      prefix: entry.prefixes[start]!,
       notModified: false,
-      retainOlder: anchor >= 0 && query.prefix === hash(list.slice(0, anchor)),
+      retainOlder: anchor >= 0 && query.prefix === entry.prefixes[anchor]!,
       stale: entry.stale,
       refreshMessage: entry.refreshMessage,
     };

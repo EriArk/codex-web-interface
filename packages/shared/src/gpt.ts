@@ -66,6 +66,8 @@ export interface GptProgress {
   activity?: "search" | "review" | "code" | "image" | "tool";
 }
 export interface GptHistoryPage {
+  /** Replace the suffix of the exact prior public snapshot; absent means a normal page. */
+  delta?: { baseRevision: string; replaceFrom: string | null; after: string | null };
   /** A previously observed public branch, retained while the native read is unavailable. */
   stale?: boolean;
   refreshMessage?: string;

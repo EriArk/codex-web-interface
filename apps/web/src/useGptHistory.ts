@@ -116,6 +116,7 @@ export function useGptHistory(selected: string) {
           else if (older) query.set("before", older);
           else if (cached?.revision && !cached.contextMessage) {
             query.set("known", cached.revision);
+            query.set("delta", "1");
             if (cached.anchor) query.set("anchor", cached.anchor);
             if (cached.prefix) query.set("prefix", cached.prefix);
           }
@@ -151,7 +152,10 @@ export function useGptHistory(selected: string) {
               }
             });
         } catch (error) {
-          if (error instanceof ApiError && error.code === "GPT_HISTORY_CHANGED") {
+          if (
+            (error instanceof ApiError && error.code === "GPT_HISTORY_CHANGED") ||
+            (error instanceof Error && error.message === "GPT_HISTORY_DELTA_MISMATCH")
+          ) {
             // A native branch changed during pagination. Refresh the tail without mixing branches.
             delete gptCache.chats[id];
             pending.current.delete(id);
@@ -207,6 +211,7 @@ export function useGptHistory(selected: string) {
   const currentPage =
     gptCache.chats[selected] ?? (pageScope.current === selected ? page : undefined);
   return {
+    revision: currentPage?.revision ?? "",
     ready: !!currentPage,
     stale: !!currentPage?.stale,
     revalidating,

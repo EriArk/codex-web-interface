@@ -23,7 +23,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import sharp from "sharp";
 import { z } from "zod";
-import { GptHistoryCache } from "./gpt-cache.js";
+import { GptHistoryCache, type GptHistorySnapshot } from "./gpt-cache.js";
 import { GptDeletions } from "./gpt-deletions.js";
 import {
   gptCatalog,
@@ -44,6 +44,7 @@ import { gptProgress, mergeGptProgress } from "./gpt-progress.js";
 import { GptProjectContent, gptProjectInput } from "./gpt-project-content.js";
 import { GptReadBackoff } from "./gpt-read-backoff.js";
 import { gptResultContent } from "./gpt-result-content.js";
+import { GptResultIndex } from "./gpt-result-index.js";
 import { gptResults, resultPage } from "./gpt-results.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 import { GptTextArtifacts } from "./gpt-text-artifacts.js";
@@ -103,6 +104,18 @@ export class GptService {
   private readonly historyBackoff = new GptReadBackoff();
   private readonly historyReads = new Map<string, Promise<Json>>();
   readonly historyCache: GptHistoryCache;
+  resultIndex(id: string, snapshot: GptHistorySnapshot) {
+    snapshot.results ??= new GptResultIndex(
+      id,
+      this.previews,
+      this.config.hub.publicBaseUrl,
+      this.textArtifacts,
+    );
+    const index = snapshot.results;
+    index.update(snapshot.items);
+    this.historyCache.accountResults(snapshot, index.bytes);
+    return index;
+  }
   receiptMessageIds(jobId: string, conversationId: string): string[] {
     if (!this.nativeJobs) return [];
     const row = this.store.db
@@ -1951,9 +1964,11 @@ export function registerGpt(
     return service.projects();
   });
   app.get("/api/gpt/conversations/:id/messages", async (req) => {
+    service.authorize();
     const p = z.object({ id }).parse(req.params),
       q = z
         .object({
+          delta: z.literal("1").optional(),
           before: id.optional(),
           messageId: id.optional(),
           cached: z.literal("1").optional(),
@@ -1974,18 +1989,26 @@ export function registerGpt(
       )
       .get(p.id);
     service.library.assertExists("thread", p.id);
-    return service.historyCache.page(
+    const page = await service.historyCache.page(
       p.id,
       q,
       running ? 15000 : 60000,
       !q.known || q.cached === "1",
     );
+    service.authorize();
+    service.library.assertExists("thread", p.id);
+    return page;
   });
   app.get("/api/gpt/conversations/:id/results", async (req) => {
+    service.authorize();
     const p = z.object({ id }).parse(req.params);
     const q = z
       .object({
         category: resultCategorySchema.default("all"),
+        known: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .optional(),
         before: id.optional(),
         cached: z.literal("1").optional(),
       })
@@ -1996,18 +2019,10 @@ export function registerGpt(
       60000,
       q.cached === "1" && !q.before,
     );
+    service.authorize();
+    service.library.assertExists("thread", p.id);
     return {
-      ...resultPage(
-        gptResults(
-          p.id,
-          snapshot.items,
-          service.previews,
-          service.config.hub.publicBaseUrl,
-          service.textArtifacts,
-        ),
-        q.category,
-        q.before,
-      ),
+      ...service.resultIndex(p.id, snapshot).page(q.category, q.before, q.known),
       sourceRevision: snapshot.lineage,
     };
   });
@@ -2035,6 +2050,7 @@ export function registerGpt(
       .send(createReadStream(item.path));
   });
   app.get("/api/gpt/conversations/:id/results/:resultId", async (req) => {
+    service.authorize();
     const p = z.object({ id, resultId: id }).parse(req.params);
     service.library.assertExists("thread", p.id);
     if (p.resultId.startsWith("canvas-")) {
@@ -2042,13 +2058,12 @@ export function registerGpt(
       if (!canvas) throw error("RESULT_NOT_FOUND", "Результат не найден.", 404);
       return canvas;
     }
-    const item = gptResults(
-      p.id,
-      await service.historyCache.messages(p.id),
-      service.previews,
-      service.config.hub.publicBaseUrl,
-      service.textArtifacts,
-    ).find((row) => row.id === p.resultId);
+    // Exact result navigation still requires a canonical authorized history read.
+    await service.historyCache.messages(p.id);
+    const snapshot = await service.historyCache.snapshot(p.id);
+    service.authorize();
+    service.library.assertExists("thread", p.id);
+    const item = service.resultIndex(p.id, snapshot).items.find((row) => row.id === p.resultId);
     if (!item) throw error("RESULT_NOT_FOUND", "Результат не найден.", 404);
     return item;
   });

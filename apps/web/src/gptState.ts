@@ -112,6 +112,35 @@ export function mergeGptHistory(
   page: GptHistoryPage,
   older = false,
 ): GptCachedChat {
+  if (page.delta) {
+    const delta = page.delta;
+    if (!previous || previous.revision !== delta.baseRevision)
+      throw Error("GPT_HISTORY_DELTA_MISMATCH");
+    const replaced =
+      delta.replaceFrom === null
+        ? -1
+        : previous.messages.findIndex((m) => m.id === delta.replaceFrom);
+    const after =
+      delta.after === null ? -1 : previous.messages.findIndex((m) => m.id === delta.after);
+    const cut =
+      replaced >= 0
+        ? replaced
+        : after >= 0
+          ? after + 1
+          : !previous.messages.length && delta.after === null
+            ? 0
+            : -1;
+    if (cut < 0) throw Error("GPT_HISTORY_DELTA_MISMATCH");
+    const messages = [...previous.messages.slice(0, cut), ...page.items];
+    return {
+      ...previous,
+      messages,
+      revision: page.revision,
+      checkedAt: Date.now(),
+      stale: page.stale,
+      refreshMessage: page.refreshMessage,
+    };
+  }
   if (page.notModified && previous)
     return {
       ...previous,

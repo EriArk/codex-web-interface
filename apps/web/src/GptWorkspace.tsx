@@ -325,6 +325,7 @@ export function GptWorkspace({
     contextMessage,
     hasNewer,
     error: historyNotice,
+    revision: historyRevision,
   } = useGptHistory(selected);
   const nativeOperations = useGptNativeOperations(
     selected,
@@ -1262,6 +1263,7 @@ export function GptWorkspace({
                 </button>
               )}
               {restoreConflict === job.id && (
+                // biome-ignore lint/a11y/useSemanticElements: This confirmation groups actions, not form fields.
                 <div className="gpt-recovery-conflict" role="group" aria-label="Заменить черновик?">
                   <p>В поле уже есть другой черновик. Заменить его сохранённым сообщением?</p>
                   <button
@@ -2206,11 +2208,7 @@ export function GptWorkspace({
             endpoint={
               selected ? "/gpt/conversations/" + encodeURIComponent(selected) + "/results" : ""
             }
-            revision={
-              messages.map((m) => m.id + ":" + m.text.length).join(",") +
-              ":" +
-              currentJobs.map((j) => j.updatedAt).join(",")
-            }
+            revision={historyRevision + ":" + currentJobs.map((j) => j.updatedAt).join(",")}
             visible={view === "results" || view === "chat"}
             onOverlayChange={setResultOverlay}
             focusCategory={resultCategory}

@@ -57,6 +57,10 @@ export interface ResultItem {
   };
 }
 export interface ResultPage {
+  revision?: string;
+  notModified?: boolean;
+  reset?: boolean;
+  delta?: { baseRevision: string; removed: string[]; head: string[] };
   sourceRevision?: number;
   items: ResultItem[];
   nextBefore: string | number | null;

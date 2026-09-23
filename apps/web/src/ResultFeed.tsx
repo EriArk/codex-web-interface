@@ -5,11 +5,12 @@ import {
   type ResultPage,
   resultCategory,
 } from "@codex-web/shared";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { ArtifactRequest, ArtifactSelection } from "./ArtifactMarkdown";
 import { ApiError, api, messageOf } from "./api";
 import { Results } from "./Results";
 import { cachedResults, rememberResults, resultCacheEpoch } from "./resultCache";
+import { firstResultPage, mergeResultUpdate } from "./resultState";
 
 export function ResultFeed({
   endpoint,
@@ -82,6 +83,7 @@ export function ResultFeed({
     })();
     return () => controller.abort();
   }, [reveal, revealRetry]);
+  const received = useRef<ResultPage | undefined>(undefined);
   const [focused, setFocused] = useState<ResultItem | null>(null);
   const [sourceRevision, setSourceRevision] = useState<number | undefined>(undefined);
   const sourceRef = useRef<number | undefined>(undefined),
@@ -96,14 +98,20 @@ export function ResultFeed({
     [error, setError] = useState("");
   const [transientFailure, setTransientFailure] = useState(false);
   const recoveryAttempts = useRef(0);
-  const readFailed = (cause: unknown) => {
+  const readFailed = useCallback((cause: unknown) => {
+    if (cause instanceof Error && cause.message === "RESULTS_DELTA_MISMATCH") {
+      if (received.current) received.current = { ...received.current, revision: undefined };
+      setRetry((value) => value + 1);
+      return;
+    }
     setTransientFailure(
       cause instanceof TypeError ||
         (cause instanceof ApiError && [0, 429, 502, 503, 504].includes(cause.status)),
     );
     setError(messageOf(cause));
-  };
+  }, []);
   const recovering = !!error && transientFailure && recoveryAttempts.current < 2;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new failure or category restarts the bounded recovery delay.
   useEffect(() => {
     if (!recovering || !visible || !endpoint) return;
     const timer = setTimeout(
@@ -130,6 +138,7 @@ export function ResultFeed({
     if (scope !== readScope.current) {
       recoveryAttempts.current = 0;
       readScope.current = scope;
+      received.current = saved;
       setItems(saved?.items ?? []);
       setCounts(saved?.counts ?? emptyResultCounts());
       fullyLoaded.current = saved?.nextBefore === null;
@@ -145,9 +154,11 @@ export function ResultFeed({
       return;
     }
     setBusy(true);
-    const accept = (data: ResultPage) => {
+    const accept = (incoming: ResultPage) => {
       if (current !== generation.current || epoch !== resultCacheEpoch()) return;
-      rememberResults(scope, data, epoch);
+      const data = mergeResultUpdate(received.current, incoming);
+      received.current = data;
+      rememberResults(scope, firstResultPage(data), epoch);
       recoveryAttempts.current = 0;
       setTransientFailure(false);
       setItems(data.items);
@@ -164,7 +175,8 @@ export function ResultFeed({
         if (current !== generation.current || epoch !== resultCacheEpoch()) return;
       }
       // Cached cards stay visible while this ordinary canonical read refreshes them.
-      accept(await api<ResultPage>(scope));
+      const known = endpoint.startsWith("/gpt/") ? received.current?.revision : undefined;
+      accept(await api<ResultPage>(scope + (known ? "&known=" + known : "")));
     })()
       .catch((e) => {
         if (current === generation.current) readFailed(e);
@@ -184,28 +196,58 @@ export function ResultFeed({
     const task = setTimeout(() => {
       const current = ++generation.current;
       const epoch = resultCacheEpoch();
-      void api<ResultPage>(endpoint + "?category=" + category)
+      const known = endpoint.startsWith("/gpt/") ? received.current?.revision : undefined;
+      void api<ResultPage>(endpoint + "?category=" + category + (known ? "&known=" + known : ""))
         .then((data) => {
           if (current !== generation.current || epoch !== resultCacheEpoch()) return;
+          if (data.delta || data.notModified) {
+            const next = mergeResultUpdate(received.current, data);
+            received.current = next;
+            rememberResults(`${endpoint}?category=${category}`, firstResultPage(next), epoch);
+            setItems(next.items);
+            loadedIds.current = next.items.map((item) => item.id);
+            setCounts(next.counts);
+            setCursor(next.nextBefore);
+            sourceRef.current = next.sourceRevision;
+            setSourceRevision(next.sourceRevision);
+            fullyLoaded.current = next.nextBefore === null;
+            recoveryAttempts.current = 0;
+            setTransientFailure(false);
+            setError("");
+            setBusy(false);
+            return;
+          }
           rememberResults(`${endpoint}?category=${category}`, data, epoch);
           recoveryAttempts.current = 0;
           setTransientFailure(false);
           setCounts(data.counts ?? emptyResultCounts());
           const replaced =
-            data.sourceRevision !== undefined && data.sourceRevision !== sourceRef.current;
+            data.reset ||
+            (data.sourceRevision !== undefined && data.sourceRevision !== sourceRef.current);
           const overlap = data.items.some((item) => loadedIds.current.includes(item.id));
           if (replaced || (!overlap && data.nextBefore !== null)) {
             // A changed native branch or a missed burst needs a fresh contiguous page.
+            received.current = data;
             setItems(data.items);
             setCursor(data.nextBefore);
             setFocused(null);
             loadedIds.current = data.items.map((item) => item.id);
             fullyLoaded.current = data.nextBefore === null;
           } else {
-            setItems((old) => [
-              ...data.items,
-              ...old.filter((row) => !data.items.some((next) => next.id === row.id)),
-            ]);
+            setItems((old) => {
+              const items = [
+                ...data.items,
+                ...old.filter((row) => !data.items.some((next) => next.id === row.id)),
+              ];
+              received.current = {
+                ...data,
+                items,
+                nextBefore: fullyLoaded.current
+                  ? null
+                  : (received.current?.nextBefore ?? data.nextBefore),
+              };
+              return items;
+            });
             loadedIds.current = [
               ...new Set([...data.items.map((item) => item.id), ...loadedIds.current]),
             ];
@@ -224,7 +266,7 @@ export function ResultFeed({
         });
     }, 250);
     return () => clearTimeout(task);
-  }, [revision, endpoint, category]);
+  }, [revision, endpoint, category, readFailed]);
   useEffect(() => {
     if (focusVersion) setCategory(focusCategory === "all" ? "files" : focusCategory);
   }, [focusVersion, focusCategory]);
@@ -261,7 +303,16 @@ export function ResultFeed({
         setRetry((value) => value + 1);
         return;
       }
-      setItems((old) => [...new Map([...old, ...data.items].map((row) => [row.id, row])).values()]);
+      setItems((old) => {
+        const items = [...new Map([...old, ...data.items].map((row) => [row.id, row])).values()];
+        received.current = {
+          ...received.current,
+          ...data,
+          items,
+          revision: received.current?.revision,
+        };
+        return items;
+      });
       setCounts(data.counts ?? emptyResultCounts());
       loadedIds.current = [
         ...new Set([...loadedIds.current, ...data.items.map((item) => item.id)]),
