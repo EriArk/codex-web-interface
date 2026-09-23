@@ -393,71 +393,78 @@ export function SpaceActivity({
                     {batch.length > 1 ? `${batch.length} коммита` : label(first)}
                   </small>
                   <h4>{first.title}</h4>
-                  {batch.length > 1 ? (
-                    <details
-                      open={!!expanded[groupId]}
-                      onToggle={(e) => {
-                        const open = e.currentTarget.open;
-                        setExpanded((old) =>
-                          old[groupId] === open ? old : { ...old, [groupId]: open },
-                        );
-                      }}
-                    >
-                      <summary>Все коммиты · {batch.length}</summary>
-                      <ul>
-                        {batch.map((v) => (
-                          <li key={v.key}>
-                            <button
-                              className="secondary activity-commit-button"
-                              type="button"
-                              disabled={!!opening}
-                              onClick={() => void open(v)}
-                            >
-                              <code>{v.sha!.slice(0, 7)}</code>
-                              <span>{v.title}</span>
-                              <Icon name="folder" size={14} />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ) : (
+                  <div className="activity-primary-actions">
+                    {batch.length > 1 ? (
+                      <details
+                        open={!!expanded[groupId]}
+                        onToggle={(e) => {
+                          const open = e.currentTarget.open;
+                          setExpanded((old) =>
+                            old[groupId] === open ? old : { ...old, [groupId]: open },
+                          );
+                        }}
+                      >
+                        <summary>Все коммиты · {batch.length}</summary>
+                        <ul>
+                          {batch.map((v) => (
+                            <li key={v.key}>
+                              <button
+                                className="secondary activity-commit-button"
+                                type="button"
+                                disabled={!!opening}
+                                onClick={() => void open(v)}
+                              >
+                                <code>{v.sha!.slice(0, 7)}</code>
+                                <span>{v.title}</span>
+                                <Icon name="folder" size={14} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : (
+                      <button
+                        className="secondary activity-open"
+                        type="button"
+                        disabled={!!opening}
+                        onClick={() => void open(first)}
+                      >
+                        {first.kind === "commit"
+                          ? "Открыть коммит"
+                          : first.kind === "pr"
+                            ? "Открыть PR"
+                            : "Открыть Issue"}
+                      </button>
+                    )}
                     <button
-                      className="secondary activity-open"
                       type="button"
-                      disabled={!!opening}
-                      onClick={() => void open(first)}
-                    >
-                      {first.kind === "commit"
-                        ? "Открыть коммит"
-                        : first.kind === "pr"
-                          ? "Открыть PR"
-                          : "Открыть Issue"}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="secondary activity-open"
-                    disabled={!!opening}
-                    onClick={() => void discuss(batch)}
-                  >
-                    <Icon name="chat" size={15} />
-                    {opening === "discuss" ? "Готовим контекст…" : "Обсудить в GPT"}
-                  </button>
-                  {eligible.find((p) => p.id === first.projectId)?.personalProjectId && (
-                    <IntakeButton
-                      projectId={eligible.find((p) => p.id === first.projectId)!.personalProjectId!}
-                      name={first.projectName}
-                      sources={[selected.url]}
-                      label="Изучить в Codex"
                       className="secondary activity-open"
-                      onWork={() =>
-                        onProject(
-                          eligible.find((p) => p.id === first.projectId)!.personalProjectId!,
-                        )
-                      }
-                    />
-                  )}
+                      aria-label="Обсудить в GPT"
+                      disabled={!!opening}
+                      onClick={() => void discuss(batch)}
+                    >
+                      <Icon name="chat" size={15} />
+                      {opening === "discuss" ? "Готовим…" : "В GPT"}
+                    </button>
+                    {eligible.find((p) => p.id === first.projectId)?.personalProjectId && (
+                      <IntakeButton
+                        projectId={
+                          eligible.find((p) => p.id === first.projectId)!.personalProjectId!
+                        }
+                        name={first.projectName}
+                        sources={[selected.url]}
+                        draftScope={`activity:${page.repositoryId}:${selected.key}`}
+                        label="В Codex"
+                        ariaLabel="Изучить в Codex"
+                        className="secondary activity-open"
+                        onWork={() =>
+                          onProject(
+                            eligible.find((p) => p.id === first.projectId)!.personalProjectId!,
+                          )
+                        }
+                      />
+                    )}
+                  </div>
                   {batch.length > 1 && (
                     <label className="activity-source-picker">
                       Обсуждение коммита

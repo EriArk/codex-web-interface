@@ -80,9 +80,15 @@ export function IssueDrawerButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" className={className} onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className={className}
+        aria-label="Подборка Issues"
+        title="Подборка Issues"
+        onClick={() => setOpen(true)}
+      >
         <Icon name="plan" size={16} />
-        Подборка Issues
+        <span>Подборка Issues</span>
       </button>
       {open && <IssueDrawerWindow targetId={targetId} onClose={() => setOpen(false)} />}
     </>

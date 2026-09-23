@@ -6,7 +6,12 @@ import { handoffFixture } from "./handoff-fixture.mjs";
 
 const engine = process.env.BROWSER ?? "chromium",
   origin = "http://127.0.0.1:18876";
-const f = await handoffFixture(origin);
+const projectName = "AltarAppsReborn — совместимость сохранений";
+const f = await handoffFixture(origin, undefined, {
+  configure(config) {
+    config.projects[0].name = projectName;
+  },
+});
 await f.release();
 const original = f.rpc.request.bind(f.rpc);
 f.rpc.request = async (method, params) => {
@@ -71,8 +76,9 @@ try {
   await main.fill("Рабочий черновик не менять");
   await page.getByRole("button", { name: "Обзор текущего проекта" }).click();
   await page.getByRole("button", { name: "Разобрать входящие задачи" }).click();
-  const dialog = page.getByRole("dialog", { name: "Разбор · Project" });
+  const dialog = page.getByRole("dialog", { name: "Разбор · " + projectName });
   await expect(dialog).toBeVisible();
+  await page.screenshot({ path: `.local/qa-intake/${engine}-empty-phone.png` });
   await dialog.locator("summary").filter({ hasText: "Issues, PR" }).click();
   await dialog
     .getByRole("textbox", { name: "Источники разбора" })
@@ -180,6 +186,24 @@ try {
         )
         .toBe(true);
       assert(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
+      assert(
+        await dialog.evaluate((el) => {
+          const r = el.getBoundingClientRect(),
+            h = el.querySelector("header").getBoundingClientRect();
+          const title = el.querySelector("h2").getBoundingClientRect();
+          const buttons = [...el.querySelectorAll(":scope > header > button")].map((b) =>
+            b.getBoundingClientRect(),
+          );
+          return (
+            Math.abs(r.left - (innerWidth - r.right)) < 2 &&
+            h.height < 110 &&
+            buttons.every(
+              (b) => b.width >= 44 && b.height >= 44 && b.left >= title.right && b.right <= r.right,
+            )
+          );
+        }),
+        "centered dialog and uncrowded header with reachable controls",
+      );
       await page.screenshot({
         path: `.local/qa-intake/${engine}-${theme}-${size.width}x${size.height}.png`,
       });

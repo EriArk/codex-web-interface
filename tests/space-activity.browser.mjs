@@ -613,6 +613,7 @@ try {
     { width: 390, height: 500 },
     { width: 1024, height: 768 },
     { width: 1366, height: 1024 },
+    { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
     for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
@@ -633,6 +634,26 @@ try {
         .toBe(true);
       await expect(dialog.getByRole("button", { name: "Закрыть пространство" })).toBeInViewport();
       await expect(dialog.getByLabel("Проект активности")).toBeInViewport();
+      await dialog.locator(".activity-feed").evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      assert(
+        await dialog
+          .locator(".activity-primary-actions")
+          .first()
+          .evaluate((el) => {
+            const buttons = [...el.querySelectorAll(":scope > button")]
+              .slice(-2)
+              .map((b) => b.getBoundingClientRect());
+            return (
+              buttons.length === 2 &&
+              Math.abs(buttons[0].top - buttons[1].top) < 2 &&
+              Math.abs(buttons[0].width - buttons[1].width) < 2 &&
+              buttons.every((b) => b.height >= 44)
+            );
+          }),
+        "assistant actions align in equal touch columns",
+      );
       await page.screenshot({
         path: `.local/activity-social-qa/feed-${process.env.BROWSER || "webkit"}-${theme}-${viewport.width}.png`,
       });

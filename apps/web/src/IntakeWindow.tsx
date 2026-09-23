@@ -27,21 +27,31 @@ type Props = {
   projectId: string;
   name: string;
   sources?: string[];
+  draftScope?: string;
   onWork?: (target: NotebookLink) => void;
 };
-export function IntakeButton(props: Props & { className?: string; label?: string }) {
+export function IntakeButton(
+  props: Props & { className?: string; label?: string; ariaLabel?: string },
+) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button
         type="button"
         className={props.className ?? "secondary"}
+        aria-label={props.ariaLabel}
         onClick={() => setOpen(true)}
       >
         <Icon name="search" size={16} />
         {props.label ?? "Разобрать входящее"}
       </button>
-      {open && <IntakeWindow key={props.projectId} {...props} onClose={() => setOpen(false)} />}
+      {open && (
+        <IntakeWindow
+          key={`${props.projectId}:${props.draftScope ?? ""}`}
+          {...props}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }
@@ -49,21 +59,22 @@ export function IntakeWindow({
   projectId,
   name,
   sources = [],
+  draftScope,
   onWork,
   onClose,
 }: Props & { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog);
   const path = `/projects/${encodeURIComponent(projectId)}/intake`,
-    draftKey = `intake-draft:${projectId}`,
-    sendKey = `intake-send:${projectId}`;
+    contextKey = draftScope ? `${projectId}:notice:${draftScope}` : projectId,
+    draftKey = `intake-draft:${contextKey}`,
+    refsKey = `intake-refs:${contextKey}`,
+    sendKey = `intake-send:${contextKey}`;
   const [data, setData] = useState<IntakeState | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(() => storage.getItem(draftKey) ?? ""),
-    [refs, setRefs] = useState(() =>
-      sources.length ? sources.join(" ") : (storage.getItem(`intake-refs:${projectId}`) ?? ""),
-    );
+    [refs, setRefs] = useState(() => storage.getItem(refsKey) ?? sources.join(" "));
   const [caps, setCaps] = useState<Capabilities>(),
     [settings, setSettings] = useState<TurnSettings>();
   const [review, setReview] = useState<{ messageId: string; text: string } | null>(() => {
@@ -103,8 +114,8 @@ export function IntakeWindow({
     }));
   }, []);
   useEffect(() => {
-    storage.setItem(`intake-refs:${projectId}`, refs);
-  }, [refs, projectId]);
+    storage.setItem(refsKey, refs);
+  }, [refs, refsKey]);
   useEffect(() => {
     storage.setItem(`intake-review:${projectId}`, JSON.stringify(review));
   }, [review, projectId]);
@@ -237,9 +248,10 @@ export function IntakeWindow({
       <header className="panel-heading notebook-heading">
         <div>
           <h2>Разбор входящего</h2>
-          <small>{name} · Только чтение</small>
+          <small title={name}>{name}</small>
+          <small>Только чтение</small>
         </div>
-        <IssueDrawerButton targetId={projectId} />
+        <IssueDrawerButton targetId={projectId} className="icon-button intake-issues" />
         {data?.threadId && (
           <button
             type="button"

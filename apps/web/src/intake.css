@@ -16,6 +16,9 @@
 .intake-window::backdrop {
   background: #0005;
 }
+.intake-window:focus {
+  outline: none;
+}
 .intake-window > header {
   flex: none;
   display: flex;
@@ -26,10 +29,33 @@
   margin: 0;
 }
 .intake-window > header small {
-  color: var(--muted);
+  color: inherit;
+  opacity: 0.8;
 }
 .intake-window > header > div {
   flex: 1;
+  min-width: 0;
+}
+.intake-window > header small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.intake-window > header .intake-issues > span {
+  display: none;
+}
+:root[data-theme] dialog.intake-window.workspace-window {
+  inset-inline: 0;
+  width: min(850px, calc(100vw - 20px));
+  max-width: none;
+  margin-inline: auto;
+}
+:root[data-theme] .intake-window > .notebook-heading {
+  align-items: center;
+}
+:root[data-theme] .intake-window > .notebook-heading h2 {
+  font-size: 1rem;
 }
 .intake-results > .results-pane {
   min-height: 0;
@@ -93,8 +119,14 @@
   display: none;
 }
 @media (max-width: 600px) {
-  .intake-window {
-    width: calc(100vw - 8px);
+  :root[data-theme] dialog.intake-window.workspace-window {
+    width: calc(100vw - 16px);
+    height: calc(var(--app-height, 100dvh) - 16px);
+    max-height: calc(var(--app-height, 100dvh) - 16px);
+    margin-block: 8px;
+  }
+  :root[data-keyboard="true"] dialog.intake-window.workspace-window[open] {
+    margin-block: 0;
     height: calc(var(--app-height, 100dvh) - 8px);
     max-height: calc(var(--app-height, 100dvh) - 8px);
   }

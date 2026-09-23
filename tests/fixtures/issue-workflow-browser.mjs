@@ -145,9 +145,39 @@ export async function issueWorkflow({
       name: "Altar",
     }).threadId;
     const before = recipient.nativeCalls.filter((c) => c.method === "turn/start").length;
+    await page.evaluate((ownerId) => {
+      localStorage.setItem(
+        `cw-user:${ownerId}:intake-draft:owner-project`,
+        "Existing unrelated draft",
+      );
+      localStorage.setItem(`cw-user:${ownerId}:intake-refs:owner-project`, "issue:123");
+    }, ownerId);
     await card.getByRole("button", { name: "Изучить", exact: true }).click();
     const intake = page.getByRole("dialog", { name: "Разбор · Altar", exact: true });
     await expect(intake).toBeVisible();
+    const draft = intake.getByRole("textbox", { name: "Сообщение для разбора", exact: true });
+    const refs = intake.getByRole("textbox", { name: "Источники разбора", exact: true });
+    await expect(draft).toHaveValue("");
+    await intake.locator("summary").filter({ hasText: "Issues, PR" }).click();
+    await expect(refs).toHaveValue("https://github.com/example/altar/issues/987");
+    await refs.fill("issue:987");
+    await draft.fill("Saved notification draft");
+    await intake.getByRole("button", { name: "Закрыть разбор" }).click();
+    await expect(card).toBeVisible();
+    await card.getByRole("button", { name: "Изучить", exact: true }).click();
+    await expect(draft).toHaveValue("Saved notification draft");
+    await intake.locator("summary").filter({ hasText: "Issues, PR" }).click();
+    await expect(refs).toHaveValue("issue:987");
+    assert.deepEqual(
+      await page.evaluate(
+        (ownerId) => [
+          localStorage.getItem(`cw-user:${ownerId}:intake-draft:owner-project`),
+          localStorage.getItem(`cw-user:${ownerId}:intake-refs:owner-project`),
+        ],
+        ownerId,
+      ),
+      ["Existing unrelated draft", "issue:123"],
+    );
     assert.equal(
       recipient.nativeCalls.filter((c) => c.method === "turn/start").length,
       before,

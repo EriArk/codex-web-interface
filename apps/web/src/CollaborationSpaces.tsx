@@ -353,6 +353,7 @@ export function CollaborationWindow({
                           key={n.issues[group * 5]!.url}
                           projectId={p.personalProjectId!}
                           name={p.name}
+                          draftScope={`${n.id}:${group}`}
                           sources={n.issues.slice(group * 5, group * 5 + 5).map((i) => i.url)}
                           label={
                             n.issues.length <= 5

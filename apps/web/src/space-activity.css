@@ -206,13 +206,15 @@
   margin: 18px auto 0;
 }
 .activity-social {
-  margin-top: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 .activity-social-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(44px, 1fr));
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 .activity-social-actions button.activity-reaction {
   min-width: 44px;
@@ -232,7 +234,28 @@
   color: var(--accent);
 }
 .activity-social-actions > .activity-open {
-  margin-left: 6px;
+  grid-column: 1 / -1;
+  margin: 0;
+  justify-content: center;
+}
+.activity-primary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.activity-primary-actions > :first-child {
+  grid-column: 1 / -1;
+}
+.activity-content .activity-primary-actions > button.activity-open {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  justify-content: center;
+  white-space: normal;
+}
+.activity-primary-actions > details {
+  margin: 0;
 }
 .activity-source-picker {
   display: grid;
@@ -307,9 +330,15 @@
     padding: 8px;
   }
   .activity-card {
-    gap: 8px;
+    position: relative;
+    display: block;
+  }
+  .activity-card > .activity-content > .activity-meta {
+    padding-inline-start: 36px;
+    min-height: 28px;
   }
   .activity-symbol {
+    position: absolute;
     width: 28px;
     height: 28px;
   }

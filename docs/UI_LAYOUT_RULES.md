@@ -1,0 +1,10 @@
+# Window and action layout
+
+Owner correction, 23 September 2026: Activity actions had accidental wrapping and unequal widths; the Intake launcher crowded its title and the mobile dialog was offset. These rules apply to subsequent interface work as well as these windows.
+
+- **Give each row one purpose.** Activity has an exact-source action, a pair of assistant actions, then a separated reaction/discussion group. Use grid columns and consistent gaps, not inline buttons with individual margins. Align peer actions; short visible labels may have fuller accessible names.
+- **Protect the heading.** Reserve the header for the title, compact context and stable icon controls. Give text `min-width: 0`; truncate a long project name with its full title available. Keep the close target at least 44×44 CSS pixels. Do not insert a large labeled tool button between the title and Close.
+- **Size the whole window deliberately.** Account for native dialog max-width, box sizing, both horizontal insets, safe areas and the actual keyboard viewport. Phone dialogs need symmetric gutters. Keep the heading and composer reachable; scroll the content independently. Suppress a decorative focus outline on a programmatically focused dialog itself, retaining visible keyboard focus on its controls.
+- **Use existing theme materials.** Keep semantic screen, casing, key and text tokens. No hard-coded substitute palette or separate theme implementation. Reactions are a quiet secondary group, not another row of competing primary actions.
+- **Keep navigation reversible.** Nested inspection leaves its parent mounted. A source-specific Intake draft belongs to that notification/event, including its edited references and pending send receipt. It must not mix with the ordinary project draft or another incoming task.
+- **Verify what a person sees.** Check phone, keyboard-constrained phone, compact tablet and wide tablet in all four themes. Include long titles, multiple action labels and active content. Test alignment, touch targets and overlap, then inspect screenshots; a window fitting inside the viewport is insufficient by itself.
