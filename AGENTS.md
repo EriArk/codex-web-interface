@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Owner-requested internal-first actions and Activity continuity (2026-09-23)
+
+- Handle primary navigation, actions and material inspection inside the web app using existing integrated tools. External websites are an explicit secondary option, not the default when an internal tool exists.
+- Activity refresh and reopening preserve loaded cards, filters, expanded content and scroll position. Merge new/changed events by exact source identity; do not blank the feed while refreshing. Keep caches bounded, account-local and invalidated on access/binding changes.
+- Activity actions are distinct themed touch buttons. Commit/Issue/PR actions open the integrated GitHub viewer above the mounted feed.
+
 ## Owner-requested complete Windows helper updates (2026-09-23)
 
 - Treat Hub and installed PC helpers as one release when their contracts change. Update the affected Windows helper in the same stage, preserving private state, task configuration and active work.

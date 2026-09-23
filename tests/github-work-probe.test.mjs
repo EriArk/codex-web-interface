@@ -166,7 +166,12 @@ test("bounded activity evidence reads exact immutable commits and rechecks PR he
     const value = await f.probe({ op: "observe", query: { kind: "evidence", source } });
     assert.equal(value.evidence.source, source);
     assert(value.evidence.text.length <= 18000);
-    if (source.startsWith("commit")) assert.match(value.evidence.text, /nullable/);
+    if (source.startsWith("commit")) {
+      assert.match(value.evidence.text, /nullable/);
+      assert.equal(value.commit.sha, "b".repeat(40));
+      assert.match(value.commit.files[0].patch, /nullable/);
+      assert(value.commit.files.every((v) => v.patch.length <= 3000));
+    }
     if (source.startsWith("pr")) assert.match(value.evidence.text, /tested/);
   }
   assert((await f.calls()).every((v) => v.method === "GET"));
@@ -178,8 +183,11 @@ test("bounded activity evidence reads exact immutable commits and rechecks PR he
     f.probe({ op: "observe", query: { kind: "evidence", source: "commit:main" } }),
     /GITHUB_WORK_REQUEST/,
   );
-  await f.save({moveHead:true});
-  await assert.rejects(f.probe({op:"observe",query:{kind:"evidence",source:"pr:2"}}),/GITHUB_WORK_CHANGED/);
+  await f.save({ moveHead: true });
+  await assert.rejects(
+    f.probe({ op: "observe", query: { kind: "evidence", source: "pr:2" } }),
+    /GITHUB_WORK_CHANGED/,
+  );
 });
 test("machine-local GitHub identity, bounded issue search and exact PR SHA/reviews/checks are normalized", async (t) => {
   const f = await fixture(t);

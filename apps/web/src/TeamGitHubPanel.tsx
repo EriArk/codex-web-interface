@@ -873,7 +873,13 @@ function Operation({
     </div>
   );
 }
-function GitHubRecord({ record: r }: { record: GitHubWorkRecord }) {
+export function GitHubRecord({
+  record: r,
+  external = true,
+}: {
+  record: GitHubWorkRecord;
+  external?: boolean;
+}) {
   return (
     <div className="shared-form">
       <h3>
@@ -897,7 +903,11 @@ function GitHubRecord({ record: r }: { record: GitHubWorkRecord }) {
         </div>
       )}
       <Markdown text={r.body} />
-      {r.truncated && <p>Описание сокращено. Полный текст доступен в GitHub.</p>}
+      {r.truncated && (
+        <p>
+          {external ? "Описание сокращено. Полный текст доступен в GitHub." : "Описание сокращено."}
+        </p>
+      )}
       {r.type === "pr" && (
         <details>
           <summary>Ревью и проверки</summary>
@@ -923,9 +933,11 @@ function GitHubRecord({ record: r }: { record: GitHubWorkRecord }) {
           )}
         </details>
       )}
-      <a href={r.url} target="_blank" rel="noreferrer">
-        Открыть в GitHub
-      </a>
+      {external && (
+        <a href={r.url} target="_blank" rel="noreferrer">
+          Открыть в GitHub
+        </a>
+      )}
     </div>
   );
 }

@@ -357,13 +357,23 @@ export async function githubWorkProbe(
         if (!patch || patch.length > 3000) truncated = true;
         return {
           path: String(v.filename ?? "").slice(0, 500),
-          status: v.status,
-          additions: v.additions,
-          deletions: v.deletions,
+          status: String(v.status ?? "").slice(0, 40),
+          additions: Number(v.additions) || 0,
+          deletions: Number(v.deletions) || 0,
           patch: patch.slice(0, 3000),
           patchOmitted: !patch,
         };
       });
+      if (kind === "commit")
+        result.commit = {
+          sha: snapshot.sha,
+          message: snapshot.message,
+          parents: snapshot.parents.filter(
+            (v: unknown) => typeof v === "string" && /^[a-f0-9]{40,64}$/.test(v),
+          ),
+          files: parts,
+          truncated,
+        };
       const full = JSON.stringify({ snapshot, files: parts });
       result.evidence = {
         source: q.source,

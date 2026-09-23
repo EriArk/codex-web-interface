@@ -4,10 +4,17 @@ import type {
   GitHubActivitySource,
   SpaceActivityPage,
 } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityDiscussion } from "./ActivityDiscussion";
+import { type ActivitySourceTarget, ActivitySourceWindow } from "./ActivitySourceWindow";
 import { accountSessionStorage as storage } from "./accountStorage";
-import { api, messageOf } from "./api";
+import {
+  activityScope,
+  mergeActivityPage,
+  readActivityView,
+  saveActivityView,
+} from "./activityCache";
+import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
 import "./space-activity.css";
 
@@ -51,17 +58,85 @@ export function SpaceActivity({
   onProject: (id: string) => void;
   onDiscuss: (handoff: ActivityGptHandoff) => void;
 }) {
-  const [pages, setPages] = useState<SpaceActivityPage[]>([]),
+  const cacheScope = activityScope(space);
+  const [initial] = useState(() => readActivityView(cacheScope));
+  const [pages, setPages] = useState<SpaceActivityPage[]>(initial.pages),
     [errors, setErrors] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(!initial.pages.length),
     [refresh, setRefresh] = useState(0);
-  const [project, setProject] = useState(""),
-    [author, setAuthor] = useState(""),
-    [limit, setLimit] = useState(20);
+  const [project, setProject] = useState(initial.project),
+    [author, setAuthor] = useState(initial.author),
+    [limit, setLimit] = useState(initial.limit);
   const [opening, setOpening] = useState(""),
     [openError, setOpenError] = useState("");
   const generation = useRef(0);
-  const [sources, setSources] = useState<Record<string, string>>({});
+  const [sources, setSources] = useState<Record<string, string>>(initial.sources);
+  const [expanded, setExpanded] = useState(initial.expanded);
+  const groupKeys = useRef(initial.groups),
+    feed = useRef<HTMLDivElement>(null),
+    scroll = useRef(initial.scroll);
+  const [target, setTarget] = useState<ActivitySourceTarget | null>(null);
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+  const view = useRef(initial);
+  view.current = {
+    pages,
+    project,
+    author,
+    limit,
+    sources,
+    expanded,
+    groups: groupKeys.current,
+    scroll: scroll.current,
+  };
+  useEffect(() => {
+    saveActivityView(cacheScope, {
+      pages,
+      project,
+      author,
+      limit,
+      sources,
+      expanded,
+      groups: groupKeys.current,
+      scroll: scroll.current,
+    });
+  }, [cacheScope, pages, project, author, limit, sources, expanded]);
+  useEffect(
+    () => () => saveActivityView(cacheScope, { ...view.current, scroll: scroll.current }),
+    [cacheScope],
+  );
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (feed.current) feed.current.scrollTop = initial.scroll;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [initial]);
+  const anchor = useRef<{ key: string; offset: number; top: number } | null>(null);
+  const capture = useCallback(() => {
+    const el = feed.current;
+    if (!el) return;
+    const row = [...el.querySelectorAll<HTMLElement>("[data-activity-key]")].find(
+      (v) => v.getBoundingClientRect().bottom > el.getBoundingClientRect().top,
+    );
+    anchor.current = row
+      ? {
+          key: row.dataset.activityKey!,
+          offset: row.getBoundingClientRect().top - el.getBoundingClientRect().top,
+          top: el.scrollTop,
+        }
+      : null;
+  }, []);
+  useLayoutEffect(() => {
+    const el = feed.current,
+      a = anchor.current;
+    anchor.current = null;
+    if (!el || !a || a.top < 8) return;
+    const row = [...el.querySelectorAll<HTMLElement>("[data-activity-key]")].find(
+      (v) => v.dataset.activityKey === a.key,
+    );
+    if (row)
+      el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - a.offset;
+  });
   const eligible = space.projects.filter((p) => p.access !== "none");
   const scope = JSON.stringify([
     space.id,
@@ -77,7 +152,6 @@ export function SpaceActivity({
       number,
     ];
     const run = ++generation.current;
-    setPages([]);
     setErrors({});
     setBusy(true);
     setOpenError("");
@@ -89,12 +163,46 @@ export function SpaceActivity({
         try {
           const page = await api<SpaceActivityPage>(`/team/spaces/${spaceId}/activity`, {
             method: "POST",
-            body: { projectId },
+            body: {
+              projectId,
+              ...(pagesRef.current.find((p) => p.projectId === projectId)?.versions
+                ? {
+                    known: {
+                      repositoryId: pagesRef.current.find((p) => p.projectId === projectId)!
+                        .repositoryId,
+                      versions: pagesRef.current.find((p) => p.projectId === projectId)!.versions,
+                    },
+                  }
+                : {}),
+            },
           });
-          if (generation.current === run) setPages((old) => [...old, page]);
+          if (generation.current === run) {
+            capture();
+            setPages((old) => [
+              ...old.filter((p) => p.projectId !== projectId),
+              mergeActivityPage(
+                old.find((p) => p.projectId === projectId),
+                page,
+              ),
+            ]);
+          }
         } catch (error) {
-          if (generation.current === run)
+          if (generation.current === run) {
             setErrors((old) => ({ ...old, [projectId]: messageOf(error) }));
+            if (
+              error instanceof ApiError &&
+              (error.status === 403 ||
+                error.status === 404 ||
+                [
+                  "GITHUB_WORK_ACCESS",
+                  "GITHUB_WORK_LOGIN",
+                  "GITHUB_WORK_IDENTITY_CHANGED",
+                  "GITHUB_WORK_REPOSITORY",
+                  "ACTIVITY_COPY_REQUIRED",
+                ].includes(error.code))
+            )
+              setPages((old) => old.filter((p) => p.projectId !== projectId));
+          }
         }
       }
       if (generation.current === run) setBusy(false);
@@ -102,7 +210,7 @@ export function SpaceActivity({
     return () => {
       generation.current++;
     };
-  }, [scope]);
+  }, [scope, capture]);
   const entries: Entry[] = pages
     .flatMap((p) => {
       const current = eligible.find((v) => v.id === p.projectId);
@@ -110,7 +218,12 @@ export function SpaceActivity({
         ? p.items.map((v) => ({ ...v, projectId: p.projectId, projectName: current.name }))
         : [];
     })
-    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || a.key.localeCompare(b.key));
+    .sort(
+      (a, b) =>
+        Date.parse(b.at) - Date.parse(a.at) ||
+        a.key.localeCompare(b.key) ||
+        a.projectId.localeCompare(b.projectId),
+    );
   const authors = [
     ...new Map(
       entries.filter((e) => e.author).map((e) => [String(e.author!.id), e.author!.login]),
@@ -121,32 +234,10 @@ export function SpaceActivity({
       (e) => (!project || e.projectId === project) && (!author || String(e.author?.id) === author),
     ),
   );
-  const open = async (entry: Entry) => {
-    const run = generation.current,
-      key = entry.projectId + entry.key;
-    // Open synchronously for mobile popup rules; no source is exposed until authorization completes.
-    const popup = window.open("about:blank", "_blank");
-    if (popup) popup.opener = null;
-    setOpening(key);
-    setOpenError("");
-    try {
-      const checked = await api<SpaceActivityPage>(`/team/spaces/${space.id}/activity`, {
-        method: "POST",
-        body: { projectId: entry.projectId, source: entry.key },
-      });
-      const item = checked.items.find((v) => v.key === entry.key);
-      if (run !== generation.current || !item) {
-        popup?.close();
-        return;
-      }
-      if (popup) popup.location.replace(item.url);
-      else setOpenError("Разреши открытие новой вкладки и нажми ещё раз.");
-    } catch (error) {
-      popup?.close();
-      if (run === generation.current) setOpenError(messageOf(error));
-    } finally {
-      if (run === generation.current) setOpening("");
-    }
+  const open = (entry: Entry) => {
+    const page = pages.find((p) => p.projectId === entry.projectId);
+    if (page)
+      setTarget({ projectId: entry.projectId, repositoryId: page.repositoryId, source: entry });
   };
   const discuss = async (batch: Entry[]) => {
     if (opening) return;
@@ -181,6 +272,7 @@ export function SpaceActivity({
       if (generation.current === run) setOpening("");
     }
   };
+  const usedGroupKeys = new Set<string>();
   return (
     <section className="space-activity" aria-label="Активность пространства">
       <div className="activity-toolbar">
@@ -230,7 +322,14 @@ export function SpaceActivity({
           <Icon name="refresh" size={18} />
         </button>
       </div>
-      <div className="activity-feed shared-scroll" aria-busy={busy}>
+      <div
+        ref={feed}
+        className="activity-feed shared-scroll"
+        aria-busy={busy}
+        onScroll={(e) => {
+          scroll.current = e.currentTarget.scrollTop;
+        }}
+      >
         {!entries.length && busy && <p className="activity-empty">Загружаем события…</p>}
         {eligible
           .filter((p) => !project || p.id === project)
@@ -256,11 +355,19 @@ export function SpaceActivity({
         {filtered.slice(0, limit).map((batch, index) => {
           const first = batch[0]!,
             day = date(first.at);
-          const groupId = first.projectId + first.key;
-          const selected = batch.find((v) => v.key === sources[groupId]) ?? first;
+          const groupId =
+            batch
+              .map((v) => groupKeys.current[v.projectId + v.key])
+              .find((key) => key && !usedGroupKeys.has(key)) ?? first.projectId + first.key;
+          usedGroupKeys.add(groupId);
+          for (const v of batch) groupKeys.current[v.projectId + v.key] = groupId;
+          const selected =
+            batch.find(
+              (v) => v.key === (sources[groupId] ?? groupId.slice(first.projectId.length)),
+            ) ?? first;
           const page = pages.find((p) => p.projectId === first.projectId)!;
           return (
-            <div className="activity-group" key={first.projectId + first.key}>
+            <div className="activity-group" key={groupId} data-activity-key={groupId}>
               {(index === 0 || date(filtered[index - 1]![0]!.at) !== day) && (
                 <h3 className="activity-date">{day}</h3>
               )}
@@ -286,15 +393,28 @@ export function SpaceActivity({
                   </small>
                   <h4>{first.title}</h4>
                   {batch.length > 1 ? (
-                    <details>
+                    <details
+                      open={!!expanded[groupId]}
+                      onToggle={(e) => {
+                        const open = e.currentTarget.open;
+                        setExpanded((old) =>
+                          old[groupId] === open ? old : { ...old, [groupId]: open },
+                        );
+                      }}
+                    >
                       <summary>Все коммиты · {batch.length}</summary>
                       <ul>
                         {batch.map((v) => (
                           <li key={v.key}>
-                            <button type="button" disabled={!!opening} onClick={() => void open(v)}>
+                            <button
+                              className="secondary activity-commit-button"
+                              type="button"
+                              disabled={!!opening}
+                              onClick={() => void open(v)}
+                            >
                               <code>{v.sha!.slice(0, 7)}</code>
                               <span>{v.title}</span>
-                              <Icon name="external" size={14} />
+                              <Icon name="folder" size={14} />
                             </button>
                           </li>
                         ))}
@@ -302,18 +422,21 @@ export function SpaceActivity({
                     </details>
                   ) : (
                     <button
-                      className="activity-open"
+                      className="secondary activity-open"
                       type="button"
                       disabled={!!opening}
                       onClick={() => void open(first)}
                     >
-                      {first.kind === "commit" ? first.sha!.slice(0, 7) : "Открыть в GitHub"}
-                      <Icon name="external" size={14} />
+                      {first.kind === "commit"
+                        ? "Открыть коммит"
+                        : first.kind === "pr"
+                          ? "Открыть PR"
+                          : "Открыть Issue"}
                     </button>
                   )}
                   <button
                     type="button"
-                    className="activity-open"
+                    className="secondary activity-open"
                     disabled={!!opening}
                     onClick={() => void discuss(batch)}
                   >
@@ -337,7 +460,7 @@ export function SpaceActivity({
                     </label>
                   )}
                   <ActivityDiscussion
-                    key={selected.key}
+                    key={`${page.repositoryId}:${selected.key}`}
                     space={space}
                     projectId={selected.projectId}
                     repositoryId={page.repositoryId}
@@ -374,6 +497,9 @@ export function SpaceActivity({
           </p>
         )}
       </div>
+      {target && (
+        <ActivitySourceWindow space={space} target={target} onClose={() => setTarget(null)} />
+      )}
     </section>
   );
 }

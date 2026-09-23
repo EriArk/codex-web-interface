@@ -41,15 +41,66 @@ store.db.prepare("INSERT INTO users VALUES(?,?)").run("owner", await teamPasswor
 const runtimes = new Map();
 const native = nativeWorkspaceFixture();
 let activityCalls = 0;
+let changedActivity = false,
+  blockedActivity = false;
 async function activityProbe(_machine, _root, request) {
   activityCalls++;
   return {
     repository: request.repository,
     repositoryId: 42,
     identity: { id: 1, login: "Owner" },
-    access: "read",
+    access: blockedActivity ? "unavailable" : "read",
     checkedAt: Date.now(),
     query: request.query,
+    commit:
+      request.query.kind === "evidence" && request.query.source.startsWith("commit:")
+        ? {
+            sha: request.query.source.slice(7),
+            message: "Exact commit description",
+            parents: [],
+            truncated: false,
+            files: [
+              {
+                path: "src/example.ts",
+                status: "modified",
+                additions: 1,
+                deletions: 0,
+                patch: "+ nullable field",
+                patchOmitted: false,
+              },
+            ],
+          }
+        : undefined,
+    record:
+      request.query.kind === "detail"
+        ? {
+            type: request.query.type,
+            number: request.query.number,
+            title: "Exact embedded GitHub record",
+            body: "Native issue description",
+            author: { id: 1, login: "Owner" },
+            state: "open",
+            url: `https://github.com/${request.repository}/issues/${request.query.number}`,
+            updatedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            comments: 1,
+            assignees: [],
+            labels: [],
+            truncated: false,
+          }
+        : undefined,
+    commentsPage:
+      request.query.kind === "detail"
+        ? [
+            {
+              id: 1,
+              author: { id: 1, login: "Owner" },
+              body: "Native GitHub comment",
+              createdAt: new Date().toISOString(),
+              url: "https://github.com/example/altar/issues/3#issuecomment-1",
+            },
+          ]
+        : undefined,
     evidence:
       request.query.kind === "evidence"
         ? { source: request.query.source, text: "Exact patch + nullable field", truncated: false }
@@ -68,7 +119,8 @@ async function activityProbe(_machine, _root, request) {
               "Preserve nullable fields in old saves",
               "Test shared world contracts",
             ][i]
-          : "Совместимость проекта и синхронизация данных между приложениями — проверка изменений " +
+          : (changedActivity && i === 3 ? "Обновлено: " : "") +
+            "Совместимость проекта и синхронизация данных между приложениями — проверка изменений " +
             i,
       at: new Date(Date.UTC(2026, 8, 23, 12, -i * 5)).toISOString(),
       state: i === 3 ? "merged" : "open",
@@ -266,15 +318,111 @@ try {
   assert.equal(activityCalls, reads, "filters must not read native GitHub");
   await dialog.getByRole("button", { name: "Показать ещё", exact: true }).click();
   await expect(dialog.locator(".activity-card")).toHaveCount(25);
-  const sourceRoute = "https://github.com/**";
-  await ownerContext.route(sourceRoute, (route) => route.fulfill({ body: "Exact GitHub source" }));
-  await dialog.getByText("Все коммиты · 3", { exact: true }).click();
-  const popupEvent = page.waitForEvent("popup");
+  let externalOpened = false;
+  page.on("popup", () => {
+    externalOpened = true;
+  });
+  if (
+    !(await dialog
+      .locator("details")
+      .first()
+      .evaluate((el) => el.open))
+  )
+    await dialog.getByText("Все коммиты · 3", { exact: true }).click();
   await dialog.locator("details li button").first().click();
-  const popup = await popupEvent;
-  await expect(popup).toHaveURL("https://github.com/example/altar/commit/" + "1".repeat(40));
-  await popup.close();
-  assert.equal(activityCalls, reads + 1, "opening rechecks access");
+  const sourceWindow = page.getByRole("dialog", { name: "GitHub · событие", exact: true });
+  await expect(sourceWindow).toContainText("Exact commit description");
+  await sourceWindow.getByText("src/example.ts", { exact: false }).click();
+  await expect(sourceWindow.locator("pre")).toContainText("+ nullable field");
+  await mkdir(".local/activity-continuity-qa", { recursive: true });
+  for (const viewport of [
+    { width: 390, height: 500 },
+    { width: 1024, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((v) => (document.documentElement.dataset.theme = v), theme);
+      await expect(sourceWindow.getByRole("button", { name: "Закрыть событие" })).toBeInViewport();
+      assert(await sourceWindow.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
+      await page.screenshot({
+        path: `.local/activity-continuity-qa/${process.env.BROWSER || "webkit"}-${theme}-${viewport.width}.png`,
+      });
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sourceWindow.getByRole("button", { name: "Закрыть событие" }).click();
+  assert.equal(externalOpened, false, "source stays inside the app");
+  assert.equal(activityCalls, reads + 2, "opening rechecks access and fetches exact commit");
+  await dialog.getByRole("button", { name: "Открыть PR", exact: true }).first().click();
+  await expect(sourceWindow).toContainText("Exact embedded GitHub record");
+  await expect(sourceWindow).toContainText("Native GitHub comment");
+  await sourceWindow.getByRole("button", { name: "Закрыть событие" }).click();
+  const deltaReplies = [];
+  let releaseRefresh;
+  await page.route("**/api/team/spaces/*/activity", async (route) => {
+    if (releaseRefresh !== undefined)
+      await new Promise((resolve) => {
+        releaseRefresh = resolve;
+      });
+    const response = await route.fetch();
+    deltaReplies.push(await response.json());
+    await route.fulfill({ response });
+  });
+  await dialog.getByLabel("Автор активности").selectOption("2");
+  await dialog.getByRole("button", { name: "Показать ещё", exact: true }).click();
+  await dialog.locator(".activity-feed").evaluate((el) => (el.scrollTop = 250));
+  const previousScroll = await dialog.locator(".activity-feed").evaluate((el) => el.scrollTop);
+  releaseRefresh = () => {};
+  await dialog.getByRole("button", { name: "Обновить активность" }).click();
+  await expect(dialog.locator(".activity-card")).toHaveCount(24);
+  await expect(dialog.getByText("Загружаем события…")).toHaveCount(0);
+  await expect.poll(() => releaseRefresh.toString().includes("native code")).toBe(true);
+  const resume = releaseRefresh;
+  releaseRefresh = undefined;
+  resume();
+  await expect(dialog.getByRole("button", { name: "Обновить активность" })).toBeEnabled();
+  assert.equal(deltaReplies.at(-1).delta, true);
+  assert.equal(deltaReplies.at(-1).items.length, 0);
+  assert(
+    Math.abs(
+      (await dialog.locator(".activity-feed").evaluate((el) => el.scrollTop)) - previousScroll,
+    ) < 2,
+  );
+  await dialog.getByRole("button", { name: "Закрыть пространство" }).click();
+  const backNav = await drawer(page);
+  releaseRefresh = () => {};
+  await backNav.getByRole("button", { name: "Активность", exact: true }).click();
+  await expect(dialog.locator(".activity-card")).toHaveCount(24);
+  await expect(dialog.getByLabel("Автор активности")).toHaveValue("2");
+  await expect
+    .poll(async () =>
+      Math.abs(
+        (await dialog.locator(".activity-feed").evaluate((el) => el.scrollTop)) - previousScroll,
+      ),
+    )
+    .toBeLessThan(2);
+  await expect.poll(() => releaseRefresh.toString().includes("native code")).toBe(true);
+  const resumeOpen = releaseRefresh;
+  releaseRefresh = undefined;
+  resumeOpen();
+  await expect(dialog.getByRole("button", { name: "Обновить активность" })).toBeEnabled();
+  changedActivity = true;
+  for (const row of hub.teamProjects.db
+    .prepare("SELECT userId,spaceId,projectId,data FROM space_activity_index")
+    .all()) {
+    const value = JSON.parse(row.data);
+    value.checkedAt = 0;
+    hub.teamProjects.db
+      .prepare(
+        "UPDATE space_activity_index SET data=? WHERE userId=? AND spaceId=? AND projectId=?",
+      )
+      .run(JSON.stringify(value), row.userId, row.spaceId, row.projectId);
+  }
+  await dialog.getByRole("button", { name: "Обновить активность" }).click();
+  await expect(dialog.getByRole("button", { name: "Обновить активность" })).toBeEnabled();
+  assert.equal(deltaReplies.at(-1).items.length, 1, "only changed source is transferred");
+  await dialog.getByLabel("Автор активности").selectOption("");
+  await dialog.locator(".activity-feed").evaluate((el) => (el.scrollTop = 0));
   // Real HTTP + durable receipts: a lost acknowledgement and reopening must not duplicate a reply.
   let lostReply = false;
   await page.route("**/api/team/spaces/*/activity/reply", async (route) => {
@@ -485,6 +633,14 @@ try {
       });
     }
   }
+  blockedActivity = true;
+  await dialog.getByRole("button", { name: "Обновить активность" }).click();
+  await expect(dialog.getByRole("button", { name: "Обновить активность" })).toBeEnabled();
+  await expect(dialog.locator(".activity-card")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Закрыть пространство" }).click();
+  const deniedNav = await drawer(page);
+  await deniedNav.getByRole("button", { name: "Активность", exact: true }).click();
+  await expect(dialog.locator(".activity-card")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Закрыть пространство" }).click();
   await expect(dialog).toHaveCount(0);
   assert.equal(errors.length, 0, errors.join("\n"));

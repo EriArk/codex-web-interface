@@ -6,6 +6,7 @@ import type {
   GitHubActivitySource,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
+import { ActivitySourceWindow } from "./ActivitySourceWindow";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { useSharedAction } from "./sharedRequests";
@@ -144,7 +145,7 @@ export function ActivityDiscussion({
         })}
         <button
           type="button"
-          className="activity-open"
+          className="secondary activity-open"
           aria-expanded={expanded}
           disabled={action.busy}
           onClick={() => {
@@ -161,7 +162,7 @@ export function ActivityDiscussion({
           <div className="activity-reply-toolbar">
             {page?.more && (
               <button
-                className="activity-open"
+                className="secondary activity-open"
                 type="button"
                 disabled={action.busy}
                 onClick={() => void action.run(() => load(page.replies[0]!.seq))}
@@ -170,7 +171,7 @@ export function ActivityDiscussion({
               </button>
             )}
             <button
-              className="activity-open"
+              className="secondary activity-open"
               type="button"
               disabled={action.busy}
               onClick={() => void action.run(() => load())}
@@ -199,7 +200,7 @@ export function ActivityDiscussion({
               <p>{r.text}</p>
               <button
                 type="button"
-                className="activity-open"
+                className="secondary activity-open"
                 disabled={action.busy}
                 onClick={() => setDraft({ ...draft, replyTo: r.seq, recipientId: r.author.id })}
               >
@@ -284,6 +285,7 @@ export function ActivityAttentionWindow({
 }) {
   const [page, setPage] = useState<ActivityDiscussionPage | null>(null),
     [error, setError] = useState("");
+  const [sourceOpen, setSourceOpen] = useState(false);
   useEffect(() => {
     let live = true;
     setPage(null);
@@ -310,9 +312,20 @@ export function ActivityAttentionWindow({
         ) && (
           <>
             <h3>{page.source.title}</h3>
-            <a href={page.source.url} target="_blank" rel="noreferrer">
-              Открыть в GitHub
-            </a>
+            <button type="button" className="secondary" onClick={() => setSourceOpen(true)}>
+              Открыть событие
+            </button>
+            {sourceOpen && (
+              <ActivitySourceWindow
+                space={space}
+                target={{
+                  projectId: page.projectId,
+                  repositoryId: page.repositoryId,
+                  source: page.source,
+                }}
+                onClose={() => setSourceOpen(false)}
+              />
+            )}
             <ActivityDiscussion
               key={page.source.key}
               space={space}

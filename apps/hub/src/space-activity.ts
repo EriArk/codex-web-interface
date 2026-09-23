@@ -254,6 +254,40 @@ export class SpaceActivity {
       throw missing();
     return this.handoff(actor, id);
   }
+  async sourceDetails(
+    actor: string,
+    spaceId: string,
+    projectId: string,
+    repositoryId: number,
+    source: string,
+    page: number,
+  ) {
+    const scope = await this.socialScope(actor, spaceId, projectId, repositoryId, source);
+    const c = await this.context(actor, spaceId, projectId);
+    const item = scope.source;
+    const value = (await this.probe(c.machine, c.root, {
+      op: "observe",
+      repository: c.repository,
+      query:
+        item.kind === "commit"
+          ? { kind: "evidence", source }
+          : { kind: "detail", type: item.kind, number: Number(source.split(":")[1]), page },
+    })) as GitHubWorkObservation;
+    if (
+      value.access === "unavailable" ||
+      value.repositoryId !== repositoryId ||
+      value.repository.toLowerCase() !== c.repository.toLowerCase() ||
+      (await this.context(actor, spaceId, projectId)).binding !== c.binding
+    )
+      throw missing();
+    if (
+      item.kind === "commit"
+        ? value.commit?.sha !== source.slice(7)
+        : value.record?.type !== item.kind || value.record?.number !== Number(source.split(":")[1])
+    )
+      throw missing();
+    return value;
+  }
   private saved(actor: string, id: string) {
     this.spaces.team.registry.active(actor);
     const row = this.spaces.team.db

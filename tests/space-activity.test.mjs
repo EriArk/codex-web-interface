@@ -134,6 +134,20 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
       identity: { id: 7, login: "viewer" },
       checkedAt: Date.now(),
       query: request.query,
+      commit:
+        request.query.kind === "evidence" && request.query.source.startsWith("commit:")
+          ? {
+              sha: request.query.source.slice(7),
+              message: "Commit",
+              parents: [],
+              files: [],
+              truncated: false,
+            }
+          : undefined,
+      record:
+        request.query.kind === "detail"
+          ? { type: request.query.type, number: request.query.number }
+          : undefined,
       evidence:
         request.query.kind === "evidence"
           ? {
@@ -165,6 +179,17 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   assert.equal(calls.at(-1).request.query.kind, "identity");
   const opened = await activity.page(f.friend, id, projectId, a.items[0].key);
   assert.equal(opened.items.length, 1);
+  assert.equal(
+    (await activity.sourceDetails(f.friend, id, projectId, 42, "commit:" + "1".repeat(40), 1))
+      .commit.sha,
+    "1".repeat(40),
+  );
+  assert.equal(
+    (await activity.sourceDetails(f.friend, id, projectId, 42, "issue:3", 1)).record.number,
+    3,
+  );
+  await assert.rejects(activity.sourceDetails(f.stranger, id, projectId, 42, "issue:3", 1));
+  await assert.rejects(activity.sourceDetails(f.friend, id, projectId, 99, "issue:3", 1));
   // Local social state stays attached to exact sources and authorizes every content operation.
   const socialReads = calls.length;
   const [scope, duplicateScope] = await Promise.all([
@@ -231,6 +256,7 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
     "discussion survives index expiry and service recreation",
   );
   access = "unavailable";
+  await assert.rejects(activity.sourceDetails(f.friend, id, projectId, 42, "issue:3", 1));
   await assert.rejects(activity.socialScope(f.friend, id, projectId, 42, scope.source.key));
   access = "read";
   repositoryId = 99;

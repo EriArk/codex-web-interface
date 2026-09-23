@@ -290,7 +290,7 @@ export function CollaborationWindow({
       >
         {target.kind === "activity" && space && (
           <SpaceActivity
-            key={space.id}
+            key={`${space.id}:${space.revision}`}
             space={space}
             onDiscuss={onDiscuss}
             onProject={(projectId) => spaces.open({ kind: "project", id: space.id, projectId })}

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { inspectProject } from "@codex-web/machines";
 import { HubError, type ProjectRepository } from "@codex-web/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -24,6 +25,24 @@ export function registerCollaborationSpaces(
     source: z.string().regex(/^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/),
   });
   const socialReadLimit = { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } };
+  app.post("/api/team/spaces/:id/activity/source", socialReadLimit, async (req, reply) => {
+    const body = socialSource
+        .extend({ page: z.number().int().min(1).max(50).default(1) })
+        .strict()
+        .parse(req.body),
+      user = actor(req);
+    const value = await activity.sourceDetails(
+      user,
+      id(req),
+      body.projectId,
+      body.repositoryId,
+      body.source,
+      body.page,
+    );
+    actor(req);
+    spaces.access(user, id(req));
+    return reply.header("Cache-Control", "no-store").send(value);
+  });
   app.post("/api/team/spaces/:id/activity/replies", socialReadLimit, async (req, reply) => {
     const body = socialSource
         .extend({ before: z.number().int().positive().optional() })
@@ -183,6 +202,15 @@ export function registerCollaborationSpaces(
             .string()
             .regex(/^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/)
             .optional(),
+          known: z
+            .object({
+              repositoryId: z.number().int().positive(),
+              versions: z
+                .record(z.string(), z.string().regex(/^[a-f0-9]{64}$/))
+                .refine((v) => Object.keys(v).length <= 200),
+            })
+            .strict()
+            .optional(),
         })
         .strict()
         .parse(req.body);
@@ -200,7 +228,26 @@ export function registerCollaborationSpaces(
           }),
         ]),
       );
-      return reply.header("Cache-Control", "no-store").send({ ...result, social });
+      const versions = Object.fromEntries(
+        result.items.map((item) => [
+          item.key,
+          createHash("sha256")
+            .update(JSON.stringify([item, social[item.key]]))
+            .digest("hex"),
+        ]),
+      );
+      const delta = body.known?.repositoryId === result.repositoryId;
+      const items = delta
+        ? result.items.filter((item) => body.known!.versions[item.key] !== versions[item.key])
+        : result.items;
+      return reply.header("Cache-Control", "no-store").send({
+        ...result,
+        items,
+        social: Object.fromEntries(items.map((item) => [item.key, social[item.key]])),
+        versions,
+        keys: result.items.map((item) => item.key),
+        delta,
+      });
     },
   );
   const id = (req: FastifyRequest) => z.object({ id: z.string().uuid() }).parse(req.params).id;

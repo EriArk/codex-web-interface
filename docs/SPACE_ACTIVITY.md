@@ -17,8 +17,29 @@ No fallback to a project owner's credentials. Space membership, project grant,
 checkout binding and execution epoch are checked around each read. GitHub access
 is rechecked even for a recent cached page and on source open. Repository numeric
 identity prevents reusing sources after same-name repository replacement. The
-external GitHub page performs its own object-level authorization; it may show 404
-for a deleted object. There is no new internal commit/PR viewer in this slice.
+primary action opens an internal GitHub window above the mounted feed. Issue/PR
+details reuse the existing GitHub record renderer, comments, reviews and checks.
+Commits show the exact SHA, message and bounded file patches with copy controls.
+The source is read again through the viewer's own worker; deleted/unavailable
+objects cannot be opened from a stale index. No external tab opens by default.
+
+The browser keeps eight account-local Activity views for 30 minutes, capped at
+2 MiB in session storage. Reopening restores cards, filters, expanded commit
+groups, selection and scroll position immediately. Refresh merges exact source
+IDs without clearing the feed. A bounded per-source version map lets the Hub
+send only new/changed cards and the current key set; repository replacement
+forces a full replacement. The worker still performs bounded canonical GitHub
+reads, with the existing 60-second refresh floor. This is not a GitHub webhook
+or an exhaustive incremental event stream. Denied access discards the affected
+cached project, and Space revision/checkout changes select a fresh cache scope.
+
+Continuity/internal-viewer verification: 12 focused worker/Activity tests cover
+the structured commit response and exact-source authorization. Chromium and
+WebKit cover a held refresh response without blanking cards, unchanged/changed
+delta payloads, close/reopen with filter and scroll restoration, cache removal
+after denied access, internal commit/PR detail without a popup, and four-theme
+phone/keyboard/tablet geometry. Existing social/GPT handoff browser scenarios
+remain in the same run.
 
 The Team database contains a private index per viewer/Space/Project, capped at
 200 references. Each read fetches at most 30 default-branch commits, 30 recent
@@ -76,6 +97,13 @@ Actual Hub -> SSH -> installed Scheduled Task reads succeeded for AltarAppsRebor
 (30 commits / 28 Issues / 30 PRs) and World (12 commits / 2 Issues), including
 evidence reads. Counts are a point-in-time acceptance sample, not product limits.
 Future protocol changes must verify the installed helper, not a temporary copy.
+
+The internal viewer update also replaces the installed helper while idle. Its
+structured commit response preserves complete bounded file entries independently
+of the GPT excerpt size; SHA-256 is
+`3f81d3bd6b8522b17fbab8de601510bf9794a03d69d721b2306c35b30fa762fd`.
+Actual Hub -> SSH -> Scheduled Task commit reads passed for both projects. The
+prior helper is backed up; tasks, private receipts and native work are preserved.
 
 ## Discuss in Project GPT
 

@@ -97,6 +97,7 @@ export interface GitHubWorkComment {
   url: string;
 }
 export type GitHubWorkObservation = GitHubRepositoryAccess & {
+  commit?: GitHubCommitDetail;
   evidence?: { source: string; text: string; truncated: boolean };
   activity?: GitHubActivitySource[];
   query: GitHubWorkQuery;
@@ -130,6 +131,23 @@ export interface SpaceActivityPage {
   checkedAt: number;
   items: GitHubActivitySource[];
   social?: Record<string, import("./collaboration.js").ActivitySocialSummary>;
+  versions?: Record<string, string>;
+  keys?: string[];
+  delta?: boolean;
+}
+export interface GitHubCommitDetail {
+  sha: string;
+  message: string;
+  parents: string[];
+  truncated: boolean;
+  files: {
+    path: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    patch: string;
+    patchOmitted: boolean;
+  }[];
 }
 export interface GitHubWorkReceipt {
   id: string;
