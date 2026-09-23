@@ -1,5 +1,12 @@
 # AGENTS.md
 
+## Owner-requested full Space access (2026-09-23)
+
+- «Полный доступ» (`direct`) includes automatic GitHub **Write**, explicitly chosen by the owner; never substitute Admin. Preserve existing higher roles.
+- Bind recipients to their own verified numeric GitHub identity. The project owner's fixed typed operation grants Write; the participant accepts a required invitation inside the web app with their own account. Do not use display names or copy tokens.
+- Persist permission intents and exact machine receipts before dispatch. Recheck membership, account and machine bindings; uncertain outcomes are reconciled without replay. Reading the Space catalog never writes to GitHub. Existing direct grants can be synchronized explicitly by their project owner.
+- Local downgrade/removal and GitHub collaborator removal remain separate operations; do not silently revoke unrelated existing repository rights.
+
 ## Owner-requested file collision choices (2026-09-23)
 
 - Uploads with an existing destination ask whether to replace the old file, keep both under another name, or skip. Never silently overwrite. Replacement approval binds the exact old fingerprint; changed files require a new choice.

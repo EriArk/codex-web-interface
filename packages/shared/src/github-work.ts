@@ -16,9 +16,18 @@ export const githubWorkInputSchema = z.discriminatedUnion("kind", [
       kind: z.literal("invite"),
       login: githubLoginSchema,
       permission: z.enum(["pull", "push"]),
+      targetId: z.number().int().positive().optional(),
     })
     .strict(),
   z.object({ kind: z.literal("remove"), login: githubLoginSchema }).strict(),
+  z
+    .object({
+      kind: z.literal("accept-invitation"),
+      targetRepository: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}\/[a-zA-Z0-9_.-]{1,100}$/),
+      repositoryId: z.number().int().positive(),
+      identityId: z.number().int().positive(),
+    })
+    .strict(),
   z.object({ kind: z.literal("request-review"), number, login: githubLoginSchema }).strict(),
 ]);
 export type GitHubWorkInput = z.infer<typeof githubWorkInputSchema>;

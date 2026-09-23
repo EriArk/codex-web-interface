@@ -7,6 +7,59 @@ import { join } from "node:path";
 import test from "node:test";
 import { githubWorkProbe } from "../packages/machines/dist/githubWorkProbe.js";
 
+test("Write grants bind the recipient numeric identity across preparation and application", async (t) => {
+  const f = await fixture(t);
+  const input = { kind: "invite", login: "Friend", permission: "push", targetId: 12 };
+  const p = await f.prepare(input);
+  await f.save({ targetId: 99 });
+  assert.equal((await f.apply(p)).state, "failed");
+  assert.equal((await f.calls()).filter((c) => c.method !== "GET").length, 0);
+  await assert.rejects(f.prepare(input), /GITHUB_WORK_IDENTITY_CHANGED/);
+  await f.save({ targetId: 12 });
+  const granted = await f.apply(await f.prepare(input));
+  assert.equal(granted.state, "completed");
+  assert.equal(granted.result.state, "pending");
+  await f.save({
+    invitations: [],
+    collaborators: [{ id: 99, login: "Friend", permission: "write" }],
+  });
+  assert.equal((await f.apply(await f.prepare(input))).state, "failed");
+  assert.equal((await f.calls()).filter((c) => c.method !== "GET").length, 1);
+});
+
+test("recipient accepts only exact Write invitation and reconciles lost acknowledgement without replay", async (t) => {
+  const f = await fixture(t);
+  const input = {
+    kind: "accept-invitation",
+    targetRepository: "Author/Shared",
+    repositoryId: 77,
+    identityId: 11,
+  };
+  const invitation = {
+    id: 301,
+    permissions: "write",
+    invitee: { id: 11, login: "Owner" },
+    repository: { id: 77, full_name: "Author/Shared" },
+  };
+  await f.save({
+    access: "read",
+    received: [{ ...invitation, invitee: { id: 99, login: "Other" } }],
+  });
+  assert.equal((await f.apply(await f.prepare(input))).state, "failed");
+  assert.equal((await f.calls()).filter((c) => c.method !== "GET").length, 0);
+  await assert.rejects(f.prepare({ ...input, identityId: 99 }), /GITHUB_WORK_IDENTITY_CHANGED/);
+  await f.save({ received: [invitation], drop: true });
+  const p = await f.prepare(input);
+  assert.equal((await f.apply(p)).state, "unknown");
+  await f.save({ unavailable: false });
+  assert.equal((await f.probe({ op: "status", id: p.id })).state, "completed");
+  assert.equal((await f.apply(p)).state, "completed");
+  assert.deepEqual(
+    (await f.calls()).filter((c) => c.method !== "GET").map((c) => c.endpoint),
+    ["user/repository_invitations/301"],
+  );
+});
+
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "github-work-")),
     repo = join(root, "repo"),
@@ -84,7 +137,7 @@ async function fixture(t) {
   await writeFile(
     join(bin, "gh"),
     `#!/usr/bin/env node
-const fs=require('node:fs'),p=process.env.GH_WORK_FIXTURE,s=JSON.parse(fs.readFileSync(p,'utf8')),args=process.argv.slice(2),method=args[args.indexOf('--method')+1],endpoint=args.find(x=>x==='user'||x.startsWith('repos/')||x.startsWith('search/issues')),body=args.includes('--input')?JSON.parse(fs.readFileSync(0,'utf8')):undefined;
+const fs=require('node:fs'),p=process.env.GH_WORK_FIXTURE,s=JSON.parse(fs.readFileSync(p,'utf8')),args=process.argv.slice(2),method=args[args.indexOf('--method')+1],endpoint=args.find(x=>x==='user'||x.startsWith('user/')||x.startsWith('users/')||x.startsWith('repos/')||x.startsWith('search/issues')),body=args.includes('--input')?JSON.parse(fs.readFileSync(0,'utf8')):undefined;
 fs.appendFileSync(p.replace('github.json','calls.jsonl'),JSON.stringify({method,endpoint,body})+'\\n');
 const answer=(status,value)=>{process.stdout.write('HTTP/2.0 '+status+' Test\\r\\nContent-Type: application/json\\r\\n\\r\\n'+(value==null?'':JSON.stringify(value)));if(status>=400)process.exitCode=1;};
 const persist=()=>fs.writeFileSync(p,JSON.stringify(s));
@@ -93,6 +146,10 @@ const base='repos/Owner/Project',raw=endpoint?.split('?')[0],parts=raw?.split('/
 if(method!=='GET'&&s.reject){answer(s.reject,{});return;}
 if(s.unavailable){answer(503,{});return;}
 if(endpoint==='user'){answer(200,s.identity);return;}
+if(raw==='users/Friend'){answer(200,{id:s.targetId||12,login:'Friend'});return;}
+if(raw==='repos/Author/Shared'){answer(s.targetAccepted?200:404,{id:77,full_name:'Author/Shared',permissions:{push:true}});return;}
+if(raw==='user/repository_invitations'){answer(200,s.received||[]);return;}
+if(raw==='user/repository_invitations/301'&&method==='PATCH'){s.targetAccepted=true;s.received=[];changed(null);return;}
 if(raw===base){answer(s.access==='unavailable'?404:200,{id:s.repositoryId,full_name:'Owner/Project',has_issues:true,permissions:{admin:s.access==='admin',maintain:s.access==='maintain',push:s.access==='write',triage:s.access==='triage',pull:true}});return;}
 if(endpoint?.startsWith('search/issues')){const q=new URLSearchParams(endpoint.split('?')[1]);answer(200,{items:q.get('q').includes('is:pr')?s.prs:s.issues});return;}
 if(parts[3]==='commits'&&parts.length===4){answer(200,[{sha:'b'.repeat(40),commit:{message:'Exact commit\\nPrivate body not indexed',author:{name:'Unlinked author'},committer:{date:'2026-09-23T10:00:00Z'}},author:null}]);return;}
@@ -108,9 +165,9 @@ if(parts[3]==='pulls'&&parts[5]==='requested_reviewers'){s.prs[0].requested_revi
 if(parts[3]==='commits'){answer(200,parts[5]==='check-runs'?{check_runs:[{name:'Local verification',head_sha:parts[4],conclusion:'success'}]}:{statuses:[]});return;}
 if(parts[3]==='collaborators'&&parts.length===4){answer(200,s.collaborators);return;}
 if(parts[3]==='collaborators'&&parts[5]==='permission'){const found=s.collaborators.find(v=>v.login.toLowerCase()===parts[4].toLowerCase());answer(found?200:404,found?{permission:found.permission,user:found}:{});return;}
-if(parts[3]==='collaborators'&&method==='PUT'){const value={id:201,invitee:{id:12,login:parts[4]},permissions:body.permission};s.invitations.push(value);changed(value);return;}
+if(parts[3]==='collaborators'&&method==='PUT'){const found=s.collaborators.find(v=>v.login.toLowerCase()===parts[4].toLowerCase());if(found){found.permission=body.permission==='push'?'write':body.permission;changed(null);return;}const value={id:201,invitee:{id:12,login:parts[4]},permissions:body.permission};s.invitations.push(value);changed(value);return;}
 if(parts[3]==='collaborators'&&method==='DELETE'){s.collaborators=s.collaborators.filter(v=>v.login!==parts[4]);changed(null);return;}
-if(parts[3]==='invitations'){if(method==='DELETE'){s.invitations=s.invitations.filter(v=>v.id!==n);changed(null);}else answer(200,s.invitations);return;}
+if(parts[3]==='invitations'){if(method==='DELETE'){s.invitations=s.invitations.filter(v=>v.id!==n);changed(null);}else if(method==='PATCH'){const value=s.invitations.find(v=>v.id===n);value.permissions=body.permissions;changed(value);}else answer(200,s.invitations);return;}
 answer(400,{unexpected:endpoint});
 `,
   );
@@ -301,6 +358,29 @@ test("collaborator invitation and removal are separate admin-only actions with e
   });
   assert.equal((await f.apply(await f.prepare(op.input))).result.state, "accepted");
   assert.equal((await f.calls()).filter((v) => v.method === "PUT").length, 1);
+});
+test("collaborator access raises insufficient roles, preserves stronger roles and reconciles lost upgrade acknowledgements", async (t) => {
+  const f = await fixture(t);
+  await f.save({ collaborators: [{ id: 12, login: "Friend", permission: "read" }] });
+  const upgrade = await f.prepare({ kind: "invite", login: "Friend", permission: "push" });
+  await f.save({ drop: true });
+  assert.equal((await f.apply(upgrade)).state, "unknown");
+  await f.save({ unavailable: false });
+  assert.equal((await f.probe({ op: "status", id: upgrade.id })).result.state, "accepted");
+  assert.equal((await f.get()).collaborators[0].permission, "write");
+  assert.equal((await f.calls()).filter((v) => v.method === "PUT").length, 1);
+  await f.save({ collaborators: [{ id: 12, login: "Friend", permission: "admin" }] });
+  assert.equal((await f.apply(await f.prepare(upgrade.input))).result.state, "accepted");
+  assert.equal((await f.get()).collaborators[0].permission, "admin");
+  assert.equal((await f.calls()).filter((v) => v.method === "PUT").length, 1);
+  await f.save({
+    collaborators: [],
+    invitations: [{ id: 201, invitee: { id: 12, login: "Friend" }, permissions: "read" }],
+  });
+  assert.equal((await f.apply(await f.prepare(upgrade.input))).result.state, "pending");
+  assert.equal((await f.get()).invitations[0].permissions, "write");
+  assert.equal((await f.get()).invitations.length, 1);
+  assert.equal((await f.calls()).filter((v) => v.method === "PATCH").length, 1);
 });
 test("changed SHA, issue state, account or repository rejects stale action before any external write", async (t) => {
   const f = await fixture(t),

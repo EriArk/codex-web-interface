@@ -502,7 +502,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
   registerTeamProjects(app, teamProjects, actor, personal);
   registerTechnicalPreviews(app, auth, true);
-  registerCollaborationSpaces(
+  const spaceGitHubAccess = registerCollaborationSpaces(
     app,
     teamProjects,
     actor,
@@ -820,7 +820,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       registrationEnabled: config.team?.registrationEnabled !== false,
     }));
     const storedWork = () => {
-      let work = activeMutations + (teamGitHub.busy() ? 1 : 0);
+      let work = activeMutations + (teamGitHub.busy() ? 1 : 0) + (spaceGitHubAccess.busy() ? 1 : 0);
       work += Number(
         registry.db
           .prepare(
@@ -1014,6 +1014,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     closing = true;
     await teamBridgeRuns.close();
     await teamGitHub.close();
+    await spaceGitHubAccess.close();
     await teamExecutions.close();
     await teamConsultations.close();
     registry.events.off("revoked", revoked);

@@ -541,8 +541,21 @@ export async function githubWorkProbe(
       exact(v, ["kind", "number", "state"]);
       valid(number(v.number) && ["open", "closed"].includes(v.state));
     } else if (v.kind === "invite") {
-      exact(v, ["kind", "login", "permission"]);
-      valid(login(v.login) && ["pull", "push"].includes(v.permission));
+      exact(v, ["kind", "login", "permission", "targetId"]);
+      valid(
+        login(v.login) &&
+          ["pull", "push"].includes(v.permission) &&
+          (v.targetId === undefined || number(v.targetId)),
+      );
+    } else if (v.kind === "accept-invitation") {
+      exact(v, ["kind", "targetRepository", "repositoryId", "identityId"]);
+      valid(
+        typeof v.targetRepository === "string" &&
+          /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}\/[a-zA-Z0-9_.-]{1,100}$/.test(v.targetRepository) &&
+          ![".", ".."].includes(v.targetRepository.split("/")[1]!) &&
+          number(v.repositoryId) &&
+          number(v.identityId),
+      );
     } else if (v.kind === "remove") {
       exact(v, ["kind", "login"]);
       valid(login(v.login));
@@ -642,6 +655,10 @@ export async function githubWorkProbe(
     if (request.op !== "prepare" && !saved) return null;
     const input = request.op === "prepare" ? request.input : saved!.public.input;
     const verifyAccess = (access: GitHubRepositoryAccess, baseline?: GitHubWorkRecord) => {
+      if (input.kind === "accept-invitation") {
+        if (access.identity.id !== input.identityId) fail("GITHUB_WORK_IDENTITY_CHANGED");
+        return;
+      }
       if (access.access === "unavailable" || !access.repositoryId) fail("GITHUB_WORK_ACCESS");
       if (["invite", "remove"].includes(input.kind) && access.access !== "admin")
         fail("GITHUB_WORK_ACCESS");
@@ -669,6 +686,16 @@ export async function githubWorkProbe(
             input.number,
           )
         : undefined;
+    const verifyTarget = async () => {
+      if (input.kind === "invite" && input.targetId !== undefined) {
+        const target = identity(await must(`users/${input.login}`));
+        if (
+          target.id !== input.targetId ||
+          target.login.toLowerCase() !== input.login.toLowerCase()
+        )
+          fail("GITHUB_WORK_IDENTITY_CHANGED");
+      }
+    };
     if (request.op === "prepare") {
       const files = (await fs.readdir(stateRoot)).filter((n) => /^[a-f0-9-]{36}\.json$/.test(n));
       if (files.length >= 10000) fail("GITHUB_WORK_CAPACITY");
@@ -686,6 +713,7 @@ export async function githubWorkProbe(
       const snapshot = await inspect(),
         original = await baseline();
       verifyAccess(snapshot, original);
+      await verifyTarget();
       const receipt: GitHubWorkReceipt = {
         id: request.id,
         input,
@@ -729,37 +757,100 @@ export async function githubWorkProbe(
       if (
         now.identity.id !== receipt.snapshot.identity.id ||
         now.identity.login.toLowerCase() !== receipt.snapshot.identity.login.toLowerCase() ||
-        now.repositoryId !== receipt.snapshot.repositoryId
+        (now.repositoryId !== receipt.snapshot.repositoryId &&
+          !(
+            input.kind === "accept-invitation" &&
+            receipt.snapshot.repositoryId === null &&
+            repository.toLowerCase() === input.targetRepository.toLowerCase() &&
+            now.repositoryId === input.repositoryId
+          ))
       )
         fail("GITHUB_WORK_IDENTITY_CHANGED");
       verifyAccess(now, receipt.baseline);
+      await verifyTarget();
       return now;
     };
     const marker = `<!-- codex-web:${receipt.id} -->`;
+    const levels: Record<string, number> = {
+      none: 0,
+      pull: 1,
+      read: 1,
+      triage: 2,
+      push: 3,
+      write: 3,
+      maintain: 4,
+      admin: 5,
+    };
+    const permissionLevel = (value: string) => levels[value] ?? -1;
+    const invitationSatisfied = (value: { state: string; permission: string }) =>
+      input.kind === "invite" &&
+      value.state !== "absent" &&
+      permissionLevel(value.permission) >= permissionLevel(input.permission);
     const collaborator = async (username: string) => {
       const r = await http(`${prefix}/collaborators/${encodeURIComponent(username)}/permission`);
-      if (r.status === 200 && r.value.permission !== "none")
+      if (r.status === 200 && r.value.permission !== "none") {
+        if (
+          input.kind === "invite" &&
+          input.targetId !== undefined &&
+          r.value.user?.id !== input.targetId
+        )
+          fail("GITHUB_WORK_IDENTITY_CHANGED");
         return { state: "accepted", id: null, permission: r.value.permission };
+      }
       if (r.status !== 404 && !(r.status === 200 && r.value.permission === "none"))
         fail("GITHUB_WORK_UNAVAILABLE");
       for (let page = 1; page <= 5; page++) {
         const list = await must(`${prefix}/invitations?per_page=100&page=${page}`);
         if (!Array.isArray(list)) fail("GITHUB_WORK_DATA");
         const v = list.find((v: any) => v.invitee?.login?.toLowerCase() === username.toLowerCase());
-        if (v && number(v.id))
+        if (v && number(v.id)) {
+          if (
+            input.kind === "invite" &&
+            input.targetId !== undefined &&
+            v.invitee?.id !== input.targetId
+          )
+            fail("GITHUB_WORK_IDENTITY_CHANGED");
           return { state: "pending", id: v.id, permission: String(v.permissions) };
+        }
         if (list.length < 100) return { state: "absent", id: null, permission: "none" };
       }
       return fail("GITHUB_WORK_UNAVAILABLE");
     };
+    const acceptedInvitation = async () => {
+      if (input.kind !== "accept-invitation") return false;
+      const r = await http(`repos/${input.targetRepository}`);
+      return (
+        r.status === 200 &&
+        r.value?.id === input.repositoryId &&
+        r.value?.full_name?.toLowerCase() === input.targetRepository.toLowerCase() &&
+        r.value?.permissions?.push === true
+      );
+    };
+    const pendingInvitation = async () => {
+      if (input.kind !== "accept-invitation") return fail("GITHUB_WORK_REQUEST");
+      for (let page = 1; page <= 5; page++) {
+        const list = await must(`user/repository_invitations?per_page=100&page=${page}`);
+        if (!Array.isArray(list)) fail("GITHUB_WORK_DATA");
+        const v = list.find(
+          (v: any) =>
+            v.repository?.id === input.repositoryId &&
+            v.repository?.full_name?.toLowerCase() === input.targetRepository.toLowerCase() &&
+            v.invitee?.id === input.identityId,
+        );
+        if (v && number(v.id) && ["write", "maintain", "admin"].includes(v.permissions))
+          return v.id;
+        if (list.length < 100) break;
+      }
+      return fail("GITHUB_WORK_CHANGED");
+    };
     const reconcile = async () => {
       await matchingAccount();
-      if (input.kind === "invite" || input.kind === "remove") {
+      if (input.kind === "accept-invitation") {
+        if (await acceptedInvitation())
+          return finish("completed", undefined, { state: "accepted" });
+      } else if (input.kind === "invite" || input.kind === "remove") {
         const v = await collaborator(input.login);
-        if (
-          (input.kind === "invite" && v.state !== "absent") ||
-          (input.kind === "remove" && v.state === "absent")
-        )
+        if (invitationSatisfied(v) || (input.kind === "remove" && v.state === "absent"))
           return finish("completed", undefined, { login: input.login, state: v.state });
       } else if (input.kind === "issue-state") {
         const v = await detail("issue", input.number);
@@ -831,7 +922,13 @@ export async function githubWorkProbe(
       )
         fail("GITHUB_WORK_CHANGED");
       let endpoint: string, method: string, payload: unknown;
-      if (input.kind === "issue-create") {
+      if (input.kind === "accept-invitation") {
+        if (await acceptedInvitation())
+          return finish("completed", undefined, { state: "accepted" });
+        endpoint = `user/repository_invitations/${await pendingInvitation()}`;
+        method = "PATCH";
+        payload = undefined;
+      } else if (input.kind === "issue-create") {
         endpoint = `${prefix}/issues`;
         method = "POST";
         payload = { title: input.title, body: input.body + "\n\n" + marker };
@@ -850,16 +947,25 @@ export async function githubWorkProbe(
       } else {
         const status = await collaborator(input.login);
         if (
-          (input.kind === "invite" && status.state !== "absent") ||
-          (input.kind === "remove" && status.state === "absent")
+          input.kind === "invite" &&
+          status.state !== "absent" &&
+          permissionLevel(status.permission) < 0
         )
+          fail("GITHUB_WORK_ACCESS");
+        if (invitationSatisfied(status) || (input.kind === "remove" && status.state === "absent"))
           return finish("completed", undefined, { login: input.login, state: status.state });
         endpoint =
-          input.kind === "remove" && status.state === "pending"
+          status.state === "pending"
             ? `${prefix}/invitations/${status.id}`
             : `${prefix}/collaborators/${input.login}`;
-        method = input.kind === "invite" ? "PUT" : "DELETE";
-        payload = input.kind === "invite" ? { permission: input.permission } : undefined;
+        method =
+          input.kind === "invite" ? (status.state === "pending" ? "PATCH" : "PUT") : "DELETE";
+        payload =
+          input.kind === "invite"
+            ? status.state === "pending"
+              ? { permissions: input.permission === "push" ? "write" : "read" }
+              : { permission: input.permission }
+            : undefined;
       }
       saved!.attempt = Date.now();
       await finish("running");

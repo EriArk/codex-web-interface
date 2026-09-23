@@ -285,6 +285,29 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.space-github-access {
+  min-width: 0;
+  border-bottom: 1px solid var(--window-edge);
+  padding-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+.space-github-access .space-actions {
+  display: grid;
+  align-items: stretch;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+.space-github-access .space-actions button {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  min-width: 0;
+  white-space: normal;
+}
+.space-github-access .space-member {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 :root[data-keyboard="true"] dialog.space-dialog.workspace-window[open] {
   top: calc(var(--app-top, 0px) + 4px);
   transform: none;

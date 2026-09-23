@@ -7,6 +7,7 @@ import type { createApp } from "./app.js";
 import { CollaborationSpaces, type VerifiedSpaceProject } from "./collaboration-spaces.js";
 import { projectGptSendSchema, rulesSchema } from "./project-gpt.js";
 import { SpaceActivity } from "./space-activity.js";
+import { SpaceGitHubAccess } from "./space-github-access.js";
 import type { GitHubProbe } from "./team-github.js";
 import type { TeamProjects } from "./team-projects.js";
 
@@ -29,6 +30,10 @@ export function registerCollaborationSpaces(
     ),
   );
   const activity = new SpaceActivity(spaces, personal, githubProbe);
+  const githubAccess = new SpaceGitHubAccess(spaces, personal, githubProbe);
+  app.addHook("onReady", async () => {
+    githubAccess.kick();
+  });
   const socialSource = z.object({
     projectId: z.string().uuid(),
     repositoryId: z.number().int().positive(),
@@ -304,6 +309,47 @@ export function registerCollaborationSpaces(
     return { personalProjectId, name: project.name, repository };
   };
   app.get("/api/team/spaces", (req) => spaces.catalog(actor(req)));
+  app.get("/api/team/spaces/:id/github-access", (req, reply) =>
+    reply.header("Cache-Control", "no-store").send(githubAccess.view(actor(req), id(req))),
+  );
+  app.post("/api/team/spaces/github-account", socialReadLimit, async (req) => {
+    const user = actor(req),
+      body = z
+        .object({
+          personalProjectId: projectId,
+          identity: z
+            .object({
+              id: z.number().int().positive(),
+              login: z.string().regex(/^[a-zA-Z0-9-]{1,39}$/),
+            })
+            .strict()
+            .optional(),
+        })
+        .strict()
+        .parse(req.body);
+    return githubAccess.track(
+      (async () => {
+        const p = await verify(user, body.personalProjectId);
+        actor(req);
+        return githubAccess.connect(
+          user,
+          p.personalProjectId,
+          p.repository.replace("https://github.com/", ""),
+          body.identity,
+        );
+      })(),
+    );
+  });
+  app.post("/api/team/spaces/:id/github-access", socialReadLimit, async (req) => {
+    const body = z.object({ projectId, userId: z.string().uuid() }).strict().parse(req.body);
+    return githubAccess.track(
+      githubAccess.refresh(actor(req), id(req), body.projectId, body.userId),
+    );
+  });
+  app.post("/api/team/spaces/:id/github-accept", socialReadLimit, async (req) => {
+    const body = z.object({ projectId }).strict().parse(req.body);
+    return githubAccess.track(githubAccess.accept(actor(req), id(req), body.projectId));
+  });
   app.post("/api/team/spaces/:id/projects/:projectId/chat", async (req) => {
     const user = actor(req);
     const params = z.object({ id: z.string().uuid(), projectId }).parse(req.params);
@@ -556,4 +602,5 @@ export function registerCollaborationSpaces(
   app.post("/api/team/spaces/:id/leave", (req) =>
     spaces.leave(actor(req), id(req), key(req), z.object({ revision }).strict().parse(req.body)),
   );
+  return githubAccess;
 }

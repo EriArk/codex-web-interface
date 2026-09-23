@@ -76,7 +76,7 @@ export function SpaceInvite({
               >
                 {space.kind !== "project" && <option value="">Без доступа</option>}
                 <option value="collaborate">Совместная работа</option>
-                <option value="direct">Прямая работа</option>
+                <option value="direct">Полный доступ</option>
               </select>
             </label>
           ))}

@@ -364,6 +364,7 @@ export class TeamGitHub {
     return { title: d.bridge.title, text: text.slice(0, 16000), truncated: text.length > 16000 };
   }
   private target(actor: string, projectId: string, request: TeamGitHubPrepare) {
+    if (request.input.kind === "accept-invitation") throw changed();
     if (!["invite", "remove", "request-review"].includes(request.input.kind)) return;
     this.projects.access(
       actor,

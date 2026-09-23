@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { pageWorkspace } from "./accountStorage";
 import { Icon } from "./icons";
 import { SpaceProjectRules } from "./ProjectRulesEditor";
+import { SpaceGitHubAccessPanel } from "./SpaceGitHubAccess";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import type { Project } from "./types";
 import type { SpacesController } from "./useCollaborationSpaces";
@@ -11,7 +12,7 @@ const labels = {
   owner: "Владелец",
   none: "Доступ не предоставлен",
   collaborate: "Совместная работа",
-  direct: "Прямая работа",
+  direct: "Полный доступ",
 };
 export function SpaceProjects({
   spaces,
@@ -62,6 +63,12 @@ export function SpaceProjects({
   };
   return (
     <section className="space-project-settings space-form" aria-label="Проекты и доступы">
+      <SpaceGitHubAccessPanel
+        spaceId={space.id}
+        revision={space.revision}
+        projects={projects}
+        names={[...space.projects, ...space.members, ...space.pending]}
+      />
       {space.projects.map((p) => (
         <details className="space-project-card" key={p.id}>
           <summary>
@@ -100,7 +107,7 @@ export function SpaceProjects({
                             Доступ не предоставлен
                           </option>
                           <option value="collaborate">Совместная работа</option>
-                          <option value="direct">Прямая работа</option>
+                          <option value="direct">Полный доступ</option>
                         </select>
                       </label>
                       {p.requests.includes(m.id) && (
@@ -216,7 +223,7 @@ export function SpaceProjects({
                 onChange={(e) => setAccess(e.target.value as CollaborationAccess)}
               >
                 <option value="collaborate">Совместная работа</option>
-                <option value="direct">Прямая работа</option>
+                <option value="direct">Полный доступ</option>
               </select>
             </label>
           )}

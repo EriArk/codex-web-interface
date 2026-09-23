@@ -26,7 +26,7 @@ type Invitation = {
   recommendations?: ProjectRules;
   explicitGrants?: boolean;
 };
-type Space = {
+export type Space = {
   id: string;
   title: string;
   kind: CollaborationKind;
@@ -42,6 +42,7 @@ const conflict = () =>
 
 /** Small, atomic metadata aggregate. Personal runtime state is never moved or copied. */
 export class CollaborationSpaces {
+  onSave?: (space: Space, previous: Space | null) => void;
   readonly chat: CollaborationChat;
   readonly social: ActivitySocial;
   constructor(readonly team: TeamProjects) {
@@ -64,6 +65,9 @@ export class CollaborationSpaces {
     return JSON.parse(String(row.data));
   }
   private save(space: Space) {
+    const old = this.team.db
+      .prepare("SELECT data FROM collaboration_spaces WHERE id=?")
+      .get(space.id);
     this.team.db
       .prepare(
         "INSERT INTO collaboration_spaces VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
@@ -72,6 +76,7 @@ export class CollaborationSpaces {
     this.team.db.prepare("DELETE FROM collaboration_space_people WHERE spaceId=?").run(space.id);
     for (const id of new Set([...space.members, ...space.invitations.map((i) => i.userId)]))
       this.team.db.prepare("INSERT INTO collaboration_space_people VALUES(?,?)").run(space.id, id);
+    this.onSave?.(space, old ? JSON.parse(String(old.data)) : null);
   }
   private all(actor: string): Space[] {
     this.team.registry.active(actor);

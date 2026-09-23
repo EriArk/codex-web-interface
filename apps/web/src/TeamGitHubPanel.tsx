@@ -59,6 +59,7 @@ const names = {
   invite: "Пригласить в репозиторий",
   remove: "Отозвать доступ к репозиторию",
   "request-review": "Запросить ревью PR",
+  "accept-invitation": "Принять приглашение GitHub",
 };
 const states = {
   preparing: "Подготовка",

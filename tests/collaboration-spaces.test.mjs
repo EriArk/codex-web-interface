@@ -8,11 +8,252 @@ import test from "node:test";
 import { collaborationPolicy } from "../apps/hub/dist/collaboration-policy.js";
 import { registerCollaborationSpaces } from "../apps/hub/dist/collaboration-routes.js";
 import { CollaborationSpaces } from "../apps/hub/dist/collaboration-spaces.js";
+import { SpaceGitHubAccess } from "../apps/hub/dist/space-github-access.js";
 import { Store } from "../apps/hub/dist/store.js";
 import { TeamProjects } from "../apps/hub/dist/team-projects.js";
 import { TeamStore } from "../apps/hub/dist/team-store.js";
 import Fastify from "../apps/hub/node_modules/fastify/fastify.js";
 import { configSchema } from "../packages/shared/dist/index.js";
+
+async function githubFixture(t) {
+  const f = await fixture(t),
+    receipts = new Map(),
+    calls = [];
+  let drop = false,
+    beforeApply = null;
+  const identities = new Map([
+    [f.owner, { id: 11, login: "Owner" }],
+    [f.friend, { id: 22, login: "Friend" }],
+  ]);
+  const personal = async (user) => ({
+    runtime: {
+      sessions: {
+        project: (id) => ({
+          id,
+          name: id,
+          machineId: user,
+          workingDirectory: `/tmp/${user}/${id}`,
+        }),
+        catalog: {
+          machine: () => ({ id: user, name: user, type: "local-linux", allowedRoots: ["/tmp"] }),
+        },
+      },
+      projectWork: { context: { assertProject() {} } },
+    },
+  });
+  const probe = async (machine, root, req) => {
+    calls.push({ user: machine.id, root, ...req });
+    const snapshot = {
+      repository: req.repository,
+      repositoryId: 100,
+      identity: identities.get(machine.id),
+      access: machine.id === f.owner ? "admin" : "read",
+      issues: true,
+      checkedAt: Date.now(),
+    };
+    if (req.op === "observe") return { ...snapshot, query: req.query };
+    if (req.op === "status") return receipts.get(req.id) ?? null;
+    if (req.op === "prepare") {
+      if (beforeApply) {
+        const cb = beforeApply;
+        beforeApply = null;
+        cb();
+      }
+      if (!receipts.has(req.id))
+        receipts.set(req.id, {
+          id: req.id,
+          state: "prepared",
+          input: req.input,
+          snapshot,
+          fingerprint: "a".repeat(64),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      return receipts.get(req.id);
+    }
+    const r = receipts.get(req.id);
+    r.state = "completed";
+    r.result = { state: r.input.kind === "invite" ? "pending" : "accepted" };
+    if (drop) {
+      drop = false;
+      throw Error("lost acknowledgement");
+    }
+    return r;
+  };
+  let service = new SpaceGitHubAccess(f.spaces, personal, probe);
+  const settle = async () => {
+    for (let n = 0; n < 20; n++) {
+      await new Promise((r) => setImmediate(r));
+      if (!service.task) return;
+    }
+    throw Error("outbox did not settle");
+  };
+  return {
+    ...f,
+    calls,
+    identities,
+    receipts,
+    settle,
+    get service() {
+      return service;
+    },
+    drop() {
+      drop = true;
+    },
+    race(cb) {
+      beforeApply = cb;
+    },
+    async restart() {
+      await service.close();
+      service = new SpaceGitHubAccess(f.spaces, personal, probe);
+      service.kick();
+      await settle();
+    },
+  };
+}
+
+test("full Space access queues Write, waits for self-verified GitHub and accepts internally without duplicate grants", async (t) => {
+  const f = await githubFixture(t);
+  try {
+    const { id } = f.spaces.create(
+      f.owner,
+      randomUUID(),
+      { ...f.input(), access: "direct" },
+      f.project("altar"),
+    );
+    await f.settle();
+    assert.equal(f.service.view(f.owner, id).grants[0].state, "waiting-account");
+    assert.equal(f.calls.length, 0);
+    assert.throws(() => f.service.view(f.stranger, id));
+    const preview = await f.service.connect(f.friend, "own-project", "example/world");
+    assert.equal(preview.confirmed, false);
+    assert.equal(f.service.view(f.friend, id).identity, null);
+    await assert.rejects(
+      f.service.connect(f.friend, "own-project", "example/world", { id: 99, login: "Friend" }),
+    );
+    await f.service.connect(f.friend, "own-project", "example/world", preview.identity);
+    await f.settle();
+    const grant = f.service.view(f.friend, id).grants[0];
+    assert.equal(grant.state, "pending");
+    const apply = f.calls.filter((c) => c.op === "apply");
+    assert.equal(apply.length, 1);
+    assert.equal(apply[0].user, f.owner);
+    const prepared = f.calls.find((c) => c.op === "prepare");
+    assert.deepEqual(prepared.input, {
+      kind: "invite",
+      login: "Friend",
+      permission: "push",
+      targetId: 22,
+    });
+    for (let i = 0; i < 5; i++) {
+      f.spaces.catalog(f.owner);
+      f.service.view(f.friend, id);
+    }
+    assert.equal(f.calls.filter((c) => c.op === "apply").length, 1);
+    await assert.rejects(f.service.accept(f.stranger, id, grant.projectId));
+    const accepted = await f.service.accept(f.friend, id, grant.projectId);
+    assert.equal(accepted.grants[0].state, "accepted");
+    await f.service.accept(f.friend, id, grant.projectId);
+    assert.equal(f.calls.filter((c) => c.op === "apply").length, 2);
+    assert.equal(f.calls.filter((c) => c.op === "apply")[1].user, f.friend);
+    const publicView = JSON.stringify(accepted);
+    assert(!publicView.includes("/tmp/"));
+    assert(!publicView.includes("own-project"));
+  } finally {
+    await f.service.close();
+  }
+});
+
+test("Space Write recovery preserves receipts across restart, changed grants and account rebindings", async (t) => {
+  const f = await githubFixture(t);
+  try {
+    await f.service.connect(f.friend, "own-project", "example/world", f.identities.get(f.friend));
+    f.drop();
+    const { id } = f.spaces.create(
+      f.owner,
+      randomUUID(),
+      { ...f.input(), access: "direct" },
+      f.project("altar"),
+    );
+    await f.settle();
+    assert.equal(f.service.view(f.owner, id).grants[0].state, "unknown");
+    assert(f.service.busy());
+    await f.restart();
+    const grant = f.service.view(f.owner, id).grants[0];
+    assert.equal(grant.state, "pending");
+    assert.equal(f.calls.filter((c) => c.op === "apply").length, 1);
+    f.drop();
+    await assert.rejects(f.service.accept(f.friend, id, grant.projectId));
+    await f.restart();
+    assert.equal(f.service.view(f.friend, id).grants[0].state, "accepted");
+    assert.equal(f.calls.filter((c) => c.op === "apply").length, 2);
+    f.spaces.grant(f.owner, id, randomUUID(), {
+      revision: 1,
+      projectId: grant.projectId,
+      userId: f.friend,
+      access: "collaborate",
+    });
+    f.race(() => {
+      f.identities.set(f.friend, { id: 99, login: "Different" });
+    });
+    f.spaces.grant(f.owner, id, randomUUID(), {
+      revision: 2,
+      projectId: grant.projectId,
+      userId: f.friend,
+      access: "direct",
+    });
+    await f.settle();
+    assert.equal(f.service.view(f.owner, id).grants[0].state, "failed");
+    assert.equal(f.calls.filter((c) => c.op === "apply").length, 2);
+  } finally {
+    await f.service.close();
+  }
+});
+
+test("Space permission revocation during preparation blocks dispatch and metadata rollback leaves no outbox job", async (t) => {
+  const f = await githubFixture(t);
+  try {
+    await f.service.connect(f.friend, "own-project", "example/world", f.identities.get(f.friend));
+    const { id } = f.spaces.create(f.owner, randomUUID(), f.input(), f.project("altar"));
+    const projectId = f.spaces.catalog(f.owner).spaces[0].projects[0].id;
+    f.race(() =>
+      f.spaces.grant(f.owner, id, randomUUID(), {
+        revision: 2,
+        projectId,
+        userId: f.friend,
+        access: "collaborate",
+      }),
+    );
+    f.spaces.grant(f.owner, id, randomUUID(), {
+      revision: 1,
+      projectId,
+      userId: f.friend,
+      access: "direct",
+    });
+    await f.settle();
+    assert.equal(f.calls.filter((c) => c.op === "apply").length, 0);
+    assert.equal(f.service.view(f.friend, id).grants.length, 0);
+    assert.throws(() =>
+      f.spaces.grant(f.stranger, id, randomUUID(), {
+        revision: 3,
+        projectId,
+        userId: f.friend,
+        access: "direct",
+      }),
+    );
+    assert.throws(() =>
+      f.spaces.create(
+        f.owner,
+        randomUUID(),
+        { ...f.input(), access: "direct" },
+        f.project("altar"),
+      ),
+    );
+    assert.equal(f.team.db.prepare("SELECT COUNT(*) n FROM space_github_grants").get().n, 1);
+  } finally {
+    await f.service.close();
+  }
+});
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "cw-spaces-"));

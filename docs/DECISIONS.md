@@ -2,6 +2,10 @@
 
 This file records decisions that should be treated as fixed unless the owner explicitly changes them.
 
+## 2026-09-23 — Full Shared access includes GitHub Write
+
+The owner explicitly selected **Write**, not Admin. New `direct` grants automatically issue or upgrade repository access using the owning participant's machine account and the recipient's self-verified numeric GitHub identity. Preserve stronger roles; accept required invitations inside the web app through the recipient's account. Durable intents and machine receipts prevent duplicate writes after lost responses. Existing grants synchronize on an explicit owner action. Local removal does not silently revoke independent GitHub rights. See [implementation and verification](SPACE_GITHUB_WRITE.md).
+
 ## 2026-09-23 — Activity-based collaboration and confirmed session boundaries
 
 The owner approved the sequence in [Roadmap](ROADMAP.md#current-owner-approved-sequence-2026-09-23): review existing unfinished work, deliver a useful Activity slice, add exact evidence handoff to Project GPT, then reactions/replies/attention and Intake/Issue Drawer. Before each substantial session recommend the exact reasoning selector level and wait for the owner's confirmation that it is set.

@@ -15,6 +15,7 @@ import { Icon } from "./icons";
 import { emptyProjectRules, ProjectRulesEditor } from "./ProjectRulesEditor";
 import { SpaceActivity } from "./SpaceActivity";
 import { SpaceChat } from "./SpaceChat";
+import { SpaceGitHubAccessPanel } from "./SpaceGitHubAccess";
 import { SpaceInvite } from "./SpaceInvite";
 import { SpaceProjectOverview } from "./SpaceProjectOverview";
 import { SpaceProjects } from "./SpaceProjects";
@@ -29,7 +30,7 @@ const accessLabels = {
   none: "Доступ не предоставлен",
   owner: "Владелец",
   collaborate: "Совместная работа",
-  direct: "Прямая работа",
+  direct: "Полный доступ",
 };
 export function SpaceModeControl({ spaces }: { spaces: SpacesController }) {
   if (!spaces.enabled) return null;
@@ -484,7 +485,7 @@ function AccessPicker({
         onChange={(e) => onChange(e.target.value as CollaborationAccess)}
       >
         <option value="collaborate">Совместная работа</option>
-        <option value="direct">Прямая работа</option>
+        <option value="direct">Полный доступ</option>
       </select>
     </label>
   );
@@ -660,6 +661,14 @@ function SpaceWizard({
                 {invitation.project.repository.replace("https://github.com/", "")}.
               </p>
             )}
+            {invitation && (
+              <SpaceGitHubAccessPanel
+                spaceId={invitation.spaceId}
+                revision={invitation.revision}
+                projects={projects}
+                names={invitation.projects ?? []}
+              />
+            )}
             <button type="button" className="secondary" onClick={onNewProject}>
               <Icon name="plus" size={16} />
               Создать проект
@@ -711,8 +720,8 @@ function SpaceWizard({
               </p>
             ))}
             <p className="muted">
-              Совместная работа — рабочие ветки и PR. Прямая работа — разрешённые ветки напрямую.
-              Права GitHub остаются верхней границей доступа.
+              Совместная работа — рабочие ветки и PR. Полный доступ — GitHub Write и разрешённые
+              ветки напрямую. Права GitHub остаются верхней границей доступа.
             </p>
             {!invitation && kind === "space" && (
               <p className="muted">Участник сам подтвердит доступ к своему проекту.</p>
