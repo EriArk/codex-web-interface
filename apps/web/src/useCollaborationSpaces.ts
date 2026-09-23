@@ -4,6 +4,7 @@ import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage"
 import { api } from "./api";
 
 export type SpaceWindow =
+  | { kind: "brainstorm"; id: string }
   | { kind: "create" | "invitations" }
   | { kind: "project"; id: string; projectId: string }
   | { kind: "activity-reply"; id: string; seq: number }

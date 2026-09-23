@@ -33,12 +33,22 @@ function loadDraft(name: string): Draft {
 export function SpaceChat({
   space,
   spaces,
+  endpoint,
+  visible = true,
+  readOnly = false,
+  onFile,
 }: {
-  space: CollaborationSpace;
-  spaces: SpacesController;
+  space: Pick<CollaborationSpace, "id">;
+  spaces: Pick<SpacesController, "open" | "refresh">;
+  endpoint?: string;
+  visible?: boolean;
+  readOnly?: boolean;
+  onFile?: (file: SpaceChatFile) => void;
 }) {
-  const path = `/team/spaces/${space.id}/chat`,
-    draftName = `space-chat-draft:${space.id}`;
+  const path = endpoint ?? `/team/spaces/${space.id}/chat`,
+    draftName = `space-chat-draft:${endpoint ?? space.id}`;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const [draft, setDraft] = useState(() => loadDraft(draftName)),
     draftRef = useRef(draft);
   const [messages, setMessages] = useState<SpaceChatMessage[]>([]);
@@ -88,7 +98,13 @@ export function SpaceChat({
     [save],
   );
   const markRead = useCallback(() => {
-    if (!live.current || document.hidden || !stick.current || fetched.current <= read.current)
+    if (
+      !visibleRef.current ||
+      !live.current ||
+      document.hidden ||
+      !stick.current ||
+      fetched.current <= read.current
+    )
       return;
     const seq = fetched.current;
     read.current = seq;
@@ -160,7 +176,12 @@ export function SpaceChat({
     markRead();
   }, [messages, markRead]);
   const send = async () => {
-    if (locked.current || (!draftRef.current.text.trim() && !draftRef.current.files.length)) return;
+    if (
+      readOnly ||
+      locked.current ||
+      (!draftRef.current.text.trim() && !draftRef.current.files.length)
+    )
+      return;
     locked.current = true;
     setBusy(true);
     setError("");
@@ -182,7 +203,7 @@ export function SpaceChat({
     }
   };
   const upload = async (files: File[]) => {
-    if (locked.current || !files.length) return;
+    if (readOnly || locked.current || !files.length) return;
     if (
       files.length + draftRef.current.files.length > 8 ||
       files.some((f) => f.size > 32 * 1024 * 1024)
@@ -255,7 +276,7 @@ export function SpaceChat({
         )}
         {!ready && <p className="nav-empty">Загружаем сообщения…</p>}
         {ready && !messages.length && (
-          <p className="nav-empty">Обсуждайте здесь работу пространства.</p>
+          <p className="nav-empty">Обсуждайте идеи и делитесь материалами.</p>
         )}
         {messages.map((m) => (
           <article
@@ -302,6 +323,14 @@ export function SpaceChat({
                 target="_blank"
                 rel="noopener noreferrer"
                 download={f.name}
+                onClick={
+                  onFile
+                    ? (e) => {
+                        e.preventDefault();
+                        onFile(f);
+                      }
+                    : undefined
+                }
               >
                 {f.mime.startsWith("image/") ? (
                   <img
@@ -326,6 +355,7 @@ export function SpaceChat({
       </section>
       <form
         className="space-chat-composer"
+        hidden={readOnly}
         onSubmit={(e) => {
           e.preventDefault();
           void send();

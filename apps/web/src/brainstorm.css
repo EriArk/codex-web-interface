@@ -1,0 +1,369 @@
+:root[data-theme] dialog.brainstorm-dialog.workspace-window[open] {
+  width: min(640px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(var(--app-height, 100dvh) - 24px);
+  height: auto;
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  bottom: auto;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--window-shell);
+}
+:root[data-theme] dialog.brainstorm-large.workspace-window[open] {
+  width: min(1240px, calc(100vw - 24px));
+  height: calc(var(--app-height, 100dvh) - 24px);
+}
+:root[data-theme] dialog.brainstorm-dialog.workspace-window > .brainstorm-heading {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.brainstorm-heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+  max-height: 2.5em;
+  overflow: auto;
+}
+.brainstorm-heading button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.brainstorm-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.brainstorm-tabs,
+.brainstorm-toolbar,
+.brainstorm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.brainstorm-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 4px 12px 10px;
+}
+.brainstorm-tabs button {
+  min-height: 44px;
+  min-width: 0;
+  padding: 6px;
+}
+.brainstorm-tabs button[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 -3px var(--accent);
+}
+.brainstorm-pane {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.brainstorm-pane[hidden],
+.brainstorm-dialog [hidden] {
+  display: none !important;
+}
+.brainstorm-toolbar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--window-edge);
+}
+.brainstorm-toolbar button,
+.brainstorm-projects button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.brainstorm-board-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.brainstorm-board {
+  position: relative;
+  min-width: 1060px;
+  background-image: radial-gradient(var(--window-edge) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.brainstorm-card {
+  position: absolute;
+  padding: 12px;
+  border: 1px solid var(--window-edge);
+  border-radius: 12px;
+  background: var(--card-material, var(--surface));
+  box-shadow: var(--card-shadow, none);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow: hidden;
+}
+.brainstorm-card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
+}
+.brainstorm-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brainstorm-card small {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.brainstorm-card-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  max-height: 120px;
+}
+.brainstorm-card svg[viewBox="0 0 1000 600"] {
+  width: 100%;
+  max-height: 140px;
+}
+.brainstorm-empty {
+  max-width: 470px;
+  padding: 40px 24px;
+  color: var(--muted);
+}
+.brainstorm-empty h3 {
+  color: var(--ink);
+}
+.brainstorm-form {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
+  min-height: 0;
+}
+.brainstorm-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.brainstorm-form input:not([type="checkbox"]),
+.brainstorm-form select,
+.brainstorm-form textarea {
+  width: 100%;
+  min-width: 0;
+}
+.brainstorm-form .brainstorm-check {
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.brainstorm-check input {
+  flex: 0 0 auto;
+}
+.brainstorm-form p {
+  margin: 0;
+}
+.brainstorm-form details > summary {
+  padding-block: 10px;
+  cursor: pointer;
+}
+.brainstorm-participant {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
+  padding-block: 8px;
+}
+.brainstorm-participant span {
+  grid-column: 1 / -1;
+}
+.brainstorm-drawing {
+  touch-action: none;
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  border: 1px solid var(--window-edge);
+  background: var(--surface);
+  border-radius: 8px;
+}
+.brainstorm-private {
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.brainstorm-gpt > .gpt-workspace {
+  flex: 1;
+  min-height: 0;
+}
+.brainstorm-catalog {
+  padding: 0 8px;
+}
+.brainstorm-room-entry {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.brainstorm-room-entry strong {
+  overflow-wrap: anywhere;
+}
+.brainstorm-room-entry small {
+  color: var(--muted);
+}
+.brainstorm-projects {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  padding: 8px 12px;
+}
+@media (max-width: 700px) {
+  :root[data-theme] dialog.brainstorm-dialog.workspace-window[open] {
+    width: calc(100vw - 16px);
+    max-height: calc(var(--app-height, 100dvh) - 16px);
+  }
+  :root[data-theme] dialog.brainstorm-large.workspace-window[open] {
+    height: calc(var(--app-height, 100dvh) - 16px);
+  }
+  .brainstorm-heading {
+    padding: 8px 10px;
+  }
+  .brainstorm-board {
+    min-width: 0;
+    min-height: 0 !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .brainstorm-card {
+    position: static;
+    width: 100% !important;
+    max-height: 330px;
+  }
+  .brainstorm-empty {
+    padding: 20px 8px;
+  }
+  .brainstorm-form {
+    padding: 12px;
+  }
+}
+
+.brainstorm-image {
+  padding: 0;
+  min-height: 70px;
+  overflow: hidden;
+}
+.brainstorm-image img {
+  display: block;
+  width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+}
+.brainstorm-voice {
+  padding: 4px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85em;
+}
+.brainstorm-voice-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px;
+  gap: 6px;
+}
+.brainstorm-voice button {
+  min-height: 44px;
+  padding: 6px;
+}
+
+.brainstorm-card-move {
+  padding: 4px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: grab;
+  touch-action: none;
+  min-height: 44px;
+}
+.brainstorm-card-move:active {
+  cursor: grabbing;
+}
+@media (max-width: 700px) {
+  .brainstorm-card-move {
+    touch-action: auto;
+    cursor: default;
+  }
+}
+
+:root[data-theme] .brainstorm-dialog > .brainstorm-heading {
+  min-height: 52px;
+  padding: 6px 10px;
+}
+.brainstorm-context {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 44px;
+  color: var(--window-ink);
+}
+.brainstorm-context > .icon-button {
+  grid-column: 3;
+  grid-row: 1;
+  color: inherit;
+}
+.brainstorm-context > span {
+  grid-column: 1;
+  grid-row: 1;
+}
+.brainstorm-context > .brainstorm-voice {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 0;
+}
+.brainstorm-context > .brainstorm-voice:has(.brainstorm-voice-controls) {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.brainstorm-pane {
+  background: var(--window-screen);
+  color: var(--ink);
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  box-shadow: var(--window-screen-shadow);
+}
+:root .brainstorm-dialog .brainstorm-board-scroll {
+  padding: 0;
+}
+.brainstorm-heading h2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}

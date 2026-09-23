@@ -75,6 +75,7 @@ export class ProjectGpts {
       CREATE TABLE IF NOT EXISTS project_gpt_sources (projectId TEXT PRIMARY KEY, root TEXT NOT NULL, repository TEXT, checkedAt INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS project_gpt_sends_scope ON project_gpt_sends(projectId,revision);
       CREATE TABLE IF NOT EXISTS project_gpt_send_authority (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS project_gpt_handoffs(projectId TEXT PRIMARY KEY,value TEXT NOT NULL);
     `);
     this.bindings = new ConversationBindings(sessions.store.db, ownerUserId);
     const db = sessions.store.db;
@@ -150,6 +151,9 @@ export class ProjectGpts {
         repository: source?.repository ?? null,
         brief,
         collaboration: this.sharedContext?.(id) ?? null,
+        brainstorm:
+          db.prepare("SELECT value FROM project_gpt_handoffs WHERE projectId=?").get(id)?.value ??
+          null,
       }),
       ...rules.enabled.map((r) => projectRuleLabels[r]),
       rules.custom,
@@ -183,6 +187,19 @@ export class ProjectGpts {
     } finally {
       this.readingRepository.delete(id);
     }
+  }
+  handoff(id: string, value: unknown) {
+    this.sessions.authorizeExecution();
+    this.project(id);
+    const db = this.sessions.store.db,
+      data = JSON.stringify(value);
+    const existing = db.prepare("SELECT value FROM project_gpt_handoffs WHERE projectId=?").get(id);
+    if (existing && existing.value !== data)
+      throw fail("PROJECT_HANDOFF_CHANGED", "Этот проект уже получил другой снимок комнаты.");
+    if (!existing && this.get(id).nativeId)
+      throw fail("PROJECT_GPT_EXISTS", "Для идеи нужен отдельный новый проект и чат.");
+    db.prepare("INSERT OR IGNORE INTO project_gpt_handoffs VALUES(?,?)").run(id, data);
+    return this.get(id);
   }
   bind(id: string, chat: string | null, expected: number) {
     this.sessions.authorizeExecution();

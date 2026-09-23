@@ -192,6 +192,8 @@ export function GptWorkspace({
   activityHandoff,
   onActivityClear,
   projectChat,
+  roomEndpoint,
+  onPublishToRoom,
   onProjectChatChange,
   notificationTarget,
   onNotificationHandled,
@@ -209,6 +211,8 @@ export function GptWorkspace({
   activityHandoff?: import("@codex-web/shared").ActivityGptHandoff;
   onActivityClear?: () => void;
   projectChat?: ProjectGpt;
+  roomEndpoint?: string;
+  onPublishToRoom?: (text: string) => void;
   onProjectChatChange?: (value: ProjectGpt) => void;
   onCodex: () => void;
   onCodexProject?: (id: string, remote: boolean) => void;
@@ -306,7 +310,7 @@ export function GptWorkspace({
     skipDraftSave = useRef(false),
     navigationVersion = useRef(0);
   const draftScope = projectChat
-    ? `project:${projectChat.projectId}:${projectChat.revision}`
+    ? `${roomEndpoint ? "brainstorm" : "project"}:${projectChat.projectId}:${projectChat.revision}`
     : selected || (createdJob ? "job:" + createdJob : "");
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
@@ -334,7 +338,7 @@ export function GptWorkspace({
       if (selectedRef.current === id) void history(id, undefined, true).catch(() => {});
     },
     (id) => {
-      if (projectChat && id !== selectedRef.current) {
+      if (!roomEndpoint && projectChat && id !== selectedRef.current) {
         void api<ProjectGpt>(`/projects/${encodeURIComponent(projectChat.projectId)}/gpt`, {
           method: "PUT",
           body: { nativeId: id || null, revision: projectChat.revision },
@@ -830,7 +834,7 @@ export function GptWorkspace({
         activityHandoff
           ? `/team/activity-handoffs/${encodeURIComponent(activityHandoff.id)}/send`
           : projectChat
-            ? `/projects/${encodeURIComponent(projectChat.projectId)}/gpt/send`
+            ? `${roomEndpoint ?? `/projects/${encodeURIComponent(projectChat.projectId)}/gpt`}/send`
             : "/gpt/send",
         {
           method: "POST",
@@ -1142,7 +1146,7 @@ export function GptWorkspace({
             client: "gpt" as const,
             threadId: job.nativeId,
             messageId: job.id,
-            projectId: projectChat?.projectId,
+            projectId: roomEndpoint ? undefined : projectChat?.projectId,
           }
         : undefined;
       const nativeUser = messages.some(
@@ -1195,7 +1199,7 @@ export function GptWorkspace({
                       <IssueCollect
                         text={job.answer}
                         source={issueSource}
-                        targetId={projectChat?.projectId}
+                        targetId={roomEndpoint ? undefined : projectChat?.projectId}
                       />
                     )}
                     <CopyButton text={job.answer} />
@@ -1847,7 +1851,17 @@ export function GptWorkspace({
                       <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
                       <b>{message.role === "user" ? "Вы" : "GPT"}</b>
                       <span className="message-actions">
-                        {nativeOperations.button(message, !!active || busy)}
+                        {!roomEndpoint && nativeOperations.button(message, !!active || busy)}
+                        {onPublishToRoom && message.role === "assistant" && message.text.trim() && (
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label="Предложить на общую доску"
+                            onClick={() => onPublishToRoom(message.text)}
+                          >
+                            <Icon name="plus" size={17} />
+                          </button>
+                        )}
                         {message.role === "assistant" && (
                           <SpeechButton id={`${speechScope}:${message.id}`} text={message.text} />
                         )}
@@ -1880,7 +1894,8 @@ export function GptWorkspace({
                             <Icon name="file" size={17} />
                           </button>
                         )}
-                        {message.role === "assistant" &&
+                        {!roomEndpoint &&
+                          message.role === "assistant" &&
                           message.complete !== false &&
                           message.phase !== "commentary" && (
                             <IssueCollect
@@ -1889,9 +1904,9 @@ export function GptWorkspace({
                                 client: "gpt",
                                 threadId: selected,
                                 messageId: message.id,
-                                projectId: projectChat?.projectId,
+                                projectId: roomEndpoint ? undefined : projectChat?.projectId,
                               }}
-                              targetId={projectChat?.projectId}
+                              targetId={roomEndpoint ? undefined : projectChat?.projectId}
                             />
                           )}
                         <CopyButton text={message.text} />
@@ -1901,6 +1916,7 @@ export function GptWorkspace({
                       <Text
                         value={message.text}
                         issueSource={
+                          !roomEndpoint &&
                           message.role === "assistant" &&
                           message.complete !== false &&
                           message.phase !== "commentary"
@@ -1908,7 +1924,7 @@ export function GptWorkspace({
                                 client: "gpt",
                                 threadId: selected,
                                 messageId: message.id,
-                                projectId: projectChat?.projectId,
+                                projectId: roomEndpoint ? undefined : projectChat?.projectId,
                               }
                             : undefined
                         }

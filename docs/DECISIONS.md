@@ -2,6 +2,10 @@
 
 This file records decisions that should be treated as fixed unless the owner explicitly changes them.
 
+## 2026-09-24 — Brainstorm before a repository
+
+The owner's continuation approves the next Brainstorm stage after GPT incremental history. Rooms are visible to authenticated installation users; following is not an ACL. A common board/chat and per-user private room GPT precede any Project or GitHub choice. Conversion uses an immutable selected snapshot and the ordinary project/invitation workflows. Private summaries are excluded from the common export and other users' GPT context. The room remains available. The bounded voice baseline uses the existing authenticated Hub, no extra PC/public port and no recording. See [implemented scope and remaining acceptance](BRAINSTORM.md).
+
 ## 2026-09-23 — Full Shared access includes GitHub Write
 
 The owner explicitly selected **Write**, not Admin. New `direct` grants automatically issue or upgrade repository access using the owning participant's machine account and the recipient's self-verified numeric GitHub identity. Preserve stronger roles; accept required invitations inside the web app through the recipient's account. Durable intents and machine receipts prevent duplicate writes after lost responses. Existing grants synchronize on an explicit owner action. Local removal does not silently revoke independent GitHub rights. See [implementation and verification](SPACE_GITHUB_WRITE.md).

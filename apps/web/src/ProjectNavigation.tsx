@@ -8,6 +8,7 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
+import { BrainstormCards } from "./Brainstorm";
 import { SpaceBell, SpaceCards, SpaceModeControl } from "./CollaborationSpaces";
 import { EntityMenu } from "./EntityMenu";
 import { Icon } from "./icons";
@@ -343,7 +344,7 @@ export function ProjectNavigation({
       <div className="nav-scroll">
         {spaceMode && sharedSection === "spaces" && <SpaceCards spaces={spaces} query={query} />}
         {spaceMode && sharedSection === "brainstorm" && (
-          <p className="nav-empty">Здесь появятся комнаты для совместного обсуждения идей.</p>
+          <BrainstormCards spaces={spaces} query={query} />
         )}
         {(!spaceMode || (selectedSpace && sharedSection === "spaces")) && (
           <section className="nav-projects">

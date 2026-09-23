@@ -11,6 +11,10 @@ import Fastify, { type FastifyRequest } from "fastify";
 import { ZodError, z } from "zod";
 import { createApp } from "./app.js";
 import { tokenHash } from "./auth.js";
+import { BrainstormRooms } from "./brainstorm.js";
+import { BrainstormGpts } from "./brainstorm-gpt.js";
+import { registerBrainstorm } from "./brainstorm-routes.js";
+import { BrainstormVoice } from "./brainstorm-voice.js";
 import { collaborationPolicy } from "./collaboration-policy.js";
 import { registerCollaborationSpaces } from "./collaboration-routes.js";
 import { CollaborationSpaces } from "./collaboration-spaces.js";
@@ -127,6 +131,17 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   const teamGpt = new TeamGpt(config, registry);
   const teamProjects = new TeamProjects(registry);
   const collaboration = new CollaborationSpaces(teamProjects);
+  const brainstorm = new BrainstormRooms(teamProjects);
+  const brainstormVoice = new BrainstormVoice(brainstorm);
+  const roomGpts = new WeakMap<PersonalApp, BrainstormGpts>();
+  const personalRoomGpt = (actor: string, runtime: PersonalApp) => {
+    let service = roomGpts.get(runtime);
+    if (!service) {
+      service = new BrainstormGpts(actor, brainstorm, runtime);
+      roomGpts.set(runtime, service);
+    }
+    return service;
+  };
   const teamLinks = new TeamLinks(teamProjects);
   const auth = new TeamAuth(config, ownerStore, registry);
   const app = Fastify({
@@ -242,6 +257,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
                 );
             },
           });
+          personalRoomGpt(userId, runtime);
           attachTeamRelayTools(
             userId,
             runtime,
@@ -500,6 +516,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     return { ok: true };
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
+  registerBrainstorm(app, brainstorm, collaboration, actor, personal, personalRoomGpt);
   registerTeamProjects(app, teamProjects, actor, personal);
   registerTechnicalPreviews(app, auth, true);
   const spaceGitHubAccess = registerCollaborationSpaces(
@@ -820,7 +837,11 @@ export async function createTeamHub(config: HubConfig, options: Options) {
       registrationEnabled: config.team?.registrationEnabled !== false,
     }));
     const storedWork = () => {
-      let work = activeMutations + (teamGitHub.busy() ? 1 : 0) + (spaceGitHubAccess.busy() ? 1 : 0);
+      let work =
+        brainstormVoice.active +
+        activeMutations +
+        (teamGitHub.busy() ? 1 : 0) +
+        (spaceGitHubAccess.busy() ? 1 : 0);
       work += Number(
         registry.db
           .prepare(
@@ -985,6 +1006,22 @@ export async function createTeamHub(config: HubConfig, options: Options) {
           session = registry.session(hash);
         const expected = new URL(req.url, config.hub.publicBaseUrl).searchParams.get("workspace");
         if (expected && expected !== session.user.id) throw new Error("WORKSPACE_CHANGED");
+        const voiceRoom = /^\/api\/team\/brainstorm\/([a-f0-9-]{36})\/voice$/.exec(
+          new URL(req.url, config.hub.publicBaseUrl).pathname,
+        )?.[1];
+        if (voiceRoom) {
+          if (expected !== session.user.id || maintenanceUntil > Date.now()) throw Error("DENIED");
+          brainstormVoice.upgrade(req, socket, head, voiceRoom, session.user.id, () => {
+            registry.session(hash);
+          });
+          track(
+            session.user.id,
+            hash,
+            () => socket.destroy(),
+            (done) => socket.once("close", done),
+          );
+          return;
+        }
         const target = await personal(session.user.id);
         const cancel = proxyPrivateSocket(req, socket, head, target.socket, () => {
           registry.session(hash);
@@ -1012,6 +1049,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   }
   app.addHook("onClose", async () => {
     closing = true;
+    brainstormVoice.close();
     await teamBridgeRuns.close();
     await teamGitHub.close();
     await spaceGitHubAccess.close();

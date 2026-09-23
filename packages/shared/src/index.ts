@@ -415,6 +415,7 @@ export interface NativePlanAction {
   message: string;
 }
 
+export * from "./brainstorm.js";
 export * from "./collaboration.js";
 export * from "./conversation-binding.js";
 export * from "./file-limits.js";

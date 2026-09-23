@@ -63,7 +63,13 @@ const labels: Record<string, string> = {
   review: "Проверь перед созданием",
 };
 type Folder = { path: string; parent: string | null; entries: { name: string; path: string }[] };
-export type ProjectSetupSeed = { name: string; repository: string; scope: string };
+export type ProjectSetupSeed = {
+  name: string;
+  repository: string;
+  scope: string;
+  receiptId?: string;
+  resetReview?: (fingerprint: string) => Promise<void>;
+};
 type ProjectDialogProps = {
   open: boolean;
   machines: Machine[];
@@ -87,7 +93,7 @@ function ProjectDialogContent({
   const restored = useRef(restore(storageKey));
   const matchesSeed = useCallback(
     (value: ProjectSetupInput) =>
-      !seed ||
+      !seed?.repository ||
       (value.repository.mode === "connect" &&
         `https://github.com/${value.repository.owner}/${value.repository.name}`.toLowerCase() ===
           seed.repository.toLowerCase()),
@@ -125,7 +131,7 @@ function ProjectDialogContent({
     };
   }, [open]);
   const delivering = useRef(false),
-    persistedOperation = useRef<string>(restored.current?.operationId ?? "");
+    persistedOperation = useRef<string>(restored.current?.operationId || seed?.receiptId || "");
   openRef.current = open;
   const machine = machines.find((m) => m.id === input.machineId) ?? machines[0];
   const locked =
@@ -146,13 +152,15 @@ function ProjectDialogContent({
   useEffect(() => {
     if (!open || !seed || appliedSeed.current === seed || restored.current) return;
     const match = /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/.exec(seed.repository);
-    if (!match) return;
+    if (!match && seed.repository) return;
     appliedSeed.current = seed;
     setField({
       ...initial,
       machineId: machine?.id ?? "",
       name: seed.name,
-      repository: { ...initial.repository, mode: "connect", owner: match[1]!, name: match[2]! },
+      repository: match
+        ? { ...initial.repository, mode: "connect", owner: match[1]!, name: match[2]! }
+        : { ...initial.repository },
     });
     setEditedPath(false);
     setStep(0);
@@ -302,7 +310,8 @@ function ProjectDialogContent({
     const value = { ...input, machineId: machine.id },
       body = JSON.stringify(value),
       version = generation.current;
-    if (attempt.current.body !== body) attempt.current = { body, key: crypto.randomUUID() };
+    if (attempt.current.body !== body)
+      attempt.current = { body, key: seed?.receiptId ?? crypto.randomUUID() };
     try {
       try {
         localStorage.setItem(
@@ -376,7 +385,7 @@ function ProjectDialogContent({
     if (step === 2) void review();
     else {
       setStep((v) => v + 1);
-      if (step === 1 && !seed && input.repository.mode !== "none") void loadRepos();
+      if (step === 1 && !seed?.repository && input.repository.mode !== "none") void loadRepos();
     }
   };
   return (
@@ -395,7 +404,7 @@ function ProjectDialogContent({
           <h2>
             {operation?.state === "complete"
               ? "Проект готов"
-              : seed
+              : seed?.repository
                 ? "Рабочая копия"
                 : "Новый проект"}
           </h2>
@@ -452,7 +461,10 @@ function ProjectDialogContent({
                   setRepos([]);
                   setField({
                     machineId: e.target.value,
-                    repository: { ...input.repository, owner: seed ? input.repository.owner : "" },
+                    repository: {
+                      ...input.repository,
+                      owner: seed?.repository ? input.repository.owner : "",
+                    },
                   });
                 }}
               >
@@ -621,13 +633,13 @@ function ProjectDialogContent({
             )}
           </>
         )}
-        {step === 2 && seed && (
+        {step === 2 && seed?.repository && (
           <p className="setup-review">
             <Icon name="repository" size={18} />{" "}
             {seed.repository.replace("https://github.com/", "")}
           </p>
         )}
-        {step === 2 && !seed && (
+        {step === 2 && !seed?.repository && (
           <>
             <div className="setup-repo-modes">
               {[
@@ -833,6 +845,20 @@ function ProjectDialogContent({
             type="button"
             className="secondary"
             onClick={() => {
+              if (seed?.resetReview && operation?.state === "prepared") {
+                setBusy(true);
+                void seed
+                  .resetReview(operation.inspection.fingerprint)
+                  .then(() => {
+                    setOperation(null);
+                    persistedOperation.current = "";
+                    attempt.current = { body: "", key: "" };
+                    setStep(2);
+                  })
+                  .catch((e) => setError(messageOf(e)))
+                  .finally(() => setBusy(false));
+                return;
+              }
               setStep((v) => v - 1);
               if (operation?.state === "failed") {
                 attempt.current = { body: "", key: "" };

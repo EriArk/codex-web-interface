@@ -118,6 +118,14 @@ function mapping(db: DatabaseSync) {
   return JSON.stringify({
     ...ownership(db),
     sharedFiles: assetRows(db),
+    chatFiles: chatRows(db),
+    brainstorm: db.prepare("SELECT name FROM sqlite_master WHERE name='brainstorm_rooms'").get()
+      ? {
+          rooms: db.prepare("SELECT * FROM brainstorm_rooms ORDER BY id").all(),
+          cards: db.prepare("SELECT id,revision,deleted FROM brainstorm_cards ORDER BY id").all(),
+          conversions: db.prepare("SELECT * FROM brainstorm_conversions ORDER BY id").all(),
+        }
+      : null,
     projects: db.prepare("SELECT name FROM sqlite_master WHERE name='team_projects'").get()
       ? {
           owners: db
@@ -175,6 +183,43 @@ function copySharedFiles(db: DatabaseSync, source: string, destination: string) 
       mode: 0o600,
     });
 }
+function chatRows(db: DatabaseSync) {
+  return (["space", "brainstorm"] as const).flatMap((namespace) => {
+    const table = `${namespace}_chat_files`;
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE name=?").get(table)) return [];
+    return db
+      .prepare(`SELECT id,bytes,sha256 FROM ${table} ORDER BY id`)
+      .all()
+      .map((row) => ({
+        namespace,
+        id: z.string().uuid().parse(row.id),
+        bytes: z
+          .number()
+          .int()
+          .min(0)
+          .max(32 * 1024 ** 2)
+          .parse(row.bytes),
+        sha256: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .parse(row.sha256),
+      }));
+  });
+}
+function chatRoot(root: string, namespace: "space" | "brainstorm") {
+  return join(root, "space-chat-files", ...(namespace === "brainstorm" ? ["brainstorm"] : []));
+}
+function copyChatFiles(db: DatabaseSync, source: string, destination: string) {
+  for (const file of chatRows(db)) {
+    const target = chatRoot(destination, file.namespace);
+    directory(target);
+    writeFileSync(
+      sharedAssetPath(target, file.id),
+      readSharedFile(chatRoot(source, file.namespace), file),
+      { flag: "wx", mode: 0o600 },
+    );
+  }
+}
 function personalPaths(config: HubConfig, user: { id: string; legacy: boolean }): HubConfig {
   if (user.legacy) return { ...config, team: undefined };
   const root = join(config.team!.root, "users", user.id);
@@ -211,6 +256,7 @@ export async function createTeamSnapshot(
     try {
       registry.exec("PRAGMA journal_mode=DELETE");
       identity = ownership(registry);
+      copyChatFiles(registry, config.team.root, staging);
       copySharedFiles(
         registry,
         join(config.team.root, "shared-results"),
@@ -293,6 +339,7 @@ export async function verifyTeamSnapshot(path: string) {
   try {
     const actual = ownership(db);
     for (const file of assetRows(db)) readSharedFile(join(path, "shared-results"), file);
+    for (const file of chatRows(db)) readSharedFile(chatRoot(path, file.namespace), file);
     if (
       actual.ownerId !== manifest.ownerId ||
       JSON.stringify(actual.users) !==
@@ -382,6 +429,7 @@ export async function restoreTeamSnapshot(snapshot: string, target: string) {
     chmodSync(join(staging, "team", "team.db"), 0o600);
     const filesRegistry = new DatabaseSync(join(staging, "team", "team.db"), { readOnly: true });
     try {
+      copyChatFiles(filesRegistry, snapshot, join(staging, "team"));
       copySharedFiles(
         filesRegistry,
         join(snapshot, "shared-results"),

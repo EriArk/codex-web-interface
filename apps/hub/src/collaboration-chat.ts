@@ -15,8 +15,18 @@ const imageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"
 export class CollaborationChat {
   readonly root: string;
   private swept = 0;
-  constructor(readonly spaces: CollaborationSpaces) {
-    this.root = join(dirname(spaces.team.registry.path), "space-chat-files");
+  constructor(
+    readonly spaces: {
+      team: CollaborationSpaces["team"];
+      access: (actor: string, id: string) => unknown;
+    },
+    private namespace: "space" | "brainstorm" = "space",
+  ) {
+    this.root = join(
+      dirname(spaces.team.registry.path),
+      "space-chat-files",
+      ...(namespace === "brainstorm" ? ["brainstorm"] : []),
+    );
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS space_chat_messages(
@@ -37,7 +47,36 @@ export class CollaborationChat {
     `);
   }
   private get db() {
-    return this.spaces.team.db;
+    const db = this.spaces.team.db;
+    const sql = (value: string) =>
+      this.namespace === "space"
+        ? value
+        : value
+            .replaceAll("space_chat_", "brainstorm_chat_")
+            .replaceAll("collaboration_spaces", "brainstorm_rooms");
+    return {
+      prepare: (value: string) => db.prepare(sql(value)),
+      exec: (value: string) => db.exec(sql(value)),
+    };
+  }
+  /** Called inside the board transaction; a selected upload becomes an ordinary shared attachment. */
+  publishFile(actor: string, spaceId: string, id: string) {
+    this.readFile(actor, spaceId, id);
+    const row = this.db
+      .prepare("SELECT * FROM space_chat_files WHERE id=? AND spaceId=?")
+      .get(id, spaceId)!;
+    if (row.messageSeq !== null) return;
+    const message = randomUUID();
+    this.db
+      .prepare(
+        "INSERT INTO space_chat_messages(id,spaceId,authorId,text,createdAt) VALUES(?,?,?,?,?)",
+      )
+      .run(message, spaceId, actor, "Материал на доске", Date.now());
+    this.db
+      .prepare(
+        "UPDATE space_chat_files SET messageSeq=(SELECT seq FROM space_chat_messages WHERE id=?) WHERE id=?",
+      )
+      .run(message, id);
   }
   unread(actor: string, spaceId: string) {
     return Number(

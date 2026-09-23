@@ -1,4 +1,5 @@
 import { type DeliveryMachineReceipt, HubError } from "@codex-web/shared";
+import { brainstormSnapshotContext } from "./brainstorm.js";
 import type { CollaborationSpaces } from "./collaboration-spaces.js";
 
 export function collaborationPolicy(spaces: CollaborationSpaces, actor: string) {
@@ -21,6 +22,20 @@ export function collaborationPolicy(spaces: CollaborationSpaces, actor: string) 
       const binding = spaces.binding(actor, projectId);
       return binding
         ? {
+            brainstorm: (() => {
+              if (
+                !spaces.team.db
+                  .prepare("SELECT name FROM sqlite_master WHERE name='brainstorm_conversions'")
+                  .get()
+              )
+                return null;
+              const row = spaces.team.db
+                .prepare(
+                  "SELECT value FROM brainstorm_conversions WHERE json_extract(value,'$.spaceId')=? LIMIT 1",
+                )
+                .get(binding.space.id);
+              return row ? brainstormSnapshotContext(JSON.parse(String(row.value)).snapshot) : null;
+            })(),
             space: binding.space.title,
             repository: binding.project.repository,
             access: binding.access,

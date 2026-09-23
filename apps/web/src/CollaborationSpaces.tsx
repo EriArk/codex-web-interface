@@ -10,6 +10,7 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import { ActivityAttentionWindow } from "./ActivityDiscussion";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
+import { BrainstormWindow } from "./Brainstorm";
 import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
 import type { ProjectSetupSeed } from "./ProjectDialog";
@@ -239,7 +240,19 @@ export function SpaceChatButton({
   );
 }
 
-export function CollaborationWindow({
+export function CollaborationWindow(props: Parameters<typeof SpaceWindowContent>[0]) {
+  return props.spaces.window?.kind === "brainstorm" ? (
+    <BrainstormWindow
+      key={props.spaces.window.id}
+      id={props.spaces.window.id}
+      spaces={props.spaces}
+      onProject={props.onProject}
+    />
+  ) : (
+    <SpaceWindowContent {...props} />
+  );
+}
+function SpaceWindowContent({
   spaces,
   projects,
   onNewProject,
