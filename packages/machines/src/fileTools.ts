@@ -8,7 +8,10 @@ import { verifyProjectRoot } from "./projectRoots.js";
 export async function runFileTools(
   machine: MachineConfig,
   root: string,
-  request: Omit<FileRequest, "op"> & { op: FileRequest["op"] | "import" | "import-check" },
+  request: Omit<FileRequest, "op"> & {
+    op: FileRequest["op"] | "import" | "import-check" | "archive";
+    paths?: string[];
+  },
   localReceiptRoot?: string,
   upload?: FileImport,
 ): Promise<Awaited<ReturnType<typeof fileToolsProbe>>> {
@@ -84,7 +87,7 @@ export async function runFileTools(
     );
     child.stdout.on("data", (b: Buffer) => {
       size += b.length;
-      if (size > 16777216) finish(false);
+      if (size > (request.op === "archive" ? 50 * 1024 * 1024 : 16777216)) finish(false);
       else chunks.push(b);
     });
     child.stderr.on("data", () => {});
@@ -102,6 +105,8 @@ export function fileToolsError(code: string) {
     FILE_CHANGED:
       "Файл изменился после открытия. Черновик сохранён — открой текущую версию для сравнения.",
     FILE_EXISTS: "Файл или папка с таким именем уже существует.",
+    FILE_TARGET_CHANGED: "Файл назначения изменился. Выбери действие заново.",
+    FILE_ARCHIVE_LARGE: "Для ZIP выбери до 2000 элементов общим размером до 32 МБ.",
     FILE_PATH: "Этот путь недоступен для файловых операций.",
     FILE_ENCODING:
       "Редактор поддерживает текст UTF-8. Этот файл имеет другую кодировку или содержит двоичные данные.",
@@ -118,7 +123,7 @@ export function fileToolsError(code: string) {
     ENOSPC: "На компьютере недостаточно места для файла.",
   };
   return new HubError(
-    code === "FILE_CHANGED" || code === "FILE_EXISTS" ? 409 : 400,
+    ["FILE_CHANGED", "FILE_EXISTS", "FILE_TARGET_CHANGED"].includes(code) ? 409 : 400,
     messages[code] ? code : "FILE_OPERATION_FAILED",
     messages[code] ?? "Не удалось завершить файловую операцию.",
   );

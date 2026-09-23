@@ -1,12 +1,15 @@
-import type { FileImport, FileRequest, FileSnapshot } from "@codex-web/shared";
+import type { FileArchiveEntry, FileImport, FileRequest, FileSnapshot } from "@codex-web/shared";
 
 // Self-contained: sent to the configured Node over the existing SSH connection.
 export async function fileToolsProbe(
   root: string,
-  request: Omit<FileRequest, "op"> & { op: FileRequest["op"] | "import" | "import-check" },
+  request: Omit<FileRequest, "op"> & {
+    op: FileRequest["op"] | "import" | "import-check" | "archive";
+    paths?: string[];
+  },
   receiptRoot?: string,
   upload?: FileImport,
-): Promise<FileSnapshot> {
+): Promise<FileSnapshot & { entries?: FileArchiveEntry[] }> {
   const fs = await import("node:fs/promises"),
     paths = await import("node:path"),
     crypto = await import("node:crypto"),
@@ -112,6 +115,66 @@ export async function fileToolsProbe(
       size,
     };
   };
+  if (request.op === "archive") {
+    if (!request.paths?.length || request.paths.length > 100) fail("FILE_REQUEST");
+    const entries: FileArchiveEntry[] = [],
+      captured: { path: string; ino: number; size: number; mtimeMs: number; ctimeMs: number }[] =
+        [];
+    const names = new Set<string>();
+    let total = 0;
+    const visit = async (name: string) => {
+      const file = await scoped(name),
+        st = await fs.lstat(file);
+      if (++captured.length > 2000) fail("FILE_ARCHIVE_LARGE");
+      captured[captured.length - 1] = {
+        path: name,
+        ino: st.ino,
+        size: st.size,
+        mtimeMs: st.mtimeMs,
+        ctimeMs: st.ctimeMs,
+      };
+      if (names.has(name.toLowerCase())) fail("FILE_PATH");
+      names.add(name.toLowerCase());
+      if (st.isDirectory()) {
+        entries.push({ path: name + "/" });
+        for (const child of (await fs.readdir(file)).sort()) await visit(name + "/" + child);
+      } else if (st.isFile()) {
+        if (total + st.size > 32 * 1024 * 1024) fail("FILE_ARCHIVE_LARGE");
+        const chunks: Buffer[] = [];
+        let size = 0;
+        for await (const bytes of streams.createReadStream(file)) {
+          bounded();
+          size += bytes.length;
+          total += bytes.length;
+          if (total > 32 * 1024 * 1024 || size > st.size) fail("FILE_ARCHIVE_LARGE");
+          chunks.push(bytes);
+        }
+        if (size !== st.size) fail("FILE_CHANGED");
+        entries.push({ path: name, data: Buffer.concat(chunks, size).toString("base64") });
+      } else fail("FILE_PATH");
+    };
+    const selected = [...new Set(request.paths)];
+    for (const name of selected)
+      if (!selected.some((parent) => parent !== name && name.startsWith(parent + "/")))
+        await visit(name);
+    for (const old of captured) {
+      const st = await fs.lstat(await scoped(old.path));
+      if (
+        st.ino !== old.ino ||
+        st.size !== old.size ||
+        st.mtimeMs !== old.mtimeMs ||
+        st.ctimeMs !== old.ctimeMs
+      )
+        fail("FILE_CHANGED");
+    }
+    return {
+      path: "",
+      kind: "directory",
+      size: total,
+      fingerprint: hash(JSON.stringify(entries)),
+      entries,
+    };
+  }
   // A completed move/delete receipt remains readable when its source no longer exists.
   const full = await scoped(request.path, !["read", "stat"].includes(request.op));
   if (request.op === "import-check") {
@@ -317,7 +380,14 @@ export async function fileToolsProbe(
     if (before && before.fingerprint !== request.fingerprint) fail("FILE_CHANGED");
     const target = request.target ? await scoped(request.target, true) : undefined;
     if (target && (target === full || target.startsWith(full + paths.sep))) fail("FILE_PATH");
-    if (target || creating) {
+    const replacing = !!request.targetFingerprint;
+    if (replacing) {
+      if (!target || !["copy", "move"].includes(request.op) || before?.kind !== "file")
+        fail("FILE_REQUEST");
+      const old = await fingerprint(target!).catch(() => null);
+      if (old?.kind !== "file" || old.fingerprint !== request.targetFingerprint)
+        fail("FILE_TARGET_CHANGED");
+    } else if (target || creating) {
       try {
         await fs.lstat(target ?? full);
         fail("FILE_EXISTS");
@@ -419,8 +489,36 @@ export async function fileToolsProbe(
       await scoped(request.path);
       await scoped(request.target!, true);
       if ((await fingerprint(full)).fingerprint !== before!.fingerprint) fail("FILE_CHANGED");
-      effectsPossible = true;
-      await copyExclusive(full, target);
+      if (replacing) {
+        // Complete and verify a sibling before replacing the specifically approved old file.
+        const sibling = paths.join(paths.dirname(target), ".codexweb-file-replace-" + request.id);
+        let owned = false;
+        try {
+          await copyExclusive(full, sibling);
+          owned = true;
+          if (
+            (await fingerprint(sibling)).fingerprint !== before!.fingerprint ||
+            (await fingerprint(full)).fingerprint !== before!.fingerprint
+          )
+            fail("FILE_CHANGED");
+          const handle = await fs.open(sibling, "r+");
+          try {
+            await handle.sync();
+          } finally {
+            await handle.close();
+          }
+          await scoped(request.target!);
+          const old = await fingerprint(target).catch(() => null);
+          if (old?.fingerprint !== request.targetFingerprint) fail("FILE_TARGET_CHANGED");
+          effectsPossible = true;
+          await fs.rename(sibling, target);
+        } finally {
+          if (owned) await fs.unlink(sibling).catch(() => {});
+        }
+      } else {
+        effectsPossible = true;
+        await copyExclusive(full, target);
+      }
       if (
         (await fingerprint(target)).fingerprint !== before!.fingerprint ||
         (await fingerprint(full)).fingerprint !== before!.fingerprint

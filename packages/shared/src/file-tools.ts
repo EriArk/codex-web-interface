@@ -17,11 +17,13 @@ export type FileOperation =
   | "move"
   | "delete";
 export type FileImport = { path: string; bytes: number; sha256: string };
+export type FileArchiveEntry = { path: string; data?: string };
 export type FileRequest = {
   op: FileOperation;
   path: string;
   target?: string;
   fingerprint?: string;
+  targetFingerprint?: string;
   text?: string;
   bom?: boolean;
   id?: string;

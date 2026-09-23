@@ -6,6 +6,7 @@
 
 ## Owner-requested stage handoff and deferred manual acceptance (2026-09-23)
 
+- Complete related behavior, recovery, layout and focused verification as one coherent stage/release; do not split closely connected file workflows into repeated continuation requests.
 - End each completed stage with the concrete next proposed step and its recommended reasoning level (selector label and protocol value). Wait for the owner's continuation before starting that stage; «Продолжаем» confirms the setting.
 - Continue useful implementation and automated verification while the owner is unavailable for manual testing. Physical-device acceptance remains pending until their later use; do not make it a prerequisite for unrelated authorized feature work or claim it completed.
 

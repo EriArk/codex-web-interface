@@ -4,6 +4,7 @@ import { authorizeMachine, runFileTools, verifyProjectRoot } from "@codex-web/ma
 import { editableFile, HubError } from "@codex-web/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { registerProjectArchives } from "./projectArchives.js";
 import { registerProjectFileUploads } from "./projectFileUploads.js";
 import type { Sessions } from "./sessions.js";
 
@@ -51,6 +52,11 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
         "Рабочая копия изменилась. Открой файлы проекта заново.",
       );
   };
+  registerProjectArchives(app, sessions, (req) => {
+    const c = context(req);
+    authorizeMachine(c.machine);
+    return { ...c, checkout: checkout(req) };
+  });
   registerProjectFileUploads(app, sessions, (req, capability) => {
     const grant = grants.get(capability);
     if (!grant || grant.expires < Date.now() || grant.scope !== scope(req))
@@ -113,6 +119,10 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
         path,
         target: path.optional(),
         fingerprint: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .optional(),
+        targetFingerprint: z
           .string()
           .regex(/^[a-f0-9]{64}$/)
           .optional(),

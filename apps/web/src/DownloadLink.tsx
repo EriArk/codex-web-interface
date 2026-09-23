@@ -6,6 +6,11 @@ import { FileViewerDialog } from "./FileViewerDialog";
 import "./download.css";
 
 export function isDownloadUrl(value: string | undefined): value is string {
+  if (
+    value &&
+    /^\/api\/projects\/[a-zA-Z0-9_-]+\/file-archives\/[a-f0-9-]{36}\/content$/.test(value)
+  )
+    return true;
   if (isFileSource(value)) return true;
   if (value && /^\/api\/threads\/[a-zA-Z0-9_-]+\/commands\/[^/?#]+\?[^#]+$/.test(value)) {
     const query = new URLSearchParams(value.split("?")[1]);

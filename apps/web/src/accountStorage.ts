@@ -15,7 +15,7 @@ const hint = () => {
 export const pageWorkspace = typeof window === "undefined" ? "" : hint();
 const prefix = pageWorkspace ? `cw-user:${pageWorkspace}:` : "";
 const ownedLegacy = (key: string) =>
-  /^(codex[-:]|codexweb-|gpt[-:]|workspace-|native-|gui-preview-|delivery-draft:|quick-capture-|work-review-)/.test(
+  /^(codex[-:]|codexweb-|gpt[-:]|workspace-|native-|gui-preview-|delivery-draft:|quick-capture-|work-review-|file-(?:batch|archive|operation):)/.test(
     key,
   ) && key !== hintKey;
 

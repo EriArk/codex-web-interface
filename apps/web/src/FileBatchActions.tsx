@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
+import { ProjectArchiveDownload } from "./ProjectArchiveDownload";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./file-batch.css";
 
@@ -13,6 +14,7 @@ type Item = {
   status: "ready" | "pending" | "done" | "error" | "skipped";
   error?: string;
   collision?: boolean;
+  replacement?: FileSnapshot;
 };
 type Batch = { op: Operation; folder: string; items: Item[] };
 const title = { copy: "Копирование", move: "Перемещение", delete: "Удаление" };
@@ -210,10 +212,31 @@ export function FileBatchActions({
             e.status >= 400 &&
             e.status < 500 &&
             !["FILE_UNKNOWN", "FILE_LOCKED", "FILE_SCOPE_CHANGED"].includes(e.code);
+          const collision =
+            definitive &&
+            e instanceof ApiError &&
+            ["FILE_EXISTS", "FILE_TARGET_CHANGED"].includes(e.code);
+          let replacement: FileSnapshot | undefined;
+          if (collision && item.request.target && item.request.target !== item.request.path) {
+            const old = await api<FileSnapshot>(
+              `${url}?op=stat&path=${encodeURIComponent(item.request.target)}`,
+            ).catch(() => undefined);
+            const source = await api<FileSnapshot>(
+              `${url}?op=stat&path=${encodeURIComponent(item.request.path)}`,
+            ).catch(() => undefined);
+            if (
+              source?.kind === "file" &&
+              source.fingerprint === item.request.fingerprint &&
+              old?.kind === "file" &&
+              old.checkout === checkout
+            )
+              replacement = old;
+          }
           patch(item.request.id!, {
             status: definitive ? "error" : "pending",
             error: messageOf(e),
-            collision: definitive && e instanceof ApiError && e.code === "FILE_EXISTS",
+            collision,
+            replacement,
           });
           if (!definitive) break;
         }
@@ -245,6 +268,7 @@ export function FileBatchActions({
           ...item.request,
           id: crypto.randomUUID(),
           target: [current.current.folder, name].filter(Boolean).join("/"),
+          targetFingerprint: undefined,
         },
         status: "ready",
         error: undefined,
@@ -257,6 +281,13 @@ export function FileBatchActions({
   return (
     <>
       <section className="file-batch-controls" aria-label="Выбор и групповые действия">
+        <ProjectArchiveDownload
+          projectId={projectId}
+          projectName={projectName}
+          checkout={checkout}
+          selection={selection}
+          selecting={selecting}
+        />
         <div className="file-batch-pair">
           <button
             type="button"
@@ -444,6 +475,32 @@ export function FileBatchActions({
                         Сохранить оба
                       </button>
                     </form>
+                  )}
+                  {item.collision && item.replacement && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        try {
+                          patch(item.request.id!, {
+                            request: {
+                              ...item.request,
+                              id: crypto.randomUUID(),
+                              targetFingerprint: item.replacement!.fingerprint,
+                            },
+                            status: "ready",
+                            error: undefined,
+                            collision: false,
+                            replacement: undefined,
+                          });
+                        } catch (e) {
+                          setError(messageOf(e));
+                        }
+                      }}
+                    >
+                      Заменить выбранную версию
+                    </button>
                   )}
                   {["ready", "error"].includes(item.status) && (
                     <button

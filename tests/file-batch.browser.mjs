@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect, webkit } from "@playwright/test";
+import { unzipSync } from "../apps/hub/node_modules/fflate/esm/index.mjs";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
 await mkdir(".local/qa-file-batch", { recursive: true });
@@ -95,6 +96,9 @@ for (const [engine, type] of [
     await start();
     await expect(row("source/sub")).toContainText("Готово");
     await expect(row("source/a.txt")).toContainText("уже существует");
+    await expect(
+      row("source/a.txt").getByRole("button", { name: "Заменить выбранную версию" }),
+    ).toBeVisible();
     assert.equal(await readFile(join(root, "target/a.txt"), "utf8"), "existing");
     assert.equal(await readFile(join(root, "target/sub/c.txt"), "utf8"), "nested");
     for (const theme of ["crt-green", "organizer", "hitech-2000s", "classic-dark"])
@@ -126,6 +130,11 @@ for (const [engine, type] of [
         });
       }
     await page.setViewportSize({ width: 390, height: 844 });
+    await row("source/a.txt").getByRole("button", { name: "Заменить выбранную версию" }).click();
+    await writeFile(join(root, "target/a.txt"), "changed after approval");
+    await start();
+    await expect(row("source/a.txt")).toContainText("назначения изменился");
+    assert.equal(await readFile(join(root, "target/a.txt"), "utf8"), "changed after approval");
     await row("source/a.txt").getByRole("button", { name: "Сохранить оба", exact: true }).click();
     await start();
     await expect(row("source/a.txt")).toContainText("Готово");
@@ -175,6 +184,9 @@ for (const [engine, type] of [
     await select("target/a.txt");
     await select("target/b.txt");
     await controls.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect(
+      popup.getByRole("button", { name: "Подтвердить удаление", exact: true }),
+    ).toBeVisible();
     assert.equal(await readFile(join(root, "target/b.txt"), "utf8"), "beta");
     await writeFile(join(root, "target/a.txt"), "external change");
     await popup.getByRole("button", { name: "Подтвердить удаление", exact: true }).click();
@@ -246,12 +258,73 @@ for (const [engine, type] of [
     await expect(row("target/a (копия).txt")).toContainText("Готово");
     assert.equal(await readFile(join(root, "target/a (копия) (копия).txt"), "utf8"), "alpha");
     await finish();
+    // ZIP includes selected folders, survives a lost response/reload and keeps its original bytes.
+    await folder("target");
+    await controls.getByRole("button", { name: /^Выбрать несколько/ }).click();
+    await controls.getByRole("button", { name: "Выбрать на странице", exact: true }).click();
+    await controls.getByRole("button", { name: "Скачать ZIP", exact: true }).click();
+    const archive = page.getByRole("dialog", { name: "Архив ZIP", exact: true });
+    for (const theme of ["crt-green", "organizer", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+      for (const [width, height] of [
+        [390, 844],
+        [390, 430],
+        [768, 1024],
+        [1366, 1024],
+      ]) {
+        await page.setViewportSize({ width, height });
+        const bounds = await archive.boundingBox();
+        assert(
+          bounds.x >= 0 &&
+            bounds.y >= 0 &&
+            bounds.x + bounds.width <= width + 1 &&
+            bounds.y + bounds.height <= height + 1,
+        );
+        await page.screenshot({
+          path: `.local/qa-file-batch/${engine}-archive-${theme}-${width}x${height}.png`,
+          animations: "disabled",
+        });
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    let archiveUrl,
+      loseArchive = true;
+    await page.route("**/file-archives/*", async (route) => {
+      if (route.request().method() === "POST" && loseArchive) {
+        loseArchive = false;
+        const response = await route.fetch();
+        assert.equal(response.status(), 200, await response.text());
+        archiveUrl = (await response.json()).url;
+        await route.abort("failed");
+      } else await route.continue();
+    });
+    await archive.getByRole("button", { name: "Подготовить / проверить" }).click();
+    await expect(archive.getByRole("alert")).toBeVisible();
+    const zipBefore = await (await context.request.get(origin + archiveUrl)).body();
+    const unpacked = unzipSync(zipBefore);
+    assert.equal(Buffer.from(unpacked["target/sub/c.txt"]).toString(), "nested");
+    await writeFile(join(root, "target/sub/c.txt"), "changed after ZIP");
+    await page.reload();
+    await open();
+    await controls.getByRole("button", { name: "Архив ZIP", exact: true }).click();
+    await archive.getByRole("button", { name: "Подготовить / проверить" }).click();
+    await expect(archive.getByRole("link", { name: "Скачать ZIP", exact: true })).toBeVisible();
+    await page.screenshot({
+      path: `.local/qa-file-batch/${engine}-archive-ready.png`,
+      animations: "disabled",
+    });
+    const downloaded = page.waitForEvent("download");
+    await archive.getByRole("link", { name: "Скачать ZIP", exact: true }).click();
+    assert.deepEqual(await readFile(await (await downloaded).path()), zipBefore);
+    await archive.getByRole("button", { name: "Удалить архив", exact: true }).click();
+    assert.equal((await context.request.get(origin + archiveUrl)).status(), 404);
+    await page.unroute("**/file-archives/*");
     await pane.getByRole("button", { name: "Закрыть файлы", exact: true }).click();
     await expect(composer).toHaveValue("Сохранить черновик чата");
     assert.deepEqual(errors, []);
     console.log(
       engine +
-        ": batch selection, nesting, copy conflicts, move receipt recovery, confirmed delete, stale source and themes passed",
+        ": batch selection, exact replacement, stale targets, move receipt recovery, confirmed delete, ZIP download recovery and themes passed",
     );
   } catch (error) {
     const page = context.pages()[0];

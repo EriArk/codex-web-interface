@@ -1876,6 +1876,47 @@ test("project file uploads isolate bytes and grants between accounts", async (t)
   assert.deepEqual(await readFile(join(f.root, spec.name)), Buffer.from([0, 255, 17]));
 });
 
+test("project ZIP archives remain private across account, copied URLs and checkout changes", async (t) => {
+  const f = await fixture(t),
+    { runtime } = await f.personal(f.registry.ownerId);
+  runtime.sessions.config.machines.push({
+    id: "zip-pc",
+    name: "Fixture",
+    type: "local-linux",
+    codex: { command: "/nonexistent", shell: "powershell" },
+  });
+  runtime.sessions.config.projects.push({
+    id: "zip-project",
+    name: "Private",
+    machineId: "zip-pc",
+    workingDirectory: f.root,
+    enabled: true,
+  });
+  runtime.store.setPreferences({ machineClients: { "zip-pc": "web" } });
+  await writeFile(join(f.root, "private-zip.txt"), "PRIVATE ZIP BYTES");
+  const grant = await f.request("/api/projects/zip-project/file-tools/access", f.owner, "POST", {
+    unlock: true,
+  });
+  assert.equal(grant.status, 200);
+  const url = `/api/projects/zip-project/file-archives/${randomUUID()}`,
+    body = { checkout: grant.body.checkout, paths: ["private-zip.txt"] };
+  const prepared = await f.request(url, f.owner, "POST", body);
+  assert.equal(prepared.status, 200, JSON.stringify(prepared.body));
+  for (const [method, suffix, payload] of [
+    ["GET", ""],
+    ["GET", "/content"],
+    ["POST", "", body],
+    ["DELETE", ""],
+  ]) {
+    const response = await f.request(url + suffix, f.friend, method, payload);
+    assert([403, 404].includes(response.status));
+    assert(!JSON.stringify(response.body).includes("PRIVATE ZIP BYTES"));
+  }
+  assert.equal((await fetch(f.base + prepared.body.url, { headers: f.owner })).status, 200);
+  runtime.sessions.config.projects[0].workingDirectory = join(f.root, "other");
+  assert.equal((await f.request(url + "/content", f.owner)).status, 404);
+});
+
 test("engine maintenance considers another user's unknown work and releases failed freezes", async (t) => {
   const f = await fixture(t),
     { runtime } = await f.personal(f.friendId);

@@ -25,6 +25,8 @@
   min-width: 0;
   min-height: 44px;
   margin: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .file-batch-check {
   width: 44px;
