@@ -1,10 +1,12 @@
 import {
+  type ActivityGptHandoff,
   type GptConversation,
   type ProjectGpt,
   type ProjectRules,
   projectRuleLabels,
 } from "@codex-web/shared";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { accountSessionStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
@@ -17,13 +19,29 @@ export function ProjectGptWindow({
   onClose,
   onSettings,
   onRemote,
+  initialHandoff,
 }: {
   projectId: string;
   name: string;
   onClose: () => void;
   onSettings: () => void;
   onRemote: () => void;
+  initialHandoff?: ActivityGptHandoff;
 }) {
+  const handoffKey = `project-activity-handoff:${projectId}`;
+  const [handoff, setHandoff] = useState<ActivityGptHandoff | null>(() => {
+    if (initialHandoff) return initialHandoff;
+    try {
+      const v = JSON.parse(storage.getItem(handoffKey) ?? "null");
+      return v?.projectId === projectId && typeof v.id === "string" ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (handoff) storage.setItem(handoffKey, JSON.stringify(handoff));
+    else storage.removeItem(handoffKey);
+  }, [handoff, handoffKey]);
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog);
   const [data, setData] = useState<ProjectGpt | null>(null),
@@ -238,6 +256,12 @@ export function ProjectGptWindow({
           <div className="project-gpt-body" hidden={configure}>
             <Suspense fallback={<p role="status">Загружаю GPT…</p>}>
               <Workspace
+                activityHandoff={handoff ?? undefined}
+                onActivityClear={() => {
+                  if (JSON.parse(storage.getItem(handoffKey) ?? "null")?.id === handoff?.id)
+                    storage.removeItem(handoffKey);
+                  setHandoff(null);
+                }}
                 key={data.revision}
                 projectChat={data}
                 onProjectChatChange={(value) => {

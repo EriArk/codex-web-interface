@@ -25,7 +25,7 @@ export const rulesSchema = z
     custom: z.string().trim().max(4000),
   })
   .strict();
-const sendSchema = z
+export const projectGptSendSchema = z
   .object({
     nativeId,
     text: z.string().max(100000),
@@ -171,11 +171,13 @@ export class ProjectGpts {
       .run(chat, id);
     return this.get(id);
   }
-  send(id: string, key: string, raw: unknown) {
+  send(id: string, key: string, raw: unknown, evidence = "") {
     this.project(id);
-    const body = sendSchema.parse(raw),
+    const body = projectGptSendSchema.parse(raw),
       db = this.sessions.store.db;
-    const fingerprint = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(evidence ? { body, evidence } : body))
+      .digest("hex");
     const previous = db.prepare("SELECT * FROM project_gpt_sends WHERE id=?").get(key);
     if (previous) {
       if (previous.projectId !== id || previous.fingerprint !== fingerprint)
@@ -208,7 +210,12 @@ export class ProjectGpts {
     const { revision: _revision, ...input } = body;
     const value = {
       ...input,
-      text: projectContextStart + current.context + projectContextEnd + body.text,
+      text:
+        projectContextStart +
+        current.context +
+        (evidence ? "\n\n" + evidence : "") +
+        projectContextEnd +
+        body.text,
     };
     db.prepare("INSERT INTO project_gpt_sends VALUES(?,?,?,?,?)").run(
       key,

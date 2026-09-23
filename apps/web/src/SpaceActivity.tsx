@@ -1,9 +1,11 @@
 import type {
+  ActivityGptHandoff,
   CollaborationSpace,
   GitHubActivitySource,
   SpaceActivityPage,
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
+import { accountSessionStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
 import "./space-activity.css";
@@ -42,9 +44,11 @@ const label = (v: Entry) =>
 export function SpaceActivity({
   space,
   onProject,
+  onDiscuss,
 }: {
   space: CollaborationSpace;
   onProject: (id: string) => void;
+  onDiscuss: (handoff: ActivityGptHandoff) => void;
 }) {
   const [pages, setPages] = useState<SpaceActivityPage[]>([]),
     [errors, setErrors] = useState<Record<string, string>>({});
@@ -140,6 +144,39 @@ export function SpaceActivity({
       if (run === generation.current) setOpenError(messageOf(error));
     } finally {
       if (run === generation.current) setOpening("");
+    }
+  };
+  const discuss = async (batch: Entry[]) => {
+    if (opening) return;
+    const run = generation.current;
+    setOpening("discuss");
+    setOpenError("");
+    try {
+      const ownProject = eligible.find((p) => p.id === batch[0]!.projectId)?.personalProjectId;
+      const storageKey = `project-activity-handoff:${ownProject}`;
+      const pending = JSON.parse(
+        storage.getItem(storageKey) ?? "null",
+      ) as ActivityGptHandoff | null;
+      // Reopening the same discussion retains a potentially unacknowledged send.
+      const reuse =
+        pending?.spaceId === space.id &&
+        pending.sharedProjectId === batch[0]!.projectId &&
+        JSON.stringify(pending.sourceKeys) === JSON.stringify(batch.map((v) => v.key));
+      const handoff = reuse
+        ? await api<ActivityGptHandoff>(`/team/activity-handoffs/${encodeURIComponent(pending.id)}`)
+        : await api<ActivityGptHandoff>(`/team/spaces/${space.id}/activity/discuss`, {
+            method: "POST",
+            key: crypto.randomUUID(),
+            body: { projectId: batch[0]!.projectId, sources: batch.map((v) => v.key) },
+          });
+      if (generation.current === run) {
+        storage.setItem(storageKey, JSON.stringify(handoff));
+        onDiscuss(handoff);
+      }
+    } catch (error) {
+      if (generation.current === run) setOpenError(messageOf(error));
+    } finally {
+      if (generation.current === run) setOpening("");
     }
   };
   return (
@@ -269,6 +306,15 @@ export function SpaceActivity({
                       <Icon name="external" size={14} />
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="activity-open"
+                    disabled={!!opening}
+                    onClick={() => void discuss(batch)}
+                  >
+                    <Icon name="chat" size={15} />
+                    {opening === "discuss" ? "Готовим контекст…" : "Обсудить в GPT"}
+                  </button>
                 </div>
               </article>
             </div>

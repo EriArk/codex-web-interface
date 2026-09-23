@@ -15,5 +15,16 @@ export type ProjectGpt = {
   rules: ProjectRules;
   context: string;
 };
+export type ActivityGptHandoff = {
+  id: string;
+  spaceId: string;
+  sharedProjectId: string;
+  projectId: string;
+  name: string;
+  title: string;
+  sources: number;
+  sourceKeys: string[];
+  truncated: boolean;
+};
 export const projectContextStart = "[CodexWeb: контекст проекта]\n";
 export const projectContextEnd = "\n[/CodexWeb: контекст проекта]\n\n";

@@ -258,6 +258,7 @@ export async function githubWorkProbe(
         repository: scalar(v.head.repo?.full_name, 150) ? v.head.repo.full_name : null,
       };
       result.base = v.base.ref;
+      if (/^[a-f0-9]{40,64}$/.test(v.base.sha)) result.baseSha = v.base.sha;
       result.draft = v.draft === true;
       result.reviewers = Array.isArray(v.requested_reviewers)
         ? v.requested_reviewers
@@ -287,7 +288,13 @@ export async function githubWorkProbe(
   const validateQuery = (q: GitHubWorkQuery) => {
     valid(object(q));
     if (q.kind === "identity" || q.kind === "activity") exact(q, ["kind"]);
-    else if (q.kind === "collaborators") {
+    else if (q.kind === "evidence") {
+      exact(q, ["kind", "source"]);
+      valid(
+        typeof q.source === "string" &&
+          /^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/.test(q.source),
+      );
+    } else if (q.kind === "collaborators") {
       exact(q, ["kind", "page"]);
       valid(number(q.page) && q.page <= 50);
     } else if (q.kind === "list" || q.kind === "detail") {
@@ -308,7 +315,62 @@ export async function githubWorkProbe(
       result: GitHubWorkObservation = { ...access, query: q };
     if (q.kind === "identity") return result;
     if (access.access === "unavailable") fail("GITHUB_WORK_ACCESS");
-    if (q.kind === "activity") {
+    if (q.kind === "evidence") {
+      const [kind, id] = q.source.split(":");
+      let snapshot: any,
+        files: any[] = [],
+        truncated = false;
+      if (kind === "commit") {
+        const v = await must(`${prefix}/commits/${id}?per_page=20`);
+        if (v.sha !== id || !Array.isArray(v.files)) fail("GITHUB_WORK_DATA");
+        files = v.files;
+        truncated = files.length >= 20 || String(v.commit?.message ?? "").length > 8000;
+        snapshot = {
+          source: q.source,
+          url: `${url}/commit/${id}`,
+          sha: v.sha,
+          message: String(v.commit?.message ?? "").slice(0, 8000),
+          parents: Array.isArray(v.parents) ? v.parents.slice(0, 10).map((p: any) => p.sha) : [],
+          stats: v.stats,
+        };
+      } else {
+        const v = await detail(kind as "issue" | "pr", Number(id));
+        snapshot = v;
+        truncated = v.truncated;
+        if (kind === "pr") {
+          const list = await must(`${prefix}/pulls/${id}/files?per_page=20`);
+          if (!Array.isArray(list)) fail("GITHUB_WORK_DATA");
+          files = list;
+          truncated ||= files.length >= 20;
+          const latest = await detail("pr", Number(id));
+          if (
+            latest.head?.sha !== v.head?.sha ||
+            latest.baseSha !== v.baseSha ||
+            latest.base !== v.base ||
+            latest.updatedAt !== v.updatedAt
+          )
+            fail("GITHUB_WORK_CHANGED");
+        }
+      }
+      const parts = files.slice(0, 20).map((v: any) => {
+        const patch = typeof v.patch === "string" ? v.patch : "";
+        if (!patch || patch.length > 3000) truncated = true;
+        return {
+          path: String(v.filename ?? "").slice(0, 500),
+          status: v.status,
+          additions: v.additions,
+          deletions: v.deletions,
+          patch: patch.slice(0, 3000),
+          patchOmitted: !patch,
+        };
+      });
+      const full = JSON.stringify({ snapshot, files: parts });
+      result.evidence = {
+        source: q.source,
+        text: full.slice(0, 18000),
+        truncated: truncated || full.length > 18000,
+      };
+    } else if (q.kind === "activity") {
       // Default-branch commits and recent Issues/PRs only; no repository event
       // stream, private native work, patches or comment bodies in the index.
       const commitResponse = await http(`${prefix}/commits?per_page=30`);

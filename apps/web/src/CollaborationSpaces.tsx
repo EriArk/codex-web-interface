@@ -1,4 +1,5 @@
 import type {
+  ActivityGptHandoff,
   CollaborationAccess,
   CollaborationInvitation,
   CollaborationKind,
@@ -239,6 +240,7 @@ export function CollaborationWindow({
   createdProjectId,
   onProject,
   onChat,
+  onDiscuss,
 }: {
   spaces: SpacesController;
   projects: Project[];
@@ -246,6 +248,7 @@ export function CollaborationWindow({
   createdProjectId: string;
   onProject: (id: string) => void;
   onChat: (id: string, projectId: string) => void;
+  onDiscuss: (handoff: ActivityGptHandoff) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog);
@@ -287,6 +290,7 @@ export function CollaborationWindow({
           <SpaceActivity
             key={space.id}
             space={space}
+            onDiscuss={onDiscuss}
             onProject={(projectId) => spaces.open({ kind: "project", id: space.id, projectId })}
           />
         )}

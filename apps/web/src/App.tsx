@@ -448,7 +448,11 @@ function Workspace({
     setResultCategory("files");
   }, [threadId]);
   const [overviewId, setOverviewId] = useState("");
-  const [projectGpt, setProjectGpt] = useState<{ id: string; name: string } | null>(null);
+  const [projectGpt, setProjectGpt] = useState<{
+    id: string;
+    name: string;
+    handoff?: import("@codex-web/shared").ActivityGptHandoff;
+  } | null>(null);
   const overviewProject = projects.find((p) => p.id === overviewId);
   const legacyLayout = useLegacyLayout();
   const [rightWidth, setRightWidth] = useState(Number(readPreference("right-width", "0")));
@@ -1630,6 +1634,7 @@ function Workspace({
             key={projectGpt.id}
             projectId={projectGpt.id}
             name={projectGpt.name}
+            initialHandoff={projectGpt.handoff}
             onClose={() => setProjectGpt(null)}
             onSettings={() => setSettings(true)}
             onRemote={() => setPcRemote(true)}
@@ -1637,6 +1642,9 @@ function Workspace({
         )}
         {spaces.window && (
           <CollaborationWindow
+            onDiscuss={(handoff) =>
+              setProjectGpt({ id: handoff.projectId, name: handoff.name, handoff })
+            }
             spaces={spaces}
             projects={projects}
             createdProjectId={spaceProjectCreated}

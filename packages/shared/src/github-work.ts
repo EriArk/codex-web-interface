@@ -23,6 +23,12 @@ export const githubWorkInputSchema = z.discriminatedUnion("kind", [
 ]);
 export type GitHubWorkInput = z.infer<typeof githubWorkInputSchema>;
 export const githubWorkQuerySchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("evidence"),
+      source: z.string().regex(/^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/),
+    })
+    .strict(),
   z.object({ kind: z.literal("activity") }).strict(),
   z.object({ kind: z.literal("identity") }).strict(),
   z
@@ -75,6 +81,7 @@ export interface GitHubWorkRecord {
   labels: string[];
   head?: { branch: string; sha: string; repository: string | null };
   base?: string;
+  baseSha?: string;
   draft?: boolean;
   reviewers?: string[];
   reviews?: { author: string; state: string; sha: string }[];
@@ -90,6 +97,7 @@ export interface GitHubWorkComment {
   url: string;
 }
 export type GitHubWorkObservation = GitHubRepositoryAccess & {
+  evidence?: { source: string; text: string; truncated: boolean };
   activity?: GitHubActivitySource[];
   query: GitHubWorkQuery;
   items?: GitHubWorkRecord[];

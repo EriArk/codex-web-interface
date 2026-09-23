@@ -109,6 +109,24 @@ test("Project GPT uses the real durable outbox, frozen exact retries, own bindin
   );
 });
 
+test("Activity evidence joins the frozen project envelope and cannot change under an accepted send key", async (t) => {
+  const f = await fixture(t);
+  const service = f.projectGpts;
+  const bound = service.bind("project", f.native.conversationId, 0);
+  const key = randomUUID(),
+    body = { ...f.native.input, text: "Discuss exact activity", revision: bound.revision };
+  const evidence = "Exact GitHub source commit:" + "a".repeat(40) + "\n+ nullable field";
+  service.send("project", key, body, evidence);
+  await until(() => f.native.state.sends === 1);
+  assert.match(f.native.state.input.text, /nullable field/);
+  assert.match(f.native.state.input.text, /Discuss exact activity$/);
+  service.send("project", key, body, evidence);
+  assert.throws(() => service.send("project", key, body, "different source"), {
+    code: "GPT_KEY_REUSED",
+  });
+  assert.equal(f.native.state.sends, 1);
+  f.native.state.finished = true;
+});
 test("New-chat identity survives binding-write interruption; pending first send cannot fork another chat", async (t) => {
   const f = await fixture(t),
     db = f.store.db;

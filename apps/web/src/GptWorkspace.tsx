@@ -194,6 +194,8 @@ function cachedId() {
   }
 }
 export function GptWorkspace({
+  activityHandoff,
+  onActivityClear,
   projectChat,
   onProjectChatChange,
   notificationTarget,
@@ -209,6 +211,8 @@ export function GptWorkspace({
   onSettings,
   onRemote,
 }: {
+  activityHandoff?: import("@codex-web/shared").ActivityGptHandoff;
+  onActivityClear?: () => void;
   projectChat?: ProjectGpt;
   onProjectChatChange?: (value: ProjectGpt) => void;
   onCodex: () => void;
@@ -788,7 +792,9 @@ export function GptWorkspace({
     !historyNotice &&
     (!connection || connection.canSend || checkingConnection);
   const send = async (dictated?: string) => {
-    const value = dictated ?? text;
+    const value =
+      (dictated ?? text) ||
+      (activityHandoff ? "Что изменилось и на что стоит обратить внимание в этом проекте?" : "");
     if (
       (dictation.locked && dictated === undefined) ||
       sending.current ||
@@ -820,14 +826,16 @@ export function GptWorkspace({
         ...(replaced ? { replacesJobId: replaced.id } : {}),
         ...(projectChat ? { revision: projectChat.revision } : {}),
       },
-      signature = JSON.stringify(body);
+      signature = JSON.stringify(activityHandoff ? { body, handoff: activityHandoff.id } : body);
     const receiptScope = "gpt:" + sourceDraft;
     try {
       const key = pendingSendKey(receiptScope, signature);
       const data = await api<{ job: GptJob }>(
-        projectChat
-          ? `/projects/${encodeURIComponent(projectChat.projectId)}/gpt/send`
-          : "/gpt/send",
+        activityHandoff
+          ? `/team/activity-handoffs/${encodeURIComponent(activityHandoff.id)}/send`
+          : projectChat
+            ? `/projects/${encodeURIComponent(projectChat.projectId)}/gpt/send`
+            : "/gpt/send",
         {
           method: "POST",
           body,
@@ -835,6 +843,7 @@ export function GptWorkspace({
         },
       );
       completePendingSend(receiptScope, key);
+      if (activityHandoff) onActivityClear?.();
       try {
         const key = "gpt-draft-" + sourceDraft;
         const saved = JSON.parse(sessionStorage.getItem(key) ?? "{}");
@@ -1997,6 +2006,27 @@ export function GptWorkspace({
                 void send();
               }}
             >
+              {activityHandoff && (
+                <fieldset className="activity-context" aria-label="Контекст Activity">
+                  <Icon name="history" size={17} />
+                  <div>
+                    <strong>{activityHandoff.title}</strong>
+                    <small>
+                      Источников: {activityHandoff.sources}
+                      {activityHandoff.truncated ? " · Фрагмент изменений" : ""}
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Убрать контекст Activity"
+                    disabled={busy}
+                    onClick={onActivityClear}
+                  >
+                    <Icon name="close" size={16} />
+                  </button>
+                </fieldset>
+              )}
               <div className="gpt-options">
                 <label className="composer-option">
                   <span>{models?.models.find((m) => m.id === model)?.label ?? "Модель"}</span>
@@ -2076,7 +2106,11 @@ export function GptWorkspace({
                 <textarea
                   ref={composer}
                   aria-label="Сообщение GPT"
-                  placeholder="Что нужно сделать?"
+                  placeholder={
+                    activityHandoff
+                      ? "Что изменилось? Или задай свой вопрос…"
+                      : "Что нужно сделать?"
+                  }
                   value={text}
                   onChange={(event) => setText(event.target.value)}
                   rows={2}
@@ -2092,7 +2126,7 @@ export function GptWorkspace({
                       busy ||
                       uploading ||
                       !sendReady ||
-                      (!text.trim() && !files.length)
+                      (!text.trim() && !files.length && !activityHandoff)
                     }
                     aria-label={active ? "Добавить в очередь GPT" : "Отправить GPT"}
                     aria-busy={busy}

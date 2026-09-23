@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { createApp } from "./app.js";
 import { CollaborationSpaces, type VerifiedSpaceProject } from "./collaboration-spaces.js";
-import { rulesSchema } from "./project-gpt.js";
+import { projectGptSendSchema, rulesSchema } from "./project-gpt.js";
 import { SpaceActivity } from "./space-activity.js";
 import type { GitHubProbe } from "./team-github.js";
 import type { TeamProjects } from "./team-projects.js";
@@ -18,6 +18,51 @@ export function registerCollaborationSpaces(
   githubProbe?: GitHubProbe,
 ) {
   const activity = new SpaceActivity(spaces, personal, githubProbe);
+  app.post(
+    "/api/team/spaces/:id/activity/discuss",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const body = z
+        .object({
+          projectId: z.string().uuid(),
+          sources: z
+            .array(z.string().regex(/^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/))
+            .min(1)
+            .max(30),
+        })
+        .strict()
+        .parse(req.body);
+      if (new Set(body.sources).size !== body.sources.length)
+        throw new HubError(400, "ACTIVITY_SOURCES", "Выбери разные источники.");
+      const result = await activity.prepare(
+        actor(req),
+        id(req),
+        body.projectId,
+        key(req),
+        body.sources,
+      );
+      actor(req);
+      return reply.header("Cache-Control", "no-store").send(result);
+    },
+  );
+  app.get("/api/team/activity-handoffs/:handoff", async (req, reply) => {
+    const handoff = z.object({ handoff: z.string().uuid() }).parse(req.params).handoff;
+    const result = await activity.handoff(actor(req), handoff);
+    actor(req);
+    return reply.header("Cache-Control", "no-store").send(result);
+  });
+  app.post("/api/team/activity-handoffs/:handoff/send", async (req, reply) => {
+    const handoff = z.object({ handoff: z.string().uuid() }).parse(req.params).handoff;
+    const user = actor(req);
+    const job = await activity.sendHandoff(
+      user,
+      handoff,
+      key(req),
+      projectGptSendSchema.parse(req.body),
+    );
+    actor(req);
+    return reply.code(202).header("Cache-Control", "no-store").send({ job });
+  });
   app.post(
     "/api/team/spaces/:id/activity",
     { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },

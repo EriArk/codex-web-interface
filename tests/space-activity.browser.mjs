@@ -14,6 +14,7 @@ import { Store } from "../apps/hub/dist/store.js";
 import { teamPasswordHash } from "../apps/hub/dist/team-auth.js";
 import { createTeamHub } from "../apps/hub/dist/team-hub.js";
 import { configSchema } from "../packages/shared/dist/index.js";
+import { nativeWorkspaceFixture } from "./fixtures/native-workspace.mjs";
 import { capabilityReply } from "./fixtures.mjs";
 
 const root = await mkdtemp(join(tmpdir(), "cw-spaces-ui-")),
@@ -38,6 +39,7 @@ const config = configSchema.parse({
 const store = new Store(config.hub.databasePath);
 store.db.prepare("INSERT INTO users VALUES(?,?)").run("owner", await teamPasswordHash(password));
 const runtimes = new Map();
+const native = nativeWorkspaceFixture();
 let activityCalls = 0;
 async function activityProbe(_machine, _root, request) {
   activityCalls++;
@@ -48,6 +50,10 @@ async function activityProbe(_machine, _root, request) {
     access: "read",
     checkedAt: Date.now(),
     query: request.query,
+    evidence:
+      request.query.kind === "evidence"
+        ? { source: request.query.source, text: "Exact patch + nullable field", truncated: false }
+        : undefined,
     activity: Array.from({ length: 27 }, (_, i) => ({
       kind: i < 3 ? "commit" : i % 2 ? "pr" : "issue",
       key: i < 3 ? "commit:" + String(i + 1).repeat(40) : `${i % 2 ? "pr" : "issue"}:${i}`,
@@ -144,7 +150,12 @@ const hub = await createTeamHub(config, {
     });
     const sessions = new Sessions(cfg, personalStore, () => rpc);
     sessions.externalActivity.refresh = async () => {};
-    const runtime = await createApp(cfg, { ...options, sessions, store: personalStore });
+    const runtime = await createApp(cfg, {
+      ...options,
+      sessions,
+      store: personalStore,
+      ...(who === "owner" ? { nativeGpt: native.workspace } : {}),
+    });
     runtimes.set(who, { ...runtime, thread, nativeId, nativeCalls });
     return runtime;
   },
@@ -264,6 +275,81 @@ try {
   await expect(popup).toHaveURL("https://github.com/example/altar/commit/" + "1".repeat(40));
   await popup.close();
   assert.equal(activityCalls, reads + 1, "opening rechecks access");
+  // Existing personal GPT binding, including a saved draft, is reused.
+  const ownerRuntime = runtimes.get("owner");
+  await ownerRuntime.gpt.catalog();
+  ownerRuntime.projectGpts.bind("owner-project", native.conversationId, 0);
+  await dialog.getByRole("button", { name: "Обсудить в GPT", exact: true }).first().click();
+  const gptWindow = page.locator(".project-gpt-window[open]");
+  const composer = gptWindow.getByRole("textbox", { name: "Сообщение GPT", exact: true });
+  await expect(composer).toBeVisible();
+  await expect(gptWindow.getByText("Первый ответ", { exact: true })).toBeVisible();
+  await expect(gptWindow.getByRole("group", { name: "Контекст Activity" })).toContainText(
+    "Источников: 3",
+  );
+  assert.equal(native.state.sends, 0);
+  await composer.fill("Does this affect old saves?");
+  await gptWindow.getByRole("button", { name: "Закрыть GPT проекта", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Обсудить в GPT", exact: true }).first().click();
+  await expect(composer).toHaveValue("Does this affect old saves?");
+  const pendingHandoff = await page.evaluate(
+    () =>
+      Object.entries(sessionStorage).find(([k]) =>
+        k.endsWith("project-activity-handoff:owner-project"),
+      )?.[1],
+  );
+  assert(pendingHandoff, "pending context survives close");
+  await mkdir(".local/activity-gpt-qa", { recursive: true });
+  for (const viewport of [
+    { width: 390, height: 500 },
+    { width: 1024, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await page.evaluate((v) => (document.documentElement.dataset.theme = v), theme);
+      await expect(composer).toBeInViewport();
+      await expect(gptWindow.getByRole("button", { name: "Закрыть GPT проекта" })).toBeInViewport();
+      await expect(gptWindow.getByRole("group", { name: "Контекст Activity" })).toBeInViewport();
+      await page.screenshot({
+        path: `.local/activity-gpt-qa/${process.env.BROWSER || "webkit"}-${theme}-${viewport.width}.png`,
+      });
+    }
+  }
+  let dropped = false;
+  await page.route("**/api/team/activity-handoffs/*/send", async (route) => {
+    if (!dropped) {
+      dropped = true;
+      await route.fetch();
+      await route.abort("failed");
+    } else await route.continue();
+  });
+  await gptWindow.getByRole("button", { name: "Отправить GPT", exact: true }).click();
+  await expect.poll(() => native.state.sends).toBe(1);
+  assert.match(native.state.input.text, /Exact patch/);
+  assert.match(native.state.input.text, /Does this affect old saves\?$/);
+  assert.equal(
+    native.state.input.conversationId ?? native.state.input.nativeId,
+    native.conversationId,
+  );
+  await expect(composer).toHaveValue("Does this affect old saves?");
+  await gptWindow.getByRole("button", { name: "Закрыть GPT проекта", exact: true }).click();
+  await dialog.getByRole("button", { name: "Обсудить в GPT", exact: true }).first().click();
+  await expect(composer).toHaveValue("Does this affect old saves?");
+  assert.equal(
+    await page.evaluate(
+      () =>
+        Object.entries(sessionStorage).find(([k]) =>
+          k.endsWith("project-activity-handoff:owner-project"),
+        )?.[1],
+    ),
+    pendingHandoff,
+  );
+  await gptWindow.getByRole("button", { name: /Отправить GPT|Добавить в очередь GPT/ }).click();
+  await expect(gptWindow.getByRole("group", { name: "Контекст Activity" })).toHaveCount(0);
+  assert.equal(native.state.sends, 1, "lost acknowledgment retry must not send twice");
+  native.state.finished = true;
+  await gptWindow.getByRole("button", { name: "Закрыть GPT проекта", exact: true }).click();
   await mkdir(".local/activity-qa", { recursive: true });
   for (const viewport of [
     { width: 390, height: 500 },

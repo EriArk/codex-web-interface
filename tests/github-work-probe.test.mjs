@@ -96,6 +96,8 @@ if(endpoint==='user'){answer(200,s.identity);return;}
 if(raw===base){answer(s.access==='unavailable'?404:200,{id:s.repositoryId,full_name:'Owner/Project',has_issues:true,permissions:{admin:s.access==='admin',maintain:s.access==='maintain',push:s.access==='write',triage:s.access==='triage',pull:true}});return;}
 if(endpoint?.startsWith('search/issues')){const q=new URLSearchParams(endpoint.split('?')[1]);answer(200,{items:q.get('q').includes('is:pr')?s.prs:s.issues});return;}
 if(parts[3]==='commits'&&parts.length===4){answer(200,[{sha:'b'.repeat(40),commit:{message:'Exact commit\\nPrivate body not indexed',author:{name:'Unlinked author'},committer:{date:'2026-09-23T10:00:00Z'}},author:null}]);return;}
+if(parts[3]==='commits'&&parts.length===5){answer(200,{sha:parts[4],commit:{message:'Exact change'},parents:[{sha:'c'.repeat(40)}],stats:{additions:1,deletions:0},files:[{filename:'src/nullable.ts',status:'modified',additions:1,deletions:0,patch:'+ nullable: true'}]});return;}
+if(parts[3]==='pulls'&&parts[5]==='files'){if(s.moveHead){s.prs[0].head.sha='d'.repeat(40);persist();}answer(200,[{filename:'src/pr.ts',status:'modified',patch:'+ tested',additions:1,deletions:0}]);return;}
 if(parts[3]==='pulls'&&parts.length===4){answer(200,s.prs);return;}
 if(parts[3]==='issues'&&parts.length===4){if(method==='POST'){const value={...s.issues[0],number:100+s.issues.length,title:body.title,body:body.body,user:s.identity};s.issues.unshift(value);changed(value);}else answer(200,s.issues);return;}
 if(parts[3]==='issues'&&parts[5]==='comments'){if(method==='POST'){const value={id:3000000000+s.comments.length,body:body.body,user:s.identity,created_at:'2026-09-13T01:00:00Z'};s.comments.push(value);changed(value);}else answer(200,s.comments);return;}
@@ -157,6 +159,27 @@ test("activity reads exact commits and Issue/PR status without bodies or mutatio
     f.probe({ op: "observe", query: { kind: "activity" } }),
     /GITHUB_WORK_ACCESS/,
   );
+});
+test("bounded activity evidence reads exact immutable commits and rechecks PR head", async (t) => {
+  const f = await fixture(t);
+  for (const source of ["commit:" + "b".repeat(40), "issue:1", "pr:2"]) {
+    const value = await f.probe({ op: "observe", query: { kind: "evidence", source } });
+    assert.equal(value.evidence.source, source);
+    assert(value.evidence.text.length <= 18000);
+    if (source.startsWith("commit")) assert.match(value.evidence.text, /nullable/);
+    if (source.startsWith("pr")) assert.match(value.evidence.text, /tested/);
+  }
+  assert((await f.calls()).every((v) => v.method === "GET"));
+  assert.equal(
+    (await f.calls()).filter((v) => v.endpoint === "repos/Owner/Project/pulls/2").length,
+    2,
+  );
+  await assert.rejects(
+    f.probe({ op: "observe", query: { kind: "evidence", source: "commit:main" } }),
+    /GITHUB_WORK_REQUEST/,
+  );
+  await f.save({moveHead:true});
+  await assert.rejects(f.probe({op:"observe",query:{kind:"evidence",source:"pr:2"}}),/GITHUB_WORK_CHANGED/);
 });
 test("machine-local GitHub identity, bounded issue search and exact PR SHA/reviews/checks are normalized", async (t) => {
   const f = await fixture(t);

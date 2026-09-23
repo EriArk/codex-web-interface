@@ -56,7 +56,7 @@ async function fixture(t) {
     access: "collaborate",
     requestedAccess: "direct",
   });
-  return { root, registry, team, spaces, owner, friend, stranger, project, input };
+  return { root, store, registry, team, spaces, owner, friend, stranger, project, input };
 }
 
 test("Space activity uses the viewer's checkout, coalesces reads, persists exact references and rechecks revocation", async (t) => {
@@ -73,10 +73,19 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   const projectId = s.catalog(f.owner).spaces[0].projects[0].id;
   const calls = [],
     personalCalls = [];
+  const sends = new Map();
   const personal = async (actor) => {
     personalCalls.push(actor);
     return {
       runtime: {
+        store: f.store,
+        projectGpts: {
+          get: () => ({ revision: 0, nativeId: "own-project-gpt" }),
+          send: (project, key, body, evidence) => {
+            if (!sends.has(key)) sends.set(key, { id: key, project, body, evidence });
+            return sends.get(key);
+          },
+        },
         sessions: {
           project: (id) => ({
             id,
@@ -100,6 +109,7 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   let access = "read",
     repositoryId = 42,
     during;
+  let evidenceBody="Exact patch: + nullable field";
   const source = (kind, n, author) => ({
     kind,
     key: kind + ":" + (kind === "commit" ? String(n).repeat(40) : n),
@@ -124,6 +134,14 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
       identity: { id: 7, login: "viewer" },
       checkedAt: Date.now(),
       query: request.query,
+      evidence:
+        request.query.kind === "evidence"
+          ? {
+              source: request.query.source,
+            text: evidenceBody,
+              truncated: false,
+            }
+          : undefined,
       activity:
         request.query.kind === "activity"
           ? [source("commit", 1, 11), source("commit", 2, 12), source("issue", 3, 11)]
@@ -147,6 +165,41 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   assert.equal(calls.at(-1).request.query.kind, "identity");
   const opened = await activity.page(f.friend, id, projectId, a.items[0].key);
   assert.equal(opened.items.length, 1);
+  const handoffId = randomUUID(),
+    sources = a.items.map((v) => v.key);
+  const prepared = await activity.prepare(f.friend, id, projectId, handoffId, sources);
+  assert.equal(prepared.projectId, "friend-copy");
+  assert.equal(prepared.sources, 3);
+  assert.equal(sends.size, 0, "preparing discussion must not send");
+  await assert.rejects(activity.handoff(f.owner, handoffId));
+  const sendKey = randomUUID(),
+    body = {
+      revision: 0,
+      nativeId: "own-project-gpt",
+      text: "Explain",
+      files: [],
+      model: "native-model",
+      effort: "0",
+    };
+  const first = await activity.sendHandoff(f.friend, handoffId, sendKey, body);
+  assert.match(first.evidence, /Exact patch/);
+  assert.doesNotMatch(first.evidence, /\/fixture/);
+  activity = new SpaceActivity(s, personal, probe);
+  assert.equal((await activity.sendHandoff(f.friend, handoffId, sendKey, body)).id, first.id);
+  assert.equal(sends.size, 1);
+  evidenceBody="Большой патч ".repeat(10000);
+  const large=await activity.prepare(f.friend,id,projectId,randomUUID(),sources);
+  assert.equal(large.truncated,true);
+  const largeSnapshot=JSON.parse(String(f.team.db.prepare("SELECT data FROM activity_gpt_handoffs WHERE id=?").get(large.id).data));
+  assert(Buffer.byteLength(largeSnapshot.text)<16384);
+  for(const source of sources)assert(largeSnapshot.text.includes(source));
+  await assert.rejects(activity.sendHandoff(f.friend, handoffId, randomUUID(), body), {
+    code: "ACTIVITY_ALREADY_SENT",
+  });
+  await assert.rejects(
+    activity.sendHandoff(f.friend, handoffId, sendKey, { ...body, revision: 1 }),
+    { code: "PROJECT_GPT_CHANGED" },
+  );
   await assert.rejects(activity.page(f.stranger, id, projectId), { code: "SPACE_NOT_FOUND" });
   const before = calls.length;
   await assert.rejects(activity.page(f.owner, id, randomUUID()));
@@ -157,6 +210,7 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   });
   repositoryId = 42;
   access = "unavailable";
+  await assert.rejects(activity.sendHandoff(f.friend, handoffId, sendKey, body));
   await assert.rejects(activity.page(f.friend, id, projectId), { code: "ACTIVITY_UNAVAILABLE" });
   assert.equal(f.team.db.prepare("SELECT count(*) AS n FROM space_activity_index").get().n, 0);
   access = "read";

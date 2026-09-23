@@ -31,8 +31,47 @@ empty repository is supported. New repositories without a personal checkout
 offer the existing connection flow.
 
 Routine activity creates no notifications, writes no reports and sends no
-GitHub mutations. Reactions/replies, attention routing and exact evidence handoff
-to personal Project GPT remain the subsequent approved stages of #218/#200.
+GitHub mutations. Reactions/replies and attention routing remain the subsequent
+approved stage of #218. Project GPT handoff is implemented as described below.
+
+## Discuss in Project GPT
+
+Each card offers **Обсудить в GPT**, including a complete commit group. This
+prepares a private evidence snapshot and opens the viewer's existing Project GPT
+for their own checkout. Opening never sends a message. The normal composer shows
+a removable context chip and preserves its previous draft. The user can ask a
+question or press Send for the default request to explain the changes and risks.
+No model/effort is selected on the user's behalf.
+
+The snapshot retains up to 30 exact references. At most five sources are read in
+detail: commit message/parents/stats and patches, Issue description/status, or PR
+description/head/base and file patches. Each source reads at most 20 files with
+bounded patches; PR head/base are checked again after the files read. Total
+snapshot JSON stays within 14,000 UTF-8 bytes, leaving room under the existing
+native 32 KiB input ceiling. Missing patches, extra sources and truncation are
+explicitly marked. This is source evidence, not a claim of reading the entire
+repository, running tests, or giving GPT new live repository tools.
+
+Prepared snapshots are private to their viewer (100 per user, seven-day retention).
+Each opening/send checks current membership, project/checkout, execution epoch,
+GitHub account, repository identity and access. Sending also requires the original
+Project GPT binding revision and chat. A changed binding leaves the draft intact.
+Repository text is labelled untrusted source data, not instructions. The snapshot
+enters the existing collapsed project-context envelope in the actual native message.
+
+One handoff can allocate only one durable send key. The existing GPT outbox freezes
+the exact input and prevents replay after uncertain delivery. Closing/reopening the
+same event retains the pending context and receipt; accepted sends clear the chip.
+Revisiting an already accepted event may explicitly start a new discussion.
+No GitHub comments, Issues, notifications or other users' chats are written.
+
+Handoff verification: 17 focused worker/Activity/Project-GPT tests, including changed
+PR head, Unicode byte bounds, revocation, private routing, changed chat binding and
+frozen evidence retries. Chromium and WebKit exercise the actual private GPT outbox,
+existing chat/draft reuse, lost acknowledgement followed by window reopen and retry
+(one native send), plus context-chip geometry in four themes on phone/tablet.
+Real Windows read-only commit and Issue evidence reads also passed; native GPT sends
+were exercised with disposable fixtures, not the owner's live chats.
 
 ## Verification (2026-09-23)
 
