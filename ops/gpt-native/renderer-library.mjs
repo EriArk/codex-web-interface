@@ -1,4 +1,5 @@
 // Fixed library operations in the pinned consumer client. No caller URLs or generic RPC.
+import {nativeRequestGate} from './request-gate.mjs';
 export async function nativeLibrary(r, read, load=()=>import('app://-/assets/app-initial-430deae5a13a.js'), runtime=globalThis) {
  const fail=c=>{throw Error(`NATIVE_${c}`);};
  const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
@@ -9,6 +10,7 @@ export async function nativeLibrary(r, read, load=()=>import('app://-/assets/app
   ['pin','archive'].includes(r.action)&&typeof r.value!=='boolean'||r.action==='delete'&&r.confirm!==true)fail('INVALID_LIBRARY');
  if((await read({operation:'inspectAccount'},load,runtime)).accountFingerprint!==r.accountFingerprint)fail('ACCOUNT_MISMATCH');
  const m=await load(),signal=AbortSignal.timeout(15000);
+ const gate=nativeRequestGate(r.accountFingerprint,runtime);
  if(typeof m.kWt?.getRequestTarget!=='function'||typeof m.kWt?.getRequestBody!=='function'||typeof m.$rn?.getInstance!=='function')fail('INCOMPATIBLE');
  const account=async()=>{
   const v=await m.M9.accessInputs.readAccountInfo();if(v?.status!=='ready')fail('ACCOUNT_UNAVAILABLE');
@@ -17,10 +19,12 @@ export async function nativeLibrary(r, read, load=()=>import('app://-/assets/app
   return {accountId:p.accountId,userId:p.userId};
  };
  const fetchFixed=async(method,route,options={})=>{
+  gate.check();
   const principal=await account(),{url,headers}=m.kWt.getRequestTarget(route,options);let attempts=0;
   let response;try{response=await m.$rn.getInstance().fetch(url,{method,headers,body:method==='GET'?undefined:m.kWt.getRequestBody(options),signal,retry:false,
    expectedIdentity:principal,assertRequestCurrent:()=>{if(signal.aborted||attempts++!==0)fail('LIBRARY_REPLAY_BLOCKED');}});
   }catch(error){
+   if(error?.responseStatus===429&&error.status===429)gate.limited(error.headers?.get?.('retry-after'));
    // The pinned native transport throws on non-2xx responses. Only an actual
    // explicit HTTP rejection is terminal; timeouts/transport failures stay unknown.
    if(!signal.aborted&&[400,403,404,409,422].includes(error?.responseStatus)&&error.status===error.responseStatus){
@@ -28,7 +32,7 @@ export async function nativeLibrary(r, read, load=()=>import('app://-/assets/app
    }
    throw error;
   }
-  await account();return response;
+  await account();if(response.status===429){const delay=response.headers?.get?.('retry-after');await response.body?.cancel();gate.limited(delay);}gate.success();return response;
  };
  const metadata=async()=>{
   if(r.kind==='project'){

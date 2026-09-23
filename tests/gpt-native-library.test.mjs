@@ -150,6 +150,8 @@ function renderer() {
   return {
     r,
     calls,
+    runtime,
+    m,
     editor,
     setChanged: () => {
       changed = true;
@@ -329,4 +331,50 @@ test("native project rename preserves instructions and appearance in fixed PATCH
   assert.deepEqual(writes, [
     { name: "After", instructions: "Owner rules", emoji: "book", theme: "blue" },
   ]);
+});
+
+test("library changes respect an active job older than the visible 100-job page", async (t) => {
+  const native = nativeWorkspaceFixture();
+  let writes = 0;
+  native.client.libraryMutation = async () => {
+    writes++;
+    return { state: "completed", name: "Changed", projectId: null };
+  };
+  const f = await handoffFixture(undefined, undefined, { nativeGpt: native.workspace });
+  t.after(() => f.close());
+  const insert = f.store.db.prepare(
+    "INSERT INTO gpt_jobs(id,fingerprint,nativeId,text,files,model,effort,status,answer,assets,error,createdAt,updatedAt) VALUES(?,?,?,'prompt','[]','latest','1',?,'','[]','',?,?)",
+  );
+  for (let i = 0; i < 102; i++)
+    insert.run(
+      randomUUID(),
+      "proof-" + i,
+      native.conversationId,
+      i === 0 ? "running" : "completed",
+      i,
+      i,
+    );
+  const result = await f.app.inject({
+    method: "POST",
+    url: "/api/library/gpt/thread/" + native.conversationId,
+    headers: { ...f.headers, "idempotency-key": randomUUID() },
+    payload: { action: "rename", name: "Changed" },
+  });
+  assert.equal(result.statusCode, 409, result.body);
+  assert.equal(writes, 0);
+});
+
+test("library rate limit prevents further account requests and never repeats a mutation", async () => {
+  const f = renderer();
+  let calls = 0;
+  const baseline = await f.run(f.r);
+  f.m.$rn.getInstance = () => ({
+    fetch: async () => {
+      calls++;
+      return new Response("", { status: 429, headers: { "Retry-After": "120" } });
+    },
+  });
+  await assert.rejects(f.run(f.r), /RATE_LIMITED/);
+  await assert.rejects(f.run({ ...f.r, operation: "mutateLibrary", baseline }), /RATE_LIMITED/);
+  assert.equal(calls, 1);
 });

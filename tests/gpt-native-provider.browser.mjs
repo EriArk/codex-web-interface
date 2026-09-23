@@ -44,8 +44,8 @@ for (const [engine, type] of [
     await page.getByRole("button", { name: "Отправить GPT", exact: true }).click();
     await expect.poll(() => native.state.sends).toBe(1);
     await expect
-      .poll(() => f.store.db.prepare("SELECT answer FROM gpt_jobs LIMIT 1").get()?.answer)
-      .toBe("Проверяю вложение");
+      .poll(() => f.store.db.prepare("SELECT value FROM gpt_job_progress LIMIT 1").get()?.value)
+      .toContain("Проверяю вложение");
     native.state.finished = true;
     await expect
       .poll(() => f.store.db.prepare("SELECT status FROM gpt_jobs LIMIT 1").get()?.status, {
@@ -56,6 +56,10 @@ for (const [engine, type] of [
       timeout: 12000,
     });
     await page.reload();
+    await expect(page.getByText("nativeworkspaceok", { exact: false }).first()).toBeVisible();
+    await composer.fill("Сохранить черновик при смене размера");
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expect(composer).toHaveValue("Сохранить черновик при смене размера");
     await expect(page.getByText("nativeworkspaceok", { exact: false }).first()).toBeVisible();
     assert.equal(native.state.sends, 1);
     assert.deepEqual(errors, []);

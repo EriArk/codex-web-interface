@@ -51,6 +51,16 @@ export class NativeGptJobs {
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS gpt_native_preparations(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id))",
     );
+    for (const column of ["retryAt", "attempts"])
+      if (
+        !store.db
+          .prepare("PRAGMA table_info(gpt_native_preparations)")
+          .all()
+          .some((r) => r.name === column)
+      )
+        store.db.exec(
+          `ALTER TABLE gpt_native_preparations ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`,
+        );
     store.db.exec(
       "UPDATE gpt_jobs SET status='failed',error='NATIVE_PREPARATION_INTERRUPTED' WHERE status='preparing' AND id IN (SELECT jobId FROM gpt_native_preparations) AND id NOT IN (SELECT jobId FROM gpt_native_receipts)",
     );
@@ -143,7 +153,9 @@ export class NativeGptJobs {
         ...(this.project(id) ? { projectId: this.project(id) } : {}),
       };
       if (!/^\d+$/.test(String(row.effort))) fail("INVALID_SETTINGS");
-      this.store.db.prepare("INSERT OR IGNORE INTO gpt_native_preparations VALUES(?)").run(id);
+      this.store.db
+        .prepare("INSERT OR IGNORE INTO gpt_native_preparations(jobId) VALUES(?)")
+        .run(id);
       if (
         this.store.db
           .prepare(
@@ -154,8 +166,10 @@ export class NativeGptJobs {
         fail("JOB_CHANGED");
       let prepared: Awaited<ReturnType<NativeJobsClient["prepareDispatch"]>>;
       const attachments: NativeUploadedFile[] = [];
+      let preparing = true;
       try {
         prepared = await this.client.prepareDispatch(input);
+        preparing = false;
         this.authorize();
         if (this.row(id).status !== "preparing") fail("JOB_CHANGED");
         if (prepared.versionId !== input.versionId || prepared.presetId !== input.presetId)
@@ -207,11 +221,40 @@ export class NativeGptJobs {
           this.authorize();
         }
       } catch (error) {
+        const attempts = Number(
+          this.store.db
+            .prepare("SELECT attempts FROM gpt_native_preparations WHERE jobId=?")
+            .get(id)?.attempts ?? 0,
+        );
+        const retry =
+          preparing &&
+          attempts < 3 &&
+          error instanceof Error &&
+          /^(NATIVE_RATE_LIMITED|NATIVE_READ_UNAVAILABLE|NATIVE_TIMEOUT|NATIVE_HISTORY_HEADERS_TIMEOUT|NATIVE_HISTORY_BODY_TIMEOUT|NATIVE_BUSY|NATIVE_MANUAL_RECOVERY|NATIVE_DISCONNECTED|NATIVE_UNAVAILABLE|NATIVE_WINDOW_CHANGED|NATIVE_WINDOW_AMBIGUOUS)$/.test(
+            error.message,
+          );
+        // Only failed read-only preparation may return to the accepted outbox.
+        // No upload or dispatch has begun. Their uncertain effects never replay.
+        if (retry)
+          this.store.db
+            .prepare(
+              "UPDATE gpt_native_preparations SET attempts=attempts+1,retryAt=? WHERE jobId=?",
+            )
+            .run(
+              Date.now() +
+                (error.message === "NATIVE_RATE_LIMITED" ? 60000 : 10000) * 2 ** attempts,
+              id,
+            );
         this.store.db
           .prepare(
-            "UPDATE gpt_jobs SET status='failed',error='NATIVE_PREPARATION_FAILED',updatedAt=? WHERE id=? AND status='preparing'",
+            "UPDATE gpt_jobs SET status=?,error=?,updatedAt=? WHERE id=? AND status='preparing'",
           )
-          .run(Date.now(), id);
+          .run(
+            retry ? "queued" : "failed",
+            retry ? "" : "NATIVE_PREPARATION_FAILED",
+            Date.now(),
+            id,
+          );
         throw error;
       }
       const payload = {
@@ -347,7 +390,9 @@ export class NativeGptJobs {
       if (
         row.status === "running" &&
         error instanceof Error &&
-        /^(NATIVE_RATE_LIMITED|NATIVE_READ_UNAVAILABLE|NATIVE_TIMEOUT)$/.test(error.message)
+        /^(NATIVE_RATE_LIMITED|NATIVE_READ_UNAVAILABLE|NATIVE_TIMEOUT|NATIVE_HISTORY_HEADERS_TIMEOUT|NATIVE_HISTORY_BODY_TIMEOUT|NATIVE_BUSY|NATIVE_QUEUE_FULL|NATIVE_MANUAL_RECOVERY|NATIVE_DISCONNECTED|NATIVE_UNAVAILABLE|NATIVE_WINDOW_CHANGED|NATIVE_WINDOW_AMBIGUOUS)$/.test(
+          error.message,
+        )
       ) {
         this.store.db.prepare("UPDATE gpt_jobs SET updatedAt=? WHERE id=?").run(Date.now(), id);
         throw error;

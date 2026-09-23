@@ -5,6 +5,7 @@ import {nativeDictation} from './renderer-dictation.mjs';
 import {nativeProject} from './renderer-project.mjs';
 import {nativeLibrary} from './renderer-library.mjs';
 import {nativeRead} from './renderer-read.mjs';
+import {nativeRequestGate} from './request-gate.mjs';
 import {nativeControl} from './renderer-control.mjs';
 import {nativeSettings} from './renderer-settings.mjs';
 import {nativeComposer} from './renderer-composer.mjs';
@@ -139,7 +140,7 @@ export class NativeRendererReader {
   try {
    const read = `(request => (${nativeRead.toString()})(request,undefined,globalThis,${nativeActivity.toString()}))`;
    const call = control === 'live' ? `(${nativeLive.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'operation' ? `(${nativeOperation.toString()})(${JSON.stringify(request)},${read},${nativeControl.toString()})` : control === 'workspace' ? `(${nativeWorkspace.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'media' ? `(${nativeMedia.toString()})(${JSON.stringify(request)},${read},${nativeArtifacts.toString()})` : control === 'dictation' ? `(${nativeDictation.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'project' ? `(${nativeProject.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'library' ? `(${nativeLibrary.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'stored-upload' ? `(${nativeStoredUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'upload-stage' ? `(${nativeUploadStage.toString()})(${JSON.stringify(request)})` : control === 'upload' ? `(${nativeUpload.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'dispatch' ? `(${nativeDispatch.toString()})(${JSON.stringify(request)},${read},${nativeControl.toString()},undefined,globalThis,undefined,${nativeActivity.toString()})` : control === 'artifacts' ? `(${nativeArtifacts.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'composer' ? `(${nativeComposer.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : control === 'settings' ? `(${nativeSettings.toString()})(${JSON.stringify(request)},${read},${nativeControl.toString()})` : control ? `(${nativeControl.toString()})(${JSON.stringify(request)},${nativeRead.toString()})` : `(${read})(${JSON.stringify(request)})`;
-   const expression = `(async()=>{try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
+   const expression = `(async()=>{const nativeRequestGate=${nativeRequestGate.toString()};try{if(!(${guard}))throw Error('NATIVE_WINDOW_CHANGED');return {ok:true,value:await ${call}}}catch(e){return {ok:false,code:/^NATIVE_[A-Z_]+$/.test(e?.message)?e.message:'NATIVE_READ_UNAVAILABLE'}}})()`;
    const unwrap=result=>{if(result?.ok!==true)throw Error(/^NATIVE_[A-Z_]+$/.test(result?.code??'')?result.code:'NATIVE_INVALID_RESPONSE');return result.value;};
    if(this.transport)return unwrap(await this.transport.evaluateMain(expression,guard,signal));
    const response = await fetch(`${endpoint}/json/list`, {signal, redirect:'error'});

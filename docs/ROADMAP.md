@@ -1,5 +1,9 @@
 # Roadmap
 
+## GPT stability pass (2026-09-23)
+
+Owner-requested large native GPT audit: [findings, fixes, tests and limits](GPT_STABILITY_AUDIT_2026-09-23.md). Covers account-wide rate-limit cooldown, bounded canonical polling, durable paced background deletions, confirmed-delivery continuity, safe preparation recovery and mobile Remote reconnection. Keep release installation evidence separate from source verification; use the normal guarded engine/native rollout.
+
 ## First priority: Collaboration Spaces (#215, 2026-09-21)
 
 Completion block implemented: additional participant invitations in existing spaces; per-project grants remain with each Project owner, including pending invitees; recipient grants for their own Project are chosen per existing member. Optional recommendations are available during creation/invitation/acceptance, merge into personal local CODEXWEB.md exactly once, and can be edited from Space Settings. Focused disposable-account acceptance includes a third member, optional-rule opt-out, existing human chat/files/unread, private native identity, theme and keyboard geometry. The owner requested completing these features before involving the friend. Remaining: release installation and ordinary real owner/friend use with actual GitHub permissions; do not claim physical-device/native two-user acceptance from simulated transport. Brainstorm stays deferred.

@@ -197,6 +197,7 @@ test("deletion is immediate locally, waits while busy, and reconciles after rest
   queue = new GptDeletions(store, library, workspace);
   queue.enqueue(key, id);
   store.db.prepare("UPDATE gpt_deletions SET nextAt=0").run();
+  store.db.prepare("UPDATE gpt_deletion_schedule SET nextAt=0").run();
   await queue.tick(
     () => {},
     () => true,
@@ -255,4 +256,60 @@ test("unknown deletion blocks only its own chat and absent native chats finish w
     ).state,
     "completed",
   );
+});
+
+test("batch tombstones stay instant while native deletions are spaced durably and yield to work", async (t) => {
+  const store = new Store(join(temp(t), "app.db"));
+  t.after(() => store.close());
+  const library = new Library(store, "gpt");
+  let now = 100000,
+    calls = 0,
+    busy = true,
+    fail = false;
+  const workspace = {
+    client: {
+      libraryMutation: async () => {
+        calls++;
+        if (fail) throw Error("NATIVE_RATE_LIMITED");
+        return { state: "completed" };
+      },
+    },
+  };
+  let queue = new GptDeletions(store, library, workspace, () => now);
+  for (let i = 0; i < 20; i++) {
+    const id = randomUUID();
+    queue.enqueue(randomUUID(), id);
+    assert.equal(library.get("thread", id).deleted, true);
+  }
+  const tick = () =>
+    queue.tick(
+      () => {},
+      () => !busy,
+    );
+  await tick();
+  assert.equal(calls, 0);
+  busy = false;
+  await tick();
+  assert.equal(calls, 1);
+  queue = new GptDeletions(store, library, workspace, () => now);
+  for (let i = 0; i < 5; i++) {
+    now += 5000;
+    await tick();
+  }
+  assert.equal(calls, 1, "new chats and restart cannot bypass global spacing");
+  now += 5000;
+  fail = true;
+  await tick();
+  assert.equal(calls, 2);
+  now += 30000;
+  await tick();
+  assert.equal(calls, 2, "failure backs off all pending deletions");
+  now += 30000;
+  busy = true;
+  await tick();
+  assert.equal(calls, 2);
+  busy = false;
+  fail = false;
+  await tick();
+  assert.equal(calls, 3);
 });

@@ -33,6 +33,7 @@ function fixture() {
       accessInputs: { readAccountInfo: async () => ({ status: "ready", data: { ...account } }) },
     },
     kWt: {
+      getRequestTarget: (route) => ({ url: route, headers: {} }),
       safeGet: async (route, options) => {
         state.calls.push({ route, options });
         if (route === "/conversation/{conversation_id}") return conversation;
@@ -45,7 +46,15 @@ function fixture() {
         };
       },
     },
-    $rn: { getInstance: () => ({ fetch: (url, options) => download("native", url, options) }) },
+    $rn: {
+      getInstance: () => ({
+        fetch: (url, options) =>
+          url === "/conversation/{conversation_id}"
+            ? (state.calls.push({ route: url, options }),
+              Promise.resolve(new Response(JSON.stringify(conversation))))
+            : download("native", url, options),
+      }),
+    },
   };
   const runtime = {
     crypto: webcrypto,
@@ -77,7 +86,7 @@ function fixture() {
       artifactId: artifactId("node", "/mnt/data/result.txt"),
       ...extra,
     });
-  return { state, account, binding, conversation, node, list, read, run };
+  return { state, account, binding, conversation, node, list, read, run, runtime };
 }
 
 test("artifact discovery uses public current-branch links, stable message/path IDs and no code examples", async () => {
@@ -142,6 +151,7 @@ test("artifact IDs cannot be substituted across messages, paths or non-current b
     /ARTIFACT_NOT_ON_BRANCH/,
   );
   f.conversation.current_node = "node";
+  f.runtime[Symbol.for("codex-web.native-history")]?.clear();
   await assert.rejects(
     f.read({ messageId: "second", artifactId: artifactId("second", "/mnt/data/result.txt") }),
     /MESSAGE_NOT_ON_BRANCH/,

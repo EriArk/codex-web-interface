@@ -1,5 +1,6 @@
 // Version-specific, private research adapter. No sends, navigation or generic RPC.
 // Keep this function self-contained: it also runs inside the native renderer.
+import {nativeRequestGate} from './request-gate.mjs';
 export async function nativeRead(request, load = () => import('app://-/assets/app-initial-430deae5a13a.js'), runtime = globalThis, activity = () => null) {
  const fail = code => { throw Error(`NATIVE_${code}`); };
  const projectId = value => typeof value==='string'&&/^g-p-[a-zA-Z0-9-]{1,80}$/.test(value);
@@ -41,12 +42,29 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  // Inspection proposes a binding; the caller must explicitly persist/approve it.
  if (request.operation === 'inspectAccount') return {build:'26.915.31945', accountFingerprint:before.fingerprint, writesEnabled:false};
  if (before.fingerprint !== request.accountFingerprint) fail('ACCOUNT_MISMATCH');
+ const gate=nativeRequestGate(before.fingerprint,runtime);
+ const get=async(route,options)=>{
+  gate.check();
+  // In this pinned build safeGet({retry:false}) drops expectedIdentity. Use the
+  // lower transport so disabling retries never weakens the account binding.
+  const {url,headers}=m.kWt.getRequestTarget(route,options);
+  let response;
+  try {
+   response=await bounded(m.$rn.getInstance().fetch(url,{headers,expectedIdentity:before.principal,signal,retry:false}));
+   if(!response.ok){const status=response.status,delay=response.headers?.get?.('retry-after');await response.body?.cancel();if(status===429)gate.limited(delay);throw {status,responseStatus:status};}
+   const reader=response.body.getReader(),decoder=new TextDecoder();let bytes=0,text='';
+   try{for(;;){const chunk=await bounded(reader.read());if(chunk.done)break;bytes+=chunk.value.length;if(bytes>16*1024**2)fail('RESPONSE_TOO_LARGE');text+=decoder.decode(chunk.value,{stream:true});}}
+   catch(e){void reader.cancel().catch(()=>{});throw e;}
+   finally{reader.releaseLock();}
+   const value=JSON.parse(text+decoder.decode());gate.success();return value;
+  } catch(e){if(e?.responseStatus===429&&e.status===429)gate.limited(e.headers?.get?.('retry-after'));throw e;}
+ };
  if(['readProjects','readProject','readProjectConversations'].includes(request.operation)){
   const route=request.operation==='readProjects'?'/gizmos/snorlax/sidebar':request.operation==='readProject'?'/gizmos/{gizmo_id_or_short_url}':'/gizmos/{gizmo_id}/conversations';
   const parameters=request.operation==='readProjects'?{query:{conversations_per_gizmo:5,cursor:request.cursor??null,limit:20,owned_only:false}}:
    request.operation==='readProject'?{path:{gizmo_id_or_short_url:request.projectId},query:{include_file_limits:true}}:
    {path:{gizmo_id:request.projectId},query:{cursor:request.cursor??null,limit:20,owned_only:false}};
-  const raw=await bounded(m.kWt.safeGet(route,{parameters,expectedIdentity:before.principal,signal}));
+  const raw=await get(route,{parameters,expectedIdentity:before.principal,signal});
   if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
   const text=(v,max)=>{if(typeof v!=='string'||v.length>max)fail('INVALID_PROJECT');return v;};
   const number=v=>typeof v==='number'?v*1000:Date.parse(v);
@@ -68,7 +86,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  }
  if(request.operation==='readPins'){
   if(!/^[a-f0-9]{64}$/.test(request.accountFingerprint??''))fail('INVALID_REQUEST');
-  const raw=await bounded(m.kWt.safeGet('/pins',{expectedIdentity:before.principal,signal}));
+  const raw=await get('/pins',{expectedIdentity:before.principal,signal});
   if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
   const rows=Array.isArray(raw)?raw:raw?.items;
   if(!Array.isArray(rows)||rows.length>100)fail('INVALID_PINS');
@@ -84,8 +102,8 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  if(request.operation==='readCatalog'||request.operation==='findCreation'){
   const offset=request.operation==='readCatalog'?(request.offset??0):0;
   let result;
-  try{result=await bounded(m.kWt.safeGet('/conversations',{parameters:{query:{offset,limit:20,order:'updated',is_archived:request.operation==='readCatalog'&&request.archived===true,hide_snorlax:false}},expectedIdentity:before.principal,signal}));}
-  catch{fail(signal.aborted?'TIMEOUT':'READ_UNAVAILABLE');}
+  try{result=await get('/conversations',{parameters:{query:{offset,limit:20,order:'updated',is_archived:request.operation==='readCatalog'&&request.archived===true,hide_snorlax:false}},expectedIdentity:before.principal,signal});}
+  catch(e){if(e?.message==='NATIVE_RATE_LIMITED')throw e;fail(signal.aborted?'TIMEOUT':'READ_UNAVAILABLE');}
   if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
   if(!Array.isArray(result?.items)||result.items.length>20)fail('INVALID_CATALOG');
   const time=x=>{const ms=typeof x==='string'?Date.parse(x):NaN;if(!Number.isFinite(ms)||ms<0)fail('INVALID_CATALOG');return ms;};
@@ -115,9 +133,9 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  }
  if (request.operation === 'readModels') {
   let catalog;
-  try { catalog = await bounded(m.kWt.safeGet('/models', {
+  try { catalog = await get('/models', {
    parameters:{query:{iim:false,include_icons:false}}, expectedIdentity:before.principal, signal,
-  })); } catch { fail(signal.aborted ? 'TIMEOUT' : 'READ_UNAVAILABLE'); }
+  }); } catch(e) { if(e?.message==='NATIVE_RATE_LIMITED')throw e;fail(signal.aborted ? 'TIMEOUT' : 'READ_UNAVAILABLE'); }
   if ((await account()).fingerprint !== before.fingerprint) fail('ACCOUNT_CHANGED');
   const text = value => typeof value === 'string' && value.length > 0 && value.length <= 128;
   if (!Array.isArray(catalog?.versions) || !catalog.versions.length || catalog.versions.length > 32) fail('INVALID_MODELS');
@@ -145,9 +163,16 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
  if(saved?.retryAt>now)fail('RATE_LIMITED');
  // Receipt polling follows a newly submitted turn. A navigation snapshot from
  // before submission must not hold back delivery/output for fifteen seconds.
- const historyTtl=request.operation==='readSubmission'?1000:15000;
+ // Delivery may need one fresh read; once this exact user exists, polling reuses
+ // the canonical snapshot. A local completion invalidates it once, below.
+ const hasSubmission=request.operation==='readSubmission'&&Object.values(saved?.value?.mapping??{}).some(n=>n?.message?.id===request.userMessageId);
+ const live=request.operation==='readSubmission'?runtime[Symbol.for('codex-web.native-live')]?.get(request.key):null;
+ if(saved&&live?.finished===true&&live.accountFingerprint===before.fingerprint&&live.userMessageId===request.userMessageId&&
+    (live.conversationId===null||live.conversationId===request.conversationId)&&saved.at<(live.finishedAt??live.at))saved=undefined;
+ const historyTtl=request.operation==='readSubmission'&&!hasSubmission?1000:15000;
  if(saved?.value&&now-saved.at<historyTtl)conversation=saved.value;
  else try {
+  gate.check();
   const principal=before.principal;
   // The default safeGet retries history failures internally; use the pinned,
   // principal-bound native transport once and respect its rate-limit response.
@@ -155,7 +180,7 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   let response;
   try { response=await bounded(m.$rn.getInstance().fetch(url,{headers,expectedIdentity:principal,signal,retry:false})); }
   catch(e){if(signal.aborted)fail('HISTORY_HEADERS_TIMEOUT');throw e;}
-  if(!response.ok){const status=response.status;await response.body?.cancel();throw {status,responseStatus:status};}
+  if(!response.ok){const status=response.status,retryAfter=response.headers?.get?.('retry-after');await response.body?.cancel();if(status===429)gate.limited(retryAfter);throw {status,responseStatus:status};}
   let bytes=0,text='';const decoder=new TextDecoder();
   const reader=response.body.getReader();
   try {
@@ -169,10 +194,11 @@ export async function nativeRead(request, load = () => import('app://-/assets/ap
   text+=decoder.decode();conversation=JSON.parse(text);
   if((await account()).fingerprint!==before.fingerprint)fail('ACCOUNT_CHANGED');
   cache.set(key,{value:conversation,bytes,at:Date.now(),retryAt:0});
+  gate.success();
   let total=0;for(const v of cache.values())total+=v.bytes??0;
   for(const [k,v] of cache){if(total<=64*1024**2)break;if(k!==key){cache.delete(k);total-=v.bytes??0;}}
  } catch(e) {
-  if(e?.responseStatus===429&&e.status===429){cache.set(key,{at:Date.now(),retryAt:Date.now()+60000});fail('RATE_LIMITED');}
+  if(e?.responseStatus===429&&e.status===429)gate.limited(e.headers?.get?.('retry-after'));
   if(/^NATIVE_[A-Z_]+$/.test(e?.message??''))throw e;
   fail(signal.aborted ? 'TIMEOUT' : 'READ_UNAVAILABLE');
  }
@@ -369,7 +395,7 @@ function gptLinkedText(body, metadata) {
   // assistant answer. Inspect terminal metadata only; never return its content.
   const head=later[0]?.message;
   const stopped=head && (head.metadata?.finish_details?.type==='interrupted' ||
-   head.metadata?.is_error===true || head.status==='finished_partial_completion' ||
+   head.metadata?.is_error===true || (head.status==='finished_partial_completion'&&head.end_turn===true) ||
    ['error','system_error'].includes(head.content?.content_type));
   if(stopped)return {state:'cancelled',messages:visible};
   const finished=latest?.nodeId===later[0]?.id&&latest?.complete&&latest.channel==='final'&&

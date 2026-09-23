@@ -11,11 +11,15 @@ export class GptDeletions {
     private store: Store,
     private library: Library,
     private workspace: NativeGptWorkspace,
+    private now = Date.now,
   ) {
     store.db.exec(`CREATE TABLE IF NOT EXISTS gpt_deletions(
       id TEXT PRIMARY KEY, key TEXT NOT NULL UNIQUE, receipt TEXT NOT NULL,
       attempted INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0,
       attempts INTEGER NOT NULL DEFAULT 0, nextAt INTEGER NOT NULL DEFAULT 0)`);
+    store.db.exec(`CREATE TABLE IF NOT EXISTS gpt_deletion_schedule(
+      id INTEGER PRIMARY KEY CHECK(id=1), nextAt INTEGER NOT NULL, failures INTEGER NOT NULL);
+      INSERT OR IGNORE INTO gpt_deletion_schedule VALUES(1,0,0)`);
     this.adoptLegacyDeletes();
   }
   private adoptLegacyDeletes() {
@@ -78,16 +82,26 @@ export class GptDeletions {
   async tick(authorize: () => void, idle: () => boolean) {
     if (this.busy || !idle()) return;
     const db = this.store.db;
+    const schedule = db
+      .prepare("SELECT nextAt,failures FROM gpt_deletion_schedule WHERE id=1")
+      .get()!;
+    if (Number(schedule.nextAt) > this.now()) return;
     const row = db
       .prepare("SELECT * FROM gpt_deletions WHERE done=0 AND nextAt<=? ORDER BY nextAt LIMIT 1")
-      .get(Date.now());
+      .get(this.now());
     if (!row) return;
     this.busy = true;
+    let attempted = false,
+      succeeded = false;
     try {
       authorize();
       if (!idle()) return;
+      // Reserve one account-wide slot durably. New tombstones do not bypass the
+      // spacing/backoff of earlier deletions, including after a Hub restart.
+      db.prepare("UPDATE gpt_deletion_schedule SET nextAt=? WHERE id=1").run(this.now() + 30000);
+      attempted = true;
       db.prepare("UPDATE gpt_deletions SET attempted=1,nextAt=? WHERE id=?").run(
-        Date.now() + 30000,
+        this.now() + 30000,
         String(row.id),
       );
       const result = await this.workspace.client.libraryMutation(
@@ -101,6 +115,7 @@ export class GptDeletions {
         !!row.attempted,
       );
       authorize();
+      succeeded = result.state === "completed";
       if (result.state === "completed")
         db.prepare("UPDATE gpt_deletions SET done=1 WHERE id=?").run(String(row.id));
       else if (result.state === "rejected")
@@ -123,10 +138,18 @@ export class GptDeletions {
       )
         db.prepare("UPDATE gpt_deletions SET attempted=0 WHERE id=?").run(String(row.id));
     } finally {
-      db.prepare("UPDATE gpt_deletions SET attempts=attempts+1,nextAt=? WHERE id=?").run(
-        Date.now() + Math.min(300000, 15000 * (Number(row.attempts) + 1)),
-        String(row.id),
-      );
+      if (attempted) {
+        const failures = succeeded ? 0 : Math.min(5, Number(schedule.failures) + 1);
+        const nextAt = this.now() + (succeeded ? 30000 : Math.min(300000, 30000 * 2 ** failures));
+        db.prepare("UPDATE gpt_deletion_schedule SET nextAt=?,failures=? WHERE id=1").run(
+          nextAt,
+          failures,
+        );
+        db.prepare("UPDATE gpt_deletions SET attempts=attempts+1,nextAt=? WHERE id=?").run(
+          nextAt,
+          String(row.id),
+        );
+      }
       this.busy = false;
     }
   }

@@ -91,7 +91,7 @@ export class GptService {
           !this.working &&
           !this.libraryBusy &&
           !this.nativeBlocked() &&
-          !this.jobs().some((job) => active.includes(job.status) || job.status === "unknown"),
+          !this.hasUnfinishedJobs(),
       )
       .catch(() => {})
       .finally(() => {
@@ -341,7 +341,7 @@ export class GptService {
         !this.libraryBusy &&
         !this.nativeLibrary?.blocked() &&
         !this.modelsPending &&
-        !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
+        !this.hasUnfinishedJobs(),
       (id) => {
         this.observedHistory = undefined;
         this.historyCache.invalidate(id);
@@ -360,7 +360,7 @@ export class GptService {
         !this.modelsPending &&
         !this.operations.blocked() &&
         !this.workspaceWork?.blocked() &&
-        !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
+        !this.hasUnfinishedJobs(),
       (id) => {
         const file = this.upload(id);
         if (this.native) return file;
@@ -390,7 +390,7 @@ export class GptService {
         !this.modelsPending &&
         !this.operations.blocked() &&
         !this.projectContent.blocked() &&
-        !this.jobs().some((j) => active.includes(j.status) || j.status === "unknown"),
+        !this.hasUnfinishedJobs(),
       !!this.native,
     );
     this.token = config.gpt ? (process.env[config.gpt.tokenSecret] ?? "") : "";
@@ -575,6 +575,12 @@ export class GptService {
               "NATIVE_HISTORY_HEADERS_TIMEOUT",
               "NATIVE_HISTORY_BODY_TIMEOUT",
               "NATIVE_BUSY",
+              "NATIVE_MANUAL_RECOVERY",
+              "NATIVE_DISCONNECTED",
+              "NATIVE_UNAVAILABLE",
+              "NATIVE_WINDOW_CHANGED",
+              "NATIVE_WINDOW_AMBIGUOUS",
+              "NATIVE_QUEUE_FULL",
             ].includes(cause.message)
           )
             throw error(
@@ -746,7 +752,7 @@ export class GptService {
       this.operations.blocked() ||
       this.projectContent.blocked() ||
       this.workspaceWork.blocked() ||
-      this.jobs().some((job) => active.includes(job.status) || job.status === "unknown")
+      this.hasUnfinishedJobs()
     )
       throw error("GPT_BUSY", "Дождись завершения текущей работы GPT.");
     this.libraryBusy = true;
@@ -774,12 +780,7 @@ export class GptService {
   }
   async manageEntity(kind: EntityKind, nativeId: string, action: EntityAction) {
     this.library.assertExists(kind, nativeId);
-    if (
-      this.working ||
-      this.libraryBusy ||
-      this.nativeBlocked() ||
-      this.jobs().some((job) => active.includes(job.status) || job.status === "unknown")
-    )
+    if (this.working || this.libraryBusy || this.nativeBlocked() || this.hasUnfinishedJobs())
       throw error("GPT_BUSY", "Дождись завершения текущей работы GPT.");
     this.libraryBusy = true;
     try {
@@ -929,6 +930,13 @@ export class GptService {
       ];
     });
     return { items, stamp };
+  }
+  private hasUnfinishedJobs() {
+    return !!this.store.db
+      .prepare(
+        "SELECT 1 FROM gpt_jobs WHERE status IN ('queued','preparing','running','unknown') LIMIT 1",
+      )
+      .get();
   }
   jobs(): GptJob[] {
     return this.store.db
@@ -1273,9 +1281,10 @@ export class GptService {
       // Give a ready independent chat priority over background history checks.
       // Its own persisted receipt still blocks it; old-provider jobs never migrate.
       const eligible = this.store.db.prepare(
-        "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE p.provider='native' AND j.status='queued' AND NOT EXISTS(SELECT 1 FROM gpt_jobs busy WHERE busy.status IN ('running','unknown') AND busy.nativeId IS j.nativeId) ORDER BY j.createdAt LIMIT 1",
+        "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE p.provider='native' AND j.status='queued' AND NOT EXISTS(SELECT 1 FROM gpt_native_preparations wait WHERE wait.jobId=j.id AND wait.retryAt>?) AND NOT EXISTS(SELECT 1 FROM gpt_jobs busy WHERE busy.status IN ('running','unknown') AND busy.nativeId IS j.nativeId) ORDER BY j.createdAt LIMIT 1",
       );
-      let next = eligible.get();
+      let next = eligible.get(Date.now());
+      retry = !!this.store.db.prepare("SELECT 1 FROM gpt_jobs WHERE status='queued' LIMIT 1").get();
       const pending = this.store.db
         .prepare(
           "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id JOIN gpt_native_receipts r ON r.jobId=j.id WHERE p.provider='native' AND j.status IN ('running','unknown') ORDER BY j.updatedAt LIMIT 2",
@@ -1295,7 +1304,7 @@ export class GptService {
         this.invalidateNativeJob(String(row.id), refreshed);
       }
       if (this.jobs().some((j) => j.status === "preparing")) return;
-      next = eligible.get();
+      next = eligible.get(Date.now());
       if (!next) return;
       retry = true;
       // Preparation validates the bound account and the selected model itself.
@@ -1312,6 +1321,15 @@ export class GptService {
         await this.nativeJobs.run(jobId);
       } catch (cause) {
         const current = this.job(jobId);
+        if (
+          current.status === "queued" &&
+          Number(
+            this.store.db
+              .prepare("SELECT retryAt FROM gpt_native_preparations WHERE jobId=?")
+              .get(jobId)?.retryAt,
+          ) > Date.now()
+        )
+          return;
         const receipt = this.store.db
           .prepare("SELECT 1 FROM gpt_native_receipts WHERE jobId=?")
           .get(jobId);

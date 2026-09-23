@@ -391,3 +391,61 @@ test("a history outage keeps confirmed work running and cached messages readable
     /NATIVE_ACCOUNT_CHANGED/,
   );
 });
+
+test("read-only preparation recovers after cooldown and restart without repeating a send", async (t) => {
+  const f = setup(t),
+    key = randomUUID();
+  let prepares = 0;
+  const prepare = f.client.prepareDispatch;
+  f.client.prepareDispatch = async (input) => {
+    prepares++;
+    if (prepares === 1) throw Error("NATIVE_RATE_LIMITED");
+    return prepare(input);
+  };
+  const first = f.open();
+  first.enqueue(key, f.input);
+  await until(() => prepares === 1 && !first.working);
+  assert.equal(first.job(key).status, "queued");
+  assert.equal(f.state.sends, 0);
+  assert.equal(f.store.db.prepare("SELECT count(*) n FROM gpt_native_receipts").get().n, 0);
+  await first.close();
+  const second = f.open();
+  await second.pump();
+  assert.equal(prepares, 1, "restart must retain the pause");
+  f.store.db.prepare("UPDATE gpt_native_preparations SET retryAt=0 WHERE jobId=?").run(key);
+  await second.pump();
+  assert.equal(second.job(key).status, "running");
+  assert.equal(f.state.sends, 1);
+  await second.pump();
+  assert.equal(f.state.sends, 1);
+});
+
+test("preparation recovery is bounded and never retries account or settings errors", async (t) => {
+  const f = setup(t),
+    service = f.open();
+  for (const reason of ["NATIVE_ACCOUNT_CHANGED", "NATIVE_INVALID_SETTINGS"]) {
+    const key = randomUUID();
+    f.client.prepareDispatch = async () => {
+      throw Error(reason);
+    };
+    service.enqueue(key, f.input);
+    await until(() => service.job(key).status === "failed" && !service.working);
+    await service.pump();
+    assert.equal(service.job(key).status, "failed");
+  }
+  const key = randomUUID();
+  let attempts = 0;
+  f.client.prepareDispatch = async () => {
+    attempts++;
+    throw Error("NATIVE_TIMEOUT");
+  };
+  service.enqueue(key, f.input);
+  await until(() => attempts === 1 && !service.working);
+  for (let i = 0; i < 3; i++) {
+    f.store.db.prepare("UPDATE gpt_native_preparations SET retryAt=0 WHERE jobId=?").run(key);
+    await service.pump();
+  }
+  assert.equal(attempts, 4);
+  assert.equal(service.job(key).status, "failed");
+  assert.equal(f.state.sends, 0);
+});

@@ -11,13 +11,21 @@ const nativeRuntime=document.querySelector('meta[name="codex-runtime"]')?.conten
 if(nativeRuntime&&document.querySelector('meta[name="codex-native-adapter"]')){
  const done=document.createElement('button');done.type='button';done.textContent='Готово';done.setAttribute('aria-label','Закрыть Remote и вернуть управление сайту');
  done.onclick=async()=>{
-  done.disabled=true;remoteInput?.dispose();keyboard?.reset();client?.disconnect();
+  done.disabled=true;stopReconnect();remoteInput?.dispose();keyboard?.reset();client?.disconnect();
   try{const response=await fetch('/gpt-connect/native/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(!response.ok)throw Error();location.assign('/');}
   catch{text('Не удалось вернуть управление. Подожди немного и нажми «Готово» ещё раз.');done.disabled=false;}
  };
  document.querySelector('footer').append(done);
 }
 let client,keyboard,mouse,touch,remoteInput;
+let reconnectTimer,stableTimer,reconnectAttempts=0,suspended=false,leaving=false;
+function stopReconnect(){leaving=true;clearTimeout(reconnectTimer);clearTimeout(stableTimer);reconnectTimer=undefined;}
+function reconnect(){
+ clearTimeout(stableTimer);
+ if(leaving||suspended||document.hidden||reconnectTimer||reconnectAttempts>=3)return;
+ const delay=[1000,3000,8000][reconnectAttempts++];
+ reconnectTimer=setTimeout(()=>{reconnectTimer=undefined;connect()},delay);
+}
 let nativeZoom=.8,nativePointer;
 if(nativeRuntime){
  const reload=document.querySelector('#reload');reload.textContent='↻';reload.setAttribute('aria-label','Переподключить приложение');
@@ -38,12 +46,14 @@ function positionNative(d,center=false){
 }
 function resize(){document.documentElement.style.setProperty('--height',(window.visualViewport?.height??innerHeight)+'px');if(!client)return;const d=client.getDisplay();if(!d.getWidth())return;const fit=Math.min(surface.clientWidth/d.getWidth(),surface.clientHeight/d.getHeight(),1),scale=nativeRuntime?Math.max(fit,nativeZoom):fit;d.scale(scale);host.style.left=Math.max(0,(surface.clientWidth-d.getWidth()*scale)/2)+'px';positionNative(d,true);}
 async function connect(){
- remoteInput?.dispose();remoteInput=undefined;keyboard?.reset();client?.disconnect();host.replaceChildren();text(nativeRuntime?'Подключаем приложение…':'Подключаем браузер…');
+ clearTimeout(reconnectTimer);clearTimeout(stableTimer);reconnectTimer=undefined;
+ if(leaving||suspended)return;
+ remoteInput?.dispose();remoteInput=undefined;keyboard?.reset();const previous=client;client=undefined;previous?.disconnect();host.replaceChildren();text(nativeRuntime?'Подключаем приложение…':'Подключаем браузер…');
  const workspace=document.querySelector('meta[name="codex-workspace"]')?.content;
  const query=new URLSearchParams();if(workspace)query.set('workspace',workspace);if(nativeRuntime)query.set('runtime','native');
  const tunnel=new G.WebSocketTunnel(location.origin.replace(/^http/,'ws')+'/gpt-connect/remote');
  client=new G.Client(tunnel);const active=client,d=active.getDisplay();host.append(d.getElement());d.onresize=resize;
- active.onerror=e=>{if(client===active)text(e.message||'Связь прервалась. Переподключись кнопкой сверху.')};tunnel.onerror=active.onerror;active.onstatechange=s=>{if(client!==active)return;if(s===3){text('');resize()}else if(s===5)text('Связь прервалась. Переподключись кнопкой сверху.')};
+ active.onerror=e=>{if(client===active){text(e.message||'Связь прервалась. Переподключись кнопкой сверху.');reconnect()}};tunnel.onerror=active.onerror;active.onstatechange=s=>{if(client!==active)return;if(s===3){text('');resize();clearTimeout(reconnectTimer);reconnectTimer=undefined;stableTimer=setTimeout(()=>{reconnectAttempts=0},10000)}else if(s===5){text('Связь прервалась. Переподключись кнопкой сверху.');reconnect()}};
  if(nativeRuntime){
   d.showCursor(true);
   remoteInput=new window.RemoteInput(surface,{
@@ -71,6 +81,10 @@ sink.addEventListener('input',e=>{if(!e.isComposing){if(committed&&e.data===comm
 sink.addEventListener('keypress',()=>sink.value='');
 const kb=document.querySelector('#keyboard');kb.onclick=()=>{if(document.activeElement===sink)sink.blur();else sink.focus({preventScroll:true})};
 sink.onfocus=()=>kb.setAttribute('aria-pressed','true');sink.onblur=()=>{kb.setAttribute('aria-pressed','false');keyboard?.reset()};
-document.querySelector('#reload').onclick=connect;
+document.querySelector('#reload').onclick=()=>{leaving=false;reconnectAttempts=0;connect()};
 for(const button of document.querySelectorAll('[data-key]'))button.onclick=()=>{const k=Number(button.dataset.key);client?.sendKeyEvent(1,k);client?.sendKeyEvent(0,k)};
-window.addEventListener('resize',resize);visualViewport?.addEventListener('resize',resize);window.addEventListener('blur',()=>{remoteInput?.reset();keyboard?.reset()});window.addEventListener('pagehide',()=>{remoteInput?.dispose();client?.disconnect()});resize();connect();
+window.addEventListener('resize',resize);visualViewport?.addEventListener('resize',resize);window.addEventListener('blur',()=>{remoteInput?.reset();keyboard?.reset()});
+window.addEventListener('pagehide',()=>{suspended=true;clearTimeout(reconnectTimer);clearTimeout(stableTimer);reconnectTimer=undefined;remoteInput?.dispose();keyboard?.reset();client?.disconnect()});
+window.addEventListener('pageshow',e=>{if(e.persisted){suspended=false;leaving=false;reconnectAttempts=0;connect()}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!leaving&&!suspended&&client?.getState()===5){reconnectAttempts=0;reconnect()}});
+window.addEventListener('online',()=>{if(client?.getState()===5){reconnectAttempts=0;reconnect()}});resize();connect();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
-import { chromium, webkit } from "@playwright/test";
+import { chromium, expect, webkit } from "@playwright/test";
 import { GuacParser, instruction } from "../apps/hub/dist/remote.js";
 
 // Real Guacamole renderer/tunnel and shared PC Remote input, with a disposable
@@ -39,6 +39,7 @@ for (const [name, type] of [
       packets = [];
     let connections = 0,
       resumed = 0;
+    let remote;
     page.on("pageerror", (error) => errors.push(error.message));
     await page.route(origin + "/**", (route) => {
       const path = new URL(route.request().url()).pathname;
@@ -65,6 +66,7 @@ for (const [name, type] of [
       assert.equal(url.searchParams.get("runtime"), "native");
       assert.equal(url.searchParams.get("width"), "1280");
       connections++;
+      remote = route;
       const parser = new GuacParser();
       route.onMessage((data) =>
         packets.push(...parser.feed(String(data)).filter((p) => p[0] === "mouse")),
@@ -141,6 +143,17 @@ for (const [name, type] of [
     });
     assert.deepEqual(after, [["mouse", "690", "450", "0"]]);
     assert.equal(connections, 2);
+    packets.length = 0;
+    remote.close({ code: 1011, reason: "Transient transport failure" });
+    await expect.poll(() => connections).toBe(3);
+    await page.waitForFunction(() => document.querySelector("#status").hidden);
+    assert.equal(packets.length, 0, "reconnect must not replay touch input");
+    await page.evaluate(() => {
+      window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    await expect.poll(() => connections).toBe(4);
+    await page.waitForFunction(() => document.querySelector("#status").hidden);
     // Fit mode must still reach the full native desktop, not clamp to CSS width.
     await page.getByRole("button", { name: "Весь экран приложения", exact: true }).click();
     const edge = await gesture(() => {

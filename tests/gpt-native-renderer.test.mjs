@@ -100,7 +100,7 @@ test("canonical graph keeps public action categories and generated images, exclu
 
 test("stopped native turns finish without exposing hidden terminal content", async () => {
   for (const terminal of [
-    { status: "finished_partial_completion" },
+    { status: "finished_partial_completion", end_turn: true },
     { metadata: { finish_details: { type: "interrupted" } } },
     { metadata: { is_error: true } },
   ]) {
@@ -705,4 +705,90 @@ test("stalled history body is cancelled at its deadline with a stage-specific er
   } finally {
     clearTimeout(timer);
   }
+});
+
+test("account cooldown covers other chats, models and catalogs; success cannot cancel Retry-After", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  let now = Date.now(),
+    calls = 0;
+  f.runtime.Date = { now: () => now };
+  f.service.$rn.getInstance = () => ({
+    fetch: async () => {
+      calls++;
+      return new Response("", { status: 429, headers: { "Retry-After": "180" } });
+    },
+  });
+  const request = { operation: "readConversationGraph", conversationId, accountFingerprint };
+  await assert.rejects(f.read(request, true), /RATE_LIMITED/);
+  for (const r of [
+    { ...request, conversationId: id(400) },
+    { operation: "readModels", accountFingerprint },
+    { operation: "readCatalog", accountFingerprint, offset: 0 },
+  ])
+    await assert.rejects(f.read(r, true), /RATE_LIMITED/);
+  now += 120000;
+  await assert.rejects(f.read(request, true), /RATE_LIMITED/);
+  assert.equal(calls, 1);
+  now += 61000;
+  await assert.rejects(f.read(request, true), /RATE_LIMITED/);
+  assert.equal(calls, 2);
+});
+
+test("confirmed active submission shares history for 15 seconds and final signal refreshes it once", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  f.node(2, "prompt", { id: id(90), author: { role: "user" } });
+  f.node(3, "working", { channel: "commentary", status: "in_progress", end_turn: false });
+  const r = {
+    operation: "readSubmission",
+    key: id(100),
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "prompt",
+  };
+  assert.equal((await f.read(r, true)).state, "running");
+  const cached = [...f.runtime[Symbol.for("codex-web.native-history")].values()][0];
+  cached.at -= 2000;
+  for (let i = 0; i < 8; i++) assert.equal((await f.read(r, true)).state, "running");
+  assert.equal(f.calls.length, 1, "polling must not fetch full graph every two seconds");
+  f.node(4, "final", { end_turn: true });
+  f.runtime[Symbol.for("codex-web.native-live")] = new Map([
+    [
+      r.key,
+      {
+        accountFingerprint,
+        userMessageId: r.userMessageId,
+        conversationId,
+        finished: true,
+        finishedAt: Date.now(),
+        at: Date.now(),
+      },
+    ],
+  ]);
+  assert.equal((await f.read(r, true)).state, "completed");
+  await f.read(r, true);
+  assert.equal(f.calls.length, 2, "one completion wakeup, then reuse canonical final");
+});
+
+test("partial intermediate output does not cancel an ongoing native turn", async () => {
+  const f = fixture(),
+    accountFingerprint = await f.binding();
+  f.node(2, "prompt", { id: id(90), author: { role: "user" } });
+  f.node(3, "partial", {
+    channel: "commentary",
+    status: "finished_partial_completion",
+    end_turn: false,
+  });
+  const result = await f.read({
+    operation: "readSubmission",
+    conversationId,
+    accountFingerprint,
+    userMessageId: id(90),
+    parentId: id(1),
+    text: "prompt",
+  });
+  assert.equal(result.state, "running");
 });

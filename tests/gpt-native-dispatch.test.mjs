@@ -98,6 +98,7 @@ function fixture(creating = false) {
       },
     }),
     mDt: async (s, args) => {
+      state.submissionCurrent = args.isSubmissionCurrent;
       state.send++;
       assert.equal(args.userCompletionMessages.message.id, input.userMessageId);
       assert.equal(args.isSubmissionCurrent(), true);
@@ -701,4 +702,48 @@ test("preparation navigates once and resolves the requested preset without opera
   assert.equal(navigations, 1);
   assert.equal(catalogs, 1);
   assert.equal(ledger.pending(), false);
+});
+
+test("accepted native send survives navigation but still refuses another account", async () => {
+  const f = fixture();
+  await f.run();
+  f.scope.value = { routeKind: "home" };
+  assert.equal(f.state.submissionCurrent(), true);
+  f.values.set("account", { accountId: "other", userId: "other" });
+  assert.equal(f.state.submissionCurrent(), false);
+  assert.equal(f.state.post, 1);
+});
+
+test("temporary native read failures preserve confirmed delivery and public output", async (t) => {
+  const f = queue(t),
+    worker = f.open();
+  await worker.run(f.id);
+  const reconcile = f.client.reconcileDispatch;
+  for (const code of [
+    "NATIVE_HISTORY_HEADERS_TIMEOUT",
+    "NATIVE_HISTORY_BODY_TIMEOUT",
+    "NATIVE_BUSY",
+    "NATIVE_QUEUE_FULL",
+    "NATIVE_MANUAL_RECOVERY",
+    "NATIVE_DISCONNECTED",
+    "NATIVE_UNAVAILABLE",
+    "NATIVE_WINDOW_AMBIGUOUS",
+    "NATIVE_RATE_LIMITED",
+  ]) {
+    f.client.reconcileDispatch = async () => {
+      throw Error(code);
+    };
+    await assert.rejects(worker.reconcile(f.id), { message: code });
+    const row = f.db.prepare("SELECT status,answer FROM gpt_jobs").get();
+    assert.equal(row.status, "running");
+    assert.equal(row.answer, "Public progress");
+    assert.equal(
+      f.db.prepare("SELECT uncertainSince FROM gpt_native_receipts").get().uncertainSince,
+      null,
+    );
+  }
+  f.client.reconcileDispatch = reconcile;
+  f.state.readState = "completed";
+  assert.equal((await worker.reconcile(f.id)).status, "completed");
+  assert.equal(f.state.sends, 1);
 });

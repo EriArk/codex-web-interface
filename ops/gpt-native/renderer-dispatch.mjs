@@ -122,7 +122,7 @@ export async function nativeDispatch(request, read, control,
    }catch{/* Optional display must never affect native generation. */}
   };
   const nativeService=scope.get(m.CUt);
-  let attempts=0;
+  let attempts=0,submitted=false;
   const guarded=new Proxy(nativeService,{get(target,key){
    if(key==='createCompletionStreamHandlers')return args=>target.createCompletionStreamHandlers({...args,shouldAttemptResume:()=>false,
     onUpdate:update=>{observe(update);return args.onUpdate?.(update);}});
@@ -140,6 +140,7 @@ export async function nativeDispatch(request, read, control,
       if(attempts++!==0)fail('REPLAY_BLOCKED');
       if(!sameAccount()||!sameRoute())fail('DISPATCH_CONTEXT_CHANGED');
       args.assertRequestCurrent?.();
+      submitted=true;
       runtime[Symbol.for('codex-web.native-history')]?.delete(request.accountFingerprint+':'+request.conversationId);
      },
     }]);
@@ -159,8 +160,8 @@ export async function nativeDispatch(request, read, control,
    const result=await m.mDt(boundScope,{conversationId:id,parentMessageId:request.parentId,
     model:request.model,thinkingEffort:request.effort,prompt:request.text,userCompletionMessages:messages,
     systemHints:scope.get(m.UNt,id),startupSignal,requireDispatchAcceptance:true,
-    isSubmissionCurrent:()=>sameAccount()&&sameRoute(),
-    onCompletion:status=>{state.state=status==='completed'?'finished':'unknown';live.finished=true;live.at=Date.now();},
+    isSubmissionCurrent:()=>sameAccount()&&(submitted||sameRoute()),
+    onCompletion:status=>{state.state=status==='completed'?'finished':'unknown';live.finished=true;live.at=Date.now();live.finishedAt=live.at;},
     ...(creating?{projectId:request.projectId??null,conversationOrigin:null,isTemporaryChat:false,onServerThreadIdChange:candidate=>{if(uuid(candidate))state.conversationId=candidate;}}:{}),
    });
    if(creating){if(uuid(result?.serverConversationId))state.conversationId=result.serverConversationId;}
