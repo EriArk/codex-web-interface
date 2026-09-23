@@ -11,8 +11,18 @@ import type { Store } from "./store.js";
 
 const specification = z
   .object({
-    kind: z.enum(["codex", "gpt"]),
+    kind: z.enum(["codex", "gpt", "project"]),
     threadId: z.string().uuid().optional(),
+    projectId: z.string().min(1).max(100).optional(),
+    checkout: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    target: z.string().min(1).max(2048).optional(),
+    replace: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     name: z
       .string()
       .min(1)
@@ -26,7 +36,7 @@ const specification = z
     bytes: z
       .number()
       .int()
-      .positive()
+      .nonnegative()
       .max(1024 ** 4),
   })
   .strict();
@@ -38,16 +48,24 @@ const fail = (code: string, message: string, status = 409): never => {
 /** Per-user, data-only disk staging. Offsets commit after fsync; retries never append twice. */
 export class ChunkUploads {
   private busy = new Set<string>();
+  private table: "upload_transfers" | "project_upload_transfers";
   constructor(
     private root: string,
     private store: Pick<Store, "db">,
     private quota: (kind: Specification["kind"]) => { limit: number; used: number },
     private authorize: (spec: Specification) => void,
-    private finish: (id: string, spec: Specification, path: string) => Promise<unknown>,
+    private finish: (
+      id: string,
+      spec: Specification,
+      path: string,
+      sha256: string,
+    ) => Promise<unknown>,
+    private projectOnly = false,
   ) {
+    this.table = projectOnly ? "project_upload_transfers" : "upload_transfers";
     mkdirSync(root, { recursive: true, mode: 0o700 });
     store.db.exec(
-      "CREATE TABLE IF NOT EXISTS upload_transfers(id TEXT PRIMARY KEY,spec TEXT NOT NULL,offset INTEGER NOT NULL DEFAULT 0,result TEXT,updatedAt INTEGER NOT NULL)",
+      `CREATE TABLE IF NOT EXISTS ${this.table}(id TEXT PRIMARY KEY,spec TEXT NOT NULL,offset INTEGER NOT NULL DEFAULT 0,result TEXT,updatedAt INTEGER NOT NULL)`,
     );
   }
   private path(id: string) {
@@ -56,7 +74,7 @@ export class ChunkUploads {
   }
   private row(id: string) {
     z.string().uuid().parse(id);
-    const row = this.store.db.prepare("SELECT * FROM upload_transfers WHERE id=?").get(id);
+    const row = this.store.db.prepare(`SELECT * FROM ${this.table} WHERE id=?`).get(id);
     if (!row) return fail("UPLOAD_MISSING", "Загрузка не найдена.", 404);
     const spec = specification.parse(JSON.parse(String(row.spec)));
     this.authorize(spec);
@@ -78,11 +96,18 @@ export class ChunkUploads {
   async begin(id: string, value: unknown) {
     z.string().uuid().parse(id);
     const spec = specification.parse(value);
+    if (
+      (spec.kind === "project") !== this.projectOnly ||
+      (this.projectOnly
+        ? !spec.projectId || !spec.checkout || !spec.target || spec.threadId
+        : !spec.bytes || spec.projectId || spec.checkout || spec.target || spec.replace)
+    )
+      fail("UPLOAD_TARGET", "Неверное назначение файла.", 400);
     this.authorize(spec);
     if ((spec.kind === "codex" && !spec.threadId) || (spec.kind === "gpt" && spec.threadId))
       fail("UPLOAD_TARGET", "Неверное назначение файла.", 400);
     if (this.busy.has(id)) fail("UPLOAD_BUSY", "Файл ещё обрабатывается.");
-    const existing = this.store.db.prepare("SELECT spec FROM upload_transfers WHERE id=?").get(id);
+    const existing = this.store.db.prepare(`SELECT spec FROM ${this.table} WHERE id=?`).get(id);
     if (existing) {
       if (existing.spec !== JSON.stringify(spec))
         fail("UPLOAD_CHANGED", "Эта загрузка уже содержит другой файл.");
@@ -98,7 +123,7 @@ export class ChunkUploads {
       );
     // Expired partial files are owned by this private store; no source/attachment deletion.
     for (const old of this.store.db
-      .prepare("SELECT id FROM upload_transfers WHERE updatedAt<?")
+      .prepare(`SELECT id FROM ${this.table} WHERE updatedAt<?`)
       .all(Date.now() - 86400000)) {
       const key = String(old.id);
       if (this.busy.has(key)) continue;
@@ -108,7 +133,7 @@ export class ChunkUploads {
           if (e.code !== "ENOENT") throw e;
         });
         this.store.db
-          .prepare("DELETE FROM upload_transfers WHERE id=? AND updatedAt<?")
+          .prepare(`DELETE FROM ${this.table} WHERE id=? AND updatedAt<?`)
           .run(key, Date.now() - 86400000);
       } finally {
         this.busy.delete(key);
@@ -117,7 +142,7 @@ export class ChunkUploads {
     const disk = await statfs(this.root);
     this.authorize(spec);
     // Recheck after asynchronous filesystem work; admission itself is atomic.
-    const again = this.store.db.prepare("SELECT spec FROM upload_transfers WHERE id=?").get(id);
+    const again = this.store.db.prepare(`SELECT spec FROM ${this.table} WHERE id=?`).get(id);
     if (again) {
       if (again.spec !== JSON.stringify(spec))
         fail("UPLOAD_CHANGED", "Эта загрузка уже содержит другой файл.");
@@ -126,7 +151,7 @@ export class ChunkUploads {
     const reserved = Number(
       this.store.db
         .prepare(
-          "SELECT COALESCE(SUM(json_extract(spec,'$.bytes')),0) n FROM upload_transfers WHERE result IS NULL AND json_extract(spec,'$.kind')=?",
+          `SELECT COALESCE(SUM(json_extract(spec,'$.bytes')),0) n FROM ${this.table} WHERE result IS NULL AND json_extract(spec,'$.kind')=?`,
         )
         .get(spec.kind)?.n,
     );
@@ -136,14 +161,21 @@ export class ChunkUploads {
     const unwritten = Number(
       this.store.db
         .prepare(
-          "SELECT COALESCE(SUM(json_extract(spec,'$.bytes')-offset),0) n FROM upload_transfers WHERE result IS NULL",
+          `SELECT COALESCE(SUM(json_extract(spec,'$.bytes')-offset),0) n FROM ${this.table} WHERE result IS NULL`,
         )
         .get()?.n,
     );
     if (disk.bavail * disk.bsize < unwritten + spec.bytes * 2 + 64 * 1024 ** 2)
       fail("UPLOAD_DISK_FULL", "На сервере недостаточно места для файла.", 507);
+    if (
+      this.projectOnly &&
+      Number(
+        this.store.db.prepare(`SELECT COUNT(*) n FROM ${this.table} WHERE result IS NULL`).get()?.n,
+      ) >= 64
+    )
+      fail("UPLOAD_BUSY", "Сначала заверши или отмени предыдущие загрузки.");
     this.store.db
-      .prepare("INSERT INTO upload_transfers(id,spec,updatedAt) VALUES(?,?,?)")
+      .prepare(`INSERT INTO ${this.table}(id,spec,updatedAt) VALUES(?,?,?)`)
       .run(id, JSON.stringify(spec), Date.now());
     return this.state(id);
   }
@@ -194,7 +226,7 @@ export class ChunkUploads {
         await handle.sync();
         this.authorize(row.spec);
         this.store.db
-          .prepare("UPDATE upload_transfers SET offset=?,updatedAt=? WHERE id=? AND offset=?")
+          .prepare(`UPDATE ${this.table} SET offset=?,updatedAt=? WHERE id=? AND offset=?`)
           .run(offset + bytes.length, Date.now(), id, offset);
       } finally {
         await handle.close();
@@ -214,22 +246,42 @@ export class ChunkUploads {
         fail("UPLOAD_INCOMPLETE", "Файл ещё не загрузился полностью.");
       const hash = createHash("sha256");
       let bytes = 0;
+      if (!row.spec.bytes) await (await open(this.path(id), "a", 0o600)).close();
       for await (const chunk of createReadStream(this.path(id))) {
         bytes += chunk.length;
         hash.update(chunk);
       }
       if (bytes !== row.spec.bytes) fail("UPLOAD_CHANGED", "Размер временного файла изменился.");
       this.authorize(row.spec);
+      const sha256 = hash.digest("hex");
       const result = {
-        file: await this.finish(id, row.spec, this.path(id)),
-        sha256: hash.digest("hex"),
+        file: await this.finish(id, row.spec, this.path(id), sha256),
+        sha256,
       };
       this.authorize(row.spec);
       this.store.db
-        .prepare("UPDATE upload_transfers SET result=?,updatedAt=? WHERE id=?")
+        .prepare(`UPDATE ${this.table} SET result=?,updatedAt=? WHERE id=?`)
         .run(JSON.stringify(result), Date.now(), id);
       await unlink(this.path(id)).catch(() => {});
       return result;
+    } finally {
+      this.busy.delete(id);
+    }
+  }
+  async cancel(id: string) {
+    if (!this.projectOnly) fail("UPLOAD_TARGET", "Неверное назначение файла.", 400);
+    if (this.busy.has(id)) fail("UPLOAD_BUSY", "Файл ещё обрабатывается.");
+    this.busy.add(id);
+    try {
+      const row = this.row(id);
+      if (row.result) return this.state(id);
+      this.store.db
+        .prepare(`UPDATE ${this.table} SET result=?,updatedAt=? WHERE id=?`)
+        .run(JSON.stringify({ cancelled: true }), Date.now(), id);
+      await unlink(this.path(id)).catch((e) => {
+        if (e.code !== "ENOENT") throw e;
+      });
+      return this.state(id);
     } finally {
       this.busy.delete(id);
     }

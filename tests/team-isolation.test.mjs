@@ -1811,6 +1811,71 @@ test("private artifact bytes and copied download URLs stay scoped even for admin
   assert.equal((await f.request(`/api/threads/${thread.id}/history`, f.owner)).status, 404);
 });
 
+test("project file uploads isolate bytes and grants between accounts", async (t) => {
+  const f = await fixture(t),
+    { runtime } = await f.personal(f.registry.ownerId);
+  runtime.sessions.config.machines.push({
+    id: "upload-pc",
+    name: "Test",
+    type: "local-linux",
+    codex: { command: "/nonexistent", shell: "powershell" },
+  });
+  runtime.sessions.config.projects.push({
+    id: "upload-project",
+    machineId: "upload-pc",
+    name: "Private",
+    workingDirectory: f.root,
+    enabled: true,
+  });
+  runtime.store.setPreferences({ machineClients: { "upload-pc": "web" } });
+  const accessPath = "/api/projects/upload-project/file-tools/access";
+  const access = await f.request(accessPath, f.owner, "POST", { unlock: true });
+  assert.equal(access.status, 200, JSON.stringify(access.body));
+  const { capability, checkout } = access.body;
+  const header = { "x-file-capability": capability },
+    url = `/api/projects/upload-project/file-uploads/${randomUUID()}`;
+  const spec = { name: "private-upload.bin", bytes: 3, folder: "", checkout };
+  assert.equal((await f.request(url, f.owner, "POST", spec, header)).status, 200);
+  for (const [method, suffix, body] of [
+    ["GET", ""],
+    ["POST", "", spec],
+    ["POST", "/complete", {}],
+    ["DELETE", ""],
+  ]) {
+    const denied = await f.request(url + suffix, f.friend, method, body, header);
+    assert([403, 404].includes(denied.status), JSON.stringify(denied));
+  }
+  const put = (user) =>
+    fetch(f.base + url + "?offset=0", {
+      method: "PUT",
+      headers: {
+        origin: f.config.hub.publicBaseUrl,
+        ...user,
+        ...header,
+        "content-type": "application/octet-stream",
+      },
+      body: Buffer.from([0, 255, 17]),
+    });
+  assert([403, 404].includes((await put(f.friend)).status));
+  assert.equal((await put(f.owner)).status, 200);
+  assert.equal(
+    (await f.request(accessPath, f.owner, "POST", { unlock: false, capability })).status,
+    200,
+  );
+  assert.equal((await f.request(url + "/complete", f.owner, "POST", {}, header)).status, 403);
+  await assert.rejects(readFile(join(f.root, spec.name)), { code: "ENOENT" });
+  const renewed = await f.request(accessPath, f.owner, "POST", { unlock: true });
+  const result = await f.request(
+    url + "/complete",
+    f.owner,
+    "POST",
+    {},
+    { "x-file-capability": renewed.body.capability },
+  );
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.deepEqual(await readFile(join(f.root, spec.name)), Buffer.from([0, 255, 17]));
+});
+
 test("engine maintenance considers another user's unknown work and releases failed freezes", async (t) => {
   const f = await fixture(t),
     { runtime } = await f.personal(f.friendId);

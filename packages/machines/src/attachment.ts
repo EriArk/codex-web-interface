@@ -83,7 +83,7 @@ export async function transferWindowsAttachment(
   const ssh = machine.ssh;
   const source = resolve(sourcePath);
   const info = await stat(source);
-  if (!info.isFile() || info.size < 1 || !Number.isSafeInteger(info.size))
+  if (!info.isFile() || info.size < 0 || !Number.isSafeInteger(info.size))
     throw new HubError(413, "FILE_TOO_LARGE", "Некорректный размер вложения");
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(source)) hash.update(chunk);

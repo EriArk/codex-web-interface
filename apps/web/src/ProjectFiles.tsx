@@ -13,6 +13,7 @@ import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
 import { DeliveryButton } from "./ProjectDeliveryHost";
 import { ProjectFilePreview } from "./ProjectFilePreview";
+import { ProjectFileUpload } from "./ProjectFileUpload";
 import { ProjectRepositoryView } from "./ProjectRepositoryView";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./project-files.css";
@@ -399,6 +400,19 @@ export function ProjectFiles({
           <Icon name="lock" size={16} />
           {capability ? "Заблокировать файлы" : "Разблокировать файлы"}
         </button>
+        {mode === "files" && visible && capability && (
+          <ProjectFileUpload
+            key={`${projectId}:${checkout}`}
+            projectId={projectId}
+            projectName={projectName}
+            capability={capability}
+            checkout={checkout}
+            folder={path}
+            onDone={() => {
+              if (scopeActive.current) setRevision((n) => n + 1);
+            }}
+          />
+        )}
         {mode === "files" && visible && capability && (
           <FileManagerActions
             key={projectId}

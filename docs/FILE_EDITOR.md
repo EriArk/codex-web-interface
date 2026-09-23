@@ -14,6 +14,16 @@ Files additionally supports creating files/folders, renaming, copying, moving an
 
 ## Write boundary and recovery
 
+### Uploads from the device
+
+Unlocked Files exposes **Загрузить файлы** for the selected folder. The queue holds up to 32 files, retains individual destination folders, and sends files sequentially in 4 MiB chunks. Binary and empty files are supported. Names can be changed before starting. Conflict choices are **Заменить старый**, **Другое имя**, and **Пропустить**; choosing another name preserves both files. Replacement binds the exact inspected old fingerprint and checks it again before committing. A changed destination requires a new choice; folders cannot be replaced by files.
+
+Progress distinguishes browser-to-Hub transfer from final saving on the execution computer. Cancellation discards only partial staging; final commit cannot be cancelled through the dialog. Closing pauses the queue. Reload restores account-local metadata, not file bytes; explicit **Продолжить / проверить** retrieves the original receipt or continues staged bytes. Reselecting an incomplete source validates already-saved chunks byte-for-byte before appending, including same-name/same-size impostors. A lost completion acknowledgement never creates a second operation automatically.
+
+The Hub uses a separate private staging directory/table, with a per-user budget equal to the configured attachment storage limit, at most 64 unfinished transfers, and lazy cleanup after 24 hours of inactivity. This budget is separate from ordinary attachment usage; free disk space is also checked. Existing-file replacement retains the 128 MiB fingerprint scan limit below; larger new files can be uploaded within the configured staging budget. Expired transfer metadata may require a new upload after inspecting its destination. No new public Windows endpoint or permanent helper is installed: final bytes use existing SSH/SFTP, and the updated self-contained file probe runs through configured Windows Node on each request. Uploaded bytes and their complete sibling copy are hash-verified before exclusive creation or approved atomic replacement.
+
+Upload routes require the same session/project/checkout-bound write grant on every request and recheck access around asynchronous transfer. Relocking, revoked access, checkout changes, and active/unknown project work block final saving. Completed receipts and cancellation tombstones remain private to the account. Native chats are never sent or replayed by upload recovery.
+
 - Authenticated typed Hub routes resolve the personal Project/machine; callers cannot supply absolute roots or shell commands. The existing SSH/Node path supports Windows, with no new listener. Local Linux uses the same helper.
 - Grants bind session and exact checkout, expire after 30 minutes, and never bypass current project/machine authorization or active/unknown work guards. They are held only in memory; restart relocks writes.
 - Canonical paths reject traversal, links, Windows device/stream names and private credential paths. Baseline fingerprints reject detected external changes. Text reads are bounded and complete, with explicit UTF-8 validation.
@@ -33,6 +43,7 @@ An unresolved save receipt requires close handling even if the user undoes text 
 
 ## Verification (2026-09-23)
 
+- Upload follow-up: 16 focused upload/chunk/file-operation tests and 8 selected Team isolation checks passed. Chromium and WebKit exercise multi-file/empty/binary uploads, replace/rename/skip, changed replacement baselines, final acknowledgement loss across reload, interrupted chunk recovery and wrong-source rejection, cancellation, system picker cancellation, preserved chat drafts and all four themes with long titles and constrained phone height. Real Hub → SSH/SFTP → Windows tests verified binary/empty files, exact replacement and repeated receipt reads in a disposable fixture. Production packaging and guarded installation are tracked separately.
 - Linux TypeScript and production web build.
 - Focused file-helper/Hub checks: exact bytes/mode, stale baselines, move/delete receipts, exclusive destination races, directory operations, unsafe paths, binary/size rejection, interrupted save reconciliation, changed source capture and session/root/relock/active-work boundaries.
 - Existing inspector and Git Delivery regression tests retained.

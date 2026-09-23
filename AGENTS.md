@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Owner-requested file collision choices (2026-09-23)
+
+- Uploads with an existing destination ask whether to replace the old file, keep both under another name, or skip. Never silently overwrite. Replacement approval binds the exact old fingerprint; changed files require a new choice.
+
 ## Owner-requested stage handoff and deferred manual acceptance (2026-09-23)
 
 - End each completed stage with the concrete next proposed step and its recommended reasoning level (selector label and protocol value). Wait for the owner's continuation before starting that stage; «Продолжаем» confirms the setting.

@@ -4,6 +4,7 @@ import { authorizeMachine, runFileTools, verifyProjectRoot } from "@codex-web/ma
 import { editableFile, HubError } from "@codex-web/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { registerProjectFileUploads } from "./projectFileUploads.js";
 import type { Sessions } from "./sessions.js";
 
 export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
@@ -50,6 +51,14 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
         "Рабочая копия изменилась. Открой файлы проекта заново.",
       );
   };
+  registerProjectFileUploads(app, sessions, (req, capability) => {
+    const grant = grants.get(capability);
+    if (!grant || grant.expires < Date.now() || grant.scope !== scope(req))
+      throw new HubError(403, "FILE_LOCKED", "Разблокируй файлы для этой рабочей копии.");
+    const c = context(req);
+    authorizeMachine(c.machine);
+    return { projectId: c.project.id, checkout: checkout(req) };
+  });
   app.post("/api/projects/:id/file-tools/access", async (req) => {
     const c = context(req);
     const body = z

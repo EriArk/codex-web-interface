@@ -26,6 +26,7 @@ type ApiOptions = {
   signal?: AbortSignal;
   raw?: Blob;
   timeoutMs?: number;
+  fileCapability?: string;
 };
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const controller = new AbortController();
@@ -102,10 +103,7 @@ async function readWithRecovery<T>(path: string, options: ApiOptions): Promise<T
     return request<T>(path, options);
   }
 }
-async function request<T>(
-  path: string,
-  options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal; raw?: Blob } = {},
-): Promise<T> {
+async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   if (sessionRotation && path !== "/auth/password") await sessionRotation;
   const requestSession = sessionRevision;
   const headers: Record<string, string> = {};
@@ -115,6 +113,7 @@ async function request<T>(
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (options.method && options.method !== "GET") headers["X-CSRF-Token"] = csrf;
   if (options.key) headers["Idempotency-Key"] = options.key;
+  if (options.fileCapability) headers["X-File-Capability"] = options.fileCapability;
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {

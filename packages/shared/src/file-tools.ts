@@ -16,6 +16,7 @@ export type FileOperation =
   | "copy"
   | "move"
   | "delete";
+export type FileImport = { path: string; bytes: number; sha256: string };
 export type FileRequest = {
   op: FileOperation;
   path: string;

@@ -1,10 +1,11 @@
-import type { FileRequest, FileSnapshot } from "@codex-web/shared";
+import type { FileImport, FileRequest, FileSnapshot } from "@codex-web/shared";
 
 // Self-contained: sent to the configured Node over the existing SSH connection.
 export async function fileToolsProbe(
   root: string,
-  request: FileRequest,
+  request: Omit<FileRequest, "op"> & { op: FileRequest["op"] | "import" | "import-check" },
   receiptRoot?: string,
+  upload?: FileImport,
 ): Promise<FileSnapshot> {
   const fs = await import("node:fs/promises"),
     paths = await import("node:path"),
@@ -15,7 +16,9 @@ export async function fileToolsProbe(
     throw Error(code);
   };
   const hash = (data: string | Buffer) => crypto.createHash("sha256").update(data).digest("hex");
-  const deadline = Date.now() + 60000;
+  const deadline =
+    Date.now() +
+    (upload ? Math.max(60000, Math.min(1740000, (upload.bytes / 262144) * 1000)) : 60000);
   const bounded = () => {
     if (Date.now() > deadline) fail("FILE_TREE_LARGE");
   };
@@ -111,6 +114,21 @@ export async function fileToolsProbe(
   };
   // A completed move/delete receipt remains readable when its source no longer exists.
   const full = await scoped(request.path, !["read", "stat"].includes(request.op));
+  if (request.op === "import-check") {
+    if (!(await fs.stat(paths.dirname(full))).isDirectory()) fail("FILE_PATH");
+    try {
+      await fs.lstat(full);
+      if (!request.fingerprint) fail("FILE_EXISTS");
+      const existing = await fingerprint(full);
+      if (existing.kind !== "file" || existing.fingerprint !== request.fingerprint)
+        fail("FILE_CHANGED");
+      return { path: request.path, ...existing };
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      if (request.fingerprint) fail("FILE_CHANGED");
+    }
+    return { path: request.path, kind: "file", size: 0, fingerprint: "" };
+  }
   if (request.op === "stat") return { path: request.path, ...(await fingerprint(full)) };
   const textFile = async () => {
     const st = await fs.stat(full);
@@ -170,6 +188,40 @@ export async function fileToolsProbe(
     };
   };
   if (request.op === "read") return textFile();
+  const importing = request.op === "import";
+  if (
+    importing &&
+    (!upload ||
+      !paths.isAbsolute(upload.path) ||
+      !Number.isSafeInteger(upload.bytes) ||
+      upload.bytes < 0 ||
+      !/^[a-f0-9]{64}$/.test(upload.sha256))
+  )
+    fail("FILE_REQUEST");
+  const importedFile = async (file: string): Promise<FileSnapshot> => {
+    const st = await fs.lstat(file);
+    if (!st.isFile() || st.isSymbolicLink() || st.size !== upload!.bytes) fail("FILE_INTEGRITY");
+    const digest = crypto.createHash("sha256"),
+      fingerprint = crypto.createHash("sha256").update(JSON.stringify(["", false, st.mode]));
+    let size = 0;
+    for await (const bytes of streams.createReadStream(file)) {
+      bounded();
+      size += bytes.length;
+      if (size > upload!.bytes) fail("FILE_INTEGRITY");
+      digest.update(bytes);
+      fingerprint.update(bytes);
+    }
+    const after = await fs.lstat(file);
+    if (
+      size !== upload!.bytes ||
+      digest.digest("hex") !== upload!.sha256 ||
+      st.ino !== after.ino ||
+      st.mtimeMs !== after.mtimeMs ||
+      st.ctimeMs !== after.ctimeMs
+    )
+      fail("FILE_INTEGRITY");
+    return { path: request.path, kind: "file", size, fingerprint: fingerprint.digest("hex") };
+  };
   if (!request.id || !/^[a-f0-9-]{36}$/.test(request.id)) fail("FILE_REQUEST");
   const state = paths.join(
     receiptRoot ?? paths.join(os.homedir(), ".codex-web", "file-operations"),
@@ -177,20 +229,39 @@ export async function fileToolsProbe(
   );
   await fs.mkdir(state, { recursive: true, mode: 0o700 });
   const receipt = paths.join(state, request.id + ".json"),
-    signature = hash(JSON.stringify(request));
+    signature = hash(
+      JSON.stringify(importing ? [request, upload!.bytes, upload!.sha256] : request),
+    );
   const savedText = await fs.readFile(receipt, "utf8").catch((e) => {
     if (e.code === "ENOENT") return null;
     throw e;
   });
+  let resumeImport = false;
   if (savedText) {
     const saved = JSON.parse(savedText);
     if (saved.signature !== signature) fail("FILE_REQUEST");
-    if (saved.result) return saved.result;
+    if (saved.result) {
+      if (importing) await fs.unlink(upload!.path).catch(() => {});
+      return saved.result;
+    }
     if (request.op === "save") {
       const current = await textFile().catch(() => null);
       if (current && current.text === request.text && current.bom === !!request.bom) return current;
     }
-    fail("FILE_UNKNOWN");
+    if (importing) {
+      try {
+        const result = await importedFile(full);
+        await fs.unlink(upload!.path).catch(() => {});
+        return result;
+      } catch (e) {
+        if (
+          (e as NodeJS.ErrnoException).code !== "ENOENT" &&
+          (!request.fingerprint || (await fingerprint(full)).fingerprint !== request.fingerprint)
+        )
+          fail("FILE_UNKNOWN");
+        resumeImport = true;
+      }
+    } else fail("FILE_UNKNOWN");
   }
   const lock = paths.join(state, "lock");
   let handle: Awaited<ReturnType<typeof fs.open>>;
@@ -240,7 +311,8 @@ export async function fileToolsProbe(
     await fs.chmod(to, st.mode & 0o777);
   };
   try {
-    const creating = request.op === "create" || request.op === "mkdir";
+    const creating =
+      request.op === "create" || request.op === "mkdir" || (importing && !request.fingerprint);
     const before = creating ? null : await fingerprint(full);
     if (before && before.fingerprint !== request.fingerprint) fail("FILE_CHANGED");
     const target = request.target ? await scoped(request.target, true) : undefined;
@@ -268,13 +340,49 @@ export async function fileToolsProbe(
     )
       fail("FILE_ENCODING");
     if (["move", "copy"].includes(request.op) && !target) fail("FILE_REQUEST");
-    await fs.writeFile(receipt, JSON.stringify({ signature }), {
-      flag: "wx",
-      mode: 0o600,
-      flush: true,
-    });
+    if (!resumeImport)
+      await fs.writeFile(receipt, JSON.stringify({ signature }), {
+        flag: "wx",
+        mode: 0o600,
+        flush: true,
+      });
     receiptStarted = true;
-    if (request.op === "save" || request.op === "create") {
+    if (importing) {
+      if (before && before.kind !== "file") fail("FILE_PATH");
+      if (resumeImport)
+        await fs.unlink(temp).catch((e) => {
+          if (e.code !== "ENOENT") throw e;
+        });
+      await importedFile(upload!.path);
+      const disk = await fs.statfs(paths.dirname(full));
+      if (disk.bavail * disk.bsize < upload!.bytes + 1048576) fail("ENOSPC");
+      await fs.copyFile(upload!.path, temp, streams.constants.COPYFILE_EXCL);
+      if (before) await fs.chmod(temp, (await fs.stat(full)).mode & 0o777);
+      await importedFile(temp);
+      const f = await fs.open(temp, "r+");
+      try {
+        await f.sync();
+      } finally {
+        await f.close();
+      }
+      await scoped(request.path, creating);
+      if (before && (await fingerprint(full)).fingerprint !== before.fingerprint)
+        fail("FILE_CHANGED");
+      // Hard link commits the complete, verified sibling atomically and never replaces a name.
+      try {
+        if (before) {
+          effectsPossible = true;
+          await fs.rename(temp, full);
+        } else {
+          await fs.link(temp, full);
+          effectsPossible = true;
+        }
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "EEXIST") fail("FILE_EXISTS");
+        throw e;
+      }
+      if (!before) await fs.unlink(temp);
+    } else if (request.op === "save" || request.op === "create") {
       const bytes = Buffer.concat([
         request.bom ? Buffer.from([239, 187, 191]) : Buffer.alloc(0),
         Buffer.from(request.text ?? "", "utf8"),
@@ -343,7 +451,9 @@ export async function fileToolsProbe(
     const result: FileSnapshot =
       request.op === "delete"
         ? { path: request.path, fingerprint: "", kind: before!.kind, size: 0 }
-        : { path: request.target ?? request.path, ...(await fingerprint(target ?? full)) };
+        : importing
+          ? await importedFile(full)
+          : { path: request.target ?? request.path, ...(await fingerprint(target ?? full)) };
     await fs.writeFile(receipt + ".tmp", JSON.stringify({ signature, result }), {
       mode: 0o600,
       flush: true,
@@ -357,6 +467,7 @@ export async function fileToolsProbe(
     if ((error as NodeJS.ErrnoException).code === "EEXIST") fail("FILE_EXISTS");
     throw error;
   } finally {
+    if (importing) await fs.unlink(upload!.path).catch(() => {});
     await fs.rm(temp, { force: true }).catch(() => {});
     await handle.close();
     await fs.unlink(lock);

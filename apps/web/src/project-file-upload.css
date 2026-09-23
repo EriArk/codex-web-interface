@@ -1,0 +1,103 @@
+:root[data-theme] dialog.project-file-upload {
+  width: min(720px, calc(100vw - 16px));
+  max-width: none;
+  height: min(760px, calc(var(--app-height, 100dvh) - 16px));
+  max-height: calc(var(--app-height, 100dvh) - 16px);
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  bottom: auto;
+  inset-inline: 0;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  padding: 12px;
+  overflow: hidden;
+  color: var(--window-ink);
+}
+.project-file-upload[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.project-file-upload:focus {
+  outline: none;
+}
+.project-file-upload .panel-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
+  flex: none;
+}
+.project-file-upload .panel-heading small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.project-file-upload .panel-heading button {
+  width: 44px;
+  height: 44px;
+}
+.upload-batch-actions,
+.upload-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  flex: none;
+}
+.upload-conflict-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.upload-list {
+  min-height: 0;
+  overflow: auto;
+  flex: 1;
+  padding: 12px;
+  background: var(--window-screen);
+  color: var(--ink);
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  box-shadow: var(--window-screen-shadow);
+}
+.upload-row {
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.upload-row label {
+  display: grid;
+  gap: 4px;
+}
+.upload-row input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.upload-row p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.upload-row progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+.project-file-upload button {
+  min-height: 44px;
+  min-width: 0;
+  margin: 0;
+}
+.upload-row small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .upload-conflict-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .upload-conflict-actions > :last-child {
+    grid-column: 1 / -1;
+  }
+}

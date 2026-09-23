@@ -137,6 +137,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
             "req.headers.cookie",
             "req.headers.authorization",
             "req.headers.x-csrf-token",
+            "req.headers.x-file-capability",
             "res.headers.set-cookie",
           ],
         }

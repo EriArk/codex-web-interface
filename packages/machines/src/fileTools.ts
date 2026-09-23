@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { type FileRequest, HubError, type MachineConfig } from "@codex-web/shared";
+import { type FileImport, type FileRequest, HubError, type MachineConfig } from "@codex-web/shared";
 import { authorizeMachine } from "./authority.js";
 import { fileToolsProbe } from "./fileToolsProbe.js";
 import { quotePowerShell, stopProcess } from "./index.js";
@@ -8,8 +8,9 @@ import { verifyProjectRoot } from "./projectRoots.js";
 export async function runFileTools(
   machine: MachineConfig,
   root: string,
-  request: FileRequest,
+  request: Omit<FileRequest, "op"> & { op: FileRequest["op"] | "import" | "import-check" },
   localReceiptRoot?: string,
+  upload?: FileImport,
 ): Promise<Awaited<ReturnType<typeof fileToolsProbe>>> {
   await verifyProjectRoot(machine, root);
   authorizeMachine(machine);
@@ -21,7 +22,7 @@ export async function runFileTools(
     );
   if (machine.type === "local-linux") {
     try {
-      return await fileToolsProbe(root, request, localReceiptRoot);
+      return await fileToolsProbe(root, request, localReceiptRoot, upload);
     } catch (error) {
       throw fileToolsError(
         (error as NodeJS.ErrnoException).code ?? (error instanceof Error ? error.message : ""),
@@ -77,7 +78,10 @@ export async function runFileTools(
         reject(failure());
       }
     };
-    const timer = setTimeout(() => finish(false), 90000);
+    const timer = setTimeout(
+      () => finish(false),
+      upload ? Math.max(90000, Math.min(1800000, (upload.bytes / 262144) * 1000)) : 90000,
+    );
     child.stdout.on("data", (b: Buffer) => {
       size += b.length;
       if (size > 16777216) finish(false);
@@ -88,7 +92,7 @@ export async function runFileTools(
     child.on("error", () => finish(false));
     child.on("close", (code) => finish(code === 0));
     child.stdin.end(
-      `(${fileToolsProbe.toString()})(${JSON.stringify(root)},${JSON.stringify(request)}).then(value=>process.stdout.write(JSON.stringify(value))).catch(e=>process.stdout.write(JSON.stringify({error:e.code||e.message})));`,
+      `(${fileToolsProbe.toString()})(${JSON.stringify(root)},${JSON.stringify(request)},undefined,${JSON.stringify(upload)}).then(value=>process.stdout.write(JSON.stringify(value))).catch(e=>process.stdout.write(JSON.stringify({error:e.code||e.message})));`,
     );
   });
 }
@@ -110,6 +114,8 @@ export function fileToolsError(code: string) {
     EACCES: "На компьютере нет прав для изменения этого файла.",
     EPERM: "Файл занят или защищён от изменения.",
     FILE_REQUEST: "Проверь параметры файловой операции.",
+    FILE_INTEGRITY: "Переданный файл не прошёл проверку целостности.",
+    ENOSPC: "На компьютере недостаточно места для файла.",
   };
   return new HubError(
     code === "FILE_CHANGED" || code === "FILE_EXISTS" ? 409 : 400,
