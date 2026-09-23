@@ -35,6 +35,21 @@ test("exact source slices, private capture receipts and quiet unchanged reads", 
   assert(!JSON.stringify(page).includes("sourceHash"));
   assert.equal(f.operations.length, 0);
 });
+test("removed capture receipts cannot acknowledge invisible drafts or revive old publications", async (t) => {
+  const f = await fixture(t),
+    body = f.answer(),
+    id = randomUUID();
+  const first = await f.d.add(id, body);
+  f.d.remove(id, first.revision);
+  await assert.rejects(() => f.d.add(id, body), { code: "ISSUE_DRAWER_REMOVED" });
+  assert.equal(f.d.list().items.length, 0);
+  const second = await f.d.add(randomUUID(), body);
+  assert.notEqual(second.id, id);
+  assert.equal(second.original, body.text);
+  assert.deepEqual(await f.d.add(second.id, body), second);
+  assert.equal(f.d.list().items.length, 1);
+  assert.equal(f.operations.length, 0);
+});
 test("only completed public assistant messages from the exact current branch can be captured", async (t) => {
   const f = await fixture(t);
   await assert.rejects(() => f.d.add(randomUUID(), f.answer("hidden commentary", "commentary")));

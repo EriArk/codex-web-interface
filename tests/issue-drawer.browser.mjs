@@ -161,6 +161,34 @@ try {
   await drawer.getByRole("button", { name: "Исходное сообщение", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Исходное сообщение Issue" })).toBeVisible();
   await page.getByRole("button", { name: "Закрыть источник", exact: true }).click();
+  const previous = f.d.list().items[0];
+  await drawer.getByRole("button", { name: "Убрать", exact: true }).click();
+  await expect(drawer.locator(".issue-draft-card")).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Закрыть подборку" }).click();
+  await intakeDialog
+    .locator(".message-short-block")
+    .getByRole("button", { name: "В Issues", exact: true })
+    .click();
+  let lostCapture = false;
+  await page.route("**/api/issue-drawer/items/*", async (route) => {
+    if (route.request().method() !== "PUT" || lostCapture) return route.continue();
+    const response = await route.fetch();
+    if (response.ok()) {
+      lostCapture = true;
+      await route.abort("failed");
+    } else await route.fulfill({ response });
+  });
+  await drawer.getByRole("button", { name: "Добавить в подборку" }).click();
+  await expect(drawer.getByRole("alert")).toBeVisible();
+  assert(lostCapture);
+  const replacement = f.d.list().items[0];
+  assert.notEqual(replacement.id, previous.id);
+  await drawer.getByRole("button", { name: "Добавить в подборку" }).click();
+  await expect(body).toHaveValue(replacement.original);
+  assert.equal(f.d.list().items.length, 1);
+  assert.equal(f.d.list().items[0].id, replacement.id);
+  assert.equal(f.operations.filter((q) => q.op === "apply").length, 1);
+  await page.unroute("**/api/issue-drawer/items/*");
   await drawer.getByRole("button", { name: "Закрыть подборку" }).click();
   await intakeDialog.getByRole("button", { name: "Закрыть разбор" }).click();
   await page.getByRole("button", { name: "Закрыть обзор проекта" }).click();

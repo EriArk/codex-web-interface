@@ -8,7 +8,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ActivitySourceWindow } from "./ActivitySourceWindow";
 import { messageCode } from "./ArtifactMarkdown";
 import { accountLocalStorage as storage } from "./accountStorage";
-import { api, messageOf } from "./api";
+import { ApiError, api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { SharedMarkdown } from "./SharedMaterialEditor";
@@ -208,7 +208,18 @@ export function IssueDrawerWindow({
         targetId: incoming.targetId ?? targetId,
       };
       const id = keyFor("codex-issue-capture", body);
-      const saved = await api<IssueDraft>(`/issue-drawer/items/${id}`, { method: "PUT", body });
+      let saved: IssueDraft;
+      try {
+        saved = await api<IssueDraft>(`/issue-drawer/items/${id}`, { method: "PUT", body });
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.code !== "ISSUE_DRAWER_REMOVED") throw e;
+        // Only a definitive removed receipt permits a fresh capture ID. Transport
+        // failures keep the original ID, including a lost acknowledgement of this retry.
+        if (JSON.parse(storage.getItem("codex-issue-capture") ?? "null")?.key === id)
+          storage.removeItem("codex-issue-capture");
+        const nextId = keyFor("codex-issue-capture", body);
+        saved = await api<IssueDraft>(`/issue-drawer/items/${nextId}`, { method: "PUT", body });
+      }
       setIncoming(undefined);
       edit(saved);
       await refresh();

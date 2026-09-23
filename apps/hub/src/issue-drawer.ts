@@ -252,6 +252,8 @@ export class IssueDrawer {
       if (prior) {
         const p = JSON.parse(String(prior.value)) as Saved;
         if (p.sourceHash !== digest(body)) throw changed();
+        if (p.hidden)
+          throw new HubError(409, "ISSUE_DRAWER_REMOVED", "Эта запись уже убрана из подборки.");
         return this.public(p);
       }
       if (
