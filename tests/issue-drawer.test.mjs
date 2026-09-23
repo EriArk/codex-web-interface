@@ -62,6 +62,59 @@ test("only completed public assistant messages from the exact current branch can
     f.d.add(randomUUID(), { ...g, source: { ...g.source, projectId: "second" } }),
   );
 });
+test("fresh GPT receipt capture persists only its exact unambiguous public native source", async (t) => {
+  const f = await fixture(t);
+  f.gpt.library.assertExists = () => {};
+  const text = "Before\r\n```md\r\nExact block\r\n```\r\nAfter";
+  const final = { id: "receipt-final", role: "assistant", text, phase: "final", complete: true };
+  let items = [final, { ...final, id: "same-text-unrelated" }];
+  f.gpt.historyCache.snapshot = async () => ({ items });
+  f.gpt.receiptMessageIds = (job, thread) =>
+    job === "own-job" && thread === "own-chat" ? ["receipt-final", "public-step"] : [];
+  f.gpt.job = () => ({ status: "completed", nativeId: "own-chat", answer: text });
+  const body = { source: { client: "gpt", threadId: "own-chat", messageId: "own-job" }, text };
+  const id = randomUUID(),
+    saved = await f.d.add(id, body);
+  assert.equal(saved.source.messageId, "receipt-final");
+  assert.equal(saved.source.jobId, "own-job");
+  assert.equal(await f.d.source(saved.source), text);
+  assert.deepEqual(await f.d.add(id, body), saved);
+  const start = text.indexOf("Exact block"),
+    end = start + "Exact block".length;
+  const block = await f.d.add(randomUUID(), {
+    ...body,
+    text: text.slice(start, end),
+    source: { ...body.source, start, end },
+  });
+  assert.equal(block.source.messageId, "receipt-final");
+  assert.equal(block.original, "Exact block");
+  for (const source of [
+    { ...body.source, threadId: "another-chat" },
+    { ...body.source, messageId: "foreign-job" },
+  ])
+    await assert.rejects(() => f.d.add(randomUUID(), { ...body, source }));
+  for (const candidates of [
+    [{ ...final, id: "same-text-unrelated" }],
+    [{ ...final, role: "user" }],
+    [{ ...final, phase: "commentary" }],
+    [{ ...final, complete: false }],
+    [final, { ...final, id: "public-step" }],
+  ]) {
+    items = candidates;
+    await assert.rejects(() => f.d.add(randomUUID(), body));
+  }
+  items = [final];
+  await assert.rejects(() => f.d.add(randomUUID(), { ...body, text: "Changed rendered answer" }));
+  await assert.rejects(() => f.d.source({ ...saved.source, messageId: "same-text-unrelated" }));
+  for (const job of [
+    { status: "running", nativeId: "own-chat", answer: text },
+    { status: "completed", nativeId: "another-chat", answer: text },
+    { status: "completed", nativeId: "own-chat", answer: "Changed receipt" },
+  ]) {
+    f.gpt.job = () => job;
+    await assert.rejects(() => f.d.add(randomUUID(), body));
+  }
+});
 test("multi-repository package freezes exact edits and actual identities, sends once only after confirmation", async (t) => {
   const f = await fixture(t),
     a = await f.add(),

@@ -11,6 +11,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { GptService } from "./gpt.js";
+import { gptSandboxFiles } from "./gpt-sandbox-files.js";
 import type { ProjectGpts } from "./project-gpt.js";
 import type { Sessions } from "./sessions.js";
 
@@ -27,6 +28,7 @@ const sourceSchema = z
     client: z.enum(["gpt", "codex"]),
     threadId: z.string().min(1).max(120),
     messageId: z.string().min(1).max(200),
+    jobId: z.string().min(1).max(200).optional(),
     projectId: z.string().max(120).optional(),
     start: z.number().int().nonnegative().optional(),
     end: z.number().int().nonnegative().optional(),
@@ -194,20 +196,34 @@ export class IssueDrawer {
     if (digest(this.scope(scope.projectId)) !== digest(scope)) throw changed();
   }
   async source(source: IssueSource) {
+    return (await this.resolveSource(source)).text;
+  }
+  private async resolveSource(source: IssueSource) {
     if (source.client === "gpt") {
       this.gpt.library.assertExists("thread", source.threadId);
       if (source.projectId && this.projectGpts.get(source.projectId).nativeId !== source.threadId)
         throw changed();
       const snapshot = await this.gpt.historyCache.snapshot(source.threadId, 0);
-      const message = snapshot.items.find(
-        (m) =>
-          m.id === source.messageId &&
-          m.role === "assistant" &&
-          m.phase !== "commentary" &&
-          m.complete !== false,
+      const publicMessages = snapshot.items.filter(
+        (m) => m.role === "assistant" && m.phase !== "commentary" && m.complete !== false,
       );
-      if (!message) throw missing();
-      return message.text;
+      const canonical = publicMessages.find((m) => m.id === source.messageId);
+      if (canonical && !source.jobId) return { text: canonical.text, source };
+      // Fresh answers use durable send text, before private download links are rewritten.
+      // Require one exact receipt-bound current-branch final message, never a text search.
+      const jobId = source.jobId ?? source.messageId;
+      const ids = new Set(this.gpt.receiptMessageIds(jobId, source.threadId));
+      const matches = publicMessages.filter((m) => ids.has(m.id));
+      const message = matches.length === 1 ? matches[0] : undefined;
+      if (!message || (source.jobId && message.id !== source.messageId)) throw missing();
+      const job = this.gpt.job(jobId);
+      if (
+        job.status !== "completed" ||
+        job.nativeId !== source.threadId ||
+        gptSandboxFiles(job.answer, source.threadId, message.id).text !== message.text
+      )
+        throw changed();
+      return { text: job.answer, source: { ...source, messageId: message.id, jobId } };
     }
     const t = this.sessions.thread(source.threadId);
     if (source.projectId && t.projectId !== source.projectId) throw changed();
@@ -220,7 +236,7 @@ export class IssueDrawer {
       ["starting", "running", "unknown", "waiting_approval"].includes(t.status)
     )
       throw missing();
-    return String(m.text);
+    return { text: String(m.text), source };
   }
   async add(id: string, raw: unknown) {
     return this.serial(async () => {
@@ -255,7 +271,8 @@ export class IssueDrawer {
           "ISSUE_DRAWER_FULL",
           "В подборке уже 200 записей. Удали ненужные завершённые записи.",
         );
-      const text = await this.source(body.source),
+      const resolved = await this.resolveSource(body.source),
+        text = resolved.text,
         start = body.source.start ?? 0,
         end = body.source.end ?? text.length;
       if (start > end || end > text.length || text.slice(start, end) !== body.text) throw changed();
@@ -267,7 +284,7 @@ export class IssueDrawer {
           this.db.prepare("SELECT COALESCE(MAX(position),0)+1 n FROM issue_drawer_items").get()!.n,
         ),
         addedAt: Date.now(),
-        source: body.source,
+        source: resolved.source,
         sourceHash: digest(body),
         original: body.text,
         title:

@@ -143,8 +143,18 @@ test("live receipt file links reveal the canonical result and reject another cha
   assert.equal(live.statusCode, 200, live.body);
   assert.equal(live.json().id, canonical.json().id);
   assert.equal((await reveal(jobId, "sandbox:/mnt/data/other.txt")).statusCode, 404);
+  await f.gpt.catalog();
+  const capture = {
+    source: { client: "gpt", threadId: native.conversationId, messageId: jobId },
+    text: "[Report](sandbox:/mnt/data/report.txt)",
+  };
+  f.store.db.prepare("UPDATE gpt_jobs SET answer=? WHERE id=?").run(capture.text, jobId);
+  const draft = await f.issueDrawer.add(randomUUID(), capture);
+  assert.equal(draft.source.messageId, graph.current_node);
+  assert.equal(await f.issueDrawer.source(draft.source), capture.text);
   f.store.db.prepare("UPDATE gpt_jobs SET nativeId=? WHERE id=?").run(randomUUID(), jobId);
   assert.equal((await reveal(jobId)).statusCode, 404);
+  await assert.rejects(() => f.issueDrawer.add(randomUUID(), capture));
   assert.equal(native.state.sends, 0);
 });
 

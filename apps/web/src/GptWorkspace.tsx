@@ -1136,6 +1136,14 @@ export function GptWorkspace({
       ),
     )
     .map((job) => {
+      const issueSource = job.nativeId
+        ? {
+            client: "gpt" as const,
+            threadId: job.nativeId,
+            messageId: job.id,
+            projectId: projectChat?.projectId,
+          }
+        : undefined;
       const nativeUser = messages.some(
         (m) =>
           m.role === "user" && m.text === job.text && m.createdAt * 1000 >= job.createdAt - 30000,
@@ -1182,12 +1190,20 @@ export function GptWorkspace({
                   <b>GPT</b>
                   <span className="message-actions">
                     <SpeechButton id={`${speechScope}:job-${job.id}`} text={job.answer} />
+                    {issueSource && job.answer.trim() && (
+                      <IssueCollect
+                        text={job.answer}
+                        source={issueSource}
+                        targetId={projectChat?.projectId}
+                      />
+                    )}
                     <CopyButton text={job.answer} />
                   </span>
                 </div>
                 <div className="message-body">
                   <Text
                     value={job.answer}
+                    issueSource={issueSource}
                     onArtifact={(source) => openArtifact(source, job.assets, job.id)}
                   />
                   <ResponseResults

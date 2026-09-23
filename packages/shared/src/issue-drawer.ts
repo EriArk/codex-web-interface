@@ -2,6 +2,7 @@ export type IssueSource = {
   client: "gpt" | "codex";
   threadId: string;
   messageId: string;
+  jobId?: string;
   projectId?: string;
   start?: number;
   end?: number;

@@ -14,6 +14,7 @@ import { Store } from "../apps/hub/dist/store.js";
 import { teamPasswordHash } from "../apps/hub/dist/team-auth.js";
 import { createTeamHub } from "../apps/hub/dist/team-hub.js";
 import { configSchema } from "../packages/shared/dist/index.js";
+import { issueWorkflow } from "./fixtures/issue-workflow-browser.mjs";
 import { nativeWorkspaceFixture } from "./fixtures/native-workspace.mjs";
 import { capabilityReply } from "./fixtures.mjs";
 
@@ -40,6 +41,21 @@ const store = new Store(config.hub.databasePath);
 store.db.prepare("INSERT INTO users VALUES(?,?)").run("owner", await teamPasswordHash(password));
 const runtimes = new Map();
 const native = nativeWorkspaceFixture();
+const friendNative = nativeWorkspaceFixture();
+let friendSentAt = 0;
+const friendDispatch = friendNative.client.dispatchText,
+  friendGraph = friendNative.client.conversationGraph;
+friendNative.client.dispatchText = async (input) => {
+  friendSentAt = Math.floor(Date.now() / 1000);
+  return friendDispatch(input);
+};
+friendNative.client.conversationGraph = async (id) => {
+  const value = await friendGraph(id);
+  for (const node of Object.values(value.mapping))
+    if (node.message && node.message.create_time === 100 && friendSentAt)
+      node.message.create_time = friendSentAt;
+  return value;
+};
 let activityCalls = 0;
 let changedActivity = false,
   blockedActivity = false;
@@ -206,9 +222,9 @@ const hub = await createTeamHub(config, {
       ...options,
       sessions,
       store: personalStore,
-      ...(who === "owner" ? { nativeGpt: native.workspace } : {}),
+      nativeGpt: who === "owner" ? native.workspace : friendNative.workspace,
     });
-    runtimes.set(who, { ...runtime, thread, nativeId, nativeCalls });
+    runtimes.set(who, { ...runtime, thread, nativeId, nativeCalls, rpc });
     return runtime;
   },
 });
@@ -579,6 +595,19 @@ try {
   assert.equal(native.state.sends, 1, "lost acknowledgment retry must not send twice");
   native.state.finished = true;
   await gptWindow.getByRole("button", { name: "Закрыть GPT проекта", exact: true }).click();
+  await issueWorkflow({
+    browser,
+    other,
+    login,
+    drawer,
+    runtimes,
+    friendNative,
+    spaces,
+    spaceId: created.id,
+    ownerId: hub.registry.ownerId,
+    activityProbe,
+    base,
+  });
   await mkdir(".local/activity-qa", { recursive: true });
   for (const viewport of [
     { width: 390, height: 500 },
