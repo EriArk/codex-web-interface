@@ -1,6 +1,6 @@
 # Project Intake — incoming engineering analysis
 
-Implemented on 23 September 2026 for #210. This stage follows the minimal conversation registry in #209; Issue Drawer #211 remains next.
+Implemented on 23 September 2026 for #210. This stage follows the minimal conversation registry in #209; [Issue Drawer #211](ISSUE_DRAWER.md) adds explicit collection and reviewed publication of selected completed answers.
 
 ## User flow
 

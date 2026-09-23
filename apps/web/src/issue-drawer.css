@@ -1,0 +1,126 @@
+.issue-drawer-window[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.issue-drawer-window > .notebook-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.issue-drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
+.issue-draft-card,
+.issue-package,
+.issue-capture {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.issue-draft-card > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: start;
+}
+.issue-draft-title {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+:root .workspace-window.issue-drawer-window .issue-draft-title input[type="checkbox"] {
+  width: 22px;
+  min-width: 22px;
+  max-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+:root .workspace-window .issue-draft-pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex: none;
+  margin: 0;
+}
+.issue-draft-title strong {
+  min-width: 0;
+  flex: 1;
+}
+.issue-drawer-window {
+  width: min(820px, calc(100vw - 24px));
+  height: min(850px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+}
+.issue-draft-card > header small {
+  color: var(--muted);
+  flex: none;
+}
+.issue-actions,
+.issue-drawer-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.issue-drawer-footer {
+  justify-content: space-between;
+  padding: 8px;
+  flex: none;
+}
+.issue-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.issue-editor label {
+  display: grid;
+  gap: 4px;
+}
+.issue-editor :is(input, textarea, select) {
+  width: 100%;
+  min-width: 0;
+}
+.issue-drawer-window .notebook-markdown {
+  min-height: 0;
+  overflow: visible;
+}
+.issue-exact {
+  max-height: 240px;
+  overflow: auto;
+}
+.issue-collect {
+  font-size: 0.85em;
+  min-height: 36px;
+}
+.issue-package > section {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.issue-drawer-window pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .issue-drawer-scroll {
+    padding: 8px;
+  }
+  .issue-draft-card > header {
+    flex-wrap: wrap;
+  }
+  .issue-actions > button {
+    min-height: 44px;
+  }
+}

@@ -68,6 +68,14 @@ try {
   await popup.getByLabel("Чат GPT проекта").selectOption(native.conversationId);
   await popup.getByRole("button", { name: "Выбрать чат", exact: true }).click();
   await expect(popup.getByText("Первый ответ", { exact: true })).toBeVisible();
+  const firstReply = popup.locator(".message").filter({ hasText: "Первый ответ" });
+  await firstReply.getByRole("button", { name: "В Issues", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "Подборка Issues", exact: true });
+  await drawer.getByRole("button", { name: "Добавить в подборку" }).click();
+  await expect(drawer.getByRole("textbox", { name: "Текст Issue", exact: true })).toHaveValue(
+    "Первый ответ",
+  );
+  await drawer.getByRole("button", { name: "Закрыть подборку" }).click();
   const composer = popup.getByRole("textbox", { name: "Сообщение GPT", exact: true });
   await composer.fill("Черновик в окне проекта");
   await popup.getByLabel("Закрыть GPT проекта", { exact: true }).click();

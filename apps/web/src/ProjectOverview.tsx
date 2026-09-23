@@ -13,6 +13,7 @@ import { api, messageOf } from "./api";
 import { GptProjectButton } from "./GptProjectContent";
 import { GuiPreviewButton } from "./GuiPreviewHost";
 import { IntakeButton } from "./IntakeWindow";
+import { IssueDrawerButton } from "./IssueDrawer";
 import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
 import { PinnedList } from "./PinnedList";
@@ -205,6 +206,10 @@ export function ProjectOverview({
           </button>
         )}
         <SharedProjectsButton scope={scope} />
+        <IssueDrawerButton
+          targetId={scope.client === "codex" ? scope.projectId : undefined}
+          className="overview-row"
+        />
         {scope.client === "codex" && (
           <IntakeButton
             projectId={scope.projectId}

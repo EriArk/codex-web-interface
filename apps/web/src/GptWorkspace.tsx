@@ -5,6 +5,7 @@ import type {
   GptJob,
   GptModels,
   GptProject,
+  IssueSource,
   NotebookLink,
   ProjectGpt,
   ResultCategory,
@@ -14,12 +15,7 @@ import { projectContextEnd, projectContextStart } from "@codex-web/shared";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  type ArtifactRequest,
-  artifactSource,
-  messageCode,
-  useArtifactComponents,
-} from "./ArtifactMarkdown";
+import { type ArtifactRequest, artifactSource, useArtifactComponents } from "./ArtifactMarkdown";
 import {
   accountLocalStorage as localStorage,
   accountSessionStorage as sessionStorage,
@@ -35,6 +31,7 @@ import { GptProgress } from "./GptProgress";
 import { GptProjectPending } from "./GptProjectContent";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob, waitingGptJob } from "./gptState";
+import { IssueCollect, useIssueCode } from "./IssueDrawer";
 import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import { SpeechButton, useSpeechScope } from "./MessageSpeech";
@@ -91,19 +88,17 @@ const Text = memo(function Text({
   onArtifact,
   resolveImage,
   complete = true,
+  issueSource,
 }: {
   value: string;
   onArtifact?: (source: string) => void;
   resolveImage?: (source: string) => Promise<string | undefined>;
   complete?: boolean;
+  issueSource?: IssueSource;
 }) {
-  const artifactHandler = useRef(onArtifact);
-  useLayoutEffect(() => {
-    artifactHandler.current = onArtifact;
-  }, [onArtifact]);
-  const openArtifact = useCallback((source: string) => artifactHandler.current?.(source), []);
   const hasArtifacts = !!onArtifact;
   const artifacts = useArtifactComponents(onArtifact, resolveImage);
+  const code = useIssueCode(value, onArtifact, complete, issueSource);
   const contextEnd = value.startsWith(projectContextStart) ? value.indexOf(projectContextEnd) : -1;
   // Drawer, draft and job updates must not reparse unchanged replies. Keep the
   // latest handler separately so cached links still target the current message.
@@ -122,7 +117,7 @@ const Text = memo(function Text({
           }
           remarkPlugins={[remarkGfm]}
           components={{
-            pre: messageCode(value, hasArtifacts ? openArtifact : undefined, complete),
+            pre: code,
             table: MarkdownTable,
             ...artifacts,
           }}
@@ -131,7 +126,7 @@ const Text = memo(function Text({
         </Markdown>
       </>
     ),
-    [value, hasArtifacts, openArtifact, contextEnd, complete, artifacts],
+    [value, hasArtifacts, contextEnd, artifacts, code],
   );
 });
 function ResponseResults({
@@ -1867,12 +1862,38 @@ export function GptWorkspace({
                             <Icon name="file" size={17} />
                           </button>
                         )}
+                        {message.role === "assistant" &&
+                          message.complete !== false &&
+                          message.phase !== "commentary" && (
+                            <IssueCollect
+                              text={message.text}
+                              source={{
+                                client: "gpt",
+                                threadId: selected,
+                                messageId: message.id,
+                                projectId: projectChat?.projectId,
+                              }}
+                              targetId={projectChat?.projectId}
+                            />
+                          )}
                         <CopyButton text={message.text} />
                       </span>
                     </div>
                     <div className="message-body">
                       <Text
                         value={message.text}
+                        issueSource={
+                          message.role === "assistant" &&
+                          message.complete !== false &&
+                          message.phase !== "commentary"
+                            ? {
+                                client: "gpt",
+                                threadId: selected,
+                                messageId: message.id,
+                                projectId: projectChat?.projectId,
+                              }
+                            : undefined
+                        }
                         complete={message.complete !== false && message.phase !== "commentary"}
                         resolveImage={async (source) =>
                           (

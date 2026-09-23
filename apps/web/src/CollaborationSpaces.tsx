@@ -10,6 +10,7 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import { ActivityAttentionWindow } from "./ActivityDiscussion";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
+import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
 import { emptyProjectRules, ProjectRulesEditor } from "./ProjectRulesEditor";
 import { SpaceActivity } from "./SpaceActivity";
@@ -54,6 +55,7 @@ export function SpaceBell({ spaces }: { spaces: SpacesController }) {
         sum +
         s.unread +
         (s.activityAttention?.length ?? 0) +
+        (s.issueDispatches?.length ?? 0) +
         s.projects.reduce((n, p) => n + (p.ownerId === pageWorkspace ? p.requests.length : 0), 0),
       0,
     );
@@ -255,6 +257,7 @@ export function CollaborationWindow({
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog);
   const target = spaces.window!;
+  const receiptAction = useSharedAction();
   const invitation =
     "id" in target ? spaces.catalog.invitations.find((i) => i.spaceId === target.id) : undefined;
   const space = "id" in target ? spaces.catalog.spaces.find((s) => s.id === target.id) : undefined;
@@ -322,13 +325,63 @@ export function CollaborationWindow({
         )}
         {target.kind === "invitations" && (
           <>
+            {receiptAction.error && (
+              <p className="notice" role="alert">
+                {receiptAction.error}
+              </p>
+            )}
             {spaces.catalog.invitations.length === 0 &&
               !spaces.catalog.spaces.some(
                 (s) =>
                   s.unread > 0 ||
                   !!s.activityAttention?.length ||
+                  !!s.issueDispatches?.length ||
                   s.projects.some((p) => p.ownerId === pageWorkspace && p.requests.length),
               ) && <p>Новых уведомлений нет.</p>}
+            {spaces.catalog.spaces.flatMap((s) =>
+              (s.issueDispatches ?? []).map((n) => {
+                const p = s.projects.find((p) => p.id === n.projectId);
+                return (
+                  <section className="space-card" key={n.id}>
+                    <strong>{p?.name ?? s.title}</strong>
+                    <p>
+                      {n.sender.name} отправил Issues: {n.issues.length}
+                    </p>
+                    {p?.personalProjectId &&
+                      Array.from({ length: Math.ceil(n.issues.length / 5) }, (_, group) => (
+                        <IntakeButton
+                          key={n.issues[group * 5]!.url}
+                          projectId={p.personalProjectId!}
+                          name={p.name}
+                          sources={n.issues.slice(group * 5, group * 5 + 5).map((i) => i.url)}
+                          label={
+                            n.issues.length <= 5
+                              ? "Изучить"
+                              : "Изучить " +
+                                (group * 5 + 1) +
+                                "–" +
+                                Math.min(n.issues.length, group * 5 + 5)
+                          }
+                        />
+                      ))}
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={receiptAction.busy}
+                      onClick={() =>
+                        void receiptAction.run(() =>
+                          sharedMutation("/team/spaces/" + s.id + "/issues/read", "POST", {
+                            dispatchId: n.id,
+                          }).then(() => spaces.refresh()),
+                        )
+                      }
+                    >
+                      Прочитано
+                    </button>
+                  </section>
+                );
+              }),
+            )}
             {spaces.catalog.spaces.flatMap((s) =>
               (s.activityAttention ?? []).map((n) => (
                 <button

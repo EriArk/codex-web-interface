@@ -15,6 +15,7 @@ import { api, messageOf } from "./api";
 import { ApprovalCard, MessageText } from "./Chat";
 import { ComposerOptions } from "./ComposerOptions";
 import { CopyButton } from "./CopyButton";
+import { IssueCollect, IssueDrawerButton } from "./IssueDrawer";
 import { Icon } from "./icons";
 import { ProjectActionPanel } from "./ProjectAction";
 import { ResultFeed } from "./ResultFeed";
@@ -238,6 +239,7 @@ export function IntakeWindow({
           <h2>Разбор входящего</h2>
           <small>{name} · Только чтение</small>
         </div>
+        <IssueDrawerButton targetId={projectId} />
         {data?.threadId && (
           <button
             type="button"
@@ -291,10 +293,22 @@ export function IntakeWindow({
           <article className="intake-message" key={m.id}>
             <header>
               <strong>{m.role === "user" ? "Вы" : "Codex · разбор"}</strong>
+              {m.role === "assistant" && !running && (
+                <IssueCollect
+                  text={m.text}
+                  source={{ client: "codex", threadId: data.threadId!, messageId: m.id, projectId }}
+                  targetId={projectId}
+                />
+              )}
               <CopyButton text={m.text} />
             </header>
             <MessageText
               text={m.text}
+              issueSource={
+                m.role === "assistant" && !running
+                  ? { client: "codex", threadId: data.threadId!, messageId: m.id, projectId }
+                  : undefined
+              }
               complete={!running}
               onArtifact={
                 m.role === "assistant"

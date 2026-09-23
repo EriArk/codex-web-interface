@@ -54,6 +54,9 @@ export class CollaborationSpaces {
     `);
     this.chat = new CollaborationChat(this);
     this.social = new ActivitySocial(this);
+    team.db.exec(
+      "CREATE TABLE IF NOT EXISTS collaboration_issue_dispatches(id TEXT PRIMARY KEY,spaceId TEXT NOT NULL,recipient TEXT NOT NULL,value TEXT NOT NULL,seen INTEGER NOT NULL DEFAULT 0)",
+    );
   }
   private read(id: string): Space {
     const row = this.team.db.prepare("SELECT data FROM collaboration_spaces WHERE id=?").get(id);
@@ -109,6 +112,13 @@ export class CollaborationSpaces {
       pending: s.invitations.map((i) => this.person(i.userId)),
       unread: this.chat.unread(actor, s.id),
       activityAttention: this.social.attention(actor, s.id),
+      issueDispatches: this.team.db
+        .prepare(
+          "SELECT value FROM collaboration_issue_dispatches WHERE spaceId=? AND recipient=? AND seen=0 ORDER BY rowid DESC LIMIT 50",
+        )
+        .all(s.id, actor)
+        .map((r) => JSON.parse(String(r.value)))
+        .filter((n) => s.projects.some((p) => p.id === n.projectId && p.ownerId === actor)),
       projects: s.projects.map((p) => ({
         id: p.id,
         ownerId: p.ownerId,
@@ -156,6 +166,44 @@ export class CollaborationSpaces {
           : [];
       }),
     };
+  }
+  issuesPublished(
+    actor: string,
+    personalProjectId: string,
+    batchId: string,
+    issues: { number: number; url: string }[],
+  ) {
+    const binding = this.binding(actor, personalProjectId);
+    if (!binding || binding.project.ownerId === actor) return;
+    const { project, space } = binding;
+    this.team.registry.active(project.ownerId);
+    if (
+      !issues.length ||
+      issues.length > 20 ||
+      issues.some(
+        (i) =>
+          !Number.isSafeInteger(i.number) ||
+          i.number < 1 ||
+          i.url.toLowerCase() !== `${project.repository}/issues/${i.number}`.toLowerCase(),
+      )
+    )
+      throw conflict();
+    const id = batchId + ":" + project.id;
+    const value = { id, projectId: project.id, sender: this.person(actor), issues, at: Date.now() };
+    this.team.db
+      .prepare(
+        "INSERT INTO collaboration_issue_dispatches(id,spaceId,recipient,value) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,seen=0 WHERE json_extract(value,'$.issues')!=json_extract(excluded.value,'$.issues')",
+      )
+      .run(id, space.id, project.ownerId, JSON.stringify(value));
+  }
+  readIssueDispatch(actor: string, spaceId: string, id: string) {
+    this.access(actor, spaceId);
+    this.team.db
+      .prepare(
+        "UPDATE collaboration_issue_dispatches SET seen=1 WHERE id=? AND spaceId=? AND recipient=?",
+      )
+      .run(id, spaceId, actor);
+    return { read: true };
   }
   private available(actor: string, projectId: string) {
     if (

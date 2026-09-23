@@ -23,6 +23,7 @@ export type CollaborationSpace = {
   pending: CollaborationPerson[];
   unread: number;
   activityAttention?: ActivityAttention[];
+  issueDispatches?: import("./issue-drawer.js").IssueDispatchNotice[];
 };
 export type CollaborationInvitation = {
   spaceId: string;

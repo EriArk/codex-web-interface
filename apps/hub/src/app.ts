@@ -42,6 +42,7 @@ import { configuredNativeGpt } from "./gpt-native-config.js";
 import type { NativeGptWorkspace } from "./gpt-native-provider.js";
 import { registerGuiPreviews } from "./gui-previews.js";
 import { ProjectIntake, registerIntake } from "./intake.js";
+import { IssueDrawer, registerIssueDrawer } from "./issue-drawer.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
 import { NativePlans, registerNativePlans } from "./native-plan.js";
@@ -105,6 +106,11 @@ export async function createApp(
     collaborationPolicy?: {
       gptContext?: (projectId: string) => unknown;
       gptScope?: (projectId: string) => unknown;
+      issuesPublished?: (
+        projectId: string,
+        batchId: string,
+        issues: { number: number; url: string }[],
+      ) => void;
       instructions: (projectId: string) => string | null;
       delivery: NonNullable<Parameters<typeof registerProjectDelivery>[3]>;
     };
@@ -749,6 +755,14 @@ export async function createApp(
     options.collaborationPolicy?.gptScope,
   );
   registerIntake(app, intake);
+  const issueDrawer = new IssueDrawer(
+    sessions,
+    gpt,
+    projectGpts,
+    options.collaborationPolicy?.gptScope,
+    options.collaborationPolicy?.issuesPublished,
+  );
+  registerIssueDrawer(app, issueDrawer);
   registerNativePlans(app, new NativePlans(sessions, projectWork.context));
   registerRelays(app, sessions, projectWork, queue);
   registerGuiPreviews(app, sessions, artifacts, projectWork.context, options.guiPreviewProbe);
@@ -1010,9 +1024,10 @@ export async function createApp(
     unsubscribeRevocation();
     for (const socket of sockets.keys()) socket.close(1001, "Server restarting");
     await bridgeDoctor.close();
+    await issueDrawer.close();
     await push.close();
     await sessions.close();
     if (!options.keepStoreOpen) store.close();
   });
-  return { app, store, sessions, auth, push, gpt, projectWork, projectGpts, intake };
+  return { app, store, sessions, auth, push, gpt, projectWork, projectGpts, intake, issueDrawer };
 }

@@ -58,6 +58,38 @@ async function fixture(t) {
   return { root, registry, team, spaces, owner, friend, stranger, project, input };
 }
 
+test("Issue package notices coalesce for the project owner without private transcripts or cross-user reads", async (t) => {
+  const f = await fixture(t),
+    s = f.spaces;
+  const { id } = s.create(f.owner, randomUUID(), f.input("project"), f.project("altar"));
+  s.answer(f.friend, id, randomUUID(), { revision: 1, accept: true }, f.project("friend-copy"));
+  const batch = randomUUID(),
+    issues = [{ number: 1, url: "https://github.com/example/altar/issues/1" }];
+  s.issuesPublished(f.friend, "friend-copy", batch, issues);
+  const notice = s.catalog(f.owner).spaces[0].issueDispatches[0];
+  assert.equal(notice.sender.id, f.friend);
+  assert.deepEqual(notice.issues, issues);
+  assert.equal(s.catalog(f.friend).spaces[0].issueDispatches.length, 0);
+  assert.equal(s.catalog(f.stranger).spaces.length, 0);
+  assert.deepEqual(Object.keys(notice).sort(), ["at", "id", "issues", "projectId", "sender"]);
+  s.readIssueDispatch(f.friend, id, notice.id);
+  assert.equal(s.catalog(f.owner).spaces[0].issueDispatches.length, 1);
+  s.readIssueDispatch(f.owner, id, notice.id);
+  s.issuesPublished(f.friend, "friend-copy", batch, issues);
+  assert.equal(s.catalog(f.owner).spaces[0].issueDispatches.length, 0);
+  s.issuesPublished(f.friend, "friend-copy", batch, [
+    ...issues,
+    { number: 2, url: "https://github.com/example/altar/issues/2" },
+  ]);
+  assert.equal(s.catalog(f.owner).spaces[0].issueDispatches.length, 1);
+  assert.equal(s.catalog(f.owner).spaces[0].issueDispatches[0].issues.length, 2);
+  assert.throws(() =>
+    s.issuesPublished(f.friend, "friend-copy", batch, [
+      { number: 1, url: "https://github.com/other/private/issues/1" },
+    ]),
+  );
+});
+
 test("Additional invitations require each project owner's grant and preserve individual acceptance choices", async (t) => {
   const f = await fixture(t),
     s = f.spaces;

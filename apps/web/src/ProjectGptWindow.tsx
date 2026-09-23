@@ -8,6 +8,7 @@ import {
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { accountSessionStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
+import { IssueDrawerButton } from "./IssueDrawer";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./project-gpt.css";
@@ -109,6 +110,7 @@ export function ProjectGptWindow({
           <strong>GPT проекта</strong>
           <small>{name}</small>
         </div>
+        <IssueDrawerButton targetId={projectId} />
         <button
           type="button"
           className="icon-button"

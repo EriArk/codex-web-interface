@@ -421,4 +421,5 @@ export * from "./file-limits.js";
 export * from "./file-tools.js";
 export * from "./github-work.js";
 export * from "./intake.js";
+export * from "./issue-drawer.js";
 export * from "./project-gpt.js";

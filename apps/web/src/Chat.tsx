@@ -1,3 +1,4 @@
+import type { IssueSource } from "@codex-web/shared";
 import { hasUnreadCompletion, type ResultCategory, type ThreadActivity } from "@codex-web/shared";
 import {
   type FormEvent,
@@ -11,12 +12,7 @@ import {
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AccessPicker } from "./AccessPicker";
-import {
-  type ArtifactRequest,
-  artifactSource,
-  messageCode,
-  useArtifactComponents,
-} from "./ArtifactMarkdown";
+import { type ArtifactRequest, artifactSource, useArtifactComponents } from "./ArtifactMarkdown";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
 import { accountSessionStorage as sessionStorage, workspaceMediaUrl } from "./accountStorage.ts";
 import { api } from "./api";
@@ -25,6 +21,7 @@ import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { ContextUsage } from "./ContextUsage";
 import { CopyButton } from "./CopyButton";
 import { useDictation } from "./Dictation";
+import { useIssueCode } from "./IssueDrawer";
 import { Icon } from "./icons";
 import { MarkdownTable } from "./MarkdownTable";
 import { MessageQueue, useMessageQueue } from "./MessageQueue";
@@ -48,19 +45,22 @@ export const MessageText = memo(function MessageText({
   onArtifact,
   resolveImage,
   complete,
+  issueSource,
 }: {
   text: string;
   onArtifact?: (source: string) => void;
   resolveImage?: (source: string) => Promise<string | undefined>;
   complete?: boolean;
+  issueSource?: IssueSource;
 }) {
   const artifacts = useArtifactComponents(onArtifact, resolveImage);
+  const code = useIssueCode(text, onArtifact, complete, issueSource);
   return (
     <Markdown
       urlTransform={(url) => (onArtifact && artifactSource(url) ? url : defaultUrlTransform(url))}
       remarkPlugins={[remarkGfm]}
       components={{
-        pre: messageCode(text, onArtifact, complete),
+        pre: code,
         table: MarkdownTable,
         ...artifacts,
       }}

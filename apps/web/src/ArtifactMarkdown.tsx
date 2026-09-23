@@ -1,4 +1,5 @@
 import { CHAT_BLOCK_LINES, type ResultItem, textBlockLines } from "@codex-web/shared";
+import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import { pageWorkspace, workspaceMediaUrl } from "./accountStorage";
@@ -91,6 +92,7 @@ export function messageCode(
   text: string,
   onOpen?: (source: string) => void,
   complete = true,
+  collect?: (text: string, start: number, end: number) => ReactNode,
 ): Components["pre"] {
   return ({ node, children }) => {
     const body = textOf(children);
@@ -110,6 +112,11 @@ export function messageCode(
       opening && closing
         ? raw.slice(opening[0].length, closing.index + (raw[closing.index] === "\n" ? 1 : 0))
         : body;
+    const start = (node?.position?.start.offset ?? 0) + (opening?.[0].length ?? 0);
+    const collected =
+      complete && closed && opening && text.slice(start, start + exact.length) === exact
+        ? collect?.(exact, start, start + exact.length)
+        : null;
     const reveal = async () => {
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(exact));
       const hash = Array.from(new Uint8Array(digest), (byte) =>
@@ -132,6 +139,7 @@ export function messageCode(
             <Icon name="chevron" size={14} />
           </button>
           <CopyButton text={exact} label="Копировать блок" />
+          {collected}
         </div>
       );
     if (textBlockLines(body) <= CHAT_BLOCK_LINES)
@@ -139,9 +147,15 @@ export function messageCode(
         <div className="copyable-block message-short-block">
           <pre>{children}</pre>
           <CopyButton text={exact} label="Копировать блок" />
+          {collected}
         </div>
       );
-    return <CollapsibleCode>{children}</CollapsibleCode>;
+    return (
+      <>
+        <CollapsibleCode>{children}</CollapsibleCode>
+        {collected}
+      </>
+    );
   };
 }
 
@@ -197,6 +211,7 @@ export function artifactComponents(
       return props.href ? (
         <a
           {...props}
+          href={props.href}
           className={props.title === "Источник" ? "source-link" : undefined}
           target={href.startsWith("#") ? undefined : "_blank"}
           rel="noopener noreferrer"

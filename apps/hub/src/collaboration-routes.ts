@@ -18,6 +18,16 @@ export function registerCollaborationSpaces(
   spaces = new CollaborationSpaces(team),
   githubProbe?: GitHubProbe,
 ) {
+  app.post("/api/team/spaces/:id/issues/read", (req) =>
+    spaces.readIssueDispatch(
+      actor(req),
+      id(req),
+      z
+        .object({ dispatchId: z.string().max(100) })
+        .strict()
+        .parse(req.body).dispatchId,
+    ),
+  );
   const activity = new SpaceActivity(spaces, personal, githubProbe);
   const socialSource = z.object({
     projectId: z.string().uuid(),

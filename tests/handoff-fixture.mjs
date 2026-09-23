@@ -78,27 +78,30 @@ export async function handoffFixture(
   const setupToken = randomBytes(32).toString("base64url");
   let running = true,
     operation = null;
-  const { app, push, projectWork, projectGpts, gpt, intake } = await createApp(config, {
-    store,
-    sessions,
-    setupToken,
-    webRoot,
-    ...appOptions,
-    desktopTransport: async (_m, action, id) => {
-      desktopCalls.push(action);
-      if (action === "ForceRelease") {
-        running = false;
-        operation = {
-          id,
-          kind: "forcerelease",
-          state: "completed",
-          code: "DESKTOP_RELEASED",
-          requestedAt: Date.now() / 1000,
-        };
-      }
-      return { available: true, running, activityKnown: true, activeTasks: 0, operation };
+  const { app, push, projectWork, projectGpts, gpt, intake, issueDrawer } = await createApp(
+    config,
+    {
+      store,
+      sessions,
+      setupToken,
+      webRoot,
+      ...appOptions,
+      desktopTransport: async (_m, action, id) => {
+        desktopCalls.push(action);
+        if (action === "ForceRelease") {
+          running = false;
+          operation = {
+            id,
+            kind: "forcerelease",
+            state: "completed",
+            code: "DESKTOP_RELEASED",
+            requestedAt: Date.now() / 1000,
+          };
+        }
+        return { available: true, running, activityKnown: true, activeTasks: 0, operation };
+      },
     },
-  });
+  );
   const password = "Isolated handoff " + randomUUID();
   const enrolled = await app.inject({
     method: "POST",
@@ -117,6 +120,7 @@ export async function handoffFixture(
     projectWork,
     projectGpts,
     intake,
+    issueDrawer,
     gpt,
     store,
     sessions,
