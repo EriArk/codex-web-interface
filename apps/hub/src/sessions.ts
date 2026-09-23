@@ -67,6 +67,10 @@ interface Approval {
   requestId: string | number;
 }
 export class Sessions extends EventEmitter {
+  assertWorkThread(id: string) {
+    if (this.store.db.prepare("SELECT diagnostic FROM threads WHERE id=?").get(id)?.diagnostic)
+      throw new HubError(409, "UTILITY_THREAD", "Открой технический чат через его окно проекта.");
+  }
   authorizeExecution: () => void = () => {};
   projectInstructions: (projectId: string) => string | null = () => null;
   private readonly collaborationThreads = new Set<string>();
@@ -644,6 +648,7 @@ export class Sessions extends EventEmitter {
     });
   }
   async queueClient(id: string): Promise<CodexClient> {
+    this.assertWorkThread(id);
     const r = await this.runtime(this.thread(id).projectId);
     r.touched = Date.now();
     return r.rpc;
@@ -837,6 +842,7 @@ export class Sessions extends EventEmitter {
     return model;
   }
   async setSettings(id: string, value: TurnSettings): Promise<TurnSettings> {
+    this.assertWorkThread(id);
     const thread = this.thread(id);
     const changingAccess =
       (this.store.threadSettings(id)?.access ?? "workspace") !== (value.access ?? "workspace");
@@ -903,6 +909,7 @@ export class Sessions extends EventEmitter {
     title: string,
     diagnostic = false,
     beforeCommit?: () => void,
+    onCreated?: (thread: ThreadRecord) => void,
   ): Promise<ThreadRecord> {
     this.project(projectId);
     return this.locked(projectId, async () => {
@@ -927,6 +934,7 @@ export class Sessions extends EventEmitter {
         throw new HubError(502, "INVALID_THREAD_RESPONSE", "Codex не вернул идентификатор диалога");
       const t = this.store.createThread(projectId, codexId, title);
       if (diagnostic) this.store.db.prepare("UPDATE threads SET diagnostic=1 WHERE id=?").run(t.id);
+      onCreated?.(t);
       if (record(result.thread).historyMode)
         this.store.db
           .prepare("UPDATE threads SET historyMode=?,workingDirectory=? WHERE id=?")
@@ -944,6 +952,7 @@ export class Sessions extends EventEmitter {
     });
   }
   async fork(id: string, attachmentIds: string[] = []): Promise<ThreadRecord> {
+    this.assertWorkThread(id);
     const original = this.thread(id);
     await this.verifyThreadRoot(original);
     this.attachments.validateCopy(id, attachmentIds);
@@ -1011,7 +1020,8 @@ export class Sessions extends EventEmitter {
       return this.store.thread(created.id);
     });
   }
-  async resume(id: string): Promise<ThreadRecord> {
+  async resume(id: string, diagnostic = false): Promise<ThreadRecord> {
+    if (!diagnostic) this.assertWorkThread(id);
     await this.verifyThreadRoot(this.thread(id));
     const t = this.thread(id);
     if (t.archived) throw new HubError(409, "THREAD_ARCHIVED", "Сначала разархивируй диалог.");
@@ -1026,10 +1036,13 @@ export class Sessions extends EventEmitter {
           threadId: t.codexThreadId,
           cwd: t.workingDirectory || this.project(t.projectId).workingDirectory,
           excludeTurns: true,
-          ...threadAccess(t.settings?.access),
+          ...(diagnostic
+            ? { sandbox: "read-only", approvalPolicy: "never" }
+            : threadAccess(t.settings?.access)),
         });
       } catch (error) {
         const empty =
+          !diagnostic &&
           t.origin === "web" &&
           !this.store.db.prepare("SELECT 1 FROM messages WHERE threadId=? LIMIT 1").get(id) &&
           !this.store.db.prepare("SELECT 1 FROM queue_transfers WHERE threadId=? LIMIT 1").get(id);
@@ -1087,7 +1100,13 @@ export class Sessions extends EventEmitter {
         const firstText = Array.isArray(codexUser?.content)
           ? record(codexUser.content.find((v) => record(v).type === "text")).text
           : undefined;
-        const matches = t.activeTurnId === last.id || (latestUser && latestUser.text === firstText);
+        const matches =
+          t.activeTurnId === last.id ||
+          (latestUser &&
+            (diagnostic
+              ? latestUser.id === (codexUser?.clientId ?? codexUser?.id)
+              : latestUser.text === firstText));
+        if (diagnostic && !matches) return this.store.thread(id);
         if (matches) {
           if (latestUser && !latestUser.turnId)
             this.emitEvent(id, "turn.started", { id: last.id }, text(last.id));
@@ -1107,6 +1126,7 @@ export class Sessions extends EventEmitter {
             }
         }
       }
+      if (diagnostic && t.status === "unknown" && !last.id) return this.store.thread(id);
       if (status === "inProgress") {
         r.active.add(id);
         this.store.setStatus(id, "running", text(last.id) || null);
@@ -1136,6 +1156,7 @@ export class Sessions extends EventEmitter {
     clientMessageId?: string,
     diagnostic = false,
     internal?: {
+      instructions?: string;
       beforeCommit?: () => void;
       beforeSubmit?: (rpc: CodexClient) => Promise<void>;
       outputSchema?: Record<string, unknown>;
@@ -1143,6 +1164,7 @@ export class Sessions extends EventEmitter {
   ): Promise<Record<string, unknown>> {
     let committing = false;
     try {
+      if (!diagnostic) this.assertWorkThread(id);
       let t = this.thread(id);
       await this.verifyThreadRoot(t);
       this.assertWritable(t.projectId);
@@ -1279,7 +1301,8 @@ export class Sessions extends EventEmitter {
                       model: selection.model,
                       reasoning_effort: selection.effort,
                       developer_instructions: diagnostic
-                        ? "Read-only diagnosis. Never edit files, execute project code, change services, credentials, browser state or send external messages. Report findings only."
+                        ? (internal?.instructions ??
+                          "Read-only diagnosis. Never edit files, execute project code, change services, credentials, browser state or send external messages. Report findings only.")
                         : this.turnInstructions(t),
                     },
                   },
@@ -1326,6 +1349,7 @@ export class Sessions extends EventEmitter {
     if (!a || a.rpc.closed)
       throw new HubError(409, "APPROVAL_EXPIRED", "Запрос подтверждения уже недействителен");
     this.thread(a.threadId);
+    if (this.store.thread(a.threadId).diagnostic && decision === "accept") decision = "decline";
     if (a.kind === "question" || a.kind === "elicitation")
       throw new HubError(400, "ANSWER_REQUIRED", "Нужен ответ на запрос");
     this.approvals.delete(id);
@@ -1361,6 +1385,7 @@ export class Sessions extends EventEmitter {
     if (!a || a.rpc.closed || !a.elicitationUrl)
       throw new HubError(409, "APPROVAL_EXPIRED", "Запрос больше не актуален");
     this.thread(a.threadId);
+    this.assertWorkThread(a.threadId);
     return a.elicitationUrl;
   }
   async elicit(
@@ -1376,6 +1401,7 @@ export class Sessions extends EventEmitter {
     let response: ReturnType<typeof elicitationResponse>;
     try {
       this.thread(a.threadId);
+      if (this.store.thread(a.threadId).diagnostic && action === "accept") action = "decline";
       response = elicitationResponse(a.elicitation, action, content);
     } catch (e) {
       throw new NotSubmittedError(e);

@@ -43,7 +43,7 @@ import { useWebHandoff } from "./WebHandoff";
 import { useThreadReviews, WorkReviewLink } from "./WorkReviewLink";
 
 const positions = new Map<string, number>();
-const MessageText = memo(function MessageText({
+export const MessageText = memo(function MessageText({
   text,
   onArtifact,
   resolveImage,
@@ -97,7 +97,7 @@ function endsTask(
       ["completed", "interrupted", "failed"].includes(status))
   );
 }
-function ApprovalCard({
+export function ApprovalCard({
   approval,
   busy,
   onDecision,

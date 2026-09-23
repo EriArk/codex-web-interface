@@ -183,6 +183,10 @@ export class BridgeDoctor {
         )
         .get() ||
       t.projectId !== a.projectId ||
+      (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='ai_conversation_claims'").get() &&
+        this.db
+          .prepare("SELECT 1 FROM ai_conversation_claims WHERE provider='codex' AND nativeId=?")
+          .get(t.codexThreadId)) ||
       t.archived ||
       busyStates.includes(t.status) ||
       context.current(scope).threadId === threadId

@@ -20,8 +20,10 @@ export function ActivitySourceWindow({
   space,
   target,
   onClose,
+  personalProjectId,
 }: {
-  space: CollaborationSpace;
+  space?: CollaborationSpace;
+  personalProjectId?: string;
   target: ActivitySourceTarget;
   onClose: () => void;
 }) {
@@ -32,21 +34,29 @@ export function ActivitySourceWindow({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const scope = JSON.stringify([
-    space.id,
-    space.revision,
+    space?.id,
+    space?.revision,
     target.projectId,
     target.repositoryId,
     target.source.key,
+    target.source.url,
   ]);
   useEffect(() => {
     let live = true;
     setBusy(true);
     setError("");
-    const [spaceId, , projectId, repositoryId, source] = JSON.parse(scope);
-    void api<GitHubWorkObservation>(`/team/spaces/${spaceId}/activity/source`, {
-      method: "POST",
-      body: { projectId, repositoryId, source, page },
-    })
+    const [spaceId, , projectId, repositoryId, source, url] = JSON.parse(scope);
+    void api<GitHubWorkObservation>(
+      personalProjectId
+        ? `/projects/${personalProjectId}/intake/source`
+        : `/team/spaces/${spaceId}/activity/source`,
+      {
+        method: "POST",
+        body: personalProjectId
+          ? { source, page, url, repositoryId }
+          : { projectId, repositoryId, source, page },
+      },
+    )
       .then((next) => {
         if (live)
           setValue((old) =>
@@ -70,7 +80,7 @@ export function ActivitySourceWindow({
     return () => {
       live = false;
     };
-  }, [scope, page]);
+  }, [scope, page, personalProjectId]);
   return (
     <dialog
       ref={dialog}

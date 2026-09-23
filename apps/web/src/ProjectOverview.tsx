@@ -12,6 +12,7 @@ import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { GptProjectButton } from "./GptProjectContent";
 import { GuiPreviewButton } from "./GuiPreviewHost";
+import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
 import { cleanTarget, type NotebookRequest } from "./Notebook";
 import { PinnedList } from "./PinnedList";
@@ -204,6 +205,15 @@ export function ProjectOverview({
           </button>
         )}
         <SharedProjectsButton scope={scope} />
+        {scope.client === "codex" && (
+          <IntakeButton
+            projectId={scope.projectId}
+            name={scope.name}
+            onWork={onTarget}
+            className="overview-row"
+            label="Разобрать входящие задачи"
+          />
+        )}
         {error && (
           <p className="notice" role="alert">
             {error}

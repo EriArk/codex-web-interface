@@ -78,7 +78,7 @@ export async function handoffFixture(
   const setupToken = randomBytes(32).toString("base64url");
   let running = true,
     operation = null;
-  const { app, push, projectWork, projectGpts, gpt } = await createApp(config, {
+  const { app, push, projectWork, projectGpts, gpt, intake } = await createApp(config, {
     store,
     sessions,
     setupToken,
@@ -116,6 +116,7 @@ export async function handoffFixture(
     push,
     projectWork,
     projectGpts,
+    intake,
     gpt,
     store,
     sessions,

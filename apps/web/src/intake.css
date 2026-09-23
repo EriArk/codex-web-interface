@@ -1,0 +1,105 @@
+.intake-window {
+  width: min(850px, calc(100vw - 20px));
+  height: min(960px, calc(var(--app-height, 100dvh) - 20px));
+  max-height: calc(var(--app-height, 100dvh) - 12px);
+  padding: 0;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.intake-window[open] {
+  display: flex;
+  flex-direction: column;
+}
+.intake-window::backdrop {
+  background: #0005;
+}
+.intake-window > header {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.intake-window h2 {
+  margin: 0;
+}
+.intake-window > header small {
+  color: var(--muted);
+}
+.intake-window > header > div {
+  flex: 1;
+}
+.intake-results > .results-pane {
+  min-height: 0;
+  flex: 1;
+}
+.intake-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
+.intake-message {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.intake-message > header,
+.intake-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.intake-message > header {
+  justify-content: space-between;
+}
+.intake-message .notebook-markdown {
+  min-height: 0;
+  overflow: visible;
+}
+.intake-window pre {
+  max-width: 100%;
+  overflow: auto;
+}
+.intake-composer {
+  flex: none;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.intake-window :is(input, textarea) {
+  width: 100%;
+  min-width: 0;
+}
+.intake-input {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+.intake-input textarea {
+  resize: vertical;
+  max-height: 130px;
+}
+.intake-sources button {
+  margin: 4px;
+}
+.intake-review {
+  padding: 12px 0;
+}
+.intake-composer .mode-option[hidden] {
+  display: none;
+}
+@media (max-width: 600px) {
+  .intake-window {
+    width: calc(100vw - 8px);
+    height: calc(var(--app-height, 100dvh) - 8px);
+    max-height: calc(var(--app-height, 100dvh) - 8px);
+  }
+  .intake-scroll,
+  .intake-composer {
+    padding: 8px;
+  }
+}

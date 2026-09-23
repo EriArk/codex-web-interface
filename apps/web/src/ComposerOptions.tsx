@@ -91,10 +91,12 @@ export function ComposerOptions({
   options,
   disabled,
   effortDisabled = disabled,
+  analysisOnly = false,
 }: {
   options: ReturnType<typeof useTurnSettings>;
   disabled: boolean;
   effortDisabled?: boolean;
+  analysisOnly?: boolean;
 }) {
   const { caps, selection, loading, saving, error, change, reload } = options;
   const model = caps?.models.find((m) => m.id === selection?.model);
@@ -137,7 +139,7 @@ export function ComposerOptions({
             ))}
           </select>
         </div>
-        <div className="composer-option mode-option">
+        <div className="composer-option mode-option" hidden={analysisOnly}>
           <span aria-hidden="true">{selection.mode === "plan" ? "План" : "Работа"}</span>
           <select
             className="mode-select"

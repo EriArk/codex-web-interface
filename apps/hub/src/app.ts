@@ -41,6 +41,7 @@ import { registerGpt } from "./gpt.js";
 import { configuredNativeGpt } from "./gpt-native-config.js";
 import type { NativeGptWorkspace } from "./gpt-native-provider.js";
 import { registerGuiPreviews } from "./gui-previews.js";
+import { ProjectIntake, registerIntake } from "./intake.js";
 import { entityAction, libraryMutation } from "./library.js";
 import { type MachineProbeDependencies, registerMachineHealth } from "./machineHealth.js";
 import { NativePlans, registerNativePlans } from "./native-plan.js";
@@ -455,6 +456,7 @@ export async function createApp(
     return {
       threads: store
         .threads(project.id)
+        .filter((t) => !t.diagnostic)
         .filter((t) =>
           projectPathAllowed(
             sessions.catalog.machine(project.machineId),
@@ -740,6 +742,13 @@ export async function createApp(
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
   const projectWork = registerProjectWork(app, sessions, gpt, queue, options.projectActionPolicy);
+  const intake = new ProjectIntake(
+    sessions,
+    projectGpts.bindings,
+    projectWork,
+    options.collaborationPolicy?.gptScope,
+  );
+  registerIntake(app, intake);
   registerNativePlans(app, new NativePlans(sessions, projectWork.context));
   registerRelays(app, sessions, projectWork, queue);
   registerGuiPreviews(app, sessions, artifacts, projectWork.context, options.guiPreviewProbe);
@@ -1005,5 +1014,5 @@ export async function createApp(
     await sessions.close();
     if (!options.keepStoreOpen) store.close();
   });
-  return { app, store, sessions, auth, push, gpt, projectWork, projectGpts };
+  return { app, store, sessions, auth, push, gpt, projectWork, projectGpts, intake };
 }

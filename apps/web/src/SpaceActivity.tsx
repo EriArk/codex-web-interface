@@ -15,6 +15,7 @@ import {
   saveActivityView,
 } from "./activityCache";
 import { ApiError, api, messageOf } from "./api";
+import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
 import "./space-activity.css";
 
@@ -443,6 +444,20 @@ export function SpaceActivity({
                     <Icon name="chat" size={15} />
                     {opening === "discuss" ? "Готовим контекст…" : "Обсудить в GPT"}
                   </button>
+                  {eligible.find((p) => p.id === first.projectId)?.personalProjectId && (
+                    <IntakeButton
+                      projectId={eligible.find((p) => p.id === first.projectId)!.personalProjectId!}
+                      name={first.projectName}
+                      sources={[selected.url]}
+                      label="Изучить в Codex"
+                      className="secondary activity-open"
+                      onWork={() =>
+                        onProject(
+                          eligible.find((p) => p.id === first.projectId)!.personalProjectId!,
+                        )
+                      }
+                    />
+                  )}
                   {batch.length > 1 && (
                     <label className="activity-source-picker">
                       Обсуждение коммита

@@ -45,7 +45,7 @@ export class ProjectContext {
         entry = row
           ? this.sessions.catalog.library.get("thread", String(row.codexThreadId))
           : undefined;
-      if (!row || row.archived || entry?.deleted || entry?.archived) return null;
+      if (!row || row.diagnostic || row.archived || entry?.deleted || entry?.archived) return null;
       return { threadId: id, title: String(row.title), status: String(row.status) };
     }
     const entry = this.gpt.library.get("thread", id);

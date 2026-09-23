@@ -38,6 +38,7 @@ export interface ThreadRecord {
   nativeObservedStatus?: string;
   nativeObservedAt?: number;
   archived?: number;
+  diagnostic?: number;
   status: string;
   activeTurnId: string | null;
   createdAt: string;
