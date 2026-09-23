@@ -12,6 +12,7 @@ import { ActivityAttentionWindow } from "./ActivityDiscussion";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
+import type { ProjectSetupSeed } from "./ProjectDialog";
 import { emptyProjectRules, ProjectRulesEditor } from "./ProjectRulesEditor";
 import { SpaceActivity } from "./SpaceActivity";
 import { SpaceChat } from "./SpaceChat";
@@ -249,7 +250,7 @@ export function CollaborationWindow({
 }: {
   spaces: SpacesController;
   projects: Project[];
-  onNewProject: (seed?: { name: string; repository: string }) => void;
+  onNewProject: (seed?: ProjectSetupSeed) => void;
   createdProjectId: string;
   onProject: (id: string) => void;
   onChat: (id: string, projectId: string) => void;
@@ -449,7 +450,7 @@ export function CollaborationWindow({
             spaces={spaces}
             invitation={invitation}
             projects={projects}
-            onNewProject={() => onNewProject()}
+            onNewProject={onNewProject}
             createdProjectId={createdProjectId}
           />
         )}
@@ -459,7 +460,7 @@ export function CollaborationWindow({
             spaces={spaces}
             space={space}
             projects={projects}
-            onNewProject={() => onNewProject()}
+            onNewProject={onNewProject}
             createdProjectId={createdProjectId}
           />
         )}
@@ -500,7 +501,7 @@ function SpaceWizard({
   spaces: SpacesController;
   invitation?: CollaborationInvitation;
   projects: Project[];
-  onNewProject: () => void;
+  onNewProject: (seed?: ProjectSetupSeed) => void;
   createdProjectId: string;
 }) {
   const [step, setStep] = useState(0),
@@ -665,13 +666,26 @@ function SpaceWizard({
               <SpaceGitHubAccessPanel
                 spaceId={invitation.spaceId}
                 revision={invitation.revision}
-                projects={projects}
                 names={invitation.projects ?? []}
               />
             )}
-            <button type="button" className="secondary" onClick={onNewProject}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() =>
+                onNewProject(
+                  invitation && kind === "project"
+                    ? {
+                        name: invitation.project.name,
+                        repository: invitation.project.repository,
+                        scope: `space:${invitation.spaceId}:invitation`,
+                      }
+                    : undefined,
+                )
+              }
+            >
               <Icon name="plus" size={16} />
-              Создать проект
+              {invitation && kind === "project" ? "Создать рабочую копию" : "Создать проект"}
             </button>
             {!invitation && (
               <TeamContactPicker value={person} onChange={setPerson} exclude={[pageWorkspace]} />
@@ -834,7 +848,7 @@ function SpaceSettings({
   spaces: SpacesController;
   space: CollaborationSpace;
   projects: Project[];
-  onNewProject: () => void;
+  onNewProject: (seed?: ProjectSetupSeed) => void;
   createdProjectId: string;
 }) {
   const [title, setTitle] = useState(space.title),

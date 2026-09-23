@@ -10,7 +10,10 @@ import type { createApp } from "./app.js";
 import type { CollaborationSpaces, Space } from "./collaboration-spaces.js";
 import type { GitHubProbe } from "./team-github.js";
 
-type Account = { projectId: string; repository: string; binding: string; identity: GitHubIdentity };
+type Account = ({ projectId: string; repository: string } | { machineId: string }) & {
+  binding: string;
+  identity: GitHubIdentity;
+};
 type Job = {
   code?: string;
   dispatched?: boolean;
@@ -169,7 +172,7 @@ export class SpaceGitHubAccess {
     };
   }
   private async observeAccount(user: string, a: Account) {
-    const c = await this.context(user, a.projectId, a.repository);
+    const c = await this.accountContext(user, a);
     if (c.binding !== a.binding) throw changed();
     const v = (await this.probe(c.machine, c.root, {
       op: "observe",
@@ -179,10 +182,55 @@ export class SpaceGitHubAccess {
     if (
       v.identity.id !== a.identity.id ||
       v.identity.login.toLowerCase() !== a.identity.login.toLowerCase() ||
-      (await this.context(user, a.projectId, a.repository)).binding !== a.binding
+      (await this.accountContext(user, a)).binding !== a.binding
     )
       throw changed();
     return c;
+  }
+  private async machineContext(user: string, machineId: string) {
+    const epoch = this.spaces.team.registry.active(user).executionEpoch;
+    const { runtime } = await this.personal(user);
+    const machine = runtime.sessions.catalog.machine(machineId);
+    authorizeMachine(machine);
+    return {
+      machine,
+      root: null,
+      repository: "",
+      binding: hash([user, epoch, "github-account", machine]),
+    };
+  }
+  private accountContext(user: string, a: Account) {
+    return "machineId" in a
+      ? this.machineContext(user, a.machineId)
+      : this.context(user, a.projectId, a.repository);
+  }
+  async connectMachine(user: string, machineId: string, expected?: GitHubIdentity) {
+    const c = await this.machineContext(user, machineId);
+    const v = (await this.probe(c.machine, null, {
+      op: "observe",
+      repository: "",
+      query: { kind: "identity" },
+    })) as GitHubWorkObservation;
+    if (!v?.identity?.id || (await this.machineContext(user, machineId)).binding !== c.binding)
+      throw changed();
+    if (expected) {
+      if (expected.id !== v.identity.id || expected.login !== v.identity.login) throw changed();
+      this.confirm(user, { machineId, binding: c.binding, identity: v.identity });
+    }
+    return { identity: v.identity, confirmed: !!expected };
+  }
+  private confirm(user: string, a: Account) {
+    this.spaces.team.db
+      .prepare(
+        "INSERT INTO space_github_accounts VALUES(?,?) ON CONFLICT(userId) DO UPDATE SET value=excluded.value",
+      )
+      .run(user, JSON.stringify(a));
+    for (const j of this.jobs())
+      if (j.userId === user && j.state === "waiting-account") {
+        j.state = "queued";
+        this.save(j);
+      }
+    this.kick();
   }
   async connect(user: string, projectId: string, repository: string, expected?: GitHubIdentity) {
     const c = await this.context(user, projectId, repository);
@@ -196,17 +244,7 @@ export class SpaceGitHubAccess {
     if (expected) {
       if (expected.id !== v.identity.id || expected.login !== v.identity.login) throw changed();
       const a: Account = { projectId, repository, binding: c.binding, identity: v.identity };
-      this.spaces.team.db
-        .prepare(
-          "INSERT INTO space_github_accounts VALUES(?,?) ON CONFLICT(userId) DO UPDATE SET value=excluded.value",
-        )
-        .run(user, JSON.stringify(a));
-      for (const j of this.jobs())
-        if (j.userId === user && j.state === "waiting-account") {
-          j.state = "queued";
-          this.save(j);
-        }
-      this.kick();
+      this.confirm(user, a);
     }
     return { identity: v.identity, confirmed: !!expected };
   }
@@ -414,6 +452,7 @@ export class SpaceGitHubAccess {
       j.state = "unknown";
       this.save(j);
       const id = j.acceptance.id,
+        repository = c.root === null ? j.repository : c.repository,
         input = {
           kind: "accept-invitation" as const,
           targetRepository: j.repository,
@@ -422,19 +461,16 @@ export class SpaceGitHubAccess {
         };
       let r = (await this.probe(c.machine, c.root, {
         op: "prepare",
-        repository: c.repository,
+        repository,
         id,
         input,
       })) as GitHubWorkReceipt;
       this.allowed(j);
-      if (
-        (await this.context(user, j.account.projectId, j.account.repository)).binding !== c.binding
-      )
-        throw changed();
+      if ((await this.accountContext(user, j.account)).binding !== c.binding) throw changed();
       if (r.state !== "completed" && r.state !== "failed")
         r = (await this.probe(c.machine, c.root, {
           op: "apply",
-          repository: c.repository,
+          repository,
           id,
           fingerprint: r.fingerprint,
         })) as GitHubWorkReceipt;

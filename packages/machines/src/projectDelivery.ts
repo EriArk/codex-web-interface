@@ -7,6 +7,7 @@ import {
   HubError,
   type MachineConfig,
 } from "@codex-web/shared";
+import { authorizeMachine } from "./authority.js";
 import { deliveryProbe } from "./deliveryProbe.js";
 import { githubWorkProbe } from "./githubWorkProbe.js";
 import { quotePowerShell, stopProcess } from "./index.js";
@@ -63,7 +64,7 @@ export async function runProjectDelivery(
 }
 export async function runProjectGitHub(
   machine: MachineConfig,
-  root: string,
+  root: string | null,
   request: GitHubWorkProbeRequest,
 ): Promise<GitHubWorkProbeResult> {
   return runFixedProjectWorker(machine, root, { op: "github", request }, () =>
@@ -72,11 +73,14 @@ export async function runProjectGitHub(
 }
 async function runFixedProjectWorker<T>(
   machine: MachineConfig,
-  root: string,
+  root: string | null,
   request: DeliveryProbeRequest | { op: "github"; request: GitHubWorkProbeRequest },
   local: () => Promise<T>,
 ): Promise<T> {
-  await verifyProjectRoot(machine, root);
+  authorizeMachine(machine);
+  if (root !== null) await verifyProjectRoot(machine, root);
+  else if (request.op !== "github")
+    throw new HubError(400, "GITHUB_WORK_REQUEST", deliveryMessage("GITHUB_WORK_REQUEST"));
   if (machine.type === "local-linux") {
     try {
       return await local();

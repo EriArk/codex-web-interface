@@ -253,6 +253,7 @@ function Workspace({
   const spaces = { ...spaceState, setMode: switchSpaceMode };
   const [spaceProjectCreated, setSpaceProjectCreated] = useState("");
   const spaceProjectCreation = useRef(false);
+  const projectSetupGeneration = useRef(0);
   const [initialized, setInitialized] = useState(false),
     [wide, setWide] = useState(window.innerWidth >= 1100);
   const [projects, setProjects] = useState<Project[]>([]),
@@ -265,6 +266,7 @@ function Workspace({
   const [sharedProjectSeed, setSharedProjectSeed] = useState<{
     name: string;
     repository: string;
+    scope: string;
   }>();
   const [machines, setMachines] = useState<Machine[]>([]),
     [createProject, setCreateProject] = useState(false),
@@ -1677,13 +1679,16 @@ function Workspace({
           seed={sharedProjectSeed}
           machines={machines}
           onClose={() => {
+            projectSetupGeneration.current++;
             setCreateProject(false);
             setSharedProjectSeed(undefined);
             spaceProjectCreation.current = false;
           }}
           onCreated={async (p) => {
+            const generation = projectSetupGeneration.current;
             const data = await api<{ projects: Project[] }>("/projects?refresh=1");
             setProjects(data.projects);
+            if (generation !== projectSetupGeneration.current) return;
             if (spaceProjectCreation.current) {
               setSpaceProjectCreated(p.id);
               return;

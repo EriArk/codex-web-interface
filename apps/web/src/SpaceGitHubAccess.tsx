@@ -1,9 +1,9 @@
 import type { GitHubIdentity } from "@codex-web/shared";
 import { useEffect, useState } from "react";
 import { pageWorkspace } from "./accountStorage";
-import { api } from "./api";
+import { api, messageOf } from "./api";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
-import type { Project } from "./types";
+import type { Machine } from "./types";
 
 type Access = {
   identity: GitHubIdentity | null;
@@ -29,12 +29,10 @@ const states: Record<string, string> = {
 export function SpaceGitHubAccessPanel({
   spaceId,
   revision,
-  projects,
   names = [],
 }: {
   spaceId: string;
   revision: number;
-  projects: Project[];
   names?: { id: string; name: string }[];
 }) {
   const action = useSharedAction();
@@ -42,7 +40,21 @@ export function SpaceGitHubAccessPanel({
     [editing, setEditing] = useState(false),
     [selected, setSelected] = useState(""),
     [candidate, setCandidate] = useState<GitHubIdentity | null>(null);
-  const choices = projects.filter((p) => !p.unassigned && !p.archived && !p.deleted);
+  const [choices, setChoices] = useState<Machine[]>([]);
+  const [machineError, setMachineError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<{ machines: Machine[] }>("/machines", { signal: controller.signal })
+      .then(({ machines }) => {
+        if (controller.signal.aborted) return;
+        setChoices(machines);
+        if (machines.length === 1) setSelected(machines[0]!.id);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted) setMachineError(messageOf(e));
+      });
+    return () => controller.abort();
+  }, []);
   useEffect(() => {
     let active = true,
       timer: ReturnType<typeof setTimeout>;
@@ -80,13 +92,13 @@ export function SpaceGitHubAccessPanel({
       {(!value?.identity || editing) && (
         <div className="space-form">
           <small className="muted">
-            Подключи свой аккаунт для получения Write. Проверим GitHub на компьютере выбранного
-            проекта.
+            Подключи свой аккаунт для получения Write. Проверим GitHub на твоём компьютере. Рабочую
+            копию проекта можно создать после принятия доступа.
           </small>
           <label>
-            Мой проект
+            Мой компьютер
             <select
-              aria-label="Проект для аккаунта GitHub"
+              aria-label="Компьютер для GitHub"
               disabled={action.busy}
               value={selected}
               onChange={(e) => {
@@ -94,7 +106,7 @@ export function SpaceGitHubAccessPanel({
                 setCandidate(null);
               }}
             >
-              <option value="">Выбрать проект…</option>
+              <option value="">Выбрать компьютер…</option>
               {choices.map((p) => (
                 <option value={p.id} key={p.id}>
                   {p.name}
@@ -118,7 +130,7 @@ export function SpaceGitHubAccessPanel({
                     identity: GitHubIdentity;
                     confirmed: boolean;
                   }>("/team/spaces/github-account", "POST", {
-                    personalProjectId: selected,
+                    machineId: selected,
                     ...(candidate ? { identity: candidate } : {}),
                   });
                   if (result.confirmed) {
@@ -191,6 +203,7 @@ export function SpaceGitHubAccessPanel({
           </div>
         </div>
       ))}
+      {machineError && <p role="alert">{machineError}</p>}
       {action.error && <p role="alert">{action.error}</p>}
     </section>
   );

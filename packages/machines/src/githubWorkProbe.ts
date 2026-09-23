@@ -14,7 +14,7 @@ import type {
 
 /** Fixed machine-local GitHub operations. Only Node built-ins may be runtime dependencies. */
 export async function githubWorkProbe(
-  root: string,
+  requestedRoot: string | null,
   request: GitHubWorkProbeRequest,
 ): Promise<GitHubWorkProbeResult> {
   const fs = await import("node:fs/promises"),
@@ -66,13 +66,18 @@ export async function githubWorkProbe(
     if (!(await fs.stat(v)).isDirectory()) fail("GITHUB_WORK_PATH");
     return fs.realpath(v);
   };
-  root = await directory(root);
+  const accountOnly = requestedRoot === null;
+  const root = await directory(requestedRoot ?? os.homedir());
   valid(object(request) && ["observe", "prepare", "apply", "status"].includes(request.op));
   const repository = request.repository;
   valid(
-    scalar(repository, 150) &&
-      /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}\/[a-zA-Z0-9_.-]{1,100}$/.test(repository) &&
-      ![".", ".."].includes(repository.split("/")[1]!),
+    (accountOnly &&
+      request.op === "observe" &&
+      repository === "" &&
+      request.query.kind === "identity") ||
+      (scalar(repository, 150) &&
+        /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}\/[a-zA-Z0-9_.-]{1,100}$/.test(repository) &&
+        ![".", ".."].includes(repository.split("/")[1]!)),
   );
   const prefix = `repos/${repository}`,
     url = `https://github.com/${repository}`;
@@ -123,13 +128,14 @@ export async function githubWorkProbe(
     if (r.code) fail("GITHUB_WORK_REPOSITORY");
     return r.output.trim();
   };
-  if (canonical(await git(["rev-parse", "--show-toplevel"])) !== canonical(root))
+  if (!accountOnly && canonical(await git(["rev-parse", "--show-toplevel"])) !== canonical(root))
     fail("GITHUB_WORK_PATH");
-  const origin = await git(["config", "--get", "remote.origin.url"]);
+  const origin = accountOnly ? "" : await git(["config", "--get", "remote.origin.url"]);
   const matched = origin.match(
     /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([a-zA-Z0-9][a-zA-Z0-9-]{0,38}\/[a-zA-Z0-9_.-]{1,100}?)(?:\.git)?$/,
   );
-  if (matched?.[1]?.toLowerCase() !== repository.toLowerCase()) fail("GITHUB_WORK_REPOSITORY");
+  if (!accountOnly && matched?.[1]?.toLowerCase() !== repository.toLowerCase())
+    fail("GITHUB_WORK_REPOSITORY");
   const gh = await executable("gh");
   const http = async (endpoint: string, method = "GET", input?: unknown) => {
     const r = await run(
@@ -178,8 +184,17 @@ export async function githubWorkProbe(
     return { id: v.id, login: v.login };
   };
   const inspect = async (): Promise<GitHubRepositoryAccess> => {
-    const account = identity(await must("user")),
-      response = await http(prefix),
+    const account = identity(await must("user"));
+    if (accountOnly && !repository)
+      return {
+        repository: "",
+        repositoryId: null,
+        identity: account,
+        access: "unavailable",
+        issues: false,
+        checkedAt: Date.now(),
+      };
+    const response = await http(prefix),
       repo = response.value;
     if ([403, 404].includes(response.status))
       return {
@@ -566,6 +581,8 @@ export async function githubWorkProbe(
   };
   if (request.op === "observe") {
     exact(request, ["op", "repository", "query"]);
+    if (accountOnly && (request.query.kind !== "identity" || repository !== ""))
+      fail("GITHUB_WORK_REQUEST");
     return observe(request.query);
   }
   exact(
@@ -587,7 +604,13 @@ export async function githubWorkProbe(
   );
   await fs.mkdir(stateRoot, { recursive: true, mode: 0o700 });
   await directory(stateRoot);
-  type Saved = { root: string; repository: string; public: GitHubWorkReceipt; attempt?: number };
+  type Saved = {
+    root: string;
+    accountOnly?: boolean;
+    repository: string;
+    public: GitHubWorkReceipt;
+    attempt?: number;
+  };
   const file = path.join(stateRoot, request.id + ".json"),
     lock = path.join(stateRoot, hash(repository.toLowerCase()) + ".lock");
   const read = async (): Promise<Saved | null> => {
@@ -645,6 +668,7 @@ export async function githubWorkProbe(
     if (
       saved &&
       (canonical(saved.root) !== canonical(root) ||
+        !!saved.accountOnly !== accountOnly ||
         saved.repository.toLowerCase() !== repository.toLowerCase())
     )
       fail("GITHUB_WORK_KEY");
@@ -654,6 +678,12 @@ export async function githubWorkProbe(
     }
     if (request.op !== "prepare" && !saved) return null;
     const input = request.op === "prepare" ? request.input : saved!.public.input;
+    if (
+      accountOnly &&
+      (input.kind !== "accept-invitation" ||
+        input.targetRepository.toLowerCase() !== repository.toLowerCase())
+    )
+      fail("GITHUB_WORK_REQUEST");
     const verifyAccess = (access: GitHubRepositoryAccess, baseline?: GitHubWorkRecord) => {
       if (input.kind === "accept-invitation") {
         if (access.identity.id !== input.identityId) fail("GITHUB_WORK_IDENTITY_CHANGED");
@@ -731,7 +761,7 @@ export async function githubWorkProbe(
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      saved = { root, repository, public: receipt };
+      saved = { root, accountOnly, repository, public: receipt };
       await write(saved);
       return receipt;
     }

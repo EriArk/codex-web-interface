@@ -316,7 +316,8 @@ export function registerCollaborationSpaces(
     const user = actor(req),
       body = z
         .object({
-          personalProjectId: projectId,
+          personalProjectId: projectId.optional(),
+          machineId: projectId.optional(),
           identity: z
             .object({
               id: z.number().int().positive(),
@@ -326,10 +327,12 @@ export function registerCollaborationSpaces(
             .optional(),
         })
         .strict()
+        .refine((v) => !!v.personalProjectId !== !!v.machineId)
         .parse(req.body);
     return githubAccess.track(
       (async () => {
-        const p = await verify(user, body.personalProjectId);
+        if (body.machineId) return githubAccess.connectMachine(user, body.machineId, body.identity);
+        const p = await verify(user, body.personalProjectId!);
         actor(req);
         return githubAccess.connect(
           user,

@@ -2,6 +2,7 @@ import type { CollaborationSpace } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { Icon } from "./icons";
+import type { ProjectSetupSeed } from "./ProjectDialog";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import type { Project, Thread } from "./types";
 import type { SpacesController } from "./useCollaborationSpaces";
@@ -20,7 +21,7 @@ export function SpaceProjectOverview({
   space: CollaborationSpace;
   projectId: string;
   projects: Project[];
-  onNewProject: (seed?: { name: string; repository: string }) => void;
+  onNewProject: (seed?: ProjectSetupSeed) => void;
   createdProjectId: string;
   onProject: (id: string) => void;
   onChat: (id: string, projectId: string) => void;
@@ -116,7 +117,13 @@ export function SpaceProjectOverview({
             <button
               type="button"
               className="secondary"
-              onClick={() => onNewProject({ name: project.name, repository: project.repository })}
+              onClick={() =>
+                onNewProject({
+                  name: project.name,
+                  repository: project.repository,
+                  scope: `space:${space.id}:project:${project.id}`,
+                })
+              }
             >
               Создать рабочую копию
             </button>

@@ -23,7 +23,7 @@ const initial: ProjectSetupInput = {
   createDirectory: true,
   repository: { mode: "none", owner: "", name: "", visibility: "private", description: "" },
 };
-function restore() {
+function restore(draftKey: string) {
   try {
     const value = JSON.parse(localStorage.getItem(draftKey) ?? "null");
     if (
@@ -63,20 +63,37 @@ const labels: Record<string, string> = {
   review: "Проверь перед созданием",
 };
 type Folder = { path: string; parent: string | null; entries: { name: string; path: string }[] };
-export function ProjectDialog({
+export type ProjectSetupSeed = { name: string; repository: string; scope: string };
+type ProjectDialogProps = {
+  open: boolean;
+  machines: Machine[];
+  onClose: () => void;
+  onCreated: (project: Project) => Promise<void>;
+  seed?: ProjectSetupSeed;
+};
+export function ProjectDialog(props: ProjectDialogProps) {
+  const scope = props.seed ? `${props.seed.scope}:${props.seed.repository}` : "personal";
+  return <ProjectDialogContent key={scope} {...props} draftScope={scope} />;
+}
+function ProjectDialogContent({
   open,
   machines,
   onClose,
   onCreated,
   seed,
-}: {
-  open: boolean;
-  machines: Machine[];
-  onClose: () => void;
-  onCreated: (project: Project) => Promise<void>;
-  seed?: { name: string; repository: string };
-}) {
-  const restored = useRef(restore());
+  draftScope,
+}: ProjectDialogProps & { draftScope: string }) {
+  const storageKey = seed ? `${draftKey}:${encodeURIComponent(draftScope)}` : draftKey;
+  const restored = useRef(restore(storageKey));
+  const matchesSeed = useCallback(
+    (value: ProjectSetupInput) =>
+      !seed ||
+      (value.repository.mode === "connect" &&
+        `https://github.com/${value.repository.owner}/${value.repository.name}`.toLowerCase() ===
+          seed.repository.toLowerCase()),
+    [seed],
+  );
+  if (restored.current && !matchesSeed(restored.current.input)) restored.current = null;
   const [input, setInput] = useState<ProjectSetupInput>(() => restored.current?.input ?? initial),
     [step, setStep] = useState(0),
     [editedPath, setEditedPath] = useState(!!restored.current?.input?.workingDirectory);
@@ -100,6 +117,13 @@ export function ProjectDialog({
     attempt = useRef<{ body: string; key: string }>(
       restored.current?.attempt ?? { body: "", key: "" },
     );
+  const visibilityGeneration = useRef(0);
+  useEffect(() => {
+    if (!open) visibilityGeneration.current++;
+    return () => {
+      visibilityGeneration.current++;
+    };
+  }, [open]);
   const delivering = useRef(false),
     persistedOperation = useRef<string>(restored.current?.operationId ?? "");
   openRef.current = open;
@@ -120,7 +144,7 @@ export function ProjectDialog({
     setField({ repository: { ...input.repository, ...patch } });
   const appliedSeed = useRef<typeof seed>(undefined);
   useEffect(() => {
-    if (!open || !seed || appliedSeed.current === seed || persistedOperation.current) return;
+    if (!open || !seed || appliedSeed.current === seed || restored.current) return;
     const match = /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/.exec(seed.repository);
     if (!match) return;
     appliedSeed.current = seed;
@@ -152,9 +176,10 @@ export function ProjectDialog({
     }));
   }, [machine, editedPath, input.name, input.createDirectory]);
   useEffect(() => {
+    if (!open) return;
     try {
       localStorage.setItem(
-        draftKey,
+        storageKey,
         JSON.stringify({
           input,
           attempt: attempt.current,
@@ -166,7 +191,7 @@ export function ProjectDialog({
         "Не удалось сохранить черновик на устройстве. Операция на сервере сохранится отдельно.",
       );
     }
-  }, [input, operation]);
+  }, [open, input, operation, storageKey]);
   useEffect(() => {
     if (!open) {
       dialog.current?.close();
@@ -177,14 +202,16 @@ export function ProjectDialog({
     void api<{ operations: ProjectSetupOperation[] }>("/project-setup", {
       signal: controller.signal,
     })
-      .then((v) => setPending(v.operations))
+      .then((v) =>
+        setPending(v.operations.filter((row) => !seed || row.id === persistedOperation.current)),
+      )
       .catch(() => {});
     if (persistedOperation.current)
       void api<ProjectSetupOperation>(`/project-setup/${persistedOperation.current}`, {
         signal: controller.signal,
       })
         .then((v) => {
-          if (!controller.signal.aborted) {
+          if (!controller.signal.aborted && matchesSeed(v.input)) {
             setOperation(v);
             setInput(v.input);
             setEditedPath(true);
@@ -193,7 +220,7 @@ export function ProjectDialog({
         })
         .catch(() => {});
     return () => controller.abort();
-  }, [open]);
+  }, [open, seed, matchesSeed]);
   const operationId = operation?.id,
     operationState = operation?.state;
   useEffect(() => {
@@ -279,7 +306,7 @@ export function ProjectDialog({
     try {
       try {
         localStorage.setItem(
-          draftKey,
+          storageKey,
           JSON.stringify({ input: value, attempt: attempt.current, operationId: "" }),
         );
       } catch {}
@@ -302,10 +329,12 @@ export function ProjectDialog({
   const finish = async () => {
     if (!operation?.project || delivering.current) return;
     delivering.current = true;
+    const visibility = visibilityGeneration.current;
     setBusy(true);
     setError("");
     try {
       await onCreated(operation.project as Project);
+      if (visibility !== visibilityGeneration.current) return;
       persistedOperation.current = "";
       attempt.current = { body: "", key: "" };
       setOperation(null);
@@ -313,7 +342,7 @@ export function ProjectDialog({
       setEditedPath(false);
       setStep(0);
       try {
-        localStorage.removeItem(draftKey);
+        localStorage.removeItem(storageKey);
       } catch {}
       onClose();
     } catch (e) {
@@ -347,7 +376,7 @@ export function ProjectDialog({
     if (step === 2) void review();
     else {
       setStep((v) => v + 1);
-      if (step === 1 && input.repository.mode !== "none") void loadRepos();
+      if (step === 1 && !seed && input.repository.mode !== "none") void loadRepos();
     }
   };
   return (
@@ -363,7 +392,13 @@ export function ProjectDialog({
       <header className="dialog-heading">
         <div>
           <small className="eyebrow">Рабочее пространство</small>
-          <h2>{operation?.state === "complete" ? "Проект готов" : "Новый проект"}</h2>
+          <h2>
+            {operation?.state === "complete"
+              ? "Проект готов"
+              : seed
+                ? "Рабочая копия"
+                : "Новый проект"}
+          </h2>
         </div>
         <button
           type="button"
@@ -417,7 +452,7 @@ export function ProjectDialog({
                   setRepos([]);
                   setField({
                     machineId: e.target.value,
-                    repository: { ...input.repository, owner: "" },
+                    repository: { ...input.repository, owner: seed ? input.repository.owner : "" },
                   });
                 }}
               >
@@ -586,7 +621,13 @@ export function ProjectDialog({
             )}
           </>
         )}
-        {step === 2 && (
+        {step === 2 && seed && (
+          <p className="setup-review">
+            <Icon name="repository" size={18} />{" "}
+            {seed.repository.replace("https://github.com/", "")}
+          </p>
+        )}
+        {step === 2 && !seed && (
           <>
             <div className="setup-repo-modes">
               {[

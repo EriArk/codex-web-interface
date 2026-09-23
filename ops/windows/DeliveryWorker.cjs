@@ -2,7 +2,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),{randomUUID}=require('node:crypto'),{execFile}=require('node:child_process'),{promisify}=require('node:util');
 const run=promisify(execFile),root=__dirname,sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const read=async (file,max=2097152)=>{const s=await fs.lstat(file);if(!s.isFile()||s.isSymbolicLink()||s.size>max)throw Error('DELIVERY_REQUEST');return JSON.parse(await fs.readFile(file,'utf8'));};
-const valid=v=>v&&typeof v.root==='string'&&path.isAbsolute(v.root)&&v.root.length<=2048&&v.request&&['inspect','prepare','apply','status','github'].includes(v.request.op);
+const valid=v=>v&&v.request&&['inspect','prepare','apply','status','github'].includes(v.request.op)&&((typeof v.root==='string'&&path.isAbsolute(v.root)&&v.root.length<=2048)||(v.root===null&&v.request.op==='github'));
 async function worker(){
  const {deliveryProbe}=await import('./deliveryProbe.js');let empty=0;const deadline=Date.now()+540000;
  while(Date.now()<deadline&&empty<8){

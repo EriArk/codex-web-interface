@@ -24,7 +24,7 @@ import type { TeamProjects } from "./team-projects.js";
 type Personal = (userId: string) => Promise<{ runtime: Awaited<ReturnType<typeof createApp>> }>;
 export type GitHubProbe = (
   machine: MachineConfig,
-  root: string,
+  root: string | null,
   request: GitHubWorkProbeRequest,
 ) => Promise<GitHubWorkProbeResult>;
 type Binding = {

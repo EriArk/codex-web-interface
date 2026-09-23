@@ -2,6 +2,7 @@ import type { CollaborationAccess, CollaborationSpace } from "@codex-web/shared"
 import { useEffect, useRef, useState } from "react";
 import { pageWorkspace } from "./accountStorage";
 import { Icon } from "./icons";
+import type { ProjectSetupSeed } from "./ProjectDialog";
 import { SpaceProjectRules } from "./ProjectRulesEditor";
 import { SpaceGitHubAccessPanel } from "./SpaceGitHubAccess";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
@@ -24,7 +25,7 @@ export function SpaceProjects({
   spaces: SpacesController;
   space: CollaborationSpace;
   projects: Project[];
-  onNewProject: () => void;
+  onNewProject: (seed?: ProjectSetupSeed) => void;
   createdProjectId: string;
 }) {
   const action = useSharedAction();
@@ -66,7 +67,6 @@ export function SpaceProjects({
       <SpaceGitHubAccessPanel
         spaceId={space.id}
         revision={space.revision}
-        projects={projects}
         names={[...space.projects, ...space.members, ...space.pending]}
       />
       {space.projects.map((p) => (
@@ -211,8 +211,23 @@ export function SpaceProjects({
               ))}
             </select>
           </label>
-          <button type="button" className="secondary" onClick={onNewProject}>
-            Создать проект
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              const target = space.projects.find((p) => p.id === picker);
+              onNewProject(
+                target
+                  ? {
+                      name: target.name,
+                      repository: target.repository,
+                      scope: `space:${space.id}:project:${target.id}`,
+                    }
+                  : undefined,
+              );
+            }}
+          >
+            {picker ? "Создать рабочую копию" : "Создать проект"}
           </button>
           {!picker && (
             <label>

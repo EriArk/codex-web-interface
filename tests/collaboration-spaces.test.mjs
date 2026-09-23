@@ -25,17 +25,24 @@ async function githubFixture(t) {
     [f.owner, { id: 11, login: "Owner" }],
     [f.friend, { id: 22, login: "Friend" }],
   ]);
+  const noProjects = new Set();
   const personal = async (user) => ({
     runtime: {
       sessions: {
-        project: (id) => ({
-          id,
-          name: id,
-          machineId: user,
-          workingDirectory: `/tmp/${user}/${id}`,
-        }),
+        project: (id) => {
+          assert(!noProjects.has(user), "new member has no project");
+          return {
+            id,
+            name: id,
+            machineId: user,
+            workingDirectory: `/tmp/${user}/${id}`,
+          };
+        },
         catalog: {
-          machine: () => ({ id: user, name: user, type: "local-linux", allowedRoots: ["/tmp"] }),
+          machine: (id) => {
+            assert.equal(id, user, "machine belongs to actor");
+            return { id: user, name: user, type: "local-linux", allowedRoots: ["/tmp"] };
+          },
         },
       },
       projectWork: { context: { assertProject() {} } },
@@ -92,6 +99,7 @@ async function githubFixture(t) {
     ...f,
     calls,
     identities,
+    noProjects,
     receipts,
     settle,
     get service() {
@@ -870,4 +878,42 @@ test("Project management, explicit elevation and Git publication follow the owni
   assert.equal(policy.instructions("friend-altar"), null);
   assert.deepEqual(s.catalog(friend), { spaces: [], invitations: [] });
   assert.equal(current().projects.length, 1);
+});
+
+test("new member confirms own machine and accepts private Write without a checkout", async (t) => {
+  const f = await githubFixture(t);
+  try {
+    f.noProjects.add(f.friend);
+    const { id } = f.spaces.create(
+      f.owner,
+      randomUUID(),
+      { ...f.input("project"), access: "direct" },
+      f.project("altar"),
+    );
+    await f.settle();
+    await assert.rejects(f.service.connectMachine(f.friend, f.owner));
+    const preview = await f.service.connectMachine(f.friend, f.friend);
+    assert.equal(preview.confirmed, false);
+    await assert.rejects(f.service.connectMachine(f.friend, f.friend, { id: 99, login: "Friend" }));
+    await f.service.connectMachine(f.friend, f.friend, preview.identity);
+    await f.settle();
+    const grant = f.service.view(f.friend, id).grants[0];
+    assert.equal(grant.state, "pending");
+    await f.restart();
+    f.identities.set(f.friend, { id: 99, login: "Other" });
+    await assert.rejects(f.service.accept(f.friend, id, grant.projectId));
+    f.identities.set(f.friend, preview.identity);
+    assert.equal(
+      (await f.service.accept(f.friend, id, grant.projectId)).grants[0].state,
+      "accepted",
+    );
+    const recipient = f.calls.filter((c) => c.user === f.friend);
+    assert(recipient.every((c) => c.root === null));
+    assert(recipient.filter((c) => c.op === "observe").every((c) => c.repository === ""));
+    assert.equal(recipient.find((c) => c.op === "prepare").repository, "example/altar");
+    assert.equal(recipient.find((c) => c.op === "prepare").input.kind, "accept-invitation");
+    assert.equal(f.calls.filter((c) => c.op === "apply").length, 2);
+  } finally {
+    await f.service.close();
+  }
 });

@@ -481,3 +481,61 @@ test("concurrent stale-lock recovery never admits two GitHub writers", async (t)
     "prepared",
   );
 });
+
+test("machine account bootstrap needs no checkout and cannot perform repository writes", async (t) => {
+  const f = await fixture(t);
+  const identity = await githubWorkProbe(null, {
+    op: "observe",
+    repository: "",
+    query: { kind: "identity" },
+  });
+  assert.deepEqual(identity.identity, { id: 11, login: "Owner" });
+  assert.equal(identity.repositoryId, null);
+  await assert.rejects(
+    githubWorkProbe(null, {
+      op: "observe",
+      repository: "Owner/Project",
+      query: { kind: "issues" },
+    }),
+  );
+  await assert.rejects(
+    githubWorkProbe(null, {
+      op: "prepare",
+      repository: "Owner/Project",
+      id: randomUUID(),
+      input: { kind: "invite", login: "Friend", permission: "push", targetId: 12 },
+    }),
+  );
+  await f.save({
+    received: [
+      {
+        id: 301,
+        permissions: "write",
+        invitee: { id: 11, login: "Owner" },
+        repository: { id: 77, full_name: "Author/Shared" },
+      },
+    ],
+  });
+  const request = { repository: "Author/Shared", id: randomUUID() };
+  const prepared = await githubWorkProbe(null, {
+    ...request,
+    op: "prepare",
+    input: {
+      kind: "accept-invitation",
+      targetRepository: "Author/Shared",
+      repositoryId: 77,
+      identityId: 11,
+    },
+  });
+  const applied = await githubWorkProbe(null, {
+    ...request,
+    op: "apply",
+    fingerprint: prepared.fingerprint,
+  });
+  assert.equal(applied.state, "completed");
+  assert.equal((await githubWorkProbe(null, { ...request, op: "status" })).state, "completed");
+  assert.deepEqual(
+    (await f.calls()).filter((c) => c.method !== "GET").map((c) => c.endpoint),
+    ["user/repository_invitations/301"],
+  );
+});

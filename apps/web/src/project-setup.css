@@ -4,6 +4,9 @@
   padding: 0;
   overflow: hidden;
 }
+.project-setup-dialog:focus {
+  outline: none;
+}
 .project-setup-dialog[open] {
   display: flex;
   flex-direction: column;

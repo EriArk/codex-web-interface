@@ -116,26 +116,30 @@ const hub = await createTeamHub(config, {
     ]);
     const cfg = configSchema.parse({
       ...selected,
-      machines: [{ id: "pc", name: who, type: "local-linux", allowedRoots: [root] }],
-      projects: [
-        {
-          id: who + "-extra",
-          name: who === "owner" ? "Assets" : "Altar copy",
-          machineId: "pc",
-          workingDirectory: extra,
-        },
-        {
-          id: who + "-project",
-          name: who === "owner" ? "Altar" : "World",
-          machineId: "pc",
-          workingDirectory: path,
-        },
-      ],
+      machines: [{ id: "pc", name: who, type: "local-linux", allowedProjectRoots: [root] }],
+      projects:
+        who === "friend"
+          ? []
+          : [
+              {
+                id: who + "-extra",
+                name: who === "owner" ? "Assets" : "Altar copy",
+                machineId: "pc",
+                workingDirectory: extra,
+              },
+              {
+                id: who + "-project",
+                name: who === "owner" ? "Altar" : "World",
+                machineId: "pc",
+                workingDirectory: path,
+              },
+            ],
     });
     const personalStore = options.store ?? new Store(cfg.hub.databasePath);
     const nativeId = randomUUID(),
       thread = personalStore.createThread(who + "-project", nativeId, "Existing " + who + " chat");
-    const nativeCalls = [];
+    const nativeCalls = [],
+      nativeProjects = [];
     personalStore.createThread(who + "-extra", randomUUID(), "Personal " + who + " chat");
     const rpc = Object.assign(new EventEmitter(), {
       closed: false,
@@ -145,6 +149,13 @@ const hub = await createTeamHub(config, {
       },
       async request(method, params) {
         nativeCalls.push({ method, params });
+        if (method === "project/list") return { data: nativeProjects, nextCursor: null };
+        if (method === "fs/getMetadata") return { isDirectory: true };
+        if (method === "project/create") {
+          const p = { id: params.idempotencyKey, name: params.name, roots: params.roots };
+          nativeProjects.push(p);
+          return { project: p };
+        }
         if (method === "thread/start") return { thread: { id: randomUUID() } };
         if (method === "turn/start") return { turn: { id: randomUUID(), status: "inProgress" } };
         const capabilities = capabilityReply(method);
@@ -157,7 +168,47 @@ const hub = await createTeamHub(config, {
     });
     const sessions = new Sessions(cfg, personalStore, () => rpc);
     sessions.externalActivity.refresh = async () => {};
-    const runtime = await createApp(cfg, { ...options, sessions, store: personalStore });
+    const runtime = await createApp(cfg, {
+      ...options,
+      sessions,
+      store: personalStore,
+      projectSetupProbe: async (_machine, req) => {
+        if (req.op === "repositories") throw Error("Seeded clone must not browse all repositories");
+        if (req.op === "inspect") {
+          if (req.input.repository.mode === "connect") {
+            assert(invitationAccepted, "private repository requires accepted access");
+            assert.equal(
+              `${req.input.repository.owner}/${req.input.repository.name}`,
+              "example/altar",
+            );
+          }
+          return {
+            exists: false,
+            empty: true,
+            git: false,
+            branch: "",
+            head: "",
+            origin: "",
+            dirty: false,
+            steps: ["clone", "register-project"],
+            fingerprint: "a".repeat(64),
+          };
+        }
+        if (req.op === "status") return null;
+        assert.equal(req.input.repository.mode, "connect");
+        await mkdir(req.input.workingDirectory, { recursive: true });
+        execFileSync("git", ["init", "-q", req.input.workingDirectory]);
+        execFileSync("git", [
+          "-C",
+          req.input.workingDirectory,
+          "remote",
+          "add",
+          "origin",
+          "https://github.com/example/altar.git",
+        ]);
+        return { id: req.id, state: "complete", phase: "register-project" };
+      },
+    });
     runtimes.set(who, { ...runtime, thread, nativeId, nativeCalls });
     return runtime;
   },
@@ -239,12 +290,30 @@ async function request(p, path, body) {
 try {
   await login(page, "owner");
   await login(other, "friend");
+  const ownDraft = {
+    machineId: "pc",
+    name: "My unrelated draft",
+    workingDirectory: `${root}/private-draft`,
+    createDirectory: true,
+    repository: { mode: "none", owner: "", name: "", visibility: "private", description: "" },
+  };
+  const unrelated = await request(other, "/project-setup/prepare", ownDraft);
+  await other.evaluate(
+    ({ input, operationId, user }) =>
+      localStorage.setItem(
+        `cw-user:${user}:codex-project-setup-draft-v1`,
+        JSON.stringify({ input, operationId }),
+      ),
+    { input: ownDraft, operationId: unrelated.id, user: friend.id },
+  );
+  await other.reload();
+  assert.equal((await request(other, "/projects")).projects.filter((p) => !p.unassigned).length, 0);
   await drawer(page);
   await drawer(other);
   errors.length = 0;
   const { id } = await request(page, "/team/spaces", {
     title: "Очень длинное название общего пространства Altar и World",
-    kind: "space",
+    kind: "project",
     userId: friend.id,
     personalProjectId: "owner-project",
     access: "collaborate",
@@ -283,7 +352,7 @@ try {
   await expect(panel.getByRole("button", { name: "Принять Write", exact: true })).toBeVisible();
   assert.equal(githubCalls.filter((c) => c.op === "apply").length, 1);
   assert(githubCalls.filter((c) => c.op === "apply")[0].owner);
-  await mkdir(".local/space-github-qa", { recursive: true });
+  await mkdir(".local/member-bootstrap-qa", { recursive: true });
   for (const size of [
     { width: 390, height: 844 },
     { width: 390, height: 430 },
@@ -331,7 +400,7 @@ try {
       assert(Math.abs(buttons[0].y - buttons[1].y) < 1);
       assert(buttons.every((b) => b.h >= 44));
       await other.screenshot({
-        path: `.local/space-github-qa/${process.env.BROWSER || "webkit"}-${size.width}-${size.height}-${theme}.png`,
+        path: `.local/member-bootstrap-qa/${process.env.BROWSER || "webkit"}-${size.width}-${size.height}-${theme}.png`,
       });
     }
   }
@@ -339,7 +408,74 @@ try {
   await expect(panel).toContainText("GitHub Write предоставлен");
   assert.equal(githubCalls.filter((c) => c.op === "apply").length, 2);
   assert(!githubCalls.filter((c) => c.op === "apply")[1].owner);
-  await d.getByLabel("Мой проект", { exact: true }).selectOption("friend-project");
+  await d.getByRole("button", { name: "Создать рабочую копию", exact: true }).click();
+  const setup = other.getByRole("dialog", { name: "Создание проекта", exact: true });
+  await expect(setup.getByLabel("Название проекта", { exact: true })).toHaveValue("Altar");
+  await expect(setup.locator(".setup-pending")).toHaveCount(0);
+  await setup
+    .getByLabel("Название проекта", { exact: true })
+    .fill("Shared working copy with a long name");
+  await setup.getByRole("button", { name: "Далее", exact: true }).click();
+  const clonePath = await setup.getByLabel("Папка проекта", { exact: true }).inputValue();
+  assert.notEqual(clonePath, ownDraft.workingDirectory);
+  await other.keyboard.press("Escape");
+  await d.getByRole("button", { name: "Создать рабочую копию", exact: true }).click();
+  await expect(setup.getByLabel("Название проекта", { exact: true })).toHaveValue(
+    "Shared working copy with a long name",
+  );
+  await setup.getByRole("button", { name: "Далее", exact: true }).click();
+  await expect(setup.getByLabel("Папка проекта", { exact: true })).toHaveValue(clonePath);
+  await setup.getByRole("button", { name: "Далее", exact: true }).click();
+  await expect(setup).toContainText("example/altar");
+  await expect(setup.getByLabel("Найти репозиторий")).toHaveCount(0);
+  await setup.getByRole("button", { name: "Проверить", exact: true }).click();
+  for (const size of [
+    { width: 390, height: 844 },
+    { width: 390, height: 430 },
+    { width: 768, height: 1024 },
+    { width: 1366, height: 1024 },
+  ]) {
+    await other.setViewportSize(size);
+    for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+      await other.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+      await other.screenshot({
+        path: `.local/member-bootstrap-qa/clone-${process.env.BROWSER || "webkit"}-${size.width}-${size.height}-${theme}.png`,
+      });
+      assert(
+        await setup.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return (
+            el.scrollWidth <= el.clientWidth + 1 &&
+            r.left >= 0 &&
+            r.right <= innerWidth &&
+            r.top >= 0 &&
+            r.bottom <= innerHeight + 1
+          );
+        }),
+      );
+      await expect(
+        setup.getByRole("button", { name: "Создать проект", exact: true }),
+      ).toBeInViewport();
+      await expect(
+        setup.getByRole("button", { name: "Закрыть создание проекта", exact: true }),
+      ).toBeInViewport();
+    }
+  }
+  await setup.getByRole("button", { name: "Создать проект", exact: true }).click();
+  await setup.getByRole("button", { name: "Открыть проект", exact: true }).click();
+  await expect(setup).not.toBeVisible();
+  const copy = (await request(other, "/projects")).projects.find(
+    (p) => p.name === "Shared working copy with a long name",
+  );
+  assert(copy);
+  assert.equal(copy.workingDirectory, clonePath);
+  await expect(d.getByLabel("Моя локальная копия проекта", { exact: true })).toHaveValue(copy.id);
+  const preserved = await other.evaluate(
+    (user) => JSON.parse(localStorage.getItem(`cw-user:${user}:codex-project-setup-draft-v1`)),
+    friend.id,
+  );
+  assert.deepEqual(preserved.input, ownDraft);
+  assert.equal(preserved.operationId, unrelated.id);
   await d.getByRole("button", { name: "Далее", exact: true }).click();
   await d.getByRole("button", { name: "Далее", exact: true }).click();
   await d.getByRole("button", { name: "Присоединиться", exact: true }).click();
@@ -354,11 +490,11 @@ try {
   assert.equal(githubCalls.filter((c) => c.op === "apply").length, 2);
   assert.deepEqual(errors, []);
   console.log(
-    `${process.env.BROWSER || "webkit"}: verified account, automatic owner Write, internal recipient acceptance, no duplicate mutation and four-theme phone/keyboard/tablet geometry passed.`,
+    `${process.env.BROWSER || "webkit"}: new member without projects, machine identity, settings Write, acceptance, exact clone, scoped draft recovery and four-theme layout passed.`,
   );
 } catch (error) {
-  await mkdir(".local/space-github-qa", { recursive: true });
-  await other.screenshot({ path: ".local/space-github-qa/failure.png" });
+  await mkdir(".local/member-bootstrap-qa", { recursive: true });
+  await other.screenshot({ path: ".local/member-bootstrap-qa/failure.png" });
   console.log(
     await other
       .locator(".space-dialog")
