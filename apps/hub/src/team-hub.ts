@@ -46,6 +46,7 @@ import { TeamProjects } from "./team-projects.js";
 import { attachTeamRelayTools } from "./team-relay-tools.js";
 import { sharedRotationPolicy } from "./team-rotation-context.js";
 import { publicUser, TeamStore } from "./team-store.js";
+import { registerTechnicalPreviews } from "./technicalPreviews.js";
 import { webSecurity } from "./web-security.js";
 
 export function privateDirectory(path: string) {
@@ -499,6 +500,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
   registerTeamProjects(app, teamProjects, actor, personal);
+  registerTechnicalPreviews(app, auth, true);
   registerCollaborationSpaces(
     app,
     teamProjects,

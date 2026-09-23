@@ -200,6 +200,7 @@ try {
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await page.screenshot({ path: `.local/qa-results-artifacts/${name}-${theme}.png` });
       }
+      await page.getByRole("button", { name: "Закрыть просмотр" }).click();
       await page.getByRole("button", { name: "Вернуться к результатам" }).click();
       await expect(
         page.locator('[data-result="binary"]').getByRole("button", { name: "Предпросмотр" }),
@@ -212,6 +213,7 @@ try {
       await expect(
         page.locator(".result-inspector").getByRole("link", { name: "Скачать файл" }),
       ).toBeVisible();
+      await page.getByRole("button", { name: "Закрыть просмотр" }).click();
       await page
         .locator(".result-filters")
         .getByRole("button", { name: /^Изображения/ })

@@ -2,37 +2,16 @@ import { Component, lazy, type ReactNode, Suspense, useEffect, useState } from "
 import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api } from "./api";
 import { CopyButton } from "./CopyButton";
+import { previewKind, technicalFormat } from "./filePreviewRegistry";
+import { ReadableFilePreview } from "./ReadableFilePreview";
+import VectorPreview, { ImageViewport } from "./VectorFilePreview";
+
+export { previewKind } from "./filePreviewRegistry";
+
+const ModelPreview = lazy(() => import("./ModelFilePreview"));
+const DxfPreview = lazy(() => import("./DxfFilePreview"));
 
 const PdfPreview = lazy(() => import("./PdfFilePreview"));
-const textExtensions =
-  /\.(txt|md|markdown|json|jsonl|csv|tsv|log|xml|yaml|yml|toml|ini|cfg|py|js|jsx|ts|tsx|css|scss|sql|sh|ps1|c|cpp|h|rs|go|java|rb|php|bat|env)$/i;
-export function previewKind(
-  file: Pick<File, "name" | "type" | "size">,
-): "image" | "pdf" | "html" | "text" | "card" {
-  if (/\.(exe|dll|com|msi|zip|7z|rar|bin|iso)$/i.test(file.name)) return "card";
-  if (
-    /^image\/(png|jpeg|gif|webp|avif)$/.test(file.type) ||
-    /\.(png|jpe?g|gif|webp|avif)$/i.test(file.name)
-  )
-    return "image";
-  if (
-    (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) &&
-    file.size <= 12 * 1024 * 1024
-  )
-    return "pdf";
-  if (/\.(html?|svg)$/i.test(file.name) || ["text/html", "image/svg+xml"].includes(file.type))
-    return file.size <= 262144 ? "html" : "card";
-  if (
-    file.type.startsWith("text/") ||
-    textExtensions.test(file.name) ||
-    /^(?:readme|license|licence|copying|makefile|dockerfile|\.gitignore|\.gitattributes|\.editorconfig)$/i.test(
-      file.name,
-    ) ||
-    file.type === "application/json"
-  )
-    return "text";
-  return "card";
-}
 function FileCard({ file }: { file: File }) {
   const type = file.name.match(/\.([a-z0-9]{1,10})$/i)?.[1]?.toUpperCase() || "Файл";
   return (
@@ -114,13 +93,41 @@ function TextOrHtml({ file, html }: { file: File; html: boolean }) {
     </>
   );
 }
-export function FilePreview({ file, objectUrl }: { file: File; objectUrl: string }) {
+export function FilePreview({
+  file,
+  objectUrl,
+  source,
+  full = false,
+}: {
+  file: File;
+  objectUrl: string;
+  source?: string;
+  full?: boolean;
+}) {
   const kind = previewKind(file),
     [badImage, setBadImage] = useState(false);
   return (
     <PreviewBoundary file={file}>
       <div className="file-preview" data-kind={kind}>
-        {kind === "image" ? (
+        {kind === "image" && full ? (
+          <ImageViewport url={objectUrl} name={file.name} />
+        ) : kind === "technical" ? (
+          <Suspense fallback={<p role="status">Открываю просмотрщик…</p>}>
+            {technicalFormat(file) === "svg" ? (
+              <VectorPreview file={file} />
+            ) : technicalFormat(file) === "dxf" ? (
+              <DxfPreview file={file} />
+            ) : (
+              <ModelPreview file={file} source={source} />
+            )}
+          </Suspense>
+        ) : kind === "audio" ? (
+          // biome-ignore lint/a11y/useMediaCaption: The viewer opens an existing file without a supplied caption track.
+          <audio src={objectUrl} controls preload="metadata" />
+        ) : kind === "video" ? (
+          // biome-ignore lint/a11y/useMediaCaption: The viewer opens an existing file without a supplied caption track.
+          <video src={objectUrl} controls playsInline preload="metadata" />
+        ) : kind === "image" ? (
           badImage ? (
             <FileCard file={file} />
           ) : (
@@ -141,7 +148,9 @@ export function FilePreview({ file, objectUrl }: { file: File; objectUrl: string
           >
             <PdfPreview file={file} />
           </Suspense>
-        ) : kind === "text" || kind === "html" ? (
+        ) : kind === "text" ? (
+          <ReadableFilePreview file={file} />
+        ) : kind === "html" ? (
           <TextOrHtml file={file} html={kind === "html"} />
         ) : (
           <FileCard file={file} />

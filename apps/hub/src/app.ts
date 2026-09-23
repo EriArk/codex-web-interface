@@ -69,6 +69,7 @@ import { registerStagingStorage } from "./staging-storage.js";
 import { storageReport } from "./storage.js";
 import { Store } from "./store.js";
 import { registerWorkspaceTasks } from "./tasks.js";
+import { registerTechnicalPreviews } from "./technicalPreviews.js";
 import { registerUsageResets } from "./usage-resets.js";
 import { webSecurity } from "./web-security.js";
 
@@ -735,6 +736,7 @@ export async function createApp(
       .send(image.data);
   });
   registerFilePreviews(app, auth);
+  registerTechnicalPreviews(app, auth);
   registerProjectInspector(app, sessions);
   registerProjectSetup(app, sessions, options.projectSetupProbe);
   registerProjectDelivery(

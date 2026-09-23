@@ -18,6 +18,7 @@ export async function inspectorProbe(
   | ProjectRepository
   | ProjectReleases
   | { path: string }
+  | { path: string; data: string; oid: string }
 > {
   const fs = await import("node:fs/promises"),
     paths = await import("node:path"),
@@ -164,6 +165,7 @@ export async function inspectorProbe(
     args: string[],
     limit = 524288,
     truncated = false,
+    encoding: BufferEncoding = "utf8",
   ): Promise<{ code: number; text: string; truncated: boolean; notRepository: boolean }> =>
     new Promise((resolve, reject) => {
       const child = cp.spawn(
@@ -193,7 +195,7 @@ export async function inspectorProbe(
         if (overflow && !truncated) return reject(Error("GIT_OUTPUT_LIMIT"));
         resolve({
           code: overflow && truncated ? 0 : code,
-          text: Buffer.concat(chunks, size).toString("utf8"),
+          text: Buffer.concat(chunks, size).toString(encoding),
           truncated: overflow,
           notRepository: stderr.includes("not a git repository (or any of the parent directories)"),
         });
@@ -527,6 +529,24 @@ export async function inspectorProbe(
     const full = paths.resolve(gitRoot, value);
     return inside(actualRoot, full) && !denied(relative(full)) ? relative(full) : null;
   };
+  if (request.op === "index-file") {
+    const file = await scoped(request.path, true);
+    const target = paths.relative(gitRoot, file).split(paths.sep).join("/");
+    const index = await git(
+      ["ls-files", "--stage", "--full-name", "-z", "--", request.path],
+      32768,
+    );
+    const rows = index.text.split("\0").filter(Boolean);
+    const match =
+      rows.length === 1 ? rows[0]!.match(/^100(?:644|755) ([a-f0-9]{40,64}) 0\t([^\0]+)$/) : null;
+    if (index.code || !match || match[2] !== target) fail();
+    const oid = match![1]!;
+    const stat = await git(["cat-file", "-s", oid], 128);
+    if (stat.code || !/^\d+\s*$/.test(stat.text) || Number(stat.text) > 33554432) fail();
+    const blob = await git(["cat-file", "blob", oid], 33554432, false, "base64");
+    if (blob.code) fail();
+    return { path: request.path, data: blob.text, oid };
+  }
   if (request.op === "diff") {
     const requestedFile = await scoped(request.path, true);
     try {

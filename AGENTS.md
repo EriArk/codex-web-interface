@@ -3,6 +3,7 @@
 ## Owner-requested deliberate control layout (2026-09-23)
 
 - Follow `docs/UI_LAYOUT_RULES.md` for changed windows/cards. Group actions by purpose in explicit rows/grids; do not let arbitrary label widths decide button placement. Equal peer actions have equal widths and aligned edges.
+- Treat the file viewer as a universal file workspace: large viewport, compact format tools, collapsible properties and separate file actions. Keep the same themed shell ready for a future converter without adding inactive placeholders.
 - Keep window headers for title/context and compact icon controls (with accessible names); large labeled tool launchers must not squeeze or fragment the title. Keep Close anchored and reachable.
 - Center compact dialogs with symmetric gutters, explicit max-width and available keyboard height. Inspect actual screenshots, including long project names, across all themes; bounding-box tests alone do not establish visual quality.
 - Preserve current screen, drafts and source identity under nested windows. Incoming notification/event context must not overwrite or silently borrow an unrelated saved draft.

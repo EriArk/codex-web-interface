@@ -3,6 +3,10 @@ import { configureApi } from "../../src/api";
 import { DownloadLink } from "../../src/DownloadLink";
 import "../../src/styles.css";
 import "../../src/themes.css";
+import "../../src/fonts.css";
+import "../../src/materials.css";
+import "../../src/polymer.css";
+import "../../src/accent-colors.css";
 
 const session = await fetch("/api/auth/session").then((r) => r.json());
 configureApi(session.csrf, () => {});

@@ -79,6 +79,9 @@ test("read-only Git handles unborn, staged, working, Unicode, rename, hidden pat
   command(root, "mv", "файл с пробелами.txt", "новое имя.txt");
   await writeFile(join(root, "новое имя.txt"), "one\ntwo\n");
   await writeFile(join(root, "new.txt"), "new");
+  const staged = await inspectorProbe(root, { op: "index-file", path: "новое имя.txt" });
+  assert.equal(Buffer.from(staged.data, "base64").toString(), "one\n");
+  await assert.rejects(inspectorProbe(root, { op: "index-file", path: "new.txt" }));
   await writeFile(join(root, ".env"), "SECRET");
   const before = await readFile(join(root, ".git/index"));
   state = await inspectorProbe(root, { op: "git" });

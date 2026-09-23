@@ -419,6 +419,7 @@ export * from "./collaboration.js";
 export * from "./conversation-binding.js";
 export * from "./file-limits.js";
 export * from "./file-tools.js";
+export { isFileSource } from "./fileSource.js";
 export * from "./github-work.js";
 export * from "./intake.js";
 export * from "./issue-drawer.js";

@@ -70,7 +70,7 @@ export async function inspectProject(
     const timer = setTimeout(() => finish(false), 25000);
     child.stdout.on("data", (b: Buffer) => {
       size += b.length;
-      if (size > 1572864) finish(false);
+      if (size > (request.op === "index-file" ? 45 * 1024 * 1024 : 1572864)) finish(false);
       else chunks.push(b);
     });
     child.stderr.on("data", () => {});

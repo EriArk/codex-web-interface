@@ -128,10 +128,18 @@ export function registerProjectInspector(app: FastifyInstance, sessions: Session
   app.get("/api/projects/:id/files/content", async (req, reply) => {
     const { project, machine } = context(req),
       q = z
-        .object({ path: path.refine((p) => !!p) })
+        .object({ path: path.refine((p) => !!p), version: z.enum(["index"]).optional() })
         .strict()
         .parse(req.query);
     const bytes = await bounded(async () => {
+      if (q.version === "index") {
+        const value = (await inspectProject(machine, project.workingDirectory, {
+          op: "index-file",
+          path: q.path,
+        })) as { data: string; oid: string };
+        reply.header("ETag", '"' + value.oid + '"');
+        return Buffer.from(value.data, "base64");
+      }
       const validated = (await inspectProject(machine, project.workingDirectory, {
         op: "file",
         path: q.path,

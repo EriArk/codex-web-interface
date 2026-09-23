@@ -6,6 +6,7 @@ import type {
 } from "@codex-web/shared";
 import { useState } from "react";
 import { api } from "./api";
+import { DownloadLink } from "./DownloadLink";
 import { MaterialContent, materialLabels } from "./SharedMaterialEditor";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
 import { useSharedResource } from "./sharedResources";
@@ -314,25 +315,32 @@ export function SharedFiles({ projectId, files }: { projectId: string; files?: S
   return files?.length ? (
     <div className="shared-form">
       {files.map((file) => (
-        <a
-          className="secondary shared-file"
-          key={file.id}
-          href={`/api/team/projects/${projectId}/assets/${file.id}`}
-          download={file.name}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {/^image\/(png|jpeg|webp|gif|avif)$/.test(file.mime) && (
-            <img
-              src={`/api/team/projects/${projectId}/assets/${file.id}`}
-              alt={file.name}
-              loading="lazy"
-            />
-          )}
-          <span>
-            {file.name} · {Math.ceil(file.bytes / 1024)} КБ
-          </span>
-        </a>
+        <div className="shared-file-actions" key={file.id}>
+          <DownloadLink
+            className="secondary shared-file"
+            href={`/api/team/projects/${projectId}/assets/${file.id}`}
+            name={file.name}
+            mime={file.mime}
+          >
+            {/^image\/(png|jpeg|webp|gif|avif)$/.test(file.mime) && (
+              <img
+                src={`/api/team/projects/${projectId}/assets/${file.id}`}
+                alt={file.name}
+                loading="lazy"
+              />
+            )}
+            <span>
+              {file.name} · {Math.ceil(file.bytes / 1024)} КБ
+            </span>
+          </DownloadLink>
+          <DownloadLink
+            directDownload
+            href={`/api/team/projects/${projectId}/assets/${file.id}`}
+            name={file.name}
+          >
+            Скачать
+          </DownloadLink>
+        </div>
       ))}
     </div>
   ) : null;

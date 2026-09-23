@@ -47,6 +47,7 @@ export type InspectRequest =
   | { op: "releases" }
   | { op: "git" }
   | { op: "diff"; path: string; staged: boolean }
+  | { op: "index-file"; path: string }
   | { op: "file"; path: string };
 
 export type ProjectRepository = {

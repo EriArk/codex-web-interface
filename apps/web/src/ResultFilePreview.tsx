@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { workspaceUrl } from "./accountStorage";
 import { isDownloadUrl } from "./DownloadLink";
 import { FilePreview } from "./FilePreview";
+import { FileViewerDialog } from "./FileViewerDialog";
 import { resultPreview } from "./resultPreview";
 import type { Result } from "./types";
 
 /** Full viewers are mounted only by an explicit Preview action. */
-export function ResultFilePreview({ result }: { result: Result }) {
+export function ResultFilePreview({ result, onClose }: { result: Result; onClose: () => void }) {
   const path = result.payload.url,
     mime = result.payload.mime,
     title = result.title;
@@ -71,14 +72,38 @@ export function ResultFilePreview({ result }: { result: Result }) {
       if (resource) URL.revokeObjectURL(resource);
     };
   }, [path, mime, title, kind, limit]);
-  return error ? (
-    <p role="status">{error}</p>
-  ) : file ? (
-    <>
-      <FilePreview file={file} objectUrl={url} />
-      {truncated && <small>Показано начало файла. Полная версия доступна для скачивания.</small>}
-    </>
-  ) : (
-    <p role="status">Загружаем предпросмотр…</p>
+  return (
+    <FileViewerDialog
+      name={title}
+      file={file}
+      source={path}
+      onClose={onClose}
+      actions={
+        isDownloadUrl(path) ? (
+          <a
+            className="secondary"
+            href={workspaceUrl(path)}
+            download={title}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Скачать файл
+          </a>
+        ) : null
+      }
+    >
+      {error ? (
+        <p role="status">{error}</p>
+      ) : file ? (
+        <>
+          <FilePreview file={file} objectUrl={url} source={path} full />
+          {truncated && (
+            <small>Показано начало файла. Полная версия доступна для скачивания.</small>
+          )}
+        </>
+      ) : (
+        <p role="status">Загружаем предпросмотр…</p>
+      )}
+    </FileViewerDialog>
   );
 }

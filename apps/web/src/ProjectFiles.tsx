@@ -204,7 +204,7 @@ export function ProjectFiles({
   };
   const download = (file: string) => (
     <DownloadLink
-      href={`/api${base}/files/content?path=${encodeURIComponent(file)}`}
+      href={`/api${base}/files/content?path=${encodeURIComponent(file)}${mode === "git" && staged ? "&version=index" : ""}`}
       name={file.split("/").at(-1)}
     >
       <Icon name="file" />

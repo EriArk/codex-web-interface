@@ -2,6 +2,8 @@
 
 ## Current owner-approved sequence (2026-09-23)
 
+Current follow-up: the unified file workspace and technical viewers (#167/#184) are implemented with [format limits and verification](FILE_VIEWERS.md). File management and the CodeMirror editor already exist; this pass adds shared full viewers and correct Git-index file opening. Physical iPhone/iPad and broader owner-DXF acceptance remain separate from browser fixtures. Deployment status is tracked by the guarded release, not this source checklist.
+
 This section supersedes earlier priority lists and pending-acceptance statements below. The owner confirmed the sequence after the 22 September issue updates. Before each substantial session, recommend a reasoning level and wait for the owner's explicit confirmation that it is set; do not start the next stage automatically.
 
 1. **Close the existing tails.** Roadmap alignment and [draft review](FILES_DRAFT_REVIEW_2026-09-23.md) are complete. The following implementation session adds the writable Files/editor with focused verification: [behavior, recovery and limits](FILE_EDITOR.md). Keep installed status separate from source completion and the guarded release queue.

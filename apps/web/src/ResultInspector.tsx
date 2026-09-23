@@ -81,7 +81,7 @@ export function ResultInspector({
         (kind === "demo" ? (
           <PreviewViewer result={result} onClose={onClose} embedded />
         ) : kind !== "card" ? (
-          <ResultFilePreview result={result} />
+          <ResultFilePreview result={result} onClose={() => setOpened(false)} />
         ) : null)}
     </div>
   );

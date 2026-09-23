@@ -241,6 +241,52 @@ async function sharedFixture(t, role = "collaborator") {
   return { ...f, projectId, path, headers };
 }
 
+test("shared technical previews use only published assets, exact bytes and live membership even with a warm cache", async (t) => {
+  const f = await sharedFixture(t);
+  const bytes = await readFile(new URL("./fixtures/technical/cube.stp", import.meta.url));
+  const runtime = (await f.personal(f.registry.ownerId)).runtime;
+  const scope = { client: "codex", projectId: "private-files", name: "Private files" };
+  const thread = runtime.store.createThread(scope.projectId, randomUUID(), "Private CAD");
+  const artifact = new Artifacts(runtime.sessions.config.hub.resultsPath, runtime.store).putFile(
+    thread.id,
+    null,
+    "case.step",
+    "/private/case.step",
+    "application/octet-stream",
+    bytes,
+  );
+  const input = { scope, items: [{ kind: "file", id: artifact.artifactId }] };
+  const preview = await f.request(f.path + "/publication-preview", f.owner, "POST", input);
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  const file = preview.body.items[0].files[0];
+  const body = {
+    source: { kind: "file", download: f.path + "/assets/" + file.id },
+    format: "step",
+    sha256: file.sha256,
+  };
+  const convert = (actor) => f.request("/api/team/previews/technical", actor, "POST", body);
+  assert.equal((await convert(f.friend)).status, 404, "unpublished source remains private");
+  assert.equal((await convert(f.owner)).status, 200);
+  const published = await f.request(
+    f.path + "/publications",
+    f.owner,
+    "POST",
+    { ...input, fingerprint: preview.body.fingerprint, files: preview.body.files },
+    f.headers(),
+  );
+  assert.equal(published.status, 200);
+  const visible = await convert(f.friend);
+  assert.equal(visible.status, 200, JSON.stringify(visible.body));
+  assert.equal(visible.body.triangles, 12);
+  assert.equal((await convert(f.friend)).status, 200, "authorized warm cache");
+  f.teamProjects.member(f.registry.ownerId, f.projectId, f.friendId, randomUUID(), {
+    revision: 1,
+    role: "viewer",
+    remove: true,
+  });
+  assert.equal((await convert(f.friend)).status, 404, "revocation closes warm derivative access");
+});
+
 test("selected private files become immutable shared copies, with revocation and verified backup restore", async (t) => {
   const f = await sharedFixture(t),
     runtime = (await f.personal(f.registry.ownerId)).runtime,

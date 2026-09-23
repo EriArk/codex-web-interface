@@ -1,11 +1,12 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { isFileSource } from "@codex-web/shared";
+import { type ReactNode, useEffect, useState } from "react";
 import { workspaceUrl } from "./accountStorage.ts";
 import { FilePreview } from "./FilePreview";
-import { Icon } from "./icons";
+import { FileViewerDialog } from "./FileViewerDialog";
 import "./download.css";
 
 export function isDownloadUrl(value: string | undefined): value is string {
+  if (isFileSource(value)) return true;
   if (value && /^\/api\/threads\/[a-zA-Z0-9_-]+\/commands\/[^/?#]+\?[^#]+$/.test(value)) {
     const query = new URLSearchParams(value.split("?")[1]);
     return (
@@ -80,7 +81,6 @@ export function DownloadLink({
     [error, setError] = useState(""),
     [direct, setDirect] = useState<{ name: string; bytes: number } | null>(null),
     [retry, setRetry] = useState(0);
-  const dialog = useRef<HTMLDialogElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly starts a fresh bounded download.
   useEffect(() => {
     if (!open) {
@@ -95,8 +95,6 @@ export function DownloadLink({
     setObjectUrl("");
     setError("");
     setDirect(null);
-    dialog.current?.showModal();
-    dialog.current?.focus({ preventScroll: true });
     void (async () => {
       try {
         if (!isDownloadUrl(href)) throw Error("Ссылка на файл недоступна.");
@@ -211,80 +209,71 @@ export function DownloadLink({
       <button type="button" className={className} onClick={() => setOpen(true)}>
         {children}
       </button>
-      {open &&
-        createPortal(
-          <dialog
-            ref={dialog}
-            className="download-dialog"
-            tabIndex={-1}
-            aria-label="Сохранить файл"
-            onCancel={() => setOpen(false)}
-          >
-            <div className="download-heading">
-              <strong>{direct?.name || file?.name || name}</strong>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Закрыть сохранение"
-                onClick={() => setOpen(false)}
-              >
-                <Icon name="close" />
+      {open && (
+        <FileViewerDialog
+          name={direct?.name || file?.name || name}
+          file={file}
+          source={href}
+          onClose={() => setOpen(false)}
+          actions={
+            file && shareable ? (
+              <button type="button" onClick={share}>
+                Сохранить / поделиться
               </button>
-            </div>
-            {!file && !direct && !error && (
-              <p role="status">
-                <span className="spinner" /> Подготавливаю файл…
+            ) : isDownloadUrl(href) ? (
+              <a
+                className="secondary"
+                href={workspaceUrl(href)}
+                download={file?.name || name}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Скачать файл
+              </a>
+            ) : null
+          }
+        >
+          {!file && !direct && !error && (
+            <p role="status">
+              <span className="spinner" /> Подготавливаю файл…
+            </p>
+          )}
+          {file && (
+            <FilePreview
+              key={file.name + retry}
+              file={file}
+              objectUrl={objectUrl}
+              source={href}
+              full
+            />
+          )}
+          {direct && (
+            <div className="download-actions">
+              <p>
+                {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
+                  direct.bytes / 1024 / 1024,
+                )}{" "}
+                МБ · Сохранение через загрузки браузера
               </p>
-            )}
-            {file && <FilePreview key={file.name + retry} file={file} objectUrl={objectUrl} />}
-            {direct && (
-              <div className="download-actions">
-                <p>
-                  {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
-                    direct.bytes / 1024 / 1024,
-                  )}{" "}
-                  МБ · Сохранение через загрузки браузера
-                </p>
-                <a
-                  className="secondary"
-                  href={workspaceUrl(href!)}
-                  download={direct.name}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Скачать файл
-                </a>
-              </div>
-            )}
-            {error && <p role="alert">{error}</p>}
-            {file ? (
-              <div className="download-actions">
-                {shareable ? (
-                  <button type="button" onClick={share}>
-                    Сохранить / поделиться
-                  </button>
-                ) : (
-                  <a
-                    className="secondary"
-                    href={objectUrl}
-                    download={file.name}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Скачать файл
-                  </a>
-                )}
-              </div>
-            ) : (
-              error && (
-                <button type="button" onClick={() => setRetry((v) => v + 1)}>
-                  Повторить
-                </button>
-              )
-            )}
-          </dialog>,
-          document.body,
-        )}
+              <a
+                className="secondary"
+                href={workspaceUrl(href!)}
+                download={direct.name}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Скачать файл
+              </a>
+            </div>
+          )}
+          {error && <p role="alert">{error}</p>}
+          {error && (
+            <button type="button" onClick={() => setRetry((v) => v + 1)}>
+              Повторить
+            </button>
+          )}
+        </FileViewerDialog>
+      )}
     </>
   );
 }

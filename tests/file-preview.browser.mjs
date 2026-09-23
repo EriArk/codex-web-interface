@@ -138,12 +138,12 @@ try {
           });
           await page.getByRole("button", { name: "Открыть файл" }).tap();
           const chatScroll = await page.locator("main").evaluate((el) => el.scrollTop);
-          const dialog = page.getByRole("dialog", { name: "Сохранить файл" });
+          const dialog = page.getByRole("dialog", { name: "Просмотр файла" });
           const save = dialog.getByRole("button", { name: "Сохранить / поделиться" });
           await expect(save).toBeVisible();
           if (file.kind === "image")
             await expect
-              .poll(() => page.locator(".download-image").evaluate((img) => img.naturalWidth))
+              .poll(() => page.locator(".image-stage img").evaluate((img) => img.naturalWidth))
               .toBe(240);
           if (file.kind === "pdf") {
             await expect(page.getByRole("img", { name: "PDF, страница 1" })).toBeVisible({
@@ -161,6 +161,8 @@ try {
             await page.getByRole("button", { name: "Следующая страница PDF" }).tap();
             await expect(page.getByRole("img", { name: "PDF, страница 2" })).toBeVisible();
           }
+          if (file.name.endsWith(".md"))
+            await page.getByRole("button", { name: "Исходный текст" }).tap();
           if (file.kind === "text")
             await expect(page.locator(".file-text")).toHaveText(file.bytes.toString());
           if (file.kind === "bounded") {
@@ -169,7 +171,9 @@ try {
             );
             await expect(dialog).toContainText("Показано начало файла");
           }
-          if (file.kind === "html") {
+          if (file.name.endsWith(".svg"))
+            await expect(page.locator(".image-stage img")).toBeVisible();
+          if (file.kind === "html" && !file.name.endsWith(".svg")) {
             await expect(page.locator("iframe.file-html")).toBeVisible();
             assert.equal(
               await page.locator("iframe.file-html").getAttribute("sandbox"),
@@ -193,10 +197,7 @@ try {
             await page.evaluate(() => !!window.compromised || !!document.body.dataset.compromised),
             false,
           );
-          for (const control of [
-            save,
-            dialog.getByRole("button", { name: "Закрыть сохранение" }),
-          ]) {
+          for (const control of [save, dialog.getByRole("button", { name: "Закрыть просмотр" })]) {
             const rect = await control.boundingBox();
             assert(
               rect.x >= 0 &&
@@ -217,7 +218,7 @@ try {
             await page.screenshot({
               path: `.local/qa-file-preview/${engine}-${layout}-${file.name}.png`,
             });
-          await dialog.getByRole("button", { name: "Закрыть сохранение" }).tap();
+          await dialog.getByRole("button", { name: "Закрыть просмотр" }).tap();
           await expect(dialog).toHaveCount(0);
           assert.equal(await page.locator("main").evaluate((el) => el.scrollTop), chatScroll);
           await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue(
