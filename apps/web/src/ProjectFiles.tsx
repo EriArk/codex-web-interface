@@ -206,6 +206,12 @@ export function ProjectFiles({
     <DownloadLink
       href={`/api${base}/files/content?path=${encodeURIComponent(file)}${mode === "git" && staged ? "&version=index" : ""}`}
       name={file.split("/").at(-1)}
+      sourceRevision={revision}
+      onEdit={
+        capability && editableFile(file) && !(mode === "git" && staged)
+          ? () => setEditorPath(file)
+          : undefined
+      }
     >
       <Icon name="file" />
       Открыть файл

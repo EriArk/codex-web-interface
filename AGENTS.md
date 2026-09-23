@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested stage handoff and deferred manual acceptance (2026-09-23)
+
+- End each completed stage with the concrete next proposed step and its recommended reasoning level (selector label and protocol value). Wait for the owner's continuation before starting that stage; «Продолжаем» confirms the setting.
+- Continue useful implementation and automated verification while the owner is unavailable for manual testing. Physical-device acceptance remains pending until their later use; do not make it a prerequisite for unrelated authorized feature work or claim it completed.
+
 ## Owner-requested deliberate control layout (2026-09-23)
 
 - Follow `docs/UI_LAYOUT_RULES.md` for changed windows/cards. Group actions by purpose in explicit rows/grids; do not let arbitrary label widths decide button placement. Equal peer actions have equal widths and aligned edges.

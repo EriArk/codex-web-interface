@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./file-viewer.css";
 import "./workspace-window.css";
 
@@ -12,6 +13,7 @@ export function FileViewerDialog({
   onClose,
   children,
   actions,
+  draft = false,
 }: {
   name: string;
   file?: File | null;
@@ -19,14 +21,12 @@ export function FileViewerDialog({
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
+  draft?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [properties, setProperties] = useState(false),
     [expanded, setExpanded] = useState(false);
-  useEffect(() => {
-    dialog.current?.showModal();
-    dialog.current?.focus({ preventScroll: true });
-  }, []);
+  useWorkspaceDialog(dialog);
   const format = (file?.name || name).split(".").at(-1)?.toUpperCase();
   return createPortal(
     <dialog
@@ -35,7 +35,11 @@ export function FileViewerDialog({
       data-expanded={expanded}
       aria-label="Просмотр файла"
       tabIndex={-1}
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
     >
       <header className="file-viewer-heading">
         <span className="file-viewer-mark">
@@ -43,7 +47,10 @@ export function FileViewerDialog({
         </span>
         <div>
           <strong title={name}>{name}</strong>
-          <small>Просмотр файла{format && format.length < 10 ? " · " + format : ""}</small>
+          <small>
+            {draft ? "Предпросмотр черновика" : "Просмотр файла"}
+            {format && format.length < 10 ? " · " + format : ""}
+          </small>
         </div>
         <div className="file-viewer-window-controls">
           <button
@@ -115,7 +122,7 @@ export function FileViewerDialog({
         )}
       </div>
       <footer className="file-viewer-footer">
-        <span>Исходный файл</span>
+        <span>{draft ? "Без сохранения в проект" : "Исходный файл"}</span>
         <div className="file-viewer-actions">{actions}</div>
       </footer>
     </dialog>,

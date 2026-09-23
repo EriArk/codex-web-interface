@@ -67,6 +67,8 @@ export function DownloadLink({
   children,
   className = "secondary",
   directDownload = false,
+  onEdit,
+  sourceRevision = 0,
 }: {
   href?: string;
   name?: string;
@@ -74,6 +76,9 @@ export function DownloadLink({
   children: ReactNode;
   className?: string;
   directDownload?: boolean;
+  /** Only supplied by the unlocked, exact working-copy owner. Saved artifacts are immutable. */
+  onEdit?: () => void;
+  sourceRevision?: number;
 }) {
   const [open, setOpen] = useState(false),
     [file, setFile] = useState<File | null>(null),
@@ -177,7 +182,7 @@ export function DownloadLink({
       controller.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [open, href, name, mime, retry]);
+  }, [open, href, name, mime, retry, sourceRevision]);
   const shareable =
     !!file &&
     typeof navigator.share === "function" &&
@@ -216,21 +221,28 @@ export function DownloadLink({
           source={href}
           onClose={() => setOpen(false)}
           actions={
-            file && shareable ? (
-              <button type="button" onClick={share}>
-                Сохранить / поделиться
-              </button>
-            ) : isDownloadUrl(href) ? (
-              <a
-                className="secondary"
-                href={workspaceUrl(href)}
-                download={file?.name || name}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Скачать файл
-              </a>
-            ) : null
+            <>
+              {onEdit && (
+                <button type="button" className="secondary" onClick={onEdit}>
+                  Редактировать
+                </button>
+              )}
+              {file && shareable ? (
+                <button type="button" onClick={share}>
+                  Сохранить / поделиться
+                </button>
+              ) : isDownloadUrl(href) ? (
+                <a
+                  className="secondary"
+                  href={workspaceUrl(href)}
+                  download={file?.name || name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Скачать файл
+                </a>
+              ) : null}
+            </>
           }
         >
           {!file && !direct && !error && (

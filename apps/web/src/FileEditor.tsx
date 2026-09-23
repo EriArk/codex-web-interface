@@ -8,8 +8,10 @@ import type { FileSnapshot } from "@codex-web/shared";
 import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
+import { FileEditorPreview } from "./FileEditorPreview";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./file-editor.css";
@@ -40,9 +42,11 @@ export default function FileEditor({
     [error, setError] = useState(""),
     [closing, setClosing] = useState(false),
     [wrap, setWrap] = useState(false),
-    [conflict, setConflict] = useState<FileSnapshot | null>(null);
+    [conflict, setConflict] = useState<FileSnapshot | null>(null),
+    [preview, setPreview] = useState<File | null>(null);
   const wrapping = useRef(new Compartment()),
-    syntax = useRef(new Compartment());
+    syntax = useRef(new Compartment()),
+    endings = useRef(new Compartment());
   const saveAction = useRef<() => void>(() => {}),
     saving = useRef(false);
   const pending = useRef<{
@@ -58,8 +62,16 @@ export default function FileEditor({
     url = `/projects/${encodeURIComponent(projectId)}/file-tools`;
   const exactLines = (text: string) => text.replace(/\r\n|\r|\n/g, lineSeparator.current);
   const current = () => exactLines(editor.current?.state.sliceDoc() ?? "");
+  const separatorOf = (text: string) => {
+    const separators = new Set(text.match(/\r\n|\r|\n/g) ?? []);
+    if (separators.size > 1)
+      throw Error(
+        "В файле смешаны окончания строк. Доступен просмотр или скачивание; редактор не будет менять их автоматически.",
+      );
+    return text.match(/\r\n|\r|\n/)?.[0] ?? "\n";
+  };
   const persist = () => {
-    if (!baseline.current || !editor.current) return;
+    if (!baseline.current || !editor.current) return false;
     try {
       if (current() === baseline.current.text && !pending.current) storage.removeItem(key);
       else
@@ -67,11 +79,13 @@ export default function FileEditor({
           key,
           JSON.stringify({ baseline: baseline.current, text: current(), pending: pending.current }),
         );
+      return true;
     } catch {
       if (active.current)
         setError(
           "Не удалось сохранить черновик на устройстве. Не закрывай редактор до сохранения файла.",
         );
+      return false;
     }
   };
   const save = async () => {
@@ -105,7 +119,7 @@ export default function FileEditor({
           capability,
         },
       });
-      baseline.current = { ...result, text, bom: base.bom };
+      baseline.current = { ...result, text, bom: operation.bom };
       pending.current = null;
       if (!active.current) return;
       setDirty(current() !== text);
@@ -130,7 +144,10 @@ export default function FileEditor({
       }
     } finally {
       saving.current = false;
-      if (active.current) setBusy(false);
+      if (active.current) {
+        persist();
+        setBusy(false);
+      }
     }
   };
   saveAction.current = () => {
@@ -149,12 +166,6 @@ export default function FileEditor({
       .then((snapshot) => {
         if (!alive || !host.current) return;
         let text = snapshot.text ?? "";
-        const endings = new Set(text.match(/\r\n|\r|\n/g) ?? []);
-        if (endings.size > 1)
-          throw Error(
-            "В файле смешаны окончания строк. Доступен просмотр или скачивание; редактор не будет менять их автоматически.",
-          );
-        lineSeparator.current = snapshot.text?.match(/\r\n|\r|\n/)?.[0] ?? "\n";
         baseline.current = snapshot;
         try {
           const draft = JSON.parse(storage.getItem(key) ?? "null");
@@ -170,6 +181,9 @@ export default function FileEditor({
             if (draft.baseline.fingerprint !== snapshot.fingerprint) setConflict(snapshot);
           }
         } catch {}
+        // A changed disk version must not change the restored draft's line endings.
+        lineSeparator.current = separatorOf(baseline.current?.text ?? "");
+        separatorOf(text);
         const view = new EditorView({
           parent: host.current,
           state: EditorState.create({
@@ -186,7 +200,7 @@ export default function FileEditor({
                 },
               ]),
               basicSetup,
-              EditorState.lineSeparator.of(snapshot.text?.match(/\r\n|\r|\n/)?.[0] ?? "\n"),
+              endings.current.of(EditorState.lineSeparator.of(lineSeparator.current)),
               EditorView.contentAttributes.of({
                 "aria-label": "Содержимое файла",
                 spellcheck: "false",
@@ -237,7 +251,7 @@ export default function FileEditor({
         if (alive && !controller.signal.aborted) setError(messageOf(e));
       });
     const leave = (event: BeforeUnloadEvent) => {
-      if (baseline.current && current() !== baseline.current.text) {
+      if (baseline.current && (current() !== baseline.current.text || pending.current)) {
         persist();
         event.preventDefault();
       }
@@ -258,10 +272,10 @@ export default function FileEditor({
   }, []);
   const close = () => {
     if (saving.current) return;
-    if (dirty) setClosing(true);
+    if (dirty || pending.current) setClosing(true);
     else onClose();
   };
-  return (
+  return createPortal(
     <dialog
       ref={dialog}
       tabIndex={-1}
@@ -276,7 +290,7 @@ export default function FileEditor({
       <header className="panel-heading">
         <Icon name="file" />
         <div>
-          <strong>
+          <strong title={path}>
             {path}
             {dirty ? " *" : ""}
           </strong>
@@ -293,51 +307,71 @@ export default function FileEditor({
         </button>
       </header>
       <div className="file-editor-toolbar">
-        <button
-          type="button"
-          className="primary"
-          disabled={!loaded || (!dirty && !pending.current) || busy}
-          onClick={() => void save()}
-        >
-          {busy ? "Сохраняю…" : "Сохранить"}
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Отменить изменение"
-          onClick={() => editor.current && undo(editor.current)}
-        >
-          <Icon name="back" />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Повторить изменение"
-          onClick={() => editor.current && redo(editor.current)}
-        >
-          <Icon name="chevron" />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Найти в файле"
-          onClick={() => editor.current && openSearchPanel(editor.current)}
-        >
-          <Icon name="search" />
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          aria-pressed={wrap}
-          onClick={() => {
-            setWrap(!wrap);
-            editor.current?.dispatch({
-              effects: wrapping.current.reconfigure(wrap ? [] : EditorView.lineWrapping),
-            });
-          }}
-        >
-          Перенос строк
-        </button>
+        <div className="file-editor-primary-actions">
+          <button
+            type="button"
+            className="primary"
+            disabled={!loaded || (!dirty && !pending.current) || busy}
+            onClick={() => void save()}
+          >
+            {busy ? "Сохраняю…" : "Сохранить"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!loaded}
+            onClick={() => {
+              setPreview(
+                new File(
+                  [baseline.current?.bom ? "\ufeff" : "", current()],
+                  path.split("/").at(-1) || path,
+                  { type: "text/plain" },
+                ),
+              );
+            }}
+          >
+            Предпросмотр
+          </button>
+        </div>
+        <div className="file-editor-text-actions">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Отменить изменение"
+            onClick={() => editor.current && undo(editor.current)}
+          >
+            <Icon name="back" />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Повторить изменение"
+            onClick={() => editor.current && redo(editor.current)}
+          >
+            <Icon name="chevron" />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Найти в файле"
+            onClick={() => editor.current && openSearchPanel(editor.current)}
+          >
+            <Icon name="search" />
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            aria-pressed={wrap}
+            onClick={() => {
+              setWrap(!wrap);
+              editor.current?.dispatch({
+                effects: wrapping.current.reconfigure(wrap ? [] : EditorView.lineWrapping),
+              });
+            }}
+          >
+            Перенос строк
+          </button>
+        </div>
       </div>
       {error && (
         <p className="notice" role="alert">
@@ -348,43 +382,55 @@ export default function FileEditor({
         <details className="file-editor-conflict" open>
           <summary>Текущая версия на компьютере</summary>
           <pre>{conflict.text}</pre>
-          <button
-            type="button"
-            className="secondary"
-            disabled={!!pending.current}
-            onClick={() => {
-              baseline.current = conflict;
-              pending.current = null;
-              setConflict(null);
-              setError("");
-              setDirty(current() !== conflict.text);
-              persist();
-            }}
-          >
-            Я сравнил — сохранить мой текст при следующем сохранении
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={!!pending.current}
-            onClick={() => {
-              if (!confirm("Заменить черновик текущей версией файла?")) return;
-              baseline.current = conflict;
-              editor.current?.dispatch({
-                changes: {
-                  from: 0,
-                  to: editor.current.state.doc.length,
-                  insert: conflict.text ?? "",
-                },
-              });
-              setDirty(false);
-              setConflict(null);
-              setError("");
-              persist();
-            }}
-          >
-            Загрузить текущую версию
-          </button>
+          <div className="file-editor-conflict-actions">
+            <button
+              type="button"
+              className="secondary"
+              aria-label="Я сравнил — сохранить мой текст при следующем сохранении"
+              disabled={!!pending.current}
+              onClick={() => {
+                baseline.current = conflict;
+                pending.current = null;
+                setConflict(null);
+                setError("");
+                setDirty(current() !== conflict.text);
+                persist();
+              }}
+            >
+              Оставить мой текст
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={!!pending.current}
+              onClick={() => {
+                if (!confirm("Заменить черновик текущей версией файла?")) return;
+                let separator: string;
+                try {
+                  separator = separatorOf(conflict.text ?? "");
+                } catch (e) {
+                  setError(messageOf(e));
+                  return;
+                }
+                lineSeparator.current = separator;
+                baseline.current = conflict;
+                editor.current?.dispatch({
+                  effects: endings.current.reconfigure(EditorState.lineSeparator.of(separator)),
+                  changes: {
+                    from: 0,
+                    to: editor.current.state.doc.length,
+                    insert: conflict.text ?? "",
+                  },
+                });
+                setDirty(false);
+                setConflict(null);
+                setError("");
+                persist();
+              }}
+            >
+              Загрузить текущую версию
+            </button>
+          </div>
         </details>
       )}
       {!loaded && !error && <p role="status">Открываю файл…</p>}
@@ -398,7 +444,7 @@ export default function FileEditor({
             disabled={busy}
             onClick={async () => {
               await save();
-              if (current() === baseline.current?.text) onClose();
+              if (!pending.current && current() === baseline.current?.text) onClose();
             }}
           >
             Сохранить и закрыть
@@ -422,14 +468,15 @@ export default function FileEditor({
             type="button"
             className="secondary"
             onClick={() => {
-              persist();
-              onClose();
+              if (persist()) onClose();
             }}
           >
             Закрыть с черновиком
           </button>
         </div>
       )}
-    </dialog>
+      {preview && <FileEditorPreview file={preview} onClose={() => setPreview(null)} />}
+    </dialog>,
+    document.body,
   );
 }
