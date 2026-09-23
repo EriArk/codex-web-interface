@@ -4,7 +4,7 @@
 
 This section supersedes earlier priority lists and pending-acceptance statements below. The owner confirmed the sequence after the 22 September issue updates. Before each substantial session, recommend a reasoning level and wait for the owner's explicit confirmation that it is set; do not start the next stage automatically.
 
-1. **Close the existing tails.** Align this roadmap and review the unfinished writable Files/editor draft. Review completed: [findings and release gates](FILES_DRAFT_REVIEW_2026-09-23.md). The draft is not shipped and requires a focused implementation/verification session before release.
+1. **Close the existing tails.** Roadmap alignment and [draft review](FILES_DRAFT_REVIEW_2026-09-23.md) are complete. The following implementation session adds the writable Files/editor with focused verification: [behavior, recovery and limits](FILE_EDITOR.md). Keep installed status separate from source completion and the guarded release queue.
 2. **Activity Timeline, first useful slice (#218 + necessary #197 integration).** Show meaningful commits, PRs and Issues in a Space with exact source links, bounded aggregation and participant/project filters. Reuse current membership, GitHub identity and delivery services. No frequent GPT reads or automatic prose reports.
 3. **Discuss with Project GPT (#200).** Hand the selected event and bounded authorized evidence to the existing personal Project GPT. Project metadata alone is not evidence that GPT has read changes.
 4. **Reactions, replies and attention (#218/#205).** Add lightweight responses and notification routing; ordinary activity does not flood the bell.
@@ -17,7 +17,7 @@ Current baseline:
 - The owner confirmed real two-user Collaboration Space and participant checkout use on 22 September in #215/#195/#198. This is owner-reported live evidence, separate from automated fixture tests. Do not repeat initial friend onboarding or rebuild working copy provisioning. #215 retains concrete polish/edge cases; #198 retains provenance/sync/conflict/test-environment work.
 - #196 and automatic Work Reports #199 are superseded. #218 replaces the latter; ordinary user-created Reports remain supported.
 - Hub engine `e744924` is installed; the guarded updater completed successfully, verified on 23 September. Owner native GPT is `26.915.31945-audit-e744924`; its real models/catalog/history reads passed. The separate member native runtime was not upgraded in that pass. The [GPT audit](GPT_STABILITY_AUDIT_2026-09-23.md) records checks and limits.
-- Writable Files #169 is an uncommitted draft, not a completed feature. Do not include it accidentally in unrelated releases.
+- Writable Files #169 now has an integrated implementation and focused verification; the earlier unpublished draft status is historical. See [File editor](FILE_EDITOR.md) for exact scope and limitations.
 
 ## Historical implementation log
 

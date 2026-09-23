@@ -1,0 +1,103 @@
+:root[data-theme] dialog.file-editor {
+  width: min(1200px, calc(100vw - 24px));
+  height: min(850px, calc(var(--app-height, 100dvh) - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  overflow: hidden;
+  color: var(--window-ink);
+}
+.file-editor .panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.file-editor .panel-heading > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.file-editor .panel-heading small {
+  display: block;
+  font-size: 12px;
+}
+.file-editor-toolbar,
+.file-editor-close {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.file-editor-close p {
+  width: 100%;
+  margin: 0;
+}
+.file-editor-host {
+  flex: 1;
+  min-height: 80px;
+  overflow: hidden;
+  background: var(--window-screen);
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  box-shadow: var(--window-screen-shadow);
+}
+.file-editor .cm-editor {
+  height: 100%;
+  color: var(--ink);
+  background: var(--window-screen);
+  font-size: 14px;
+}
+.file-editor .cm-scroller {
+  overflow: auto;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.file-editor .cm-gutters,
+.file-editor .cm-panels {
+  color: var(--muted);
+  background: var(--window-screen);
+  border-color: var(--window-edge);
+}
+.file-editor .cm-content {
+  caret-color: var(--ink);
+}
+.file-editor .cm-cursor {
+  border-left-color: var(--ink);
+}
+.file-editor .cm-activeLine,
+.file-editor .cm-activeLineGutter {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.file-editor .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent) 30%, transparent) !important;
+}
+.file-editor .cm-search input {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--ink);
+  background: var(--window-screen);
+}
+.file-editor-conflict {
+  max-height: 35%;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--window-edge);
+}
+.file-editor-conflict pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.file-editor .notice {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  :root[data-theme] dialog.file-editor {
+    width: calc(100vw - 8px);
+    height: calc(var(--app-height, 100dvh) - 8px);
+    padding: 8px;
+  }
+  .file-editor-toolbar {
+    gap: 4px;
+  }
+}

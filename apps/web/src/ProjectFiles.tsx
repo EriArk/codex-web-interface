@@ -1,8 +1,14 @@
-import type { ProjectDiff, ProjectDirectory, ProjectGit } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import {
+  editableFile,
+  type ProjectDiff,
+  type ProjectDirectory,
+  type ProjectGit,
+} from "@codex-web/shared";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
 import { DownloadLink } from "./DownloadLink";
+import { FileManagerActions } from "./FileManagerActions";
 import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
 import { DeliveryButton } from "./ProjectDeliveryHost";
@@ -12,6 +18,8 @@ import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./project-files.css";
 import "./workspace-window.css";
 import "./project-tools.css";
+
+const FileEditor = lazy(() => import("./FileEditor"));
 
 const fileSize = (size: number) =>
   size < 1024
@@ -44,6 +52,34 @@ export function ProjectFiles({
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog, visible);
   const [section, setSection] = useState<"overview" | "changes" | "releases">("overview");
+  const [editorPath, setEditorPath] = useState(""),
+    [fileAction, setFileAction] = useState("");
+  const [capability, setCapability] = useState(""),
+    [checkout, setCheckout] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const grant = useRef("");
+  const scopeRevision = useRef(0);
+  const scopeActive = useRef(visible);
+  scopeActive.current = visible;
+  useEffect(() => {
+    scopeRevision.current++;
+    scopeActive.current = visible;
+    if (!visible) {
+      setCapability("");
+      setEditorPath("");
+      setFileAction("");
+    }
+    return () => {
+      scopeActive.current = false;
+      const token = grant.current;
+      grant.current = "";
+      if (token)
+        void api(`/projects/${encodeURIComponent(projectId)}/file-tools/access`, {
+          method: "POST",
+          body: { unlock: false, capability: token },
+        }).catch(() => {});
+    };
+  }, [visible, projectId]);
   const [path, setPath] = useState(""),
     [input, setInput] = useState(""),
     [editingPath, setEditingPath] = useState(false),
@@ -179,6 +215,12 @@ export function ProjectFiles({
     <section className="inspector-selected" aria-label="Выбранный файл">
       <div className="inspector-actions">
         {download(selected)}
+        {capability && editableFile(selected) && (
+          <button type="button" className="secondary" onClick={() => setEditorPath(selected)}>
+            <Icon name="edit" size={16} />
+            {mode === "git" && staged ? "Редактировать рабочий файл" : "Редактировать"}
+          </button>
+        )}
         {mode === "git" && <CopyButton text={selected} label="Копировать путь" />}
         <button
           type="button"
@@ -283,7 +325,10 @@ export function ProjectFiles({
       className="project-files notebook-dialog workspace-window project-tool-window"
       data-tool={mode}
       aria-label={mode === "files" ? "Файлы проекта" : "Git проекта"}
-      onCancel={onBack}
+      onCancel={(e) => {
+        e.preventDefault();
+        onBack();
+      }}
     >
       <header className="inspector-heading notebook-heading">
         <Icon name={mode === "files" ? "folder" : "branch"} />
@@ -310,11 +355,61 @@ export function ProjectFiles({
         </button>
       </header>
       <div className="project-tool-actions">
-        {mode === "files" && (
-          <span className="inspector-readonly">
-            <Icon name="lock" size={16} />
-            Только чтение
-          </span>
+        <button
+          type="button"
+          className="secondary"
+          disabled={unlocking || !!editorPath}
+          aria-pressed={!!capability}
+          onClick={async () => {
+            const revision = scopeRevision.current;
+            setUnlocking(true);
+            setError("");
+            try {
+              const value = await api<{ capability: string; checkout?: string }>(
+                `${base}/file-tools/access`,
+                {
+                  method: "POST",
+                  body: { unlock: !capability, ...(capability ? { capability } : {}) },
+                },
+              );
+              if (!scopeActive.current || scopeRevision.current !== revision) {
+                if (value.capability)
+                  void api(`${base}/file-tools/access`, {
+                    method: "POST",
+                    body: { unlock: false, capability: value.capability },
+                  }).catch(() => {});
+                return;
+              }
+              grant.current = value.capability;
+              setCapability(value.capability);
+              setCheckout(value.checkout ?? "");
+            } catch (e) {
+              if (scopeActive.current) setError(messageOf(e));
+            } finally {
+              setUnlocking(false);
+            }
+          }}
+        >
+          <Icon name="lock" size={16} />
+          {capability ? "Заблокировать файлы" : "Разблокировать файлы"}
+        </button>
+        {mode === "files" && visible && capability && (
+          <FileManagerActions
+            key={projectId}
+            projectId={projectId}
+            capability={capability}
+            checkout={checkout}
+            folder={path}
+            request={fileAction}
+            onConsume={() => setFileAction("")}
+            onDone={(file, edit) => {
+              if (!scopeActive.current) return;
+              setRevision((n) => n + 1);
+              setSelected(file ?? "");
+              if (file) setReveal(file.split("/").at(-1)!);
+              if (file && edit) setEditorPath(file);
+            }}
+          />
         )}
         {visible && (
           <GuiPreviewButton projectId={projectId} projectName={projectName} threadId={threadId} />
@@ -502,6 +597,16 @@ export function ProjectFiles({
                         {entry.kind === "directory" && <Icon name="chevron" size={15} />}
                       </button>
                       <CopyButton text={entry.path} label={`Копировать путь ${entry.name}`} />
+                      {capability && (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          aria-label={`Действия: ${entry.name}`}
+                          onClick={() => setFileAction(entry.path)}
+                        >
+                          <Icon name="more" />
+                        </button>
+                      )}
                     </div>
                     {selected === entry.path && selectedPanel()}
                   </li>
@@ -564,6 +669,19 @@ export function ProjectFiles({
           />
         )}
       </div>
+      {editorPath && visible && capability && (
+        <Suspense fallback={<p role="status">Открываю редактор…</p>}>
+          <FileEditor
+            key={`${projectId}:${editorPath}`}
+            projectId={projectId}
+            capability={capability}
+            projectName={projectName}
+            path={editorPath}
+            onClose={() => setEditorPath("")}
+            onSaved={() => setRevision((n) => n + 1)}
+          />
+        </Suspense>
+      )}
     </dialog>
   );
 }

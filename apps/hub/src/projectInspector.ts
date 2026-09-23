@@ -3,9 +3,11 @@ import { inspectProject, readProjectFile } from "@codex-web/machines";
 import { type CachedProjectGit, HubError, type ProjectGit } from "@codex-web/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { registerFileTools } from "./file-tools.js";
 import type { Sessions } from "./sessions.js";
 
 export function registerProjectInspector(app: FastifyInstance, sessions: Sessions) {
+  registerFileTools(app, sessions);
   const path = z.string().max(2048).default("");
   let pending = 0;
   const readers: { grant: () => void; timer: ReturnType<typeof setTimeout> }[] = [];

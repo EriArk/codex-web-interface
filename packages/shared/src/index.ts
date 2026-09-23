@@ -417,5 +417,6 @@ export interface NativePlanAction {
 
 export * from "./collaboration.js";
 export * from "./file-limits.js";
+export * from "./file-tools.js";
 export * from "./github-work.js";
 export * from "./project-gpt.js";

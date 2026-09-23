@@ -6,6 +6,7 @@ export { type NativeActivity, readNativeActivity } from "./activity.js";
 export { authorizeMachine, bindMachineAuthority } from "./authority.js";
 export { controlDesktop, type DesktopState, desktopError } from "./desktop.js";
 export { readMachineImage } from "./image.js";
+export { runFileTools } from "./fileTools.js";
 export { PREVIEW_LIMIT, previewPath, readMachinePreview } from "./preview.js";
 export {
   assertProjectRoot,

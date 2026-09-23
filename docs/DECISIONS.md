@@ -6,6 +6,8 @@ This file records decisions that should be treated as fixed unless the owner exp
 
 The owner approved the sequence in [Roadmap](ROADMAP.md#current-owner-approved-sequence-2026-09-23): review existing unfinished work, deliver a useful Activity slice, add exact evidence handoff to Project GPT, then reactions/replies/attention and Intake/Issue Drawer. Before each substantial session recommend the exact reasoning selector level and wait for the owner's confirmation that it is set.
 
+Owner clarification: **«Продолжаем» also confirms the recommended reasoning level is set**. Do not ask for an additional confirmation when that instruction arrives.
+
 The 22 September issue updates replace automatic prose Work Reports (#199, closed) with [Activity Timeline #218](https://github.com/EriArk/codex-web-interface/issues/218). Git/GitHub/Result/Review objects remain authoritative; the Timeline indexes exact source events. Notifications represent attention-worthy replies/requests rather than mirroring every event. Ordinary user-created Reports are unaffected. Project GPT stays personal; no new Space GPT is introduced.
 
 The owner has confirmed actual friend admission, Collaboration Spaces and usable personal checkouts in #215/#195/#198. Do not rebuild that base or retain first-friend admission as an unfinished feature. Extend current services for concrete remaining gaps. This owner-reported evidence does not assert every edge-case or physical-device acceptance item has passed.

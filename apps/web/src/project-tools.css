@@ -24,6 +24,24 @@
 .project-tool-actions > button {
   margin: 0;
 }
+.file-action-dialog {
+  width: min(480px, calc(100vw - 24px));
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.file-action-dialog .panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.file-action-menu {
+  display: grid;
+  gap: 8px;
+}
+.file-action-menu button {
+  text-align: left;
+}
 .inspector-workspace {
   min-height: 0;
   flex: 1;
