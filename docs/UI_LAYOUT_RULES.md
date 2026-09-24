@@ -101,3 +101,10 @@ choices beneath it. Keep progress and continuation within the existing operation
 window, retain a fixed reachable footer/Close at keyboard height, and paginate
 large plans instead of mounting thousands of cards. Cleanup describes empty-folder
 removal; retained folders must not be displayed as deleted.
+
+Full help: use a protected title/Close row and a compact catalog/keys/search toolbar.
+The wide catalog and article scroll independently. Phone layouts show one at a
+time with explicit catalog/back navigation. Categories expand into subcategories
+and readable touch entries; section links and related articles remain inside the
+same guide. Preserve the parent window and reading position. Opening the catalog
+must not raise the software keyboard; search receives focus only when requested.

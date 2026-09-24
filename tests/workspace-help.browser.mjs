@@ -84,6 +84,60 @@ try {
           );
         assert.equal(stolen, false);
         await expect(page.getByRole("dialog")).toHaveCount(0);
+        await page.getByRole("button", { name: "Настройки", exact: true }).tap();
+        await page
+          .getByRole("dialog", { name: "Настройки приложения" })
+          .getByRole("button", { name: "Справка и клавиши" })
+          .tap();
+        await expect(page.getByRole("navigation", { name: "Категории справки" })).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog", { name: "Настройки приложения" })).toBeVisible();
+        await page.getByRole("button", { name: "Закрыть настройки" }).tap();
+        await page.getByRole("button", { name: "Справка и клавиши" }).tap();
+        const guide = page.getByRole("dialog", { name: "Справка и клавиши" }),
+          catalog = guide.getByRole("navigation", { name: "Категории справки" });
+        await expect(catalog.locator("summary")).toHaveCount(11);
+        await catalog.getByText("Материалы и файлы", { exact: true }).click();
+        await expect(catalog.getByRole("heading", { name: "Редактор", exact: true })).toBeVisible();
+        await catalog
+          .getByRole("button", { name: "Слияние папок и совпадения", exact: true })
+          .tap();
+        await expect(
+          guide.getByRole("heading", { name: "Слияние папок и совпадения", exact: true }),
+        ).toBeVisible();
+        await guide
+          .getByRole("navigation", { name: "В этой статье" })
+          .getByRole("button", { name: "Пример", exact: true })
+          .tap();
+        await expect(guide.getByRole("heading", { name: "Пример", exact: true })).toBeInViewport();
+        const priorScroll = await guide.locator(".help-content").evaluate((el) => el.scrollTop);
+        assert(priorScroll > 0);
+        await guide
+          .getByRole("navigation", { name: "Связанные статьи" })
+          .getByRole("button", {
+            name: "Копировать, вырезать, переименовать, удалить",
+            exact: true,
+          })
+          .tap();
+        await guide.getByRole("button", { name: "Назад", exact: true }).tap();
+        await expect
+          .poll(() => guide.locator(".help-content").evaluate((el) => el.scrollTop))
+          .toBe(priorScroll);
+        await guide.getByRole("searchbox", { name: "Поиск по справке" }).fill("УЧЕТН");
+        await expect(
+          catalog.getByRole("button", { name: /Полный доступ и GitHub Write/ }),
+        ).toBeVisible();
+        await catalog.getByRole("button", { name: /Полный доступ и GitHub Write/ }).tap();
+        await expect(guide.locator(".help-content")).toContainText("а не Admin");
+        await guide
+          .getByRole("searchbox", { name: "Поиск по справке" })
+          .fill("несуществующий_раздел_123");
+        await expect(catalog).toContainText("Ничего не найдено");
+        await catalog.getByRole("button", { name: "Сбросить поиск" }).tap();
+        await catalog.getByText("Рабочие циклы", { exact: true }).tap();
+        await catalog.getByRole("button", { name: "От брейншторма до проекта", exact: true }).tap();
+        await expect(guide.locator(".help-content ol li")).toHaveCount(7);
+        await page.keyboard.press("Escape");
         for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"])
           for (const [layout, viewport] of [
             ["phone", { width: 390, height: 844 }],
@@ -100,7 +154,17 @@ try {
               .tap();
             await expect(page.getByRole("heading", { name: "Файлы и просмотр" })).toBeVisible();
             await page.getByRole("button", { name: "Клавиши", exact: true }).tap();
-            await expect(page.getByText("Ctrl / ⌘ + Enter", { exact: true })).toBeVisible();
+            await expect(page.locator(".help-content")).toContainText("Ctrl / ⌘ + Enter");
+            await guide.getByRole("button", { name: "Оглавление справки" }).tap();
+            await expect(guide.getByRole("searchbox")).not.toBeFocused();
+            await page.screenshot({
+              path: `.local/qa-help/${engine}-${theme}-${layout}-index.png`,
+            });
+            await guide
+              .getByRole("searchbox", { name: "Поиск по справке" })
+              .fill("От задачи до готового изменения");
+            await catalog.getByRole("button", { name: /От задачи до готового изменения/ }).tap();
+            await expect(guide.locator(".help-content ol li")).toHaveCount(7);
             const bounds = await page
               .getByRole("dialog", { name: "Справка и клавиши" })
               .boundingBox();

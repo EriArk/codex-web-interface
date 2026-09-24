@@ -1,5 +1,15 @@
 # AGENTS.md
 
+## Owner-requested complete in-app help (2026-09-24)
+
+- Settings' question-mark button opens the full guide with categories/subcategories,
+  searchable detailed articles, explanations and end-to-end work examples.
+- Keep help aligned with implemented behavior when changing user-facing workflows.
+  Distinguish working files/copies, local Git/GitHub, private/shared material and
+  uncertain/completed operations. Do not document planned features as available.
+- Preserve contextual entry points, themes, phone navigation and the parent draft.
+
+
 ## Owner-requested viewer scope (2026-09-24)
 
 - PowerPoint/presentation viewers are not wanted. The archive/Office pass covers ZIP, Word DOCX and Excel XLSX; keep other originals downloadable.

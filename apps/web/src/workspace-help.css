@@ -1,9 +1,9 @@
 :root dialog.workspace-window.workspace-help,
 :root[data-theme] dialog.workspace-window.workspace-help[open] {
   box-sizing: border-box;
-  width: min(660px, calc(100vw - 24px));
+  width: min(1100px, calc(100vw - 24px));
   max-width: none;
-  height: min(660px, calc(var(--app-height, 100dvh) - 24px));
+  height: min(860px, calc(var(--app-height, 100dvh) - 24px));
   max-height: none;
   top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
   bottom: auto;
@@ -43,24 +43,6 @@
   flex: none;
   padding: 0;
 }
-.help-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.help-tabs button {
-  min-height: 44px;
-  background: var(--window-key);
-  color: var(--window-key-ink);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--window-key-shadow);
-}
-.help-tabs button[aria-pressed="true"] {
-  background: var(--window-pressed);
-  box-shadow: var(--window-pressed-shadow);
-}
 .help-content {
   flex: 1;
   min-height: 0;
@@ -73,46 +55,197 @@
   border-radius: var(--radius-sm);
   line-height: 1.5;
 }
-.help-topic {
-  display: grid;
-  gap: 6px;
-}
-.help-topic select {
-  width: 100%;
-  min-height: 44px;
-  padding: 8px;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  font: inherit;
-}
-.help-keys {
-  margin: 16px 0;
-}
-.help-keys > div {
-  display: grid;
-  grid-template-columns: minmax(110px, 2fr) minmax(0, 3fr);
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-.help-keys dd {
-  margin: 0;
-}
-.help-keys kbd {
-  font: inherit;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
 .help-heading-actions {
   display: flex;
   gap: 4px;
   align-items: center;
 }
-@media (max-width: 500px) {
-  .help-keys > div {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 5px;
+.help-heading {
+  flex: none;
+}
+.help-toolbar {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  padding-bottom: 8px;
+  flex: none;
+}
+.workspace-help .help-toolbar button,
+.workspace-help .help-related button,
+.workspace-help .help-index button {
+  min-height: 44px;
+  margin: 0;
+}
+.help-search {
+  display: block;
+  min-width: 0;
+}
+.help-search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 8px 12px;
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.help-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.85fr) minmax(0, 2fr);
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.help-index {
+  overflow: auto;
+  min-height: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  overscroll-behavior: contain;
+}
+.help-index summary {
+  cursor: pointer;
+  padding: 12px 6px;
+  min-height: 44px;
+  box-sizing: border-box;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.help-index details {
+  border-bottom: 1px solid var(--line);
+}
+.help-index section h3 {
+  font-size: 0.85em;
+  color: var(--muted);
+  margin: 12px 8px 4px;
+}
+.workspace-help .help-entry {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+  font: inherit;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.workspace-help .help-entry[aria-current="page"] {
+  background: var(--window-pressed);
+  color: var(--window-key-ink);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.help-entry small,
+.help-breadcrumb {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.help-entry span {
+  font-size: 0.9em;
+}
+.help-match-count {
+  margin: 8px;
+}
+.help-content {
+  min-width: 0;
+  padding: clamp(12px, 2vw, 24px);
+}
+.help-content article {
+  max-width: 76ch;
+  margin: 0 auto;
+  overflow-wrap: anywhere;
+}
+.help-content h2 {
+  font-size: 1.4em;
+  line-height: 1.25;
+  margin: 12px 0;
+}
+.help-content h3 {
+  margin: 24px 0 8px;
+  line-height: 1.35;
+  scroll-margin-top: 12px;
+}
+.help-content h2:focus,
+.help-content h3:focus {
+  outline: none;
+}
+.help-content p {
+  margin: 10px 0;
+}
+.help-content li {
+  margin: 10px 0;
+  padding-left: 4px;
+}
+.help-content ol,
+.help-content ul {
+  padding-left: 24px;
+}
+.help-lead {
+  font-size: 1.05em;
+}
+.help-contents {
+  display: grid;
+  gap: 0;
+  border-block: 1px solid var(--line);
+  margin: 20px 0;
+}
+.workspace-help .help-contents button {
+  text-align: left;
+  min-height: 44px;
+  padding: 8px 0;
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+  box-shadow: none;
+  font: inherit;
+  white-space: normal;
+}
+.help-related {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+.workspace-help .help-related button {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.workspace-help .help-back {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+}
+@media (max-width: 799px) {
+  .help-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .help-search {
+    grid-column: 1 / -1;
+  }
+  .help-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .help-index,
+  .help-content {
+    flex: 1;
+  }
+  .workspace-help[data-index="true"] .help-content {
+    display: none;
+  }
+  .workspace-help[data-index="false"] .help-index {
+    display: none;
   }
 }

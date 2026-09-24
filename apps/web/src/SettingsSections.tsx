@@ -62,7 +62,7 @@ export function SettingsSections({
     previous.current = selected;
   }, [selected, open]);
   return (
-    <div className="settings-sections" data-detail={selected !== null}>
+    <div className="settings-sections" data-help-context="home" data-detail={selected !== null}>
       <div className="dialog-heading settings-heading">
         <button
           type="button"

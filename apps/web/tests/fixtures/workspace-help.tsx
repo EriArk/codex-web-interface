@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { composerShortcut } from "../../src/composerShortcut";
 import { FileViewerDialog } from "../../src/FileViewerDialog";
+import { SettingsSections } from "../../src/SettingsSections";
+import { useWorkspaceDialog } from "../../src/useWorkspaceDialog";
 import { HelpButton, WorkspaceHelp } from "../../src/WorkspaceHelp";
 import "../../src/styles.css";
 import "../../src/themes.css";
@@ -10,14 +12,40 @@ import "../../src/materials.css";
 import "../../src/polymer.css";
 import "../../src/accent-colors.css";
 
+function SettingsFixture({ onClose }: { onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useWorkspaceDialog(dialog);
+  const section = () => <p>Настройки сохраняются под справкой.</p>;
+  return (
+    <dialog ref={dialog} aria-label="Настройки приложения">
+      <SettingsSections
+        open
+        onClose={onClose}
+        sections={{
+          appearance: section,
+          sound: section,
+          connections: section,
+          library: section,
+          maintenance: section,
+          access: section,
+        }}
+      />
+    </dialog>
+  );
+}
 function Fixture() {
   const [file, setFile] = useState(false),
+    [settings, setSettings] = useState(false),
     [sent, setSent] = useState(0),
     [blocked, setBlocked] = useState(false);
   return (
     <main style={{ padding: 16 }}>
       <WorkspaceHelp topic="gpt" />
       <HelpButton />
+      <button type="button" onClick={() => setSettings(true)}>
+        Настройки
+      </button>
+      {settings && <SettingsFixture onClose={() => setSettings(false)} />}
       <button type="button" onClick={() => setFile(true)}>
         Файл
       </button>
