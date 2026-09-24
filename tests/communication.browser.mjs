@@ -13,6 +13,7 @@ async function client(headers) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
+    reducedMotion: "reduce",
     serviceWorkers: "allow",
   });
   contexts.push(context);
