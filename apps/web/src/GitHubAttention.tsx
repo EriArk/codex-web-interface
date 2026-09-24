@@ -1,13 +1,19 @@
 import type { CollaborationSpace, GitHubAttentionKind, SpaceActivityPage } from "@codex-web/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type ActivitySourceTarget, ActivitySourceWindow } from "./ActivitySourceWindow";
-import { api, messageOf } from "./api";
+import { mergeActivityPage } from "./activityCache";
+import { ApiError, api, messageOf } from "./api";
+import { readAttentionView, saveAttentionView } from "./attentionCache";
+import { Icon } from "./icons";
 
 const labels: Record<GitHubAttentionKind, string> = {
   assigned: "Назначено тебе",
   review: "Запрошено твоё ревью",
   checks: "Проверки твоего PR требуют внимания",
+  "review-changes": "Запрошены изменения в твоём PR",
 };
+const readKey = (page: SpaceActivityPage, source: string, version: string) =>
+  JSON.stringify([page.projectId, page.repositoryId, page.viewerId, source, version]);
 
 /** On-demand projection over canonical GitHub reads. Acknowledgement is local only. */
 export function GitHubAttention({
@@ -17,7 +23,6 @@ export function GitHubAttention({
   spaces: CollaborationSpace[];
   onCount: (count: number, busy: boolean) => void;
 }) {
-  const [pages, setPages] = useState<Record<string, SpaceActivityPage>>({});
   const [busy, setBusy] = useState(true),
     [error, setError] = useState("");
   const [reading, setReading] = useState("");
@@ -34,8 +39,51 @@ export function GitHubAttention({
         .map((p) => [p.id, p.personalProjectId, p.repository]),
     ]),
   );
+  const [initial] = useState(() => readAttentionView(scope));
+  const initialScope = useRef(scope);
+  const scrollPosition = useRef(initial.scroll);
+  const [pages, setPages] = useState(initial.pages);
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+  const [refresh, setRefresh] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const generation = useRef(0);
+  const acknowledged = useRef(new Set<string>());
+  useEffect(() => {
+    saveAttentionView(scope, {
+      pages,
+      scroll: scrollPosition.current,
+    });
+  }, [scope, pages]);
+  useEffect(() => {
+    const el = root.current?.closest(".space-dialog-body");
+    if (!el) return;
+    const frame = requestAnimationFrame(() => {
+      el.scrollTop = initialScope.current === scope ? initial.scroll : 0;
+      scrollPosition.current = el.scrollTop;
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Parent layout may already change before passive unmount cleanup. Retain
+    // the last observed position rather than reading a now-collapsed scroller.
+    const save = () =>
+      saveAttentionView(scope, { pages: pagesRef.current, scroll: scrollPosition.current });
+    const schedule = () => {
+      scrollPosition.current = el.scrollTop;
+      clearTimeout(timer);
+      timer = setTimeout(save, 200);
+    };
+    el.addEventListener("scroll", schedule, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+      el.removeEventListener("scroll", schedule);
+      save();
+    };
+  }, [scope, initial]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Refresh is an explicit finite user-triggered read.
   useEffect(() => {
     let live = true;
+    const epoch = ++generation.current;
     const scopes = JSON.parse(scope) as [string, number, [string, string, string][]][];
     const allowed = new Set(
       scopes.flatMap(([id, revision, projects]) =>
@@ -51,14 +99,44 @@ export function GitHubAttention({
           if (!live) return;
           const key = JSON.stringify([id, revision, projectId, copy, repository]);
           try {
+            const old = pagesRef.current[key];
             const page = await api<SpaceActivityPage>(`/team/spaces/${id}/activity`, {
               method: "POST",
-              body: { projectId },
+              body: {
+                projectId,
+                ...(old?.versions
+                  ? { known: { repositoryId: old.repositoryId, versions: old.versions } }
+                  : {}),
+              },
             });
-            if (live) setPages((old) => ({ ...old, [key]: page }));
+            if (live && generation.current === epoch)
+              setPages((current) => {
+                const merged = mergeActivityPage(current[key], page);
+                return {
+                  ...current,
+                  [key]: {
+                    ...merged,
+                    items: merged.items.map((source) => ({
+                      ...source,
+                      attention: source.attention?.map((n) =>
+                        acknowledged.current.has(readKey(merged, source.key, n.version))
+                          ? { ...n, read: true }
+                          : n,
+                      ),
+                    })),
+                  },
+                };
+              });
           } catch (e) {
             if (live) {
-              setPages((old) => Object.fromEntries(Object.entries(old).filter(([k]) => k !== key)));
+              if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
+                setPages((old) =>
+                  Object.fromEntries(Object.entries(old).filter(([k]) => k !== key)),
+                );
+                setTarget((old) =>
+                  old?.space.id === id && old.source.projectId === projectId ? null : old,
+                );
+              }
               setError(messageOf(e));
             }
           }
@@ -68,7 +146,7 @@ export function GitHubAttention({
     return () => {
       live = false;
     };
-  }, [scope]);
+  }, [scope, refresh]);
   const notices = spaces
     .flatMap((space) =>
       space.projects.flatMap((project) => {
@@ -110,7 +188,19 @@ export function GitHubAttention({
     (s) => s.id === target?.space.id && s.revision === target.space.revision,
   );
   return (
-    <>
+    <div ref={root} className="github-attention">
+      <div className="activity-attention-heading">
+        <strong>GitHub</strong>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Обновить события GitHub"
+          disabled={busy}
+          onClick={() => setRefresh((v) => v + 1)}
+        >
+          <Icon name="refresh" />
+        </button>
+      </div>
       {notices.map((n) => (
         <section className="space-card" key={n.key}>
           <strong>
@@ -152,6 +242,10 @@ export function GitHubAttention({
                   },
                 })
                   .then(() => {
+                    for (const notice of n.notices)
+                      acknowledged.current.add(readKey(n.page, n.source.key, notice.version));
+                    while (acknowledged.current.size > 2000)
+                      acknowledged.current.delete(acknowledged.current.values().next().value!);
                     setPages((old) => {
                       const key = JSON.stringify([
                         n.space.id,
@@ -201,6 +295,6 @@ export function GitHubAttention({
           onClose={() => setTarget(null)}
         />
       )}
-    </>
+    </div>
   );
 }

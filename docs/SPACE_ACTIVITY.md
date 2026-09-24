@@ -214,3 +214,45 @@ through Hub → SSH → Scheduled Task; matching release hashes are required.
 Physical-device acceptance remains pending. Private Work Review publication and
 an exhaustive GitHub event history remain separate scope; #218/#205/#197 are not
 claimed fully closed by this release.
+
+## Remaining-coverage pass — 24 September 2026
+
+The five most recently updated PRs now include public review decisions, including
+closed PRs. The worker reads at most 100 chronological review records per PR and
+rechecks the PR head/state afterwards. Only the latest submitted decision per
+numeric reviewer on that exact head is shown; comments and pending drafts do not
+erase a decision. Dismissal supersedes it. A full first page or an unavailable
+read never implies approval: the full history remains in the integrated PR viewer.
+Review bodies are not copied into the Activity index. This follows the
+[GitHub review contract](https://docs.github.com/en/rest/pulls/reviews).
+
+Activity shows a compact expandable review summary with author and exact SHA;
+expansion is retained with the source card. Only a request for changes on an open
+PR creates directed attention for its numeric author/assignee, excluding the
+reviewer's own decision. Approval and dismissal remain quiet. Read receipts bind
+the repository, viewer, source, head and decision IDs; a new decision can require
+attention again, while an unrelated comment cannot. Older unobserved sources lose
+their current review/check claims. This is observed bounded GitHub state, not a
+complete historical event stream or a mandatory review workflow. Private personal
+Work Reviews are still not implicitly published.
+
+Notifications retain one account-local view for 30 minutes, bounded to 512 KiB.
+Reopening restores loaded GitHub cards and scroll, then refreshes serially using
+the existing source-version deltas. Transient errors preserve the feed; access
+denial removes the affected cached project. Space revision, checkout/repository
+binding and account changes invalidate the scope. There is a compact explicit
+refresh action and no closed-window poller. Acknowledgement racing a refresh does
+not resurrect the exact acknowledged version.
+
+The existing atomic Space journal also records renames and distinguishes voluntary
+departure from participant removal. These ordinary events do not ring the bell.
+
+Verification: 49 focused worker, Activity and collaboration tests pass. Chromium
+and WebKit cover review display/internal PR opening, actual delta merge, cached
+reopening, transient failure, acknowledgement, scroll restoration and denied-access
+cache removal. Phone/keyboard/tablet/wide screenshots across all four themes are
+inspected; physical-device acceptance remains pending. The installed Windows
+GitHub probe was replaced at idle with a verified backup and matching SHA-256;
+actual Hub → SSH → Scheduled Task read-only acceptance returned 88 sources and
+five exact-head review observations. No collaborator messages or GitHub mutations
+were sent as verification.

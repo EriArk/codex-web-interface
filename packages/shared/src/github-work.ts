@@ -233,9 +233,19 @@ export type GitHubWorkObservation = GitHubRepositoryAccess & {
     invitationId?: number;
   }[];
 };
-export type GitHubAttentionKind = "assigned" | "review" | "checks";
+export type GitHubAttentionKind = "assigned" | "review" | "checks" | "review-changes";
 export interface GitHubActivitySource {
   attention?: { kind: GitHubAttentionKind; version: string; read?: boolean }[];
+  reviews?: {
+    sha: string;
+    complete: boolean;
+    decisions: {
+      id: number;
+      author: GitHubIdentity;
+      state: "APPROVED" | "CHANGES_REQUESTED" | "DISMISSED";
+      at: string;
+    }[];
+  };
   checks?: { sha: string; state: "success" | "pending" | "failure"; total: number; failed: number };
   kind: "commit" | "issue" | "pr";
   key: string;

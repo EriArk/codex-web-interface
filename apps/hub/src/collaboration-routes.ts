@@ -50,7 +50,7 @@ export function registerCollaborationSpaces(
   });
   app.post("/api/team/spaces/:id/activity/github-read", async (req) => {
     const body = socialSource
-      .extend({ versions: z.array(z.string().min(1).max(180)).min(1).max(3) })
+      .extend({ versions: z.array(z.string().min(1).max(180)).min(1).max(4) })
       .strict()
       .parse(req.body);
     return activity.readAttention(

@@ -74,3 +74,10 @@ through 8, then inner scrolling. A hidden measuring twin preserves the live inpu
 selection and surrounding scroll. Controlled draft restores, hidden-to-visible
 windows, responsive width and loaded fonts trigger remeasurement. CodeMirror is a
 full document editor and keeps its workspace-sized viewport.
+
+Activity/Notifications: review details live in a quiet expandable section of the
+existing PR card, with a visible chevron and a 44px summary target. Use the same
+source action to inspect the PR internally. Notifications have a compact GitHub
+heading/refresh key and equal-width Open/Read actions. Preserve cached cards and
+the last observed scroll position during refresh and parent-window transitions;
+do not measure a scroller after its parent layout has already collapsed.

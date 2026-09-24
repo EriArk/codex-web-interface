@@ -478,6 +478,48 @@ export function SpaceActivity({
                       · <code>{first.checks.sha.slice(0, 7)}</code>
                     </p>
                   )}
+                  {first.reviews &&
+                    (!first.reviews.complete || first.reviews.decisions.length > 0) && (
+                      <div className="activity-reviews">
+                        {!first.reviews.complete ? (
+                          <small>Ревью: открой PR для полной истории</small>
+                        ) : (
+                          <details
+                            open={!!expanded[groupId]}
+                            onToggle={(e) => {
+                              const open = e.currentTarget.open;
+                              setExpanded((old) =>
+                                old[groupId] === open ? old : { ...old, [groupId]: open },
+                              );
+                            }}
+                          >
+                            <summary>
+                              <Icon name="chevron" size={14} />
+                              Ревью ·{" "}
+                              {first.reviews.decisions.filter(
+                                (v) => v.state === "CHANGES_REQUESTED",
+                              ).length
+                                ? "нужны изменения"
+                                : first.reviews.decisions.some((v) => v.state === "APPROVED")
+                                  ? "есть одобрение"
+                                  : "отозвано"}
+                            </summary>
+                            {first.reviews.decisions.map((review) => (
+                              <p key={review.id}>
+                                <strong>@{review.author.login}</strong> ·{" "}
+                                {review.state === "APPROVED"
+                                  ? "Одобрено"
+                                  : review.state === "CHANGES_REQUESTED"
+                                    ? "Нужны изменения"
+                                    : "Ревью отозвано"}
+                                {" · "}
+                                <code>{first.reviews!.sha.slice(0, 7)}</code>
+                              </p>
+                            ))}
+                          </details>
+                        )}
+                      </div>
+                    )}
                   <div className="activity-primary-actions">
                     {batch.length > 1 ? (
                       <details

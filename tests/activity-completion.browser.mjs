@@ -74,7 +74,12 @@ try {
   ];
   let release,
     hold = false,
-    read = false;
+    read = false,
+    githubHold = false,
+    releaseGithub,
+    githubFailure = 0,
+    activityCalls = [],
+    extraNotices = 0;
   const source = {
     kind: "pr",
     key: "pr:12",
@@ -88,6 +93,18 @@ try {
     url: "https://github.com/example/project/pull/12",
     checks: { sha: "a".repeat(40), state: "failure", total: 3, failed: 1 },
     attention: [{ kind: "checks", version: "run1" }],
+    reviews: {
+      sha: "a".repeat(40),
+      complete: true,
+      decisions: [
+        {
+          id: 52,
+          author: { id: 8, login: "ReviewerWithLongName" },
+          state: "CHANGES_REQUESTED",
+          at: new Date().toISOString(),
+        },
+      ],
+    },
   };
   await context.route("http://activity.test/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -107,7 +124,7 @@ try {
       return route.fulfill({ json: { items: local } });
     }
     if (path.endsWith("/activity/github-read")) {
-      assert.deepEqual(route.request().postDataJSON().versions, ["assigned", "run1"]);
+      assert.deepEqual(route.request().postDataJSON().versions, ["assigned", "run1", "review52"]);
       read = true;
       return route.fulfill({ json: { read: true } });
     }
@@ -137,7 +154,29 @@ try {
           },
         },
       });
-    if (path.endsWith("/activity"))
+    if (path.endsWith("/activity")) {
+      activityCalls.push(route.request().postDataJSON());
+      if (githubHold)
+        await new Promise((r) => {
+          releaseGithub = r;
+        });
+      if (githubFailure)
+        return route.fulfill({
+          status: githubFailure,
+          json: { error: { code: "ACTIVITY_UNAVAILABLE", message: "fixture failure" } },
+        });
+      const items = Array.from({ length: extraNotices + 1 }, (_, i) => ({
+        ...source,
+        key: "pr:" + (12 + i),
+        number: 12 + i,
+        attention: [
+          { kind: "assigned", version: "assigned", read },
+          { kind: "checks", version: "run1", read },
+          { kind: "review-changes", version: "review52", read },
+        ],
+      }));
+      const version = (read ? "b" : "a").repeat(64);
+      const known = route.request().postDataJSON().known;
       return route.fulfill({
         json: {
           projectId: "project",
@@ -145,17 +184,14 @@ try {
           repository: "example/project",
           viewerId: 7,
           checkedAt: Date.now(),
-          items: [
-            {
-              ...source,
-              attention: [
-                { kind: "assigned", version: "assigned", read },
-                { kind: "checks", version: "run1", read },
-              ],
-            },
-          ],
+          versions: Object.fromEntries(items.map((v) => [v.key, version])),
+          keys: items.map((v) => v.key),
+          delta: !!known,
+          items: known ? items.filter((v) => known.versions[v.key] !== version) : items,
         },
       });
+    }
+
     if (path === "/api/team/result-shares/11111111-1111-4111-8111-111111111111")
       return route.fulfill({
         json: {
@@ -174,7 +210,7 @@ try {
     return route.fulfill({ json: {} });
   });
   await page.goto("http://activity.test/");
-  const win = page.locator("dialog.activity-dialog"),
+  const win = page.locator("dialog.space-dialog").first(),
     feed = win.locator(".activity-feed");
   await expect(
     win.getByRole("heading", { name: "Опубликован результат", exact: true }),
@@ -183,6 +219,8 @@ try {
   await expect(page.locator(".file-viewer-dialog")).toContainText("Точный опубликованный материал");
   await page.getByRole("button", { name: "Закрыть просмотр", exact: true }).click();
   await expect(win.getByText("Проверки: ошибки", { exact: false })).toBeVisible();
+  await win.locator(".activity-reviews summary").click();
+  await expect(win.locator(".activity-reviews p")).toContainText("Нужны изменения");
   await win.getByRole("button", { name: "Показать ещё", exact: true }).click();
   await feed.evaluate((e) => {
     e.scrollTop = 500;
@@ -239,6 +277,27 @@ try {
     });
   }
   await expect(win.locator(".space-card")).toHaveCount(1);
+  await expect(win.getByText("Запрошены изменения в твоём PR", { exact: false })).toBeVisible();
+  await win.getByRole("button", { name: "Лента", exact: true }).click();
+  githubHold = true;
+  await win.getByRole("button", { name: "Уведомления", exact: true }).click();
+  await expect.poll(() => !!releaseGithub).toBe(true);
+  await expect(win.locator(".space-card")).toHaveCount(1);
+  assert(activityCalls.at(-1).known, "cached notifications request deltas");
+  await win.locator(".space-card").evaluate((e) => {
+    window.savedNotice = e;
+  });
+  releaseGithub();
+  githubHold = false;
+  await expect(win.getByRole("button", { name: "Обновить события GitHub" })).toBeEnabled();
+  assert(await win.locator(".space-card").evaluate((e) => e === window.savedNotice));
+  githubFailure = 503;
+  await win.getByRole("button", { name: "Обновить события GitHub" }).click();
+  await expect(win.getByText("fixture failure", { exact: true })).toBeVisible();
+  await expect(win.locator(".space-card")).toHaveCount(1);
+  githubFailure = 0;
+  await win.getByRole("button", { name: "Обновить события GitHub" }).click();
+  await expect(win.getByRole("button", { name: "Обновить события GitHub" })).toBeEnabled();
   await win.getByRole("button", { name: "Открыть PR", exact: true }).click();
   await expect(page.getByText("Exact internal PR", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Закрыть событие", exact: true }).click();
@@ -246,12 +305,55 @@ try {
   await expect(win.locator(".space-card")).toHaveCount(0);
   assert(read);
   await win.getByRole("button", { name: "Лента", exact: true }).click();
+  await win.getByRole("button", { name: "Уведомления", exact: true }).click();
+  await expect(win.getByRole("button", { name: "Обновить события GitHub" })).toBeEnabled();
+  await expect(win.locator(".space-card")).toHaveCount(0);
+  read = false;
+  await win.getByRole("button", { name: "Обновить события GitHub" }).click();
+  await expect(win.locator(".space-card")).toHaveCount(1);
+  githubFailure = 404;
+  await win.getByRole("button", { name: "Обновить события GitHub" }).click();
+  await expect(win.locator(".space-card")).toHaveCount(0);
+  githubFailure = 0;
+  await win.getByRole("button", { name: "Лента", exact: true }).click();
   await expect(
     win.getByRole("heading", { name: "Опубликован результат", exact: true }),
   ).toBeVisible();
   local = local.filter((v) => v.kind !== "result");
   await win.getByRole("button", { name: "Обновить активность", exact: true }).click();
   await expect(win.getByRole("button", { name: "Открыть результат", exact: true })).toHaveCount(0);
+  extraNotices = 20;
+  await win.getByRole("button", { name: "Уведомления", exact: true }).click();
+  await expect(win.locator(".space-card")).toHaveCount(21);
+  const noticeScroller = win.locator(".space-dialog-body");
+  await noticeScroller.evaluate((e) => {
+    e.scrollTop = 650;
+  });
+  const noticeTop = await noticeScroller.evaluate((e) => e.scrollTop);
+  assert(noticeTop > 100);
+  await win.getByRole("button", { name: "Лента", exact: true }).click();
+  githubHold = true;
+  releaseGithub = null;
+  await win.getByRole("button", { name: "Уведомления", exact: true }).click();
+  await expect.poll(() => !!releaseGithub).toBe(true);
+  await expect(win.locator(".space-card")).toHaveCount(21);
+  await expect.poll(() => noticeScroller.evaluate((e) => e.scrollTop)).toBe(noticeTop);
+  releaseGithub();
+  githubHold = false;
+  await expect(win.getByRole("button", { name: "Обновить события GitHub" })).toBeEnabled();
+  assert.equal(await noticeScroller.evaluate((e) => e.scrollTop), noticeTop);
+  githubFailure = 403;
+  await win.getByRole("button", { name: "Обновить события GitHub" }).click();
+  await expect(win.locator(".space-card")).toHaveCount(0);
+  await win.getByRole("button", { name: "Лента", exact: true }).click();
+  githubHold = true;
+  releaseGithub = null;
+  await win.getByRole("button", { name: "Уведомления", exact: true }).click();
+  await expect.poll(() => !!releaseGithub).toBe(true);
+  await expect(win.locator(".space-card")).toHaveCount(0);
+  releaseGithub();
+  githubHold = false;
+  await expect(win.getByRole("button", { name: "Обновить события GitHub" })).toBeEnabled();
   assert.deepEqual(errors, []);
   console.log(engine + " activity completion browser passed");
 } finally {

@@ -411,7 +411,7 @@ export class SpaceActivity {
       page.repositoryId !== repositoryId ||
       !page.viewerId ||
       !versions.length ||
-      versions.length > 3 ||
+      versions.length > 4 ||
       !versions.every((v) =>
         page.items.some((i) => i.key === source && i.attention?.some((n) => n.version === v)),
       )
@@ -490,7 +490,7 @@ export class SpaceActivity {
     const items = new Map<string, GitHubActivitySource>(
       (previous?.items ?? []).map((item) => [
         item.key,
-        { ...item, attention: [], checks: undefined },
+        { ...item, attention: [], checks: undefined, reviews: undefined },
       ]),
     );
     for (const item of value.activity) items.set(item.key, item);

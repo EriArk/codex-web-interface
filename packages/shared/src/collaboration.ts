@@ -93,6 +93,8 @@ export type SpaceJournalEvent = {
     | "created"
     | "joined"
     | "left"
+    | "removed"
+    | "renamed"
     | "project-added"
     | "project-removed"
     | "access-changed"

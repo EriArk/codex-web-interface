@@ -187,7 +187,7 @@ if(parts[3]==='issues'&&parts.length===4){if(method==='POST'){const value={...s.
 if(parts[3]==='issues'&&parts[5]==='comments'){if(method==='POST'){const value={id:3000000000+s.comments.length,body:body.body,user:s.identity,created_at:'2026-09-13T01:00:00Z'};s.comments.push(value);changed(value);}else answer(200,s.comments);return;}
 if(parts[3]==='issues'&&parts.length===5){const value=s.issues.find(x=>x.number===n)||s.prs.find(x=>x.number===n);if(!value){answer(404,{});return;}if(method==='PATCH'){value.state=body.state;changed(value);}else answer(200,value);return;}
 if(parts[3]==='pulls'&&parts.length===5){answer(200,s.prs.find(x=>x.number===n));return;}
-if(parts[3]==='pulls'&&parts[5]==='reviews'){answer(200,[{user:{login:'Friend'},state:'COMMENTED',commit_id:'a'.repeat(40)}]);return;}
+if(parts[3]==='pulls'&&parts[5]==='reviews'){if(s.reviewMovesHead){s.prs[0].head.sha='b'.repeat(40);persist();}answer(s.reviewsUnavailable?503:200,s.reviews||[{user:{login:'Friend'},state:'COMMENTED',commit_id:'a'.repeat(40)}]);return;}
 if(parts[3]==='pulls'&&parts[5]==='requested_reviewers'){s.prs[0].requested_reviewers=body.reviewers.map(login=>({login}));changed(s.prs[0]);return;}
 if(parts[3]==='commits'){answer(200,parts[5]==='check-runs'?{total_count:1,check_runs:[{id:s.checkRun||9,name:'Local verification',head_sha:parts[4],conclusion:s.checkState||'success'}]}:{sha:parts[4],total_count:0,statuses:[]});return;}
 if(parts[3]==='collaborators'&&parts.length===4){answer(200,s.collaborators);return;}
@@ -1205,4 +1205,82 @@ test("lost immutable acknowledgement is confirmed once by hash before the next p
     (await f.calls()).filter((c) => c.method !== "GET").map((c) => c.endpoint),
     ["repos/Owner/Project/git/trees", "repos/Owner/Project/git/commits", "graphql"],
   );
+});
+
+test("activity reviews preserve exact head and latest numeric reviewer decision without publishing bodies", async (t) => {
+  const f = await fixture(t);
+  const review = (id, state, user = 12, sha = "a".repeat(40)) => ({
+    id,
+    state,
+    user: { id: user, login: "Friend" },
+    commit_id: sha,
+    submitted_at: "2026-09-24T10:00:00Z",
+    body: "Never index review body",
+  });
+  const read = async () =>
+    (await f.probe({ op: "observe", query: { kind: "activity" } })).activity.find(
+      (v) => v.kind === "pr",
+    );
+  await f.save({ reviews: [review(1, "CHANGES_REQUESTED"), review(2, "COMMENTED")] });
+  let pr = await read();
+  assert.equal(pr.reviews.decisions[0].id, 1);
+  const version = pr.attention.find((v) => v.kind === "review-changes").version;
+  assert(!JSON.stringify(pr).includes("Never index review body"));
+  await f.save({ reviews: [review(1, "CHANGES_REQUESTED"), review(3, "COMMENTED")] });
+  assert.equal((await read()).attention.find((v) => v.kind === "review-changes").version, version);
+  for (const state of ["APPROVED", "DISMISSED"]) {
+    await f.save({ reviews: [review(1, "CHANGES_REQUESTED"), review(4, state)] });
+    pr = await read();
+    assert.equal(pr.reviews.decisions[0].state, state);
+    assert(!pr.attention.some((v) => v.kind === "review-changes"));
+  }
+  await f.save({ reviews: [review(5, "CHANGES_REQUESTED")] });
+  assert.notEqual(
+    (await read()).attention.find((v) => v.kind === "review-changes").version,
+    version,
+  );
+  await f.save({ identity: { id: 999, login: "Owner" } });
+  assert(!(await read()).attention.some((v) => v.kind === "review-changes"));
+  await f.save({
+    identity: { id: 11, login: "Owner" },
+    reviews: [review(6, "CHANGES_REQUESTED", 11)],
+  });
+  assert(!(await read()).attention.some((v) => v.kind === "review-changes"));
+  await f.save({ reviews: [review(7, "CHANGES_REQUESTED", 12, "b".repeat(40))] });
+  assert.deepEqual((await read()).reviews.decisions, []);
+  await f.save({
+    reviews: Array.from({ length: 100 }, (_, i) => review(i + 1, "CHANGES_REQUESTED")),
+  });
+  pr = await read();
+  assert.equal(pr.reviews.complete, false);
+  assert.deepEqual(pr.reviews.decisions, []);
+  assert(!pr.attention.some((v) => v.kind === "review-changes"));
+  await f.save({ reviewsUnavailable: true });
+  pr = await read();
+  assert.equal(pr.reviews, undefined);
+  assert(pr.checks, "failed review read does not remove valid CI evidence");
+  await f.save({
+    reviewsUnavailable: false,
+    reviewMovesHead: true,
+    reviews: [review(8, "CHANGES_REQUESTED")],
+  });
+  pr = await read();
+  assert.equal(pr.reviews, undefined);
+  assert.equal(pr.checks, undefined);
+  assert((await f.calls()).every((v) => v.method === "GET"));
+});
+
+test("recent closed PR reviews do not crowd out the existing open-PR CI window", async (t) => {
+  const f = await fixture(t);
+  const prs = Array.from({ length: 7 }, (_, i) => ({
+    ...f.issue(i + 2, "pr"),
+    state: i < 6 ? "closed" : "open",
+  }));
+  await f.save({ prs, checkState: "failure", reviews: [] });
+  const page = await f.probe({ op: "observe", query: { kind: "activity" } });
+  const open = page.activity.find((v) => v.key === "pr:8");
+  assert.equal(open.checks.state, "failure");
+  assert(open.attention.some((v) => v.kind === "checks"));
+  assert.equal(open.reviews, undefined);
+  assert.equal(page.activity.filter((v) => v.reviews).length, 5);
 });

@@ -42,7 +42,11 @@ function App() {
   useWorkspaceDialog(dialog);
   const [notices, setNotices] = useState(false);
   return (
-    <dialog ref={dialog} className="space-dialog activity-dialog workspace-window" tabIndex={-1}>
+    <dialog
+      ref={dialog}
+      className={`space-dialog workspace-window${notices ? "" : " activity-dialog"}`}
+      tabIndex={-1}
+    >
       <header className="panel-heading">
         <h2>{notices ? "Уведомления" : "Активность"}</h2>
         <button type="button" className="secondary" onClick={() => setNotices((v) => !v)}>
@@ -51,7 +55,7 @@ function App() {
       </header>
       <div className="space-dialog-body">
         {notices ? (
-          <div className="shared-scroll" style={{ overflow: "auto", padding: 16, width: "100%" }}>
+          <div>
             <GitHubAttention spaces={[space]} onCount={() => {}} />
           </div>
         ) : (

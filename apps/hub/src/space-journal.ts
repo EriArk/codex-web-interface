@@ -46,13 +46,17 @@ export class SpaceJournal {
         );
     };
     if (!previous) append("created", "Создано пространство");
+    if (previous && previous.title !== space.title)
+      append("renamed", `Пространство переименовано: ${space.title}`);
     for (const id of space.members.filter((id) => !previous?.members.includes(id)))
       if (previous)
         append("joined", `${this.spaces.team.registry.user(id).name} присоединился`, undefined, id);
     for (const id of previous?.members.filter((id) => !space.members.includes(id)) ?? [])
       append(
-        "left",
-        `${this.spaces.team.registry.user(id).name} покинул пространство`,
+        actor === id ? "left" : "removed",
+        actor === id
+          ? `${this.spaces.team.registry.user(id).name} покинул пространство`
+          : `${this.spaces.team.registry.user(id).name}: участие прекращено`,
         undefined,
         id,
       );

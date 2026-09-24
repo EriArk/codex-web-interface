@@ -357,3 +357,33 @@
   font-size: 13px;
   color: var(--muted);
 }
+.activity-attention-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.github-attention {
+  min-width: 0;
+}
+.activity-reviews {
+  display: grid;
+  gap: 4px;
+  margin-block: 8px;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+.activity-reviews p {
+  margin: 0;
+}
+.activity-reviews summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.activity-reviews details[open] > summary svg {
+  transform: rotate(90deg);
+}

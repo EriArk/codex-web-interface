@@ -458,3 +458,26 @@ test("GitHub attention read receipts bind viewer, repository, source and version
   await assert.rejects(unread(), { code: "ACTIVITY_UNAVAILABLE" });
   assert(calls.every((v) => v.op === "observe"));
 });
+
+test("space rename and participant removal are distinct atomic quiet events", async (t) => {
+  const f = await fixture(t),
+    s = f.spaces;
+  const { id } = s.create(f.owner, randomUUID(), f.input("space"), f.project("altar"));
+  s.answer(
+    f.friend,
+    id,
+    randomUUID(),
+    { revision: 1, accept: true, access: "collaborate" },
+    f.project("copy"),
+  );
+  const key = randomUUID(),
+    input = { revision: 2, title: "Renamed space" };
+  s.rename(f.owner, id, key, input);
+  s.rename(f.owner, id, key, input);
+  assert.equal(s.journal.list(f.friend, id).filter((v) => v.kind === "renamed").length, 1);
+  assert.equal(s.catalog(f.friend).spaces[0].accessAttention.length, 0);
+  s.removeMember(f.owner, id, randomUUID(), { revision: 3, userId: f.friend });
+  assert.equal(s.journal.list(f.owner, id).filter((v) => v.kind === "removed").length, 1);
+  assert.equal(s.journal.list(f.owner, id).filter((v) => v.kind === "left").length, 0);
+  assert.throws(() => s.journal.list(f.friend, id));
+});

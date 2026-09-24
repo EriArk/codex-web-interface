@@ -817,15 +817,80 @@ export async function githubWorkProbe(
           });
         }
       }
-      // Bounded public CI summary on the five newest open PR heads. Unknown is not success.
-      for (const source of activity
+      // Bounded public review/CI observations. No comment bodies or native/private work.
+      const reviewSources = activity.filter((v) => v.kind === "pr" && v.sha).slice(0, 5);
+      const checkSources = activity
         .filter((v) => v.kind === "pr" && v.state === "open" && v.sha)
-        .slice(0, 5)) {
+        .slice(0, 5);
+      for (const source of new Set([...reviewSources, ...checkSources])) {
         const sha = source.sha!;
         const observations = await Promise.allSettled([
-          must(`${prefix}/commits/${sha}/check-runs?per_page=50`),
-          must(`${prefix}/commits/${sha}/status?per_page=50`),
+          checkSources.includes(source)
+            ? must(`${prefix}/commits/${sha}/check-runs?per_page=50`)
+            : Promise.resolve(null),
+          checkSources.includes(source)
+            ? must(`${prefix}/commits/${sha}/status?per_page=50`)
+            : Promise.resolve(null),
+          reviewSources.includes(source)
+            ? must(`${prefix}/pulls/${source.number}/reviews?per_page=100`)
+            : Promise.resolve(null),
         ]);
+        // Do not attach decisions/checks to a head that moved during observation.
+        const current = await http(`${prefix}/pulls/${source.number}`);
+        if (
+          current.status !== 200 ||
+          current.value?.head?.sha !== sha ||
+          (current.value.merged_at ? "merged" : current.value.state) !== source.state
+        )
+          continue;
+        const reviews = observations[2]!.status === "fulfilled" ? observations[2]!.value : null;
+        if (Array.isArray(reviews)) {
+          // REST reviews are chronological. A full first page cannot establish latest decisions.
+          const complete = reviews.length < 100;
+          const latest = new Map<number, any>();
+          for (const review of reviews) {
+            if (
+              !Number.isSafeInteger(review.id) ||
+              review.id <= 0 ||
+              !Number.isSafeInteger(review.user?.id) ||
+              review.user.id <= 0 ||
+              typeof review.user.login !== "string" ||
+              !Number.isFinite(Date.parse(review.submitted_at)) ||
+              !["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(review.state)
+            )
+              continue;
+            // COMMENTED/PENDING never erase a submitted decision. A later decision on
+            // another head supersedes the old one, but is not evidence for this head.
+            latest.set(review.user.id, review);
+          }
+          const decisions = complete
+            ? [...latest.values()]
+                .filter((v) => v.commit_id === sha)
+                .map((v) => ({
+                  id: v.id,
+                  author: identity(v.user),
+                  state: v.state as "APPROVED" | "CHANGES_REQUESTED" | "DISMISSED",
+                  at: v.submitted_at as string,
+                }))
+            : [];
+          source.reviews = { sha, complete, decisions };
+          const changes = decisions.filter(
+            (v) => v.state === "CHANGES_REQUESTED" && v.author.id !== access.identity.id,
+          );
+          if (
+            complete &&
+            source.state === "open" &&
+            changes.length &&
+            (source.author?.id === access.identity.id ||
+              source.attention?.some((v) => v.kind === "assigned"))
+          )
+            source.attention!.push({
+              kind: "review-changes",
+              version:
+                `review-changes:${sha}:` +
+                hash(changes.map((v) => v.id).sort((a, b) => a - b)).slice(0, 32),
+            });
+        }
         const runs = observations[0]!.status === "fulfilled" ? observations[0]!.value : null;
         const combined = observations[1]!.status === "fulfilled" ? observations[1]!.value : null;
         if (

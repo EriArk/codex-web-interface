@@ -118,3 +118,18 @@ for exact behavior, boundaries and verification.
 
 Next proposed stage is **4: remaining Activity and Notifications coverage**,
 **Высокое (`high`)**, followed by **1 -> 5**. Wait for the owner's continuation.
+
+## Activity/Notifications continuation — 24 September
+
+Stage **4** now includes exact-head GitHub review decisions and directed requests
+for changes, quiet Space rename/removal events, and bounded account-local
+Notifications caching/deltas/scroll with transient-failure continuity. Verification
+and the observed-history boundaries are recorded in SPACE_ACTIVITY.md. This does
+not create mandatory reviews, automatically publish private Work Reviews or claim
+an exhaustive GitHub event history.
+
+Next proposed stage: **1 — archive and Office viewers**, **Высокое (`high`)**.
+Extend the universal file workspace with bounded archive inspection and document
+viewing, preserving original downloads, editor entry points and private source
+boundaries. User-facing conversion remains deferred. Then **5 — help/shortcuts**.
+Wait for the owner's continuation before beginning the next stage.
