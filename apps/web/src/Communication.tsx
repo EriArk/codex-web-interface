@@ -104,6 +104,14 @@ export function CommunicationNotices() {
     </>
   );
 }
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((v) => Array.from(v)[0] ?? "")
+    .join("")
+    .toLocaleUpperCase("ru");
 function CommunicationWindow({
   catalog,
   initial,
@@ -113,18 +121,24 @@ function CommunicationWindow({
   initial: string;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const ref = useRef<HTMLDialogElement>(null),
+    gate = useRef(false);
   useWorkspaceDialog(ref);
   const [selected, setSelected] = useState(initial),
     [creating, setCreating] = useState(false),
     [members, setMembers] = useState<TeamContact[]>([]),
     [title, setTitle] = useState(""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const [visited, setVisited] = useState(initial ? [initial] : []);
+    [busy, setBusy] = useState(false),
+    [tab, setTab] = useState<"chats" | "people">("chats"),
+    [query, setQuery] = useState(""),
+    [settings, setSettings] = useState(false),
+    [visited, setVisited] = useState(initial ? [initial] : []);
   const select = useCallback((id: string) => {
     setSelected(id);
     setCreating(false);
+    setSettings(false);
+    setError("");
     setVisited((old) => [...old.filter((v) => v !== id), id].slice(-5));
   }, []);
   useEffect(() => {
@@ -135,11 +149,25 @@ function CommunicationWindow({
     void catalog.refresh();
   }, [catalog.refresh]);
   const current = catalog.items.find((c) => c.id === selected);
-  const create = async () => {
-    if (busy || !members.length) return;
+  const create = async (people: TeamContact[], kind: "direct" | "group") => {
+    if (gate.current || !people.length || (kind === "group" && !title.trim())) return;
+    if (kind === "direct") {
+      const existing = catalog.items.find(
+        (c) => c.kind === "direct" && c.members.some((m) => m.id === people[0]!.id),
+      );
+      if (existing) {
+        select(existing.id);
+        return;
+      }
+    }
+    gate.current = true;
     setBusy(true);
     setError("");
-    const body = { title, members: members.map((m) => m.id).sort() };
+    const body = {
+      title: kind === "group" ? title.trim() : "",
+      members: people.map((m) => m.id).sort(),
+      kind,
+    };
     try {
       const request = durableKey("conversation", body);
       const c = await api<HumanConversation>("/team/conversations", {
@@ -150,14 +178,27 @@ function CommunicationWindow({
       await catalog.refresh();
       select(c.id);
       request.clear();
-      setMembers([]);
-      setTitle("");
+      if (kind === "group") {
+        setMembers([]);
+        setTitle("");
+      }
     } catch (e) {
       setError(messageOf(e));
     } finally {
+      gate.current = false;
       setBusy(false);
     }
   };
+  const back = () => {
+    if (creating) setCreating(false);
+    else setSelected("");
+    setSettings(false);
+  };
+  const chats = catalog.items.filter((c) =>
+    `${c.title} ${c.members.map((m) => m.name).join(" ")}`
+      .toLocaleLowerCase("ru")
+      .includes(query.toLocaleLowerCase("ru")),
+  );
   return createPortal(
     <dialog
       ref={ref}
@@ -170,13 +211,20 @@ function CommunicationWindow({
     >
       <header className="notebook-heading">
         <div>
-          <strong>{current && !creating ? current.title : "Общение"}</strong>
-          <small>
-            {current && !creating
-              ? current.members.map((m) => m.name).join(", ")
-              : "Личные и групповые разговоры"}
-          </small>
+          <strong>Общение</strong>
         </div>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Создать группу"
+          onClick={() => {
+            setCreating(true);
+            setSettings(false);
+            setError("");
+          }}
+        >
+          <Icon name="plus" />
+        </button>
         <button
           type="button"
           className="icon-button"
@@ -186,124 +234,276 @@ function CommunicationWindow({
           <Icon name="close" />
         </button>
       </header>
-      <div className="communication-body" data-selected={!!selected && !creating}>
-        <aside className="communication-list">
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => {
-              setCreating(true);
-              setSelected("");
-            }}
-          >
-            Новый разговор
-          </button>
-          {catalog.items.map((c) => (
+      <div
+        className="communication-body"
+        data-selected={!!current || creating}
+        data-creating={creating}
+      >
+        <aside className="communication-list" aria-label="Чаты и люди">
+          <nav className="communication-tabs" aria-label="Раздел общения">
             <button
               type="button"
               className="secondary"
-              aria-pressed={c.id === selected}
-              key={c.id}
-              onClick={() => select(c.id)}
+              aria-pressed={tab === "chats"}
+              onClick={() => setTab("chats")}
             >
-              <span>{c.title}</span>
-              {c.unread > 0 && <small>{c.unread}</small>}
+              Чаты
             </button>
-          ))}
-          {!catalog.items.length && <p className="muted">Выбери людей и начни разговор.</p>}
-        </aside>
-        <section className="communication-content">
-          {(error || catalog.error) && <p role="alert">{error || catalog.error}</p>}
-          {creating ? (
-            <div className="communication-create shared-form">
-              <label>
-                Название группы
-                <input
-                  value={title}
-                  maxLength={120}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Для разговора с несколькими людьми"
-                />
-              </label>
-              <div className="communication-members">
-                {members.map((m) => (
+            <button
+              type="button"
+              className="secondary"
+              aria-pressed={tab === "people"}
+              onClick={() => setTab("people")}
+            >
+              Люди
+            </button>
+          </nav>
+          {tab === "chats" ? (
+            <>
+              <input
+                type="search"
+                aria-label="Найти чат"
+                placeholder="Поиск"
+                value={query}
+                maxLength={120}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <div className="communication-rows">
+                {chats.map((c) => (
                   <button
                     type="button"
-                    className="secondary"
-                    key={m.id}
-                    onClick={() => setMembers((old) => old.filter((v) => v.id !== m.id))}
+                    className="communication-row"
+                    aria-label={c.title}
+                    aria-pressed={c.id === selected && !creating}
+                    key={c.id}
+                    onClick={() => select(c.id)}
                   >
-                    {m.name} ×
+                    <span className="communication-avatar" aria-hidden="true">
+                      {c.kind === "group" ? <Icon name="people" /> : initials(c.title)}
+                    </span>
+                    <span className="communication-row-copy">
+                      <strong>{c.title}</strong>
+                      <small>
+                        {c.preview ??
+                          (c.kind === "group"
+                            ? `${c.members.length} участников`
+                            : "Личный разговор")}
+                      </small>
+                    </span>
+                    <span className="communication-row-meta">
+                      <time dateTime={new Date(c.updatedAt).toISOString()}>
+                        {new Date(c.updatedAt).toLocaleDateString() ===
+                        new Date().toLocaleDateString()
+                          ? new Date(c.updatedAt).toLocaleTimeString("ru", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : new Date(c.updatedAt).toLocaleDateString("ru", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                      </time>
+                      {c.unread > 0 ? (
+                        <span className="communication-badge" data-muted={c.muted}>
+                          {c.unread}
+                        </span>
+                      ) : c.muted ? (
+                        <Icon name="bell" size={14} />
+                      ) : null}
+                    </span>
                   </button>
                 ))}
-              </div>
-              <TeamContactPicker
-                value={null}
-                exclude={[pageWorkspace, ...members.map((m) => m.id)]}
-                disabled={busy || members.length >= 7}
-                onChange={(m) => setMembers((old) => [...old, m])}
-              />
-              <button
-                type="button"
-                className="primary"
-                disabled={busy || !members.length}
-                onClick={() => void create()}
-              >
-                Начать разговор
-              </button>
-            </div>
-          ) : current ? (
-            <>
-              <div className="communication-toolbar">
-                <button type="button" className="secondary" onClick={() => setSelected("")}>
-                  Разговоры
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  aria-pressed={current.muted}
-                  aria-label={current.muted ? "Включить уведомления" : "Отключить уведомления"}
-                  onClick={() =>
-                    void api(`/team/conversations/${current.id}`, {
-                      method: "PUT",
-                      body: { muted: !current.muted },
-                    })
-                      .then(catalog.refresh)
-                      .catch((e) => setError(messageOf(e)))
-                  }
-                >
-                  <Icon name="bell" />
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Покинуть разговор? Доступ к сообщениям и материалам этого разговора будет закрыт.",
-                      )
-                    )
-                      void api(`/team/conversations/${current.id}`, { method: "DELETE" })
-                        .then(() => {
-                          setVisited((old) => old.filter((id) => id !== current.id));
-                          setSelected("");
-                          return catalog.refresh();
-                        })
-                        .catch((e) => setError(messageOf(e)));
-                  }}
-                >
-                  Покинуть
-                </button>
+                {!chats.length && (
+                  <div className="communication-empty">
+                    <Icon name="chat" size={32} />
+                    <p>{query ? "Чат не найден" : "Начни с разговора"}</p>
+                    <button type="button" className="secondary" onClick={() => setTab("people")}>
+                      Выбрать человека
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           ) : (
-            <p className="nav-empty">Выбери разговор или создай новый.</p>
+            <div className="communication-people">
+              <TeamContactPicker
+                value={null}
+                exclude={[pageWorkspace]}
+                disabled={busy}
+                onChange={(m) => void create([m], "direct")}
+              />
+            </div>
+          )}
+          {(error || catalog.error) && !creating && (
+            <p className="communication-error" role="alert">
+              {error || catalog.error}
+            </p>
+          )}
+        </aside>
+        <section className="communication-content">
+          {creating ? (
+            <>
+              <header className="communication-chat-heading">
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Назад к разговорам"
+                  onClick={back}
+                >
+                  <Icon name="back" />
+                </button>
+                <div>
+                  <strong>Новая группа</strong>
+                  <small>Выбери участников и название</small>
+                </div>
+              </header>
+              <div className="communication-create shared-form">
+                <label>
+                  Название группы
+                  <input
+                    value={title}
+                    maxLength={120}
+                    disabled={busy}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Как назовём группу?"
+                  />
+                </label>
+                <div className="communication-members">
+                  {members.map((m) => (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      aria-label={`Убрать ${m.name}`}
+                      key={m.id}
+                      onClick={() => setMembers((old) => old.filter((v) => v.id !== m.id))}
+                    >
+                      {m.name}
+                      <Icon name="close" size={14} />
+                    </button>
+                  ))}
+                </div>
+                <TeamContactPicker
+                  value={null}
+                  exclude={[pageWorkspace, ...members.map((m) => m.id)]}
+                  disabled={busy || members.length >= 7}
+                  onChange={(m) =>
+                    setMembers((old) => (old.some((v) => v.id === m.id) ? old : [...old, m]))
+                  }
+                />
+                {error && <p role="alert">{error}</p>}
+              </div>
+              <footer className="communication-create-actions">
+                <button type="button" className="secondary" onClick={back}>
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy || !members.length || !title.trim()}
+                  onClick={() => void create(members, "group")}
+                >
+                  {busy ? "Создаём…" : "Создать группу"}
+                </button>
+              </footer>
+            </>
+          ) : current ? (
+            <>
+              <header className="communication-chat-heading">
+                <button
+                  type="button"
+                  className="icon-button communication-back"
+                  aria-label="К списку чатов"
+                  onClick={back}
+                >
+                  <Icon name="back" />
+                </button>
+                <span className="communication-avatar" aria-hidden="true">
+                  {current.kind === "group" ? <Icon name="people" /> : initials(current.title)}
+                </span>
+                <div>
+                  <strong title={current.title}>{current.title}</strong>
+                  <small>
+                    {current.kind === "group"
+                      ? `${current.members.length} участников`
+                      : "Личный разговор"}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Настройки разговора"
+                  aria-expanded={settings}
+                  onClick={() => setSettings(!settings)}
+                >
+                  <Icon name="settings" />
+                </button>
+              </header>
+              {settings && (
+                <div className="communication-settings">
+                  <p>{current.members.map((m) => m.name).join(", ")}</p>
+                  <div>
+                    <button
+                      type="button"
+                      className="secondary"
+                      aria-pressed={current.muted}
+                      disabled={busy}
+                      onClick={() => {
+                        setBusy(true);
+                        void api(`/team/conversations/${current.id}`, {
+                          method: "PUT",
+                          body: { muted: !current.muted },
+                        })
+                          .then(catalog.refresh)
+                          .catch((e) => setError(messageOf(e)))
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      {current.muted ? "Включить уведомления" : "Без уведомлений"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Покинуть разговор? Доступ к сообщениям и материалам этого разговора будет закрыт.",
+                          )
+                        ) {
+                          setBusy(true);
+                          void api(`/team/conversations/${current.id}`, { method: "DELETE" })
+                            .then(() => {
+                              setVisited((old) => old.filter((id) => id !== current.id));
+                              setSelected("");
+                              setSettings(false);
+                              return catalog.refresh();
+                            })
+                            .catch((e) => setError(messageOf(e)))
+                            .finally(() => setBusy(false));
+                        }
+                      }}
+                    >
+                      Покинуть
+                    </button>
+                  </div>
+                </div>
+              )}
+              {error && <p role="alert">{error}</p>}
+            </>
+          ) : (
+            <div className="communication-empty">
+              <Icon name="chat" size={44} />
+              <p>Выбери чат или человека</p>
+              <small>Здесь можно общаться и делиться материалами</small>
+            </div>
           )}
           {visited
             .filter((id) => catalog.items.some((c) => c.id === id))
             .map((id) => (
               <div className="communication-chat" key={id} hidden={id !== selected || creating}>
                 <SpaceChat
+                  compactComposer
                   space={{ id }}
                   endpoint={`/team/conversations/${id}/chat`}
                   members={catalog.items.find((c) => c.id === id)?.members}

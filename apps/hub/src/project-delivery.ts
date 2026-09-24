@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { deliveryMessage, runProjectDelivery } from "@codex-web/machines";
 import {
+  type CheckoutProvenance,
   type DeliveryInput,
   type DeliveryMachineReceipt,
   type DeliveryObservation,
@@ -18,18 +19,96 @@ export function registerProjectDelivery(
   sessions: Sessions,
   probe = runProjectDelivery,
   policy: (projectId: string, receipt: DeliveryMachineReceipt) => void = () => {},
+  checkoutScope: (projectId: string) => {
+    spaceId: string;
+    projectId: string;
+    ownerId: string;
+    ownerProjectId: string;
+    participantId: string;
+    repository: string;
+    access: string;
+  } | null = () => null,
 ) {
   const db = sessions.store.db,
     running = new Map<string, Promise<void>>(),
     preparing = new Map<string, Promise<DeliveryOperation>>(),
     readers = new Map<string, Promise<DeliveryObservation>>();
   const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS checkout_provenance (scope TEXT PRIMARY KEY, projectId TEXT NOT NULL, value TEXT NOT NULL)",
+  );
   const context = (id: string) => {
+    sessions.authorizeExecution();
     const project = sessions.project(id);
-    if (project.unassigned || sessions.catalog.library.get("project", id)?.deleted)
+    if (
+      project.unassigned ||
+      sessions.catalog.library.get("project", id)?.deleted ||
+      sessions.catalog.library.get("project", id)?.archived
+    )
       throw new HubError(404, "PROJECT_REQUIRED", "Выбери существующий проект.");
     const machine = sessions.catalog.machine(project.machineId);
-    return { project, machine, binding: hash([project.id, project.workingDirectory, machine]) };
+    const binding = hash([project.id, project.workingDirectory, machine]);
+    const scope = checkoutScope(id);
+    return { project, machine, binding, scope, scopeKey: scope ? hash([scope, binding]) : null };
+  };
+  const requireScope = (id: string, input: DeliveryInput) => {
+    const c = context(id);
+    if (input.kind === "sync" && (!c.scopeKey || c.scopeKey !== input.syncScope))
+      throw new HubError(
+        409,
+        "CHECKOUT_UNAVAILABLE",
+        "Общий проект или доступ изменился. Обнови рабочую копию в списке проектов.",
+      );
+    return c;
+  };
+  const provenance = (c: ReturnType<typeof context>, state: DeliveryState) => {
+    if (!c.scopeKey || !c.scope) return undefined;
+    const row = db.prepare("SELECT value FROM checkout_provenance WHERE scope=?").get(c.scopeKey);
+    const previous = row ? (JSON.parse(String(row.value)) as CheckoutProvenance) : undefined;
+    if (!state.sync?.repositoryId || !state.sync.githubUserId) return previous;
+    if (
+      `https://github.com/${state.github.repository}`.toLowerCase() !==
+      c.scope.repository.toLowerCase()
+    )
+      throw new HubError(
+        409,
+        "SPACE_REPOSITORY_MISMATCH",
+        "Рабочая папка относится к другому GitHub-проекту.",
+      );
+    if (previous) {
+      const old = previous;
+      if (
+        ["repositoryId", "githubUserId", "gitDirectory", "commonDirectory"].some(
+          (k) =>
+            old.baseline[k as keyof typeof old.baseline] !==
+            state.sync![k as keyof typeof state.sync],
+        )
+      )
+        throw new HubError(
+          409,
+          "CHECKOUT_BINDING_CHANGED",
+          "GitHub-аккаунт или рабочая копия изменились. Переподключи свою копию проекта.",
+        );
+      return old;
+    }
+    if (Number(db.prepare("SELECT count(*) n FROM checkout_provenance").get()?.n) >= 10000)
+      throw new HubError(409, "CHECKOUT_LIMIT", "Достигнут лимит сохранённых рабочих копий.");
+    const value: CheckoutProvenance = {
+      ...c.scope,
+      scope: c.scopeKey,
+      machineId: c.machine.id,
+      root: c.project.workingDirectory,
+      branch: state.branch,
+      head: state.head,
+      adoptedAt: Date.now(),
+      baseline: state.sync,
+    };
+    db.prepare("INSERT INTO checkout_provenance VALUES(?,?,?)").run(
+      c.scopeKey,
+      c.project.id,
+      JSON.stringify(value),
+    );
+    return value;
   };
   const keys = (p: unknown) =>
     z.object({ id: z.string().min(1).max(100), operation: z.string().uuid().optional() }).parse(p);
@@ -88,6 +167,7 @@ export function registerProjectDelivery(
   const reconcile = async (op: DeliveryOperation) => {
     if (!["unknown", "running"].includes(op.state) || running.has(op.id)) return op;
     const c = bound(op);
+    // Status only inspects the exact old receipt. Revocation blocks new work, not recovery of an already dispatched operation.
     try {
       const r = await probe(c.machine, c.project.workingDirectory, { op: "status", id: op.id });
       if (r) return checked(op, r);
@@ -103,16 +183,21 @@ export function registerProjectDelivery(
     const read = (async () => {
       const state = (await probe(c.machine, c.project.workingDirectory, {
         op: "inspect",
+        ...(c.scope ? { sync: true } : {}),
       })) as DeliveryState;
       if (!state || !Array.isArray(state.paths) || typeof state.fingerprint !== "string")
         throw new HubError(503, "DELIVERY_UNAVAILABLE", deliveryMessage("DELIVERY_UNAVAILABLE"));
-      if (context(id).binding !== c.binding)
+      if (context(id).binding !== c.binding || context(id).scopeKey !== c.scopeKey)
         throw new HubError(409, "DELIVERY_PROJECT_CHANGED", "Проект изменился. Обнови состояние.");
       const v: DeliveryObservation = {
         id: randomUUID(),
         projectId: id,
         projectName: c.project.name,
         state,
+        checkout: provenance(c, state),
+        checkoutUnavailable:
+          !c.scope &&
+          !!db.prepare("SELECT 1 FROM checkout_provenance WHERE projectId=? LIMIT 1").get(id),
         createdAt: Date.now(),
       };
       db.prepare("INSERT INTO delivery_observations VALUES(?,?,?,?)").run(
@@ -150,7 +235,7 @@ export function registerProjectDelivery(
     const { id, operation } = keys(req.params),
       key = z.string().uuid().parse(operation),
       input = deliveryInputSchema.parse(req.body),
-      c = context(id);
+      c = requireScope(id, input);
     const previous = db.prepare("SELECT projectId FROM delivery_operations WHERE id=?").get(key);
     const same = (v: DeliveryOperation) => {
       if (v.projectId !== id || hash(v.input) !== hash(input))
@@ -176,6 +261,10 @@ export function registerProjectDelivery(
       })) as DeliveryMachineReceipt;
       if (!r || r.id !== key || hash(r.input) !== hash(input) || !r.fingerprint)
         throw new HubError(503, "DELIVERY_UNAVAILABLE", deliveryMessage("DELIVERY_UNAVAILABLE"));
+      const latest = requireScope(id, input);
+      if (latest.binding !== c.binding || latest.scopeKey !== c.scopeKey)
+        throw new HubError(409, "DELIVERY_PROJECT_CHANGED", "Проект изменился. Обнови состояние.");
+      if (input.kind === "sync") provenance(c, r.snapshot);
       policy(id, r);
       return put(
         { ...r, projectId: id, projectName: c.project.name, machineId: c.machine.id },
@@ -214,6 +303,9 @@ export function registerProjectDelivery(
     )
       throw new HubError(409, "DELIVERY_BUSY", deliveryMessage("DELIVERY_BUSY"));
     await sessions.externalActivity.refresh();
+    const latest = requireScope(id, op.input);
+    if (latest.binding !== c.binding)
+      throw new HubError(409, "DELIVERY_PROJECT_CHANGED", "Проект изменился. Обнови состояние.");
     policy(id, op);
     const release = sessions.beginProjectDelivery(id);
     put({ ...op, state: "running", error: undefined });
@@ -237,7 +329,18 @@ export function registerProjectDelivery(
     void job.finally(() => running.delete(op.id));
     return reply.code(202).send(get(op.id, id));
   });
+  const validateCheckout = (projectId: string, scope: unknown) => {
+    requireScope(projectId, {
+      kind: "sync",
+      syncScope: typeof scope === "string" ? scope : "",
+      paths: [],
+      message: "",
+      title: "",
+      body: "",
+    });
+  };
   app.addHook("preClose", async () => {
     await Promise.allSettled([...running.values(), ...preparing.values(), ...readers.values()]);
   });
+  return { validateCheckout };
 }

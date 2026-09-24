@@ -4,6 +4,29 @@ import type { CollaborationSpaces } from "./collaboration-spaces.js";
 
 export function collaborationPolicy(spaces: CollaborationSpaces, actor: string) {
   return {
+    checkoutScope(projectId: string) {
+      const binding = spaces.binding(actor, projectId);
+      if (
+        !binding ||
+        binding.access === "owner" ||
+        !binding.project.copies[binding.project.ownerId]
+      )
+        return null;
+      try {
+        spaces.team.registry.active(binding.project.ownerId);
+      } catch {
+        return null;
+      }
+      return {
+        spaceId: binding.space.id,
+        projectId: binding.project.id,
+        ownerId: binding.project.ownerId,
+        ownerProjectId: binding.project.copies[binding.project.ownerId]!,
+        participantId: actor,
+        repository: binding.project.repository,
+        access: binding.access,
+      };
+    },
     issuesPublished(projectId: string, batchId: string, issues: { number: number; url: string }[]) {
       spaces.issuesPublished(actor, projectId, batchId, issues);
     },
@@ -80,7 +103,7 @@ export function collaborationPolicy(spaces: CollaborationSpaces, actor: string) 
           "SPACE_REPOSITORY_MISMATCH",
           "GitHub проекта изменился. Переподключи проект к пространству.",
         );
-      if (binding.access !== "collaborate") return;
+      if (receipt.kind === "sync" || binding.access !== "collaborate") return;
       const branch = receipt.snapshot.branch;
       if (
         !observed.defaultBranch ||

@@ -7,6 +7,7 @@ export type HumanConversation = {
   unread: number;
   muted: boolean;
   updatedAt: number;
+  preview?: string;
 };
 export type SharedResultCard = {
   id: string;

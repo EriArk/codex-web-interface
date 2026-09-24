@@ -44,6 +44,7 @@ export function SpaceChat({
   endpoint,
   visible = true,
   readOnly = false,
+  compactComposer = false,
   onFile,
   members,
 }: {
@@ -52,6 +53,7 @@ export function SpaceChat({
   endpoint?: string;
   visible?: boolean;
   readOnly?: boolean;
+  compactComposer?: boolean;
   onFile?: (file: SpaceChatFile) => void;
   members?: { id: string; name: string }[];
 }) {
@@ -68,6 +70,7 @@ export function SpaceChat({
     [uploading, setUploading] = useState(false),
     [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState("");
+  const [toolsOpen, setToolsOpen] = useState(false);
   const list = useRef<HTMLElement>(null),
     picker = useRef<HTMLInputElement>(null);
   const live = useRef(true),
@@ -436,8 +439,21 @@ export function SpaceChat({
           </p>
         )}
         {uploading && <small role="status">Загружаем файлы…</small>}
-        {members && (
+        {members && (!compactComposer || toolsOpen) && (
           <div className="chat-mentions">
+            {compactComposer && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || uploading}
+                onClick={() => {
+                  picker.current?.click();
+                  setToolsOpen(false);
+                }}
+              >
+                Файл
+              </button>
+            )}
             <HumanReferencePicker
               onChoose={(text) =>
                 save({
@@ -504,15 +520,16 @@ export function SpaceChat({
           <button
             type="button"
             className="icon-button"
-            aria-label="Прикрепить к общему чату"
+            aria-label={compactComposer ? "Добавить к сообщению" : "Прикрепить к общему чату"}
+            aria-expanded={compactComposer ? toolsOpen : undefined}
             disabled={busy || uploading}
-            onClick={() => picker.current?.click()}
+            onClick={() => (compactComposer ? setToolsOpen(!toolsOpen) : picker.current?.click())}
           >
             <Icon name="plus" />
           </button>
           <textarea
             aria-label="Сообщение участникам"
-            placeholder="Сообщение участникам…"
+            placeholder={compactComposer ? "Сообщение…" : "Сообщение участникам…"}
             rows={2}
             maxLength={16000}
             value={draft.text}

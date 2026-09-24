@@ -313,3 +313,71 @@ test("Exact Result capture, grants, public-room audience, revocation, retained b
   await writeFile(frozen, "changed");
   await assert.rejects(verifyTeamSnapshot(path));
 });
+
+test("one-tap direct conversations reuse identity; explicitly named two-person groups stay separate", async (t) => {
+  const f = await communicationFixture();
+  t.after(f.close);
+  const dm = ok(
+    await f.request(f.headers, "POST", "/api/team/conversations", {
+      kind: "direct",
+      title: "",
+      members: [f.friend],
+    }),
+  );
+  const again = ok(
+    await f.request(f.headers, "POST", "/api/team/conversations", {
+      kind: "direct",
+      title: "",
+      members: [f.friend],
+    }),
+  );
+  assert.equal(again.id, dm.id);
+  const group = ok(
+    await f.request(f.headers, "POST", "/api/team/conversations", {
+      kind: "group",
+      title: "Наш проект",
+      members: [f.friend],
+    }),
+  );
+  assert.notEqual(group.id, dm.id);
+  assert.equal(group.kind, "group");
+  assert.equal(group.title, "Наш проект");
+  assert.equal(
+    (
+      await f.request(f.headers, "POST", "/api/team/conversations", {
+        kind: "group",
+        title: "",
+        members: [f.friend],
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await f.request(f.headers, "POST", "/api/team/conversations", {
+        kind: "direct",
+        title: "",
+        members: [f.friend, f.third],
+      })
+    ).statusCode,
+    400,
+  );
+  ok(
+    await f.request(f.headers, "POST", `/api/team/conversations/${dm.id}/chat`, {
+      text: "Latest\nmessage",
+      files: [],
+    }),
+  );
+  assert.equal(
+    ok(await f.request(f.headers, "GET", `/api/team/conversations/${dm.id}`)).preview,
+    "Вы: Latest message",
+  );
+  assert.equal(
+    ok(await f.request(f.friendHeaders, "GET", `/api/team/conversations/${dm.id}`)).preview,
+    "Latest message",
+  );
+  assert.equal(
+    (await f.request(f.thirdHeaders, "GET", `/api/team/conversations/${dm.id}`)).statusCode,
+    404,
+  );
+});

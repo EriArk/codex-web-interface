@@ -24,7 +24,7 @@ const labels = {
   failed: "Не выполнено",
   unknown: "Нужно проверить",
 };
-const names = { commit: "Коммит", push: "Push", pr: "Pull request" };
+const names = { commit: "Коммит", push: "Push", pr: "Pull request", sync: "Обновление копии" };
 const checks = {
   passed: "Успешно",
   failed: "Ошибка",
@@ -125,6 +125,15 @@ export default function ProjectDelivery({
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [base, key, refresh]);
+  const managedCopy = !!observation?.state.sync;
+  useEffect(() => {
+    if (!managedCopy) return;
+    const timer = setInterval(() => {
+      if (!document.hidden && !busyRef.current && !["running", "unknown"].includes(op?.state ?? ""))
+        void refresh().catch(() => {});
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [managedCopy, op?.state, refresh]);
   const operationId = op?.id,
     operationState = op?.state;
   useEffect(() => {
@@ -178,6 +187,7 @@ export default function ProjectDelivery({
           message: kind === "commit" ? draft.message : "",
           title: kind === "pr" ? draft.title : "",
           body: kind === "pr" ? draft.body : "",
+          ...(kind === "sync" ? { syncScope: observation?.checkout?.scope } : {}),
           ...(request.reviewId ? { reviewId: request.reviewId } : {}),
         },
       };
@@ -232,7 +242,7 @@ export default function ProjectDelivery({
       );
       if (alive.current) setDiff(value);
     });
-  const fix = () =>
+  const fix = (kind: "ci_fix" | "checkout_reconcile" = "ci_fix") =>
     run(async () => {
       if (!observation) return;
       ciKey.current ??= crypto.randomUUID();
@@ -240,7 +250,7 @@ export default function ProjectDelivery({
         method: "PUT",
         body: {
           scope: { client: "codex", projectId: request.projectId, name: request.projectName },
-          kind: "ci_fix",
+          kind,
           observationId: observation.id,
         },
       });
@@ -269,7 +279,7 @@ export default function ProjectDelivery({
     >
       <header>
         <div>
-          <small>{request.projectName}</small>
+          <small title={request.projectName}>{request.projectName}</small>
           <h2>
             <Icon name="branch" size={21} />
             Доставка
@@ -344,6 +354,111 @@ export default function ProjectDelivery({
                 {new Date(state.checkedAt).toLocaleString("ru")}
               </small>
             </section>
+            {observation?.checkoutUnavailable && (
+              <section className="delivery-card">
+                Общий проект недоступен. Локальная работа сохранена.
+              </section>
+            )}
+            {state.sync && (
+              <section className="delivery-card checkout-sync" aria-label="Рабочая копия">
+                <header>
+                  <h3>Рабочая копия</h3>
+                  <span role="status">
+                    {
+                      {
+                        current: "Актуальна",
+                        behind: "Есть обновления",
+                        local: "Есть локальные коммиты",
+                        dirty: "Есть несохранённые изменения",
+                        conflict: "Нужен разбор конфликтов",
+                        unavailable: "Основная ветка недоступна",
+                      }[state.sync.status]
+                    }
+                  </span>
+                </header>
+                {state.sync.baseRef && (
+                  <p>
+                    {state.sync.baseRef.replace("refs/heads/", "")} ·{" "}
+                    <code>{short(state.sync.baseSha)}</code>
+                  </p>
+                )}
+                {state.sync.behind !== undefined && (
+                  <p>
+                    Новых коммитов: {state.sync.behind} · Локальных: {state.sync.ahead}
+                  </p>
+                )}
+                {state.sync.status === "dirty" && (
+                  <p>Сначала сохрани изменения в коммит. Затем обнови проверку.</p>
+                )}
+                {state.sync.conflictsTotal > 0 && (
+                  <details>
+                    <summary>Конфликты · {state.sync.conflictsTotal}</summary>
+                    {state.sync.conflicts.map((c) => (
+                      <details key={c.path}>
+                        <summary>{c.path}</summary>
+                        {c.preview !== null ? (
+                          <CollapsibleCode label="Сравнение с маркерами сторон">
+                            {c.preview}
+                          </CollapsibleCode>
+                        ) : (
+                          <p>Для этого файла нужен разбор в проекте.</p>
+                        )}
+                      </details>
+                    ))}
+                    {state.sync.conflictsTotal > state.sync.conflicts.length && (
+                      <p>Показаны доступные файлы; полный разбор — в проекте.</p>
+                    )}
+                  </details>
+                )}
+                {observation?.checkout && (
+                  <>
+                    <div className="checkout-actions">
+                      {!!state.sync.behind && ["behind", "local"].includes(state.sync.status) && (
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={locked || !!op}
+                          onClick={() => void prepare("sync")}
+                        >
+                          {state.sync.ahead ? "Согласовать изменения" : "Обновить копию"}
+                        </button>
+                      )}
+                      {["conflict", "local", "dirty"].includes(state.sync.status) && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={busy}
+                          onClick={() => void fix("checkout_reconcile")}
+                        >
+                          Разобрать в Codex
+                        </button>
+                      )}
+                    </div>
+                    <details>
+                      <summary>Источник рабочей копии</summary>
+                      <dl className="checkout-provenance">
+                        <dt>Репозиторий</dt>
+                        <dd>{observation.checkout.repository}</dd>
+                        <dt>Компьютер</dt>
+                        <dd>{observation.checkout.machineId}</dd>
+                        <dt>Папка</dt>
+                        <dd>{observation.checkout.root}</dd>
+                        <dt>Ветка при подключении</dt>
+                        <dd>{observation.checkout.branch}</dd>
+                        <dt>Ревизия при первом учёте</dt>
+                        <dd>
+                          <code>{observation.checkout.head}</code>
+                        </dd>
+                        <dt>Основная ревизия при учёте</dt>
+                        <dd>
+                          <code>{observation.checkout.baseline.baseSha}</code>
+                        </dd>
+                      </dl>
+                    </details>
+                  </>
+                )}
+              </section>
+            )}
             <div className="delivery-columns">
               <div className="delivery-main">
                 {op ? (
@@ -371,6 +486,15 @@ export default function ProjectDelivery({
                       <p>
                         {op.snapshot.github.repository} · {op.snapshot.branch}
                         {op.kind === "pr" ? " → " + op.snapshot.github.defaultBranch : ""}
+                      </p>
+                    )}
+                    {op.kind === "sync" && (
+                      <p>
+                        {op.snapshot.sync?.ahead
+                          ? "Создаст коммит слияния, сохранив обе истории."
+                          : "Переведёт копию на новую ревизию основной ветки."}{" "}
+                        Цель: <code>{short(op.snapshot.sync?.baseSha)}</code>. На GitHub ничего не
+                        отправляется.
                       </p>
                     )}
                     {op.kind === "pr" && (
@@ -413,7 +537,9 @@ export default function ProjectDelivery({
                             ? "коммит"
                             : op.kind === "push"
                               ? "push"
-                              : "создание PR"}
+                              : op.kind === "sync"
+                                ? "обновление копии"
+                                : "создание PR"}
                         </button>
                       )}
                       {["running", "unknown"].includes(op.state) && (

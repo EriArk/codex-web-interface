@@ -282,3 +282,256 @@
 :root .communication-window .space-chat-input-row svg {
   color: inherit;
 }
+
+/* Messenger layout: quiet rows, a separate contact list and deliberate group creation. */
+.communication-body {
+  grid-template-columns: minmax(240px, 32%) minmax(0, 1fr);
+}
+.communication-list {
+  border-right: 1px solid var(--line);
+  gap: 10px;
+  overflow: hidden;
+}
+.communication-tabs,
+.communication-create-actions,
+.communication-settings > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.communication-tabs > button,
+.communication-create-actions > button,
+.communication-settings button {
+  min-height: 44px;
+  min-width: 0;
+  white-space: normal;
+}
+.communication-list > input {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+}
+.communication-rows,
+.communication-people {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+:root .communication-window button.communication-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+  text-align: start;
+}
+:root .communication-window button.communication-row[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.communication-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 17%, var(--paper));
+  border: 1px solid var(--line);
+  font-size: 16px;
+  font-weight: 600;
+}
+.communication-row-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+.communication-row-copy > * {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.communication-row-copy small,
+.communication-row-meta time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.communication-row-meta {
+  display: grid;
+  justify-items: end;
+  align-self: stretch;
+  align-content: center;
+  gap: 7px;
+}
+.communication-badge {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 5px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--paper);
+  font-size: 12px;
+}
+.communication-badge[data-muted="true"] {
+  background: var(--muted);
+}
+.communication-chat-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.communication-chat-heading > div {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.communication-chat-heading strong {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.communication-chat-heading small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.communication-chat-heading .communication-back {
+  display: none;
+}
+.communication-empty {
+  display: flex;
+  flex: 1;
+  min-height: 160px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 20px;
+  color: var(--muted);
+}
+.communication-empty p {
+  margin: 0;
+}
+.communication-settings {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.communication-settings p {
+  overflow-wrap: anywhere;
+  margin: 0 0 12px;
+}
+.communication-create-actions {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.communication-people .team-contacts {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.communication-people .team-contacts > legend {
+  display: none;
+}
+.communication-people .team-contact-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+:root .communication-people .team-contact {
+  background: transparent;
+  box-shadow: none;
+  border: 0;
+  min-height: 64px;
+  justify-content: flex-start;
+  text-align: start;
+}
+.communication-members > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.communication-window .space-chat-message {
+  max-width: min(85%, 620px);
+  width: fit-content;
+  margin: 6px auto 6px 0;
+  border-radius: 14px 14px 14px 4px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  box-shadow: none;
+}
+.communication-window .space-chat-message[data-own="true"] {
+  margin-left: auto;
+  margin-right: 0;
+  border-radius: 14px 14px 4px 14px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--paper));
+}
+.communication-window .space-chat-message header {
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.communication-window .space-chat-text p {
+  margin-block: 4px;
+}
+.communication-error {
+  padding: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 680px) {
+  .communication-body[data-selected="false"] .communication-list {
+    max-height: none;
+    flex: 1;
+    border: 0;
+  }
+  .communication-body[data-selected="false"] .communication-content {
+    display: none;
+  }
+  .communication-body[data-selected="true"] .communication-content {
+    flex: 1;
+  }
+  .communication-chat-heading .communication-back {
+    display: inline-flex;
+  }
+  .communication-chat-heading {
+    padding: 8px;
+    gap: 8px;
+  }
+  .communication-window .space-chat-message {
+    max-width: 92%;
+  }
+}
+
+.communication-window .space-chat-message[data-own="true"] > header > strong {
+  display: none;
+}
+.communication-window .space-chat-message[data-own="true"] > header {
+  justify-content: flex-end;
+}
+.communication-window .chat-mentions {
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.communication-window .space-chat-input-row textarea {
+  border-radius: 12px;
+}

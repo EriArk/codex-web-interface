@@ -1,4 +1,5 @@
 import type {
+  CheckoutSync,
   DeliveryCheck,
   DeliveryGitHub,
   DeliveryInput,
@@ -281,7 +282,7 @@ export async function deliveryProbe(
     }
   };
   type FileSnapshot = { data: Buffer | null; mode: string };
-  const inspect = async (withGithub = true) => {
+  const inspect = async (withGithub = true, allowUnmerged = false) => {
     const top = await scalar(["rev-parse", "--show-toplevel"]);
     if (!top)
       return {
@@ -335,7 +336,8 @@ export async function deliveryProbe(
       remote = repoFrom(await scalar(["remote", "get-url", "--all", "origin"])),
       pushRemote = repoFrom(await scalar(["remote", "get-url", "--push", "--all", "origin"]));
     const repository = remote && pushRemote?.toLowerCase() === remote.toLowerCase() ? remote : null;
-    if ((await must(["ls-files", "--unmerged"])).length) fail("DELIVERY_UNMERGED");
+    if (!allowUnmerged && (await must(["ls-files", "--unmerged"])).length)
+      fail("DELIVERY_UNMERGED");
     const status = await git([
       "-c",
       "status.renames=false",
@@ -449,7 +451,149 @@ export async function deliveryProbe(
     };
     return { state, files, indexPath, indexHash, configHash, repository };
   };
-  if (request.op === "inspect") return (await inspect()).state;
+  // Fetch objects only: no remote-tracking refs, FETCH_HEAD, index or working-tree writes.
+  const synchronization = async (s: DeliveryState): Promise<CheckoutSync> => {
+    const unavailable: CheckoutSync = { status: "unavailable", conflicts: [], conflictsTotal: 0 };
+    const oid = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{40,64}$/.test(v);
+    if (!s.repository || !s.branch || !oid(s.head) || !s.github.repository) return unavailable;
+    try {
+      const repository = s.github.repository;
+      const [repo, user] = await Promise.all([gh(`repos/${repository}`), gh("user")]);
+      if (
+        repo.full_name?.toLowerCase() !== repository.toLowerCase() ||
+        !Number.isSafeInteger(repo.id) ||
+        repo.id <= 0 ||
+        !Number.isSafeInteger(user.id) ||
+        user.id <= 0 ||
+        !text(repo.default_branch, 200) ||
+        !repo.default_branch
+      )
+        return unavailable;
+      const ref = `refs/heads/${repo.default_branch}`;
+      if ((await git(["check-ref-format", ref])).code) return unavailable;
+      const remote = await git(["ls-remote", "--heads", "origin", ref]);
+      const lines = remote.out.toString("utf8").trim().split("\n");
+      const [sha, foundRef] = (lines[0] ?? "").split(/\s+/);
+      if (remote.code || lines.length !== 1 || foundRef !== ref || !oid(sha)) return unavailable;
+      if ((await git(["cat-file", "-e", `${sha}^{commit}`])).code) {
+        const fetched = await git(
+          [
+            "-c",
+            `core.hooksPath=${path.join(stateRoot, "disabled-hooks")}`,
+            "fetch",
+            "--no-tags",
+            "--no-write-fetch-head",
+            "--no-recurse-submodules",
+            "--",
+            "origin",
+            sha,
+          ],
+          undefined,
+          {},
+          90000,
+        );
+        if (fetched.code) return unavailable;
+      }
+      const common = await scalar(["merge-base", s.head, sha]);
+      if (!oid(common)) return unavailable;
+      const counts = (await must(["rev-list", "--left-right", "--count", `${s.head}...${sha}`]))
+        .split(/\s+/)
+        .map(Number);
+      if (counts.length !== 2 || counts.some((n) => !Number.isSafeInteger(n) || n < 0))
+        return unavailable;
+      const [ahead, behind] = counts;
+      const v: CheckoutSync = {
+        ...unavailable,
+        baseRef: ref,
+        baseSha: sha,
+        commonSha: common,
+        repositoryId: repo.id,
+        githubUserId: user.id,
+        gitDirectory: await must(["rev-parse", "--absolute-git-dir"]),
+        commonDirectory: path.resolve(root, await must(["rev-parse", "--git-common-dir"])),
+        ahead,
+        behind,
+        status: s.changed
+          ? "dirty"
+          : behind
+            ? ahead
+              ? "local"
+              : "behind"
+            : ahead
+              ? "local"
+              : "current",
+      };
+      if ((await must(["ls-files", "--unmerged"])).length) {
+        v.status = "conflict";
+        return v;
+      }
+      // Existing merge/rebase/cherry-pick state is never adopted by an update.
+      for (const marker of [
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "rebase-merge",
+        "rebase-apply",
+      ]) {
+        if (
+          await fs
+            .lstat(path.resolve(root, await must(["rev-parse", "--git-path", marker])))
+            .catch(() => null)
+        ) {
+          v.status = "dirty";
+          return v;
+        }
+      }
+      if (ahead && behind) {
+        if ((await scalar(["config", "--get-regexp", "^merge\\..*\\.driver$"]))?.length)
+          return { ...v, status: "unavailable" };
+        const merge = await git([
+          "-c",
+          `core.hooksPath=${path.join(stateRoot, "disabled-hooks")}`,
+          "merge-tree",
+          "--write-tree",
+          "--name-only",
+          "-z",
+          s.head,
+          sha,
+        ]);
+        const parts = merge.out.toString("utf8").split("\0");
+        if (![0, 1].includes(merge.code) || !oid(parts[0])) return { ...v, status: "unavailable" };
+        if (!merge.code) v.tree = parts[0];
+        else {
+          v.status = "conflict";
+          const names: string[] = [];
+          for (const name of parts.slice(1)) {
+            if (!name) break;
+            names.push(name);
+          }
+          v.conflictsTotal = names.length;
+          let budget = 262144;
+          for (const name of names.filter(safePath).slice(0, 20)) {
+            let preview: string | null = null;
+            const object = `${parts[0]}:${name}`;
+            const size = Number(await scalar(["cat-file", "-s", object]));
+            if (size > 0 && size <= 32768 && size <= budget) {
+              const data = await git(["cat-file", "blob", object]);
+              if (!data.code && !data.out.includes(0)) {
+                preview = data.out.toString("utf8");
+                budget -= data.out.length;
+              }
+            }
+            v.conflicts.push({ path: name, preview });
+          }
+        }
+      }
+      return v;
+    } catch {
+      return unavailable;
+    }
+  };
+  if (request.op === "inspect") {
+    const state = (await inspect(true, !!request.sync)).state;
+    if (request.sync) state.sync = await synchronization(state);
+    return state;
+  }
   if (!uuid(request.id)) fail("DELIVERY_REQUEST");
   await ensurePrivate();
   const file = path.join(stateRoot, request.id + ".json");
@@ -499,7 +643,7 @@ export async function deliveryProbe(
     if (
       !input ||
       Buffer.byteLength(JSON.stringify(input)) > 100000 ||
-      !["commit", "push", "pr"].includes(input.kind) ||
+      !["commit", "push", "pr", "sync"].includes(input.kind) ||
       !Array.isArray(input.paths) ||
       input.paths.length > 200 ||
       !input.paths.every(safePath) ||
@@ -514,11 +658,24 @@ export async function deliveryProbe(
       input.body.includes("\0")
     )
       fail("DELIVERY_REQUEST");
+    if (input.kind === "sync" && !/^[a-f0-9]{64}$/.test(input.syncScope ?? ""))
+      fail("DELIVERY_REQUEST");
     if (old) {
       if (JSON.stringify(old.public.input) !== JSON.stringify(input)) fail("DELIVERY_KEY_REUSED");
       return old.public;
     }
     const v = await inspect();
+    if (input.kind === "sync") {
+      v.state.sync = await synchronization(v.state);
+      const s = v.state.sync;
+      if (
+        v.state.changed ||
+        !["behind", "local"].includes(s.status) ||
+        !s.behind ||
+        (s.ahead && !s.tree)
+      )
+        fail("DELIVERY_SYNC_BLOCKED");
+    }
     if (!v.state.repository) fail("DELIVERY_NO_REPO");
     if (!v.state.branch) fail("DELIVERY_DETACHED");
     if (input.kind === "commit") {
@@ -682,6 +839,17 @@ export async function deliveryProbe(
         await write(receipt);
         return receipt.public;
       }
+    } else if (receipt.public.kind === "sync") {
+      const current = await inspect(false, true);
+      if (
+        receipt.commit &&
+        current.state.head === receipt.commit &&
+        current.state.branch === s.branch &&
+        current.repository === s.github.repository
+      ) {
+        receipt.public.commit = receipt.commit;
+        return completed();
+      }
     } else if (receipt.public.kind !== "commit" && s.github.repository) {
       if (
         repoFrom(await scalar(["remote", "get-url", "--all", "origin"]))?.toLowerCase() !==
@@ -726,6 +894,52 @@ export async function deliveryProbe(
     receipt.pid = process.pid;
     receipt.phase = "before-mutation";
     await write(receipt);
+    if (input.kind === "sync") {
+      const sync = await synchronization({ ...v.state, github: s.github });
+      if (!s.sync || hash(JSON.stringify(sync)) !== hash(JSON.stringify(s.sync)) || v.state.changed)
+        fail("DELIVERY_REMOTE_CHANGED");
+      let target = sync.baseSha!;
+      if (sync.ahead) {
+        if (!sync.tree) fail("DELIVERY_SYNC_BLOCKED");
+        const sign = await scalar(["config", "--bool", "--get", "commit.gpgsign"]);
+        target = await must(
+          [
+            "commit-tree",
+            sync.tree!,
+            "-p",
+            s.head!,
+            "-p",
+            sync.baseSha!,
+            ...(sign === "true" ? ["-S"] : []),
+          ],
+          `Merge ${sync.baseRef} into ${s.branch}\n`,
+        );
+      }
+      receipt.commit = target;
+      // Recheck before recording dispatch; a rejected check has not touched the working tree.
+      if ((await inspect(false)).state.fingerprint !== s.fingerprint) fail("DELIVERY_CHANGED");
+      receipt.phase = "sync-started";
+      await write(receipt);
+      const moved = await git([
+        "-c",
+        `core.hooksPath=${path.join(stateRoot, "disabled-hooks")}`,
+        "-c",
+        "merge.autostash=false",
+        "merge",
+        "--ff-only",
+        "--no-edit",
+        "--no-stat",
+        "--no-overwrite-ignore",
+        target,
+      ]);
+      if (moved.code && (await inspect(false, true)).state.fingerprint === s.fingerprint) {
+        receipt.public.state = "failed";
+        receipt.public.code = "DELIVERY_SYNC_BLOCKED";
+        await write(receipt);
+        return receipt.public;
+      }
+      return await reconcile();
+    }
     if (input.kind === "commit") {
       const indexLock = v.indexPath + ".lock";
       receipt.indexPath = v.indexPath;
@@ -873,6 +1087,7 @@ export async function deliveryProbe(
     return await reconcile();
   } catch (e) {
     if (
+      receipt.phase === "sync-started" ||
       receipt.phase === "move-head" ||
       receipt.phase === "push-started" ||
       receipt.phase === "pr-started"

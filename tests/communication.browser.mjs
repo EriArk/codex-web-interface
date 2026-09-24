@@ -50,9 +50,8 @@ try {
   await owner.bringToFront();
   await open(owner);
   const win = owner.locator(".communication-window");
-  await win.getByRole("button", { name: "Новый разговор", exact: true }).click();
+  await win.getByRole("button", { name: "Люди", exact: true }).click();
   await win.getByRole("button", { name: /Друг/, exact: false }).click();
-  await win.getByRole("button", { name: "Начать разговор", exact: true }).click();
   const compose = win.getByRole("textbox", { name: "Сообщение участникам", exact: true });
   await compose.fill("Первое личное сообщение");
   await win.getByRole("button", { name: "Отправить в общий чат", exact: true }).click();

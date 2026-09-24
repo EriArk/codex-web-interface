@@ -52,7 +52,11 @@ export function registerCommunication(
       actor(req),
       key(req),
       z
-        .object({ title: z.string().trim().max(120), members: z.array(uuid).min(1).max(7) })
+        .object({
+          title: z.string().trim().max(120),
+          members: z.array(uuid).min(1).max(7),
+          kind: z.enum(["direct", "group"]).optional(),
+        })
         .strict()
         .parse(req.body),
     ),

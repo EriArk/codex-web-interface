@@ -33,3 +33,10 @@ Focused Linux server tests cover canonical DMs, reciprocal creation, exact retri
 Chromium and WebKit exercise two authenticated users, draft restoration, Result forwarding, public-room audience selection, interactive sandboxed HTML, per-destination revocation and unaffected second grants. Screenshots cover all four themes, phone, keyboard-constrained phone, portrait/landscape tablet and wide tablet. These are automated browser checks, not physical iPhone/iPad acceptance.
 
 This stage changes Hub storage/routes and shared web UI. It does not change the Windows helper contract; integrated GitHub reads reuse the installed worker. Use the existing idle-guarded coordinated release and retain backup/rollback. Do not restart native tasks to deploy it.
+
+
+## Messenger layout (24 September follow-up)
+
+The lower shortcut opens a messenger with Chats/People navigation. A contact opens the exact existing direct conversation or creates it once immediately; there is no title form or second start button for a DM. Conversation rows show initials/group symbol, latest message, time and unread count. A separate Create group action selects people and a name; explicit two-person groups remain distinct from their DM. Legacy create requests retain their former automatic direct/group classification and receipt compatibility.
+
+Phone list and conversation are separate screens with a stable back control; tablets show list and conversation together. Settings/mute/leave are behind one compact conversation control. Group drafts and visited message drafts remain mounted across internal navigation. All surfaces use the shared theme; no fake online/read-status indicators are added. Last-message previews are membership-authorized and bounded to 140 characters. Tests verify one-tap DM reuse, explicit group identity, drafts, message sharing and four-theme layouts.

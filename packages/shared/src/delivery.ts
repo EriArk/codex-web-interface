@@ -1,17 +1,20 @@
 import { z } from "zod";
 export const deliveryInputSchema = z
   .object({
-    kind: z.enum(["commit", "push", "pr"]),
+    kind: z.enum(["commit", "push", "pr", "sync"]),
     paths: z.array(z.string().min(1).max(2048)).max(200).default([]),
     message: z.string().trim().max(2000).default(""),
     title: z.string().trim().max(200).default(""),
     body: z.string().max(20000).default(""),
+    syncScope: z.string().length(64).optional(),
     reviewId: z.string().uuid().optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
     if (new TextEncoder().encode(JSON.stringify(v)).length > 100000)
       ctx.addIssue({ code: "custom", message: "Выбери меньше файлов для одной операции" });
+    if (v.kind === "sync" && !v.syncScope)
+      ctx.addIssue({ code: "custom", message: "Обнови привязку рабочей копии" });
     if (v.kind === "commit" && (!v.paths.length || !v.message))
       ctx.addIssue({ code: "custom", message: "Выбери файлы и напиши сообщение коммита" });
     if (v.kind === "pr" && !v.title)
@@ -46,7 +49,38 @@ export type DeliveryGitHub = {
   checksSha?: string;
   checksKnown?: boolean;
 };
+export type CheckoutSync = {
+  status: "current" | "behind" | "local" | "conflict" | "dirty" | "unavailable";
+  baseRef?: string;
+  baseSha?: string;
+  commonSha?: string;
+  repositoryId?: number;
+  githubUserId?: number;
+  gitDirectory?: string;
+  commonDirectory?: string;
+  ahead?: number;
+  behind?: number;
+  tree?: string;
+  conflicts: { path: string; preview: string | null }[];
+  conflictsTotal: number;
+};
+export type CheckoutProvenance = {
+  scope: string;
+  spaceId: string;
+  projectId: string;
+  ownerId: string;
+  ownerProjectId: string;
+  participantId: string;
+  repository: string;
+  machineId: string;
+  root: string;
+  branch: string | null;
+  head: string | null;
+  adoptedAt: number;
+  baseline: CheckoutSync;
+};
 export type DeliveryState = {
+  sync?: CheckoutSync;
   repository: boolean;
   branch: string | null;
   head: string | null;
@@ -87,10 +121,12 @@ export type DeliveryObservation = {
   projectId: string;
   projectName: string;
   state: DeliveryState;
+  checkout?: CheckoutProvenance;
+  checkoutUnavailable?: boolean;
   createdAt: number;
 };
 export type DeliveryProbeRequest =
-  | { op: "inspect" }
+  | { op: "inspect"; sync?: boolean }
   | { op: "prepare"; id: string; input: DeliveryInput }
   | { op: "apply"; id: string; fingerprint: string }
   | { op: "status"; id: string };

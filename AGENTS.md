@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Owner-requested messenger interaction (2026-09-24)
+
+- Make “Общение” a familiar messenger: select a person to open a personal conversation directly; create a named group through a separate action. Use a chat list with previews and unread counts, phone list/chat navigation, and a two-pane tablet/desktop layout. Preserve themes, private membership checks and drafts.
+
 ## Owner-requested communication entry (2026-09-24)
 
 - Put “Общение” in the lower workspace shortcuts beside Tasks, Notes and Notifications in both clients. Remove Reports from that row; the owner does not use it. Keep the separate Space chat entry in the workspace header.

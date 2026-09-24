@@ -107,6 +107,7 @@ export async function createApp(
     ownerUserId?: string;
     projectActionPolicy?: ProjectActionPolicy;
     collaborationPolicy?: {
+      checkoutScope?: NonNullable<Parameters<typeof registerProjectDelivery>[4]>;
       gptContext?: (projectId: string) => unknown;
       gptScope?: (projectId: string) => unknown;
       issuesPublished?: (
@@ -743,17 +744,19 @@ export async function createApp(
   registerTechnicalPreviews(app, auth);
   registerProjectInspector(app, sessions);
   registerProjectSetup(app, sessions, options.projectSetupProbe);
-  registerProjectDelivery(
+  const projectDelivery = registerProjectDelivery(
     app,
     sessions,
     options.projectDeliveryProbe,
     options.collaborationPolicy?.delivery,
+    options.collaborationPolicy?.checkoutScope,
   );
   registerMachineHealth(app, sessions, options.machineDiagnostics);
   registerStagingStorage(app, config, options.stagingProbe);
   registerNotebook(app, sessions);
   registerProjectCores(app, sessions);
   const projectWork = registerProjectWork(app, sessions, gpt, queue, options.projectActionPolicy);
+  projectWork.validateCheckout = projectDelivery.validateCheckout;
   const intake = new ProjectIntake(
     sessions,
     projectGpts.bindings,

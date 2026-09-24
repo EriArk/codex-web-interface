@@ -63,7 +63,16 @@ export class Communication {
       )
       .all(id)
       .map((r) => ({ id: String(r.id), name: String(r.name) }));
+    const last = this.db
+      .prepare(
+        "SELECT text,authorId FROM conversation_chat_messages WHERE spaceId=? ORDER BY seq DESC LIMIT 1",
+      )
+      .get(id);
     return {
+      preview: last
+        ? (String(last.authorId) === actor ? "Вы: " : "") +
+          (String(last.text).replace(/\s+/g, " ").slice(0, 140) || "Материал")
+        : "Пока нет сообщений",
       id,
       ownerId: String(row.ownerId),
       kind: row.dmKey ? "direct" : "group",
@@ -95,18 +104,31 @@ export class Communication {
       .map((r) => this.detail(actor, String(r.id)))
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
-  create(actor: string, key: string, input: { members: string[]; title: string }) {
+  create(
+    actor: string,
+    key: string,
+    input: { members: string[]; title: string; kind?: "direct" | "group" },
+  ) {
     const members = [...new Set([actor, ...input.members])].sort();
     if (members.length < 2 || members.length > 8)
       throw new HubError(400, "CONVERSATION_MEMBERS", "Выбери от 1 до 7 собеседников.");
+    if (
+      (input.kind === "direct" && members.length !== 2) ||
+      (input.kind === "group" && !input.title.trim())
+    )
+      throw new HubError(
+        400,
+        "CONVERSATION_KIND",
+        "Выбери одного собеседника или укажи название группы.",
+      );
     for (const id of members) this.team.registry.active(id);
     const receipt = this.team.once(
       actor,
       "conversation.create",
       key,
-      { members, title: input.title },
+      { members, title: input.title, ...(input.kind ? { kind: input.kind } : {}) },
       () => {
-        const dmKey = members.length === 2 ? members.join(":") : null;
+        const dmKey = input.kind !== "group" && members.length === 2 ? members.join(":") : null;
         const existing = dmKey
           ? this.db.prepare("SELECT id FROM human_conversations WHERE dmKey=?").get(dmKey)
           : null;
