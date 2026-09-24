@@ -92,10 +92,32 @@ test("repository editor persists intent, isolates source bindings, and reconcile
     .run(JSON.stringify(missing), interrupted);
   assert.equal((await call(`/${interrupted}/status`)).json().state, "failed");
   assert(!deploymentBlockers(f.store).some((v) => v.kind === "repository_file"));
+  for (const input of [
+    { kind: "repository-branch", branch: "edit/readme", base: "main", head: "a".repeat(40) },
+    {
+      kind: "repository-pr",
+      branch: "edit/readme",
+      base: "main",
+      head: "b".repeat(40),
+      title: "PR",
+      body: "Reviewed",
+    },
+  ]) {
+    const next = randomUUID();
+    assert.equal((await call(`/${next}/prepare`, { ...body, input })).statusCode, 200);
+    assert.equal((await call(`/${next}/confirm`, { fingerprint: "fingerprint" })).statusCode, 500);
+    const before = applies;
+    assert.equal((await call(`/${next}/status`)).json().state, "completed");
+    assert.equal(
+      (await call(`/${next}/confirm`, { fingerprint: "fingerprint" })).json().state,
+      "completed",
+    );
+    assert.equal(applies, before);
+  }
   scope = { ...scope, root: "C:/Other" };
   assert.equal((await call(`/${id}/confirm`, { fingerprint: "fingerprint" })).statusCode, 409);
   assert.equal((await call(`/${randomUUID()}/prepare`, body)).statusCode, 409);
-  assert.equal(applies, 1);
+  assert.equal(applies, 3);
   const otherId = randomUUID(),
     otherBinding = createHash("sha256").update(JSON.stringify(scope)).digest("hex");
   assert.equal(

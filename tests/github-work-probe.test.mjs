@@ -155,7 +155,7 @@ if(s.preparation){
 const crypto=require('node:crypto'),blob=content=>{const b=Buffer.from(content,'base64');return crypto.createHash('sha1').update('blob '+b.length+'\\0').update(b).digest('hex');};
 const commit=(branch,message,files,parent)=>{const sha=crypto.createHash('sha1').update(message+JSON.stringify(files)).digest('hex'),tree={...(s.commits[parent]?.tree||{}),...Object.fromEntries(files.map(f=>[f.path,f.content]))};s.commits[sha]={sha,commit:{message},parents:parent?[{sha:parent}]:[],author:s.identity,tree};s.refs[branch]=sha;return sha;};
 if(parts[3]==='commits'&&parts.length===5){const ref=decodeURIComponent(parts[4]),sha=s.refs[ref]||ref,c=s.commits[sha];answer(c?200:409,c||{message:'Git Repository is empty.'});return;}
-if(parts[3]==='git'&&parts[4]==='ref'){const ref=parts.slice(6).join('/');answer(s.refs[ref]?200:404,{object:{sha:s.refs[ref]}});return;}
+if(parts[3]==='git'&&parts[4]==='ref'){const ref=decodeURIComponent(parts.slice(6).join('/'));answer(s.refs[ref]?200:404,{object:{sha:s.refs[ref]}});return;}
 if(parts[3]==='git'&&parts[4]==='refs'&&method==='POST'){s.refs[body.ref.replace('refs/heads/','')]=body.sha;changed({object:{sha:body.sha}});return;}
 if(parts[3]==='contents'){const name=parts.slice(4).map(decodeURIComponent).join('/');if(method==='PUT'){const sha=commit(body.branch,body.message,[{path:name,content:body.content}],null);changed({commit:{sha}});return;}const ref=new URLSearchParams(endpoint.split('?')[1]).get('ref'),content=s.commits[ref]?.tree[name];if(content===undefined){const prefix=name?name+'/':'',entries=[...new Set(Object.keys(s.commits[ref]?.tree||{}).filter(k=>k.startsWith(prefix)).map(k=>k.slice(prefix.length).split('/')[0]))].map(v=>({name:v,path:prefix+v,type:Object.hasOwn(s.commits[ref]?.tree||{},prefix+v)?'file':'dir'}));if(entries.length || !name){answer(200,entries);return;}}answer(content===undefined?404:200,{type:'file',path:name,sha:content===undefined?undefined:blob(content),size:content===undefined?0:Buffer.from(content,'base64').length,encoding:'base64',content});return;}
 if(endpoint==='graphql'){const v=body.variables.input,branch=v.branch.branchName;if(s.refs[branch]!==v.expectedHeadOid){answer(200,{errors:[{type:'STALE_DATA'}]});return;}const oid=commit(branch,v.message.headline+'\\n\\n'+v.message.body,v.fileChanges.additions.map(f=>({path:f.path,content:f.contents})),v.expectedHeadOid);changed({data:{createCommitOnBranch:{commit:{oid}}}});return;}
@@ -797,5 +797,85 @@ test("direct repository file edits refuse stale heads, changed file fingerprints
   const p2 = await f.prepare(input);
   await f.save({ refs: { main: "b".repeat(40) } });
   assert.equal((await f.apply(p2)).state, "failed");
+  assert((await f.calls()).every((v) => v.method === "GET"));
+});
+
+test("manual branch -> commit -> PR preserves the base and reconciles every lost acknowledgement without replay", async (t) => {
+  const f = await preparationFixture(t),
+    branch = "edit/readme#1";
+  const b = await f.prepare({ kind: "repository-branch", branch, base: "main", head: f.sha });
+  await f.save({ drop: true });
+  assert.equal((await f.apply(b)).state, "unknown");
+  await f.save({ unavailable: false });
+  assert.equal((await f.probe({ op: "status", id: b.id })).state, "completed");
+  assert.equal((await f.apply(b)).state, "completed");
+  const read = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch, path: "README.md" },
+  });
+  const file = await f.prepare({
+    kind: "repository-file",
+    branch,
+    head: f.sha,
+    title: "Reviewed change",
+    files: [
+      { path: "README.md", previous: read.repositoryFiles.file.sha, content: encoded("New\r\n") },
+    ],
+  });
+  const saved = await f.apply(file);
+  assert.equal(saved.state, "completed");
+  const input = {
+    kind: "repository-pr",
+    branch,
+    base: "main",
+    head: saved.result.sha,
+    title: "Review manual change",
+    body: "Description",
+  };
+  const pr = await f.prepare(input);
+  await f.save({ drop: true });
+  assert.equal((await f.apply(pr)).state, "unknown");
+  await f.save({ unavailable: false });
+  const done = await f.probe({ op: "status", id: pr.id });
+  assert.equal(done.state, "completed");
+  assert.equal(done.result.number, 78);
+  assert.equal((await f.apply(pr)).state, "completed");
+  await assert.rejects(f.prepare(input), /GITHUB_WORK_CHANGED/);
+  const state = await f.get();
+  assert.equal(state.refs.main, f.sha);
+  assert.equal(state.refs[branch], saved.result.sha);
+  const writes = (await f.calls()).filter((v) => v.method !== "GET");
+  assert.equal(writes.length, 3);
+  assert(writes.every((v) => v.method === "POST"));
+});
+test("manual branch/PR creation refuses occupied names, stale sources, identical branches, changed heads and acting accounts", async (t) => {
+  const f = await preparationFixture(t);
+  const input = { kind: "repository-branch", branch: "edit/test", base: "main", head: f.sha };
+  await assert.rejects(f.prepare({ ...input, branch: "main" }), /GITHUB_WORK_REQUEST/);
+  await assert.rejects(f.prepare({ ...input, head: "b".repeat(40) }), /GITHUB_WORK_CHANGED/);
+  const prepared = await f.prepare(input);
+  await f.save({ refs: { main: f.sha, "edit/test": f.sha } });
+  assert.equal((await f.apply(prepared)).state, "failed");
+  await assert.rejects(f.prepare(input), /GITHUB_WORK_CHANGED/);
+  await f.save({ refs: { main: f.sha } });
+  const changed = await f.prepare(input);
+  await f.save({ identity: { id: 99, login: "Owner" } });
+  assert.equal((await f.apply(changed)).state, "failed");
+  await f.save({
+    identity: { id: 11, login: "Owner" },
+    refs: { main: f.sha, "edit/test": "b".repeat(40) },
+  });
+  const prInput = {
+    kind: "repository-pr",
+    branch: "edit/test",
+    base: "main",
+    head: "b".repeat(40),
+    title: "PR",
+    body: "",
+  };
+  await assert.rejects(f.prepare({ ...prInput, base: "edit/test" }), /GITHUB_WORK_REQUEST/);
+  const pr = await f.prepare(prInput);
+  await f.save({ refs: { main: f.sha, "edit/test": "c".repeat(40) } });
+  assert.equal((await f.apply(pr)).state, "failed");
   assert((await f.calls()).every((v) => v.method === "GET"));
 });

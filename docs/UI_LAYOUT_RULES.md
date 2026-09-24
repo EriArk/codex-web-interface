@@ -52,3 +52,9 @@ file body and separate review footer. Give workspace-specific modal geometry
 higher specificity than generic theme/mobile dialog rules, including when loaded
 from a lazy viewer. Restore nested recovery dialogs after the parent reaches the
 native top layer, so the parent never covers their controls.
+
+GitHub branch/PR editing: keep the destination choice and branch name in an
+explicit two-column row (one column on phones). PR base, title and description
+form a single aligned column; retain the protected heading, scrollable body and
+fixed equal-width confirmation footer. Show only controls for the current step.
+The resulting PR opens over the mounted review in the integrated viewer.

@@ -407,11 +407,14 @@ export async function githubWorkProbe(
     return { branch: repo.default_branch as string, head: revision, files };
   };
   const preparationPreflight = async (v: GitHubWorkInput) => {
-    if (v.kind === "preparation-branch") {
-      const r = await http(`${prefix}/git/ref/heads/${v.branch}`);
+    if (v.kind === "preparation-branch" || v.kind === "repository-branch") {
+      const r = await http(`${prefix}/git/ref/heads/${encodeURIComponent(v.branch)}`);
       if (r.status !== 404) fail("GITHUB_WORK_CHANGED");
-      const repo = await preparationRepository([]);
-      if (repo.head !== v.head) fail("GITHUB_WORK_CHANGED");
+      const head =
+        v.kind === "repository-branch"
+          ? (await must(`${prefix}/git/ref/heads/${encodeURIComponent(v.base)}`)).object?.sha
+          : (await preparationRepository([])).head;
+      if (head !== v.head) fail("GITHUB_WORK_CHANGED");
     } else if (v.kind === "preparation-seed") {
       const repo = await preparationRepository([]);
       if (repo.head || repo.branch !== v.branch || v.file.previous !== null)
@@ -419,10 +422,25 @@ export async function githubWorkProbe(
     } else if (
       v.kind === "preparation-files" ||
       v.kind === "repository-file" ||
-      v.kind === "preparation-pr"
+      v.kind === "preparation-pr" ||
+      v.kind === "repository-pr"
     ) {
-      const r = await must(`${prefix}/git/ref/heads/${v.branch}`);
+      const r = await must(`${prefix}/git/ref/heads/${encodeURIComponent(v.branch)}`);
       if (r.object?.sha !== v.head) fail("GITHUB_WORK_CHANGED");
+      if (v.kind === "repository-pr") {
+        const baseRef = await must(`${prefix}/git/ref/heads/${encodeURIComponent(v.base)}`);
+        if (!sha(baseRef.object?.sha) || baseRef.object.sha === v.head) fail("GITHUB_WORK_CHANGED");
+        const existing = await must(
+          `${prefix}/pulls?state=open&head=${encodeURIComponent(repository.split("/")[0] + ":" + v.branch)}&base=${encodeURIComponent(v.base)}&per_page=100`,
+        );
+        if (!Array.isArray(existing)) fail("GITHUB_WORK_DATA");
+        if (
+          existing.some(
+            (p: any) => p.state === "open" && p.head?.ref === v.branch && p.base?.ref === v.base,
+          )
+        )
+          fail("GITHUB_WORK_CHANGED");
+      }
       if (v.kind === "preparation-files" || v.kind === "repository-file") {
         if (
           v.kind === "preparation-files" &&
@@ -480,7 +498,7 @@ export async function githubWorkProbe(
       const repo = await must(prefix),
         selected = q.branch || repo.default_branch;
       valid(branch(selected));
-      const tip = await must(`${prefix}/git/ref/heads/${selected}`);
+      const tip = await must(`${prefix}/git/ref/heads/${encodeURIComponent(selected)}`);
       valid(sha(tip.object?.sha));
       const head = tip.object.sha as string;
       const value = await must(
@@ -817,7 +835,10 @@ export async function githubWorkProbe(
   };
   const validateInput = (v: GitHubWorkInput) => {
     valid(object(v));
-    if (v.kind === "preparation-branch") {
+    if (v.kind === "repository-branch") {
+      exact(v, ["kind", "branch", "base", "head"]);
+      valid(branch(v.branch) && branch(v.base) && v.branch !== v.base && sha(v.head));
+    } else if (v.kind === "preparation-branch") {
       exact(v, ["kind", "branch", "head"]);
       valid(/^codexweb\/prepare\/[a-f0-9-]{36}$/.test(v.branch) && sha(v.head));
     } else if (v.kind === "preparation-files" || v.kind === "repository-file") {
@@ -848,10 +869,12 @@ export async function githubWorkProbe(
       valid(branch(v.branch) && scalar(v.title, 200) && !!v.title.trim());
       preparationFile(v.file);
       valid(v.file.previous === null);
-    } else if (v.kind === "preparation-pr") {
+    } else if (v.kind === "preparation-pr" || v.kind === "repository-pr") {
       exact(v, ["kind", "branch", "head", "base", "title", "body"]);
       valid(
-        /^codexweb\/prepare\/[a-f0-9-]{36}$/.test(v.branch) &&
+        (v.kind === "repository-pr"
+          ? branch(v.branch) && v.branch !== v.base
+          : /^codexweb\/prepare\/[a-f0-9-]{36}$/.test(v.branch)) &&
           sha(v.head) &&
           branch(v.base) &&
           scalar(v.title, 200) &&
@@ -1037,7 +1060,7 @@ export async function githubWorkProbe(
       if (["invite", "remove"].includes(input.kind) && access.access !== "admin")
         fail("GITHUB_WORK_ACCESS");
       if (
-        (input.kind.startsWith("preparation-") || input.kind === "repository-file") &&
+        (input.kind.startsWith("preparation-") || input.kind.startsWith("repository-")) &&
         !["write", "maintain", "admin"].includes(access.access)
       )
         fail("GITHUB_WORK_ACCESS");
@@ -1225,8 +1248,8 @@ export async function githubWorkProbe(
     };
     const reconcile = async () => {
       await matchingAccount();
-      if (input.kind === "preparation-branch") {
-        const v = await http(`${prefix}/git/ref/heads/${input.branch}`);
+      if (input.kind === "preparation-branch" || input.kind === "repository-branch") {
+        const v = await http(`${prefix}/git/ref/heads/${encodeURIComponent(input.branch)}`);
         if (v.status === 200 && v.value?.object?.sha === input.head)
           return finish("completed", undefined, { sha: input.head, branch: input.branch });
       } else if (
@@ -1263,7 +1286,7 @@ export async function githubWorkProbe(
               url: `${url}/commit/${c.sha}`,
             });
         }
-      } else if (input.kind === "preparation-pr") {
+      } else if (input.kind === "preparation-pr" || input.kind === "repository-pr") {
         const list = await must(
           `${prefix}/pulls?state=all&head=${encodeURIComponent(repository.split("/")[0] + ":" + input.branch)}&base=${encodeURIComponent(input.base)}&per_page=100`,
         );
@@ -1361,7 +1384,7 @@ export async function githubWorkProbe(
         fail("GITHUB_WORK_CHANGED");
       await preparationPreflight(input);
       let endpoint: string, method: string, payload: unknown;
-      if (input.kind === "preparation-branch") {
+      if (input.kind === "preparation-branch" || input.kind === "repository-branch") {
         endpoint = `${prefix}/git/refs`;
         method = "POST";
         payload = { ref: "refs/heads/" + input.branch, sha: input.head };
@@ -1390,7 +1413,7 @@ export async function githubWorkProbe(
             },
           },
         };
-      } else if (input.kind === "preparation-pr") {
+      } else if (input.kind === "preparation-pr" || input.kind === "repository-pr") {
         endpoint = `${prefix}/pulls`;
         method = "POST";
         payload = {

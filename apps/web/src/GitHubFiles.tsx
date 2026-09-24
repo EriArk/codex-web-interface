@@ -1,20 +1,33 @@
 import {
   editableFile,
+  type GitHubWorkInput,
   type GitHubWorkObservation,
   type GitHubWorkReceipt,
   type RepositoryFiles,
 } from "@codex-web/shared";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ActivitySourceWindow } from "./ActivitySourceWindow";
 import { accountLocalStorage as storage } from "./accountStorage";
-import { api, messageOf } from "./api";
+import { ApiError, api, messageOf } from "./api";
+import "./space-activity.css";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./github-files.css";
 
 const FileEditor = lazy(() => import("./FileEditor"));
 type Operation = { id: string; state: string; receipt?: GitHubWorkReceipt };
+type Step = {
+  id: string;
+  input: Extract<GitHubWorkInput, { kind: "repository-branch" | "repository-pr" }>;
+  operation?: Operation;
+};
 type Review = {
+  origin?: GitHubWorkObservation & { binding: string };
+  baseBranch?: string;
+  newBranch?: string;
+  branchStep?: Step;
+  prStep?: Step;
   source?: string;
   id: string;
   input: Extract<GitHubWorkReceipt["input"], { kind: "repository-file" }>;
@@ -96,6 +109,7 @@ function GitHubFiles({
       file: File;
       source: string;
       snapshot: RepositoryFiles;
+      baseBranch?: string;
       observation: GitHubWorkObservation & { binding: string };
     } | null>(null);
   const [review, setReview] = useState<Review | null>(null);
@@ -289,6 +303,8 @@ function GitHubFiles({
               }
               const next: Review = {
                 source: edit.source,
+                baseBranch: edit.baseBranch ?? edit.snapshot.branch,
+                origin: edit.observation,
                 id: crypto.randomUUID(),
                 binding: edit.observation.binding,
                 repositoryId: edit.observation.repositoryId!,
@@ -320,12 +336,29 @@ function GitHubFiles({
       {review && (
         <GitHubFileReview
           value={review}
+          projectId={projectId}
           base={base}
           storageKey={key}
           onChange={setReview}
           onBack={
-            edit
+            edit || review.origin?.repositoryFiles?.file?.content != null
               ? () => {
+                  const origin = review.origin ?? edit!.observation;
+                  const original = origin.repositoryFiles!.file!;
+                  const bytes = Uint8Array.from(atob(original.content!), (c) => c.charCodeAt(0));
+                  setEdit({
+                    file: new File([bytes], original.path.split("/").at(-1)!, {
+                      type: "text/plain",
+                    }),
+                    source: review.source!,
+                    observation: origin,
+                    baseBranch: review.baseBranch,
+                    snapshot: {
+                      ...origin.repositoryFiles!,
+                      branch: review.input.branch,
+                      head: review.input.head,
+                    },
+                  });
                   storage.removeItem(key);
                   setReview(null);
                 }
@@ -337,7 +370,7 @@ function GitHubFiles({
             storage.removeItem(`workspace-file-copy:${review.source}`);
             setReview(null);
             setEdit(null);
-            void read(snapshot?.path ?? "", snapshot?.branch ?? branch);
+            void read(review.input.files[0]!.path, review.input.branch);
           }}
         />
       )}
@@ -347,6 +380,7 @@ function GitHubFiles({
 }
 function GitHubFileReview({
   value,
+  projectId,
   base,
   storageKey,
   onChange,
@@ -355,6 +389,7 @@ function GitHubFileReview({
   onBack,
 }: {
   value: Review;
+  projectId: string;
   base: string;
   storageKey: string;
   onChange: (v: Review) => void;
@@ -374,41 +409,118 @@ function GitHubFileReview({
     },
     [],
   );
+  const [inspectPr, setInspectPr] = useState(false);
+  const update = (next: Review) => {
+    try {
+      storage.setItem(storageKey, JSON.stringify(next));
+      onChange(next);
+      return true;
+    } catch {
+      setError("Не удалось сохранить черновик на устройстве.");
+      return false;
+    }
+  };
+  const target = value.prStep
+    ? "pr"
+    : value.newBranch !== undefined && value.branchStep?.operation?.state !== "completed"
+      ? "branch"
+      : "commit";
+  const selected = target === "pr" ? value.prStep : target === "branch" ? value.branchStep : value;
+  const state = selected?.operation?.state;
   const run = async (action: "prepare" | "confirm" | "status") => {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
     setError("");
+    let step = selected;
+    if (target === "branch" && !step)
+      step = {
+        id: crypto.randomUUID(),
+        input: {
+          kind: "repository-branch",
+          branch: value.newBranch!.trim(),
+          base: value.input.branch,
+          head: value.input.head,
+        },
+      };
+    if (!step) {
+      lock.current = false;
+      setBusy(false);
+      return;
+    }
+    const keep = (operation?: Operation) => {
+      const currentStep = { ...step!, operation };
+      const next: Review =
+        target === "commit"
+          ? { ...value, operation }
+          : target === "pr"
+            ? { ...value, prStep: currentStep as Step }
+            : { ...value, branchStep: currentStep as Step };
+      if (target === "branch" && operation?.state === "completed")
+        next.input = { ...value.input, branch: step!.input.branch };
+      return next;
+    };
     try {
       const pending =
         action === "confirm"
-          ? { ...value, operation: { ...value.operation!, state: "unknown" } }
-          : value;
-      storage.setItem(storageKey, JSON.stringify(pending));
-      if (action === "confirm") onChange(pending);
-      const operation = await api<Operation>(`${base}/${value.id}/${action}`, {
+          ? { ...step.operation!, state: "unknown" }
+          : action === "prepare"
+            ? { id: step.id, state: "preparing" }
+            : step.operation;
+      if (!update(keep(pending))) return;
+      const operation = await api<Operation>(`${base}/${step.id}/${action}`, {
         method: "POST",
         body:
           action === "prepare"
             ? {
-                input: value.input,
+                input: step.input,
                 binding: value.binding,
                 repositoryId: value.repositoryId,
                 identityId: value.identityId,
               }
             : action === "confirm"
-              ? { fingerprint: value.operation?.receipt?.fingerprint }
+              ? { fingerprint: step.operation?.receipt?.fingerprint }
               : {},
       });
-      const next = { ...value, operation };
+      const next = keep(operation);
       storage.setItem(storageKey, JSON.stringify(next));
       if (live.current) onChange(next);
     } catch (e) {
-      if (live.current) setError(messageOf(e));
+      if (live.current) {
+        if (
+          action === "status" &&
+          e instanceof ApiError &&
+          e.status === 404 &&
+          step.operation?.state === "preparing"
+        )
+          update(keep(undefined));
+        setError(messageOf(e));
+      }
     } finally {
       lock.current = false;
       if (live.current) setBusy(false);
     }
+  };
+  const startPr = () => {
+    const head = value.operation?.receipt?.result?.sha;
+    if (!head) {
+      setError("Сначала проверь сохранённый коммит.");
+      return;
+    }
+    update({
+      ...value,
+      prStep: {
+        id: crypto.randomUUID(),
+        input: {
+          kind: "repository-pr",
+          branch: value.input.branch,
+          head,
+          base: value.baseBranch !== value.input.branch ? (value.baseBranch ?? "") : "",
+          title: value.input.title,
+          body: "",
+        },
+      },
+    });
   };
   const refresh = async () => {
     if (lock.current) return;
@@ -436,7 +548,10 @@ function GitHubFileReview({
         ...value,
         id: crypto.randomUUID(),
         operation: undefined,
+        branchStep:
+          value.branchStep?.operation?.state === "completed" ? value.branchStep : undefined,
         oldText: decode(v.repositoryFiles.file.content),
+        origin: v,
         input: {
           ...value.input,
           head: v.repositoryFiles.head,
@@ -452,7 +567,6 @@ function GitHubFileReview({
       if (live.current) setBusy(false);
     }
   };
-  const state = value.operation?.state;
   return createPortal(
     <dialog
       ref={dialog}
@@ -466,7 +580,9 @@ function GitHubFileReview({
     >
       <header className="panel-heading">
         <div>
-          <strong>Коммит GitHub</strong>
+          <strong>
+            {target === "pr" ? "Новый PR" : target === "branch" ? "Новая ветка" : "Коммит GitHub"}
+          </strong>
           <small>
             {value.input.branch} · {value.input.files[0]!.path}
           </small>
@@ -482,28 +598,139 @@ function GitHubFileReview({
         </button>
       </header>
       <div className="github-file-body">
-        <label>
-          Сообщение коммита
-          <input
-            aria-label="Сообщение коммита"
-            value={value.input.title}
-            disabled={!!value.operation || busy}
-            onChange={(e) =>
-              onChange({ ...value, input: { ...value.input, title: e.target.value } })
-            }
-          />
-        </label>
-        <section aria-label="Изменения файла">
-          <pre>{diff(value.oldText, value.newText)}</pre>
-        </section>
+        {target !== "pr" ? (
+          <>
+            {!value.operation && !value.branchStep && (
+              <div className="github-edit-destination">
+                <label>
+                  Сохранение
+                  <select
+                    aria-label="Куда сохранить коммит"
+                    value={value.newBranch === undefined ? "current" : "new"}
+                    disabled={busy}
+                    onChange={(e) =>
+                      update({
+                        ...value,
+                        newBranch:
+                          e.target.value === "new"
+                            ? "edit/" + crypto.randomUUID().slice(0, 8)
+                            : undefined,
+                      })
+                    }
+                  >
+                    <option value="current">В текущую ветку</option>
+                    <option value="new">В новую ветку</option>
+                  </select>
+                </label>
+                {value.newBranch !== undefined && (
+                  <label>
+                    Новая ветка
+                    <input
+                      aria-label="Название новой ветки"
+                      maxLength={240}
+                      value={value.newBranch}
+                      disabled={busy}
+                      onChange={(e) => update({ ...value, newBranch: e.target.value })}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+            {value.branchStep && (
+              <p>
+                Ветка: <strong>{value.branchStep.input.branch}</strong>
+                {value.branchStep.operation?.state === "completed" ? " · Создана" : ""}
+              </p>
+            )}
+            <label>
+              Сообщение коммита
+              <input
+                aria-label="Сообщение коммита"
+                maxLength={200}
+                value={value.input.title}
+                disabled={!!value.operation || busy}
+                onChange={(e) =>
+                  update({ ...value, input: { ...value.input, title: e.target.value } })
+                }
+              />
+            </label>
+            <section aria-label="Изменения файла">
+              <pre>{diff(value.oldText, value.newText)}</pre>
+            </section>
+          </>
+        ) : (
+          value.prStep?.input.kind === "repository-pr" && (
+            <div className="github-pr-fields">
+              <p>
+                Ветка: <strong>{value.prStep.input.branch}</strong> · Коммит{" "}
+                <code>{value.prStep.input.head.slice(0, 8)}</code>
+              </p>
+              <label>
+                Влить в ветку
+                <input
+                  aria-label="Базовая ветка PR"
+                  maxLength={240}
+                  value={value.prStep.input.base}
+                  disabled={!!value.prStep.operation || busy}
+                  onChange={(e) =>
+                    update({
+                      ...value,
+                      prStep: {
+                        ...value.prStep!,
+                        input: { ...value.prStep!.input, base: e.target.value },
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Заголовок PR
+                <input
+                  aria-label="Заголовок PR"
+                  maxLength={200}
+                  value={value.prStep.input.title}
+                  disabled={!!value.prStep.operation || busy}
+                  onChange={(e) =>
+                    update({
+                      ...value,
+                      prStep: {
+                        ...value.prStep!,
+                        input: { ...value.prStep!.input, title: e.target.value } as Step["input"],
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Описание
+                <textarea
+                  aria-label="Описание PR"
+                  maxLength={16000}
+                  rows={6}
+                  value={value.prStep.input.body}
+                  disabled={!!value.prStep.operation || busy}
+                  onChange={(e) =>
+                    update({
+                      ...value,
+                      prStep: {
+                        ...value.prStep!,
+                        input: { ...value.prStep!.input, body: e.target.value } as Step["input"],
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+          )
+        )}
         {error && <p role="alert">{error}</p>}
         <div className="github-file-review-tools">
-          {onBack && (!state || state === "prepared" || state === "failed") && (
+          {onBack && target !== "pr" && (!state || state === "prepared" || state === "failed") && (
             <button className="secondary" type="button" disabled={busy} onClick={onBack}>
               К редактору
             </button>
           )}
-          {(!state || state === "failed") && (
+          {target !== "pr" && (!state || state === "failed") && (
             <button
               className="secondary"
               type="button"
@@ -513,43 +740,136 @@ function GitHubFileReview({
               Обновить сравнение
             </button>
           )}
+          {target === "pr" && (!state || state === "failed") && (
+            <button
+              className="secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => update({ ...value, prStep: undefined })}
+            >
+              К коммиту
+            </button>
+          )}
+          {state === "failed" && target !== "commit" && (
+            <button
+              className="secondary"
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                update(
+                  target === "branch"
+                    ? { ...value, branchStep: undefined }
+                    : {
+                        ...value,
+                        prStep: { ...value.prStep!, id: crypto.randomUUID(), operation: undefined },
+                      },
+                )
+              }
+            >
+              Изменить параметры
+            </button>
+          )}
         </div>
         {state && (
           <p role="status">
             {state === "completed"
-              ? "Коммит сохранён"
+              ? target === "pr"
+                ? "PR создан"
+                : "Коммит сохранён"
               : state === "prepared"
-                ? "Изменения проверены. Можно создать коммит."
+                ? target === "branch"
+                  ? "Ветка проверена. Можно создать."
+                  : target === "pr"
+                    ? "PR проверен. Можно опубликовать."
+                    : "Изменения проверены. Можно создать коммит."
                 : state === "failed"
-                  ? "GitHub отклонил изменение. Обнови файл и сравни версии."
+                  ? "GitHub отклонил изменение. Проверь параметры и версии."
                   : "Результат ещё не подтверждён. Проверь сохранение."}
           </p>
         )}
       </div>
       <footer className="file-copy-actions">
-        <button
-          className="secondary"
-          type="button"
-          disabled={busy}
-          onClick={() => void run("status")}
-        >
-          Проверить результат
-        </button>
         {state === "completed" ? (
-          <button className="primary" type="button" onClick={onDone}>
-            Готово
-          </button>
+          <>
+            {target === "commit" ? (
+              <button className="secondary" type="button" onClick={startPr}>
+                Создать PR
+              </button>
+            ) : (
+              <button className="secondary" type="button" onClick={() => setInspectPr(true)}>
+                Открыть PR
+              </button>
+            )}
+            <button className="primary" type="button" onClick={onDone}>
+              Готово
+            </button>
+          </>
         ) : (
-          <button
-            className="primary"
-            type="button"
-            disabled={busy || !value.input.title.trim() || (!!state && state !== "prepared")}
-            onClick={() => void run(state === "prepared" ? "confirm" : "prepare")}
-          >
-            {state === "prepared" ? "Создать коммит" : "Подготовить коммит"}
-          </button>
+          <>
+            <button
+              className="secondary"
+              type="button"
+              disabled={busy || !selected?.operation}
+              onClick={() => void run("status")}
+            >
+              Проверить результат
+            </button>
+            <button
+              className="primary"
+              type="button"
+              disabled={
+                busy ||
+                (!!state && state !== "prepared") ||
+                (target === "branch"
+                  ? !value.newBranch?.trim() || value.newBranch.trim() === value.input.branch
+                  : target === "pr" && value.prStep?.input.kind === "repository-pr"
+                    ? !value.prStep.input.title.trim() ||
+                      !value.prStep.input.base.trim() ||
+                      value.prStep.input.base === value.prStep.input.branch
+                    : !value.input.title.trim())
+              }
+              onClick={() => void run(state === "prepared" ? "confirm" : "prepare")}
+            >
+              {target === "branch"
+                ? state === "prepared"
+                  ? "Создать ветку"
+                  : "Подготовить ветку"
+                : target === "pr"
+                  ? state === "prepared"
+                    ? "Опубликовать PR"
+                    : "Подготовить PR"
+                  : state === "prepared"
+                    ? "Создать коммит"
+                    : "Подготовить коммит"}
+            </button>
+          </>
         )}
       </footer>
+      {inspectPr &&
+        value.prStep?.operation?.receipt?.result?.number &&
+        createPortal(
+          <ActivitySourceWindow
+            personalProjectId={projectId}
+            target={{
+              projectId,
+              repositoryId: value.repositoryId,
+              source: {
+                kind: "pr",
+                key: `pr:${value.prStep.operation.receipt.result.number}`,
+                number: value.prStep.operation.receipt.result.number,
+                title:
+                  value.prStep.input.kind === "repository-pr" ? value.prStep.input.title : "PR",
+                url: value.prStep.operation.receipt.result.url!,
+                author: value.prStep.operation.receipt.snapshot.identity,
+                authorName: value.prStep.operation.receipt.snapshot.identity.login,
+                at: new Date(value.prStep.operation.receipt.updatedAt).toISOString(),
+                state: "open",
+              },
+            }}
+            onClose={() => setInspectPr(false)}
+          />,
+          document.body,
+        )}
     </dialog>,
     document.body,
   );

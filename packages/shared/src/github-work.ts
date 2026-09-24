@@ -40,6 +40,29 @@ export const repositoryFileInput = z
     title: z.string().trim().min(1).max(200),
   })
   .strict();
+export const repositoryBranchInput = z
+  .object({
+    kind: z.literal("repository-branch"),
+    branch: z.string().min(1).max(240),
+    base: z.string().min(1).max(240),
+    head: z.string().regex(/^[a-f0-9]{40}$/),
+  })
+  .strict();
+export const repositoryPrInput = z
+  .object({
+    kind: z.literal("repository-pr"),
+    branch: z.string().min(1).max(240),
+    base: z.string().min(1).max(240),
+    head: z.string().regex(/^[a-f0-9]{40}$/),
+    title: z.string().trim().min(1).max(200),
+    body: z.string().max(16000),
+  })
+  .strict();
+export const repositoryEditInput = z.discriminatedUnion("kind", [
+  repositoryFileInput,
+  repositoryBranchInput,
+  repositoryPrInput,
+]);
 export type RepositoryFiles = {
   branch: string;
   head: string;
@@ -49,6 +72,8 @@ export type RepositoryFiles = {
 };
 export const githubWorkInputSchema = z.discriminatedUnion("kind", [
   repositoryFileInput,
+  repositoryBranchInput,
+  repositoryPrInput,
   preparationBranchInput,
   preparationFilesInput,
   preparationSeedInput,

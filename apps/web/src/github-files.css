@@ -101,3 +101,27 @@
   max-width: 520px;
   margin-top: 12px;
 }
+
+.github-edit-destination,
+.github-pr-fields {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.github-edit-destination {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.github-edit-destination select,
+.github-pr-fields textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+.github-pr-fields textarea {
+  resize: vertical;
+}
+@media (max-width: 600px) {
+  .github-edit-destination {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -7,6 +7,7 @@ import react from "../apps/web/node_modules/@vitejs/plugin-react/dist/index.js";
 import { build } from "../apps/web/node_modules/vite/dist/node/index.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
+const withPr = process.env.WITH_PR === "1";
 const dir = await mkdtemp(join(tmpdir(), "manual-edit-"));
 try {
   await build({
@@ -58,6 +59,8 @@ try {
       const [name, value] = f.headers.cookie.split("=");
       await context.addCookies([{ name, value, url: origin }]);
       let commits = 0,
+        branches = 0,
+        prs = 0,
         operation;
       await context.route(origin + "/**", async (route) => {
         const path = new URL(route.request().url()).pathname;
@@ -76,6 +79,25 @@ try {
           return route.fulfill({
             contentType: "text/markdown",
             body: "# Original\r\nComplete text\r\n",
+          });
+        if (path.endsWith("/intake/source"))
+          return route.fulfill({
+            json: {
+              repository: "Owner/Repo",
+              repositoryId: 51,
+              record: {
+                type: "pr",
+                number: 78,
+                title: "Reviewed file change",
+                body: "Details",
+                state: "open",
+                author: { id: 11, login: "Owner" },
+                labels: [],
+                assignees: [],
+                updatedAt: new Date(0).toISOString(),
+              },
+              commentsPage: [],
+            },
           });
         if (path.includes("/github-files")) {
           const body = route.request().postDataJSON();
@@ -107,12 +129,24 @@ try {
             operation = {
               id: path.split("/").at(-2),
               state: "prepared",
-              receipt: { fingerprint: "fingerprint" },
+              receipt: {
+                fingerprint: "fingerprint",
+                input: body.input,
+                snapshot: { identity: { id: 11, login: "Owner" } },
+                updatedAt: Date.now(),
+                result: {
+                  sha: "c".repeat(40),
+                  number: 78,
+                  url: "https://github.com/Owner/Repo/pull/78",
+                },
+              },
             };
             return route.fulfill({ json: operation });
           }
           if (path.endsWith("/confirm")) {
-            commits++;
+            if (operation.receipt.input.kind === "repository-branch") branches++;
+            else if (operation.receipt.input.kind === "repository-pr") prs++;
+            else commits++;
             operation.state = "completed";
             return route.abort("failed");
           }
@@ -162,6 +196,24 @@ try {
       await editor.locator(".cm-content").fill("# Remote change\n");
       await editor.getByRole("button", { name: "Проверить изменения", exact: true }).click();
       await expect(review).toContainText("+# Remote change");
+      if (withPr) {
+        await review.getByLabel("Куда сохранить коммит").selectOption("new");
+        await review.getByLabel("Название новой ветки").fill("edit/readme");
+        await review.getByRole("button", { name: "Подготовить ветку", exact: true }).click();
+        await review.getByRole("button", { name: "Создать ветку", exact: true }).click();
+        await expect(review.getByRole("alert")).toBeVisible();
+        assert.equal(branches, 1);
+        await page.reload();
+        await page.getByRole("button", { name: "Файлы GitHub", exact: true }).click();
+        await expect(review).toContainText("+# Remote change");
+        await review.getByRole("button", { name: "Проверить результат" }).click();
+        await expect(review).toContainText("Создана");
+        await review.getByRole("button", { name: "К редактору", exact: true }).click();
+        await expect(editor.locator(".cm-content")).toContainText("# Remote change");
+        await editor.getByRole("button", { name: "Проверить изменения", exact: true }).click();
+        await expect(review).toContainText("edit/readme");
+        await expect(review).toContainText("+# Remote change");
+      }
       for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
         await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
         for (const [label, w, h] of [
@@ -187,8 +239,60 @@ try {
       await expect(review).toContainText("+# Remote change");
       await review.getByRole("button", { name: "Проверить результат" }).click();
       await expect(review).toContainText("Коммит сохранён");
+      if (withPr) {
+        await review.getByRole("button", { name: "Создать PR", exact: true }).click();
+        await expect(review.getByLabel("Базовая ветка PR")).toHaveValue("main");
+        await review.getByLabel("Заголовок PR").fill("Reviewed file change");
+        await review.getByLabel("Описание PR").fill("Details");
+        await page.reload();
+        await page.getByRole("button", { name: "Файлы GitHub", exact: true }).click();
+        await expect(review.getByLabel("Описание PR")).toHaveValue("Details");
+        for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+          await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+          for (const [label, width, height] of [
+            ["phone", 390, 844],
+            ["keyboard", 390, 460],
+            ["tablet", 768, 1024],
+            ["wide", 1366, 1024],
+          ]) {
+            await page.setViewportSize({ width, height });
+            const box = await review.boundingBox();
+            assert(
+              box.x >= 0 &&
+                box.y >= 0 &&
+                box.x + box.width <= width + 1 &&
+                box.y + box.height <= height + 1,
+            );
+            await page.screenshot({
+              path: `.local/qa-manual-edit/${engine}-pr-${theme}-${label}.png`,
+            });
+          }
+        }
+        await review.getByRole("button", { name: "Подготовить PR", exact: true }).click();
+        await review.getByRole("button", { name: "Опубликовать PR", exact: true }).click();
+        await expect(review.getByRole("alert")).toBeVisible();
+        assert.equal(prs, 1);
+        await page.reload();
+        await page.getByRole("button", { name: "Файлы GitHub", exact: true }).click();
+        await review.getByRole("button", { name: "Проверить результат" }).click();
+        await expect(review).toContainText("PR создан");
+        await review.getByRole("button", { name: "Открыть PR", exact: true }).click();
+        await expect(
+          page.getByRole("heading", { name: "PR #78 · Reviewed file change" }),
+        ).toBeVisible();
+        assert.equal(page.url(), origin + "/");
+        await page.keyboard.press("Escape");
+        await expect(review).toBeVisible();
+        assert.equal(branches, 1);
+        assert.equal(prs, 1);
+      }
       await review.getByRole("button", { name: "Готово", exact: true }).click();
       assert.equal(commits, 1);
+      if (withPr)
+        console.log(
+          engine +
+            ": branch/commit/PR each dispatched once; reload/drafts/internal PR viewer passed",
+        );
       assert.deepEqual(errors, []);
       console.log(
         engine +

@@ -6,7 +6,7 @@ import {
   githubWorkQuerySchema,
   HubError,
   type ProjectRepository,
-  repositoryFileInput,
+  repositoryEditInput,
 } from "@codex-web/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -25,7 +25,7 @@ type Saved = {
   projectId: string;
   binding: string;
   repository: string;
-  input: z.infer<typeof repositoryFileInput>;
+  input: z.infer<typeof repositoryEditInput>;
   repositoryId: number;
   identityId: number;
   receipt?: GitHubWorkReceipt;
@@ -127,7 +127,7 @@ export function registerRepositoryFiles(
     return serial(project, async () => {
       const body = z
           .object({
-            input: repositoryFileInput,
+            input: repositoryEditInput,
             binding: z.string(),
             repositoryId: z.number().int().positive(),
             identityId: z.number().int().positive(),

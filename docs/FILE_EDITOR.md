@@ -102,3 +102,36 @@ Verification: focused Hub/file/upload/GitHub worker tests cover active Codex,
 identity changes, stale branch/file versions, path checks, lost acknowledgements
 and single-commit reconciliation. Browser acceptance and installed worker checks
 are recorded in the release evidence; physical-device acceptance remains pending.
+
+
+## Branch and pull request from the editor (24 September)
+
+The GitHub review can save into the current branch or create a named branch from
+its exact reviewed base HEAD. Branch creation, the file commit and PR publication
+are separate explicit actions in one retained workflow. The local checkout is
+not switched. After a confirmed commit, the PR form keeps the base branch, title
+and description; the resulting PR opens in the integrated source viewer above
+the editor. Returning to the file retains the chosen branch.
+
+The same per-account durable operation store handles `repository-branch` and
+`repository-pr`. Preparation and dispatch recheck the acting numeric GitHub
+identity, repository access, branch names and reviewed HEAD. Occupied branch
+names, stale source revisions and existing open PRs are refused before writing.
+Each dispatched operation keeps its exact receipt after response loss; explicit
+status reconciles without repeating branch creation, commit or PR publication.
+PR recovery requires the operation marker, author, source SHA, title and base.
+GitHub branch protection and permissions remain authoritative. No merge or
+local checkout mutation is implicit.
+
+Account-local recovery preserves the edited bytes, source observation, branch
+choice and PR draft across reloads. After a confirmed branch creation the review
+can return to CodeMirror without losing the new branch or original PR base.
+Pending/unknown operations cannot be reset into a fresh send.
+
+Verification: 24 focused helper/Hub tests passed, including lost acknowledgements
+for all three writes, exact-ID reconciliation, changed identities/heads and
+occupied names. Chromium and WebKit cover branch -> restored editor -> commit ->
+PR, draft recovery, exactly-once dispatch and internal PR inspection. Four-theme
+phone, keyboard-constrained, tablet and wide screenshots were captured, with
+representative screenshots visually inspected. Physical-device acceptance stays
+pending. Installed Windows helper and release evidence are recorded separately.
