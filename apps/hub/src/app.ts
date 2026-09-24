@@ -744,7 +744,9 @@ export async function createApp(
   installResultCaptureLimit(app);
   registerTechnicalPreviews(app, auth);
   registerProjectInspector(app, sessions);
-  registerProjectSetup(app, sessions, options.projectSetupProbe);
+  registerProjectSetup(app, sessions, options.projectSetupProbe, (id, agentProfile) =>
+    projectGpts.rules(id, { ...projectGpts.get(id).rules, agentProfile }),
+  );
   const projectDelivery = registerProjectDelivery(
     app,
     sessions,

@@ -8,6 +8,7 @@ import type {
 } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityBadge } from "./ActivityBadge";
+import { AgentProfileButton } from "./AgentProfileEditor";
 import { workspaceMediaUrl } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { GptProjectButton } from "./GptProjectContent";
@@ -195,6 +196,9 @@ export function ProjectOverview({
         )}
       </header>
       <div className="project-overview-scroll">
+        {scope.client === "codex" && (
+          <AgentProfileButton projectId={scope.projectId} name={scope.name} />
+        )}
         {scope.client === "codex" && onProjectGpt && (
           <button type="button" className="overview-row" onClick={onProjectGpt}>
             <Icon name="chat" />

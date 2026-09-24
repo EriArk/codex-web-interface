@@ -43,7 +43,13 @@ export type InspectRequest =
       reveal?: string;
     }
   | { op: "repository" }
-  | { op: "project-rules"; content: string }
+  | {
+      op: "project-rules" | "project-rules-cancel";
+      content: string;
+      expected?: string | null;
+      key?: string;
+    }
+  | { op: "project-rules-read"; key?: string }
   | { op: "releases" }
   | { op: "git" }
   | { op: "diff"; path: string; staged: boolean }

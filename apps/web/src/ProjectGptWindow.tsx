@@ -1,12 +1,11 @@
-import {
-  type ActivityGptHandoff,
-  type GptConversation,
-  type NotebookLink,
-  type ProjectGpt,
-  type ProjectRules,
-  projectRuleLabels,
+import type {
+  ActivityGptHandoff,
+  GptConversation,
+  NotebookLink,
+  ProjectGpt,
 } from "@codex-web/shared";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { AgentProfileButton } from "./AgentProfileEditor";
 import { accountSessionStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { IssueDrawerButton } from "./IssueDrawer";
@@ -56,7 +55,6 @@ export function ProjectGptWindow({
   const [preparing, setPreparing] = useState(false);
   const [configure, setConfigure] = useState(false),
     [busy, setBusy] = useState(false);
-  const [rules, setRules] = useState<ProjectRules>({ enabled: [], custom: "" });
   const [chats, setChats] = useState<GptConversation[]>([]),
     [next, setNext] = useState<number | null>(0);
   const [choice, setChoice] = useState("");
@@ -69,7 +67,6 @@ export function ProjectGptWindow({
       .then((d) => {
         if (live.current) {
           setData(d);
-          setRules(d.rules);
           setChoice(d.nativeId ?? "");
         }
       })
@@ -214,61 +211,7 @@ export function ProjectGptWindow({
               <summary>Контекст проекта</summary>
               <pre>{data.context}</pre>
             </details>
-            <details>
-              <summary>Дополнительные правила</summary>
-              <p>
-                Для следующих запросов Codex и GPT. Создадим локальный CODEXWEB.md вне коммитов;
-                AGENTS.md останется вашим.
-              </p>
-              {Object.entries(projectRuleLabels).map(([id, title]) => {
-                const key = id as keyof typeof projectRuleLabels;
-                return (
-                  <label className="project-rule" key={key}>
-                    <input
-                      type="checkbox"
-                      checked={rules.enabled.includes(key)}
-                      onChange={(e) =>
-                        setRules((r) => ({
-                          ...r,
-                          enabled: e.target.checked
-                            ? [...r.enabled, key]
-                            : r.enabled.filter((v) => v !== key),
-                        }))
-                      }
-                    />
-                    {title}
-                  </label>
-                );
-              })}
-              <label>
-                Свои пожелания
-                <textarea
-                  aria-label="Свои правила проекта"
-                  rows={4}
-                  maxLength={4000}
-                  value={rules.custom}
-                  onChange={(e) => setRules((r) => ({ ...r, custom: e.target.value }))}
-                />
-              </label>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void act(async () => {
-                    const d = await api<ProjectGpt>(`${path}/rules`, {
-                      method: "PUT",
-                      body: rules,
-                    });
-                    if (live.current) {
-                      setData(d);
-                      setConfigure(false);
-                    }
-                  })
-                }
-              >
-                Применить правила
-              </button>
-            </details>
+            <AgentProfileButton projectId={projectId} name={name} />
           </div>
           <div className="project-gpt-body" hidden={configure}>
             <Suspense fallback={<p role="status">Загружаю GPT…</p>}>

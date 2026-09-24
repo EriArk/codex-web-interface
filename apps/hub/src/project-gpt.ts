@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { inspectProject } from "@codex-web/machines";
 import {
+  agentProfileInstructions,
+  agentProfileSchema,
   type ConversationBindingSpec,
   HubError,
   type ProjectGpt,
@@ -14,6 +16,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConversationBindings } from "./conversation-bindings.js";
 import type { GptService } from "./gpt.js";
+import { ProjectProfiles } from "./project-profiles.js";
 import type { Sessions } from "./sessions.js";
 
 const nativeId = z
@@ -25,6 +28,7 @@ export const rulesSchema = z
   .object({
     enabled: z.array(z.enum(["related", "tests", "focused", "dependencies", "issues"])).max(5),
     custom: z.string().trim().max(4000),
+    agentProfile: agentProfileSchema.nullable().optional(),
   })
   .strict();
 export const projectGptSendSchema = z
@@ -54,7 +58,7 @@ export class ProjectGpts {
       execution: null,
     };
   }
-  private writingRules = new Set<string>();
+  readonly profiles: ProjectProfiles;
   private readingRepository = new Set<string>();
   constructor(
     private sessions: Sessions,
@@ -78,6 +82,11 @@ export class ProjectGpts {
       CREATE TABLE IF NOT EXISTS project_gpt_handoffs(projectId TEXT PRIMARY KEY,value TEXT NOT NULL);
     `);
     this.bindings = new ConversationBindings(sessions.store.db, ownerUserId);
+    this.profiles = new ProjectProfiles(
+      sessions,
+      (id) => this.get(id).rules,
+      (id) => this.authorizationScope?.(id),
+    );
     const db = sessions.store.db;
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -157,6 +166,8 @@ export class ProjectGpts {
       }),
       ...rules.enabled.map((r) => projectRuleLabels[r]),
       rules.custom,
+      rules.agentProfile ? agentProfileInstructions(rules.agentProfile) : "",
+      "Project GPT interprets implementation preferences as analysis and recommendations, not permission to implement. Current collaboration capabilities override profile prose.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -323,37 +334,14 @@ export class ProjectGpts {
     }
   }
   async rules(id: string, raw: unknown) {
-    const rules = rulesSchema.parse(raw),
-      p = this.project(id);
-    this.sessions.authorizeExecution();
-    if (this.writingRules.has(id)) throw fail("PROJECT_RULES_BUSY", "Правила уже сохраняются.");
-    this.writingRules.add(id);
-    try {
-      this.get(id);
-      const content =
-        rules.enabled.length || rules.custom
-          ? [
-              "<!-- CodexWeb: personal project rules -->",
-              "# CODEXWEB",
-              "",
-              "Read this alongside AGENTS.md. These are this user's optional project preferences.",
-              ...rules.enabled.map((r) => `- ${projectRuleLabels[r]}`),
-              rules.custom,
-            ]
-              .filter(Boolean)
-              .join("\n") + "\n"
-          : "";
-      await inspectProject(this.sessions.catalog.machine(p.machineId), p.workingDirectory, {
-        op: "project-rules",
-        content,
-      });
-      this.sessions.store.db
-        .prepare("UPDATE project_gpt_bindings SET rules=? WHERE projectId=?")
-        .run(JSON.stringify(rules), id);
-      return this.get(id);
-    } finally {
-      this.writingRules.delete(id);
-    }
+    const parsed = rulesSchema.parse(raw),
+      current = this.get(id).rules;
+    const rules =
+      parsed.agentProfile === undefined && current.agentProfile !== undefined
+        ? { ...parsed, agentProfile: current.agentProfile }
+        : parsed;
+    await this.profiles.save(id, rules);
+    return this.get(id);
   }
   async invitationRules(id: string, receipt: string, raw: unknown) {
     const db = this.sessions.store.db;
@@ -386,11 +374,12 @@ export class ProjectGpts {
       .get(id);
     if (!row) return null;
     const rules = JSON.parse(String(row.rules)) as ProjectRules;
-    if (!rules.enabled.length && !rules.custom) return null;
+    if (!rules.enabled.length && !rules.custom && !rules.agentProfile) return null;
     return [
       "Read CODEXWEB.md alongside AGENTS.md before working. User-selected personal project preferences:",
       ...rules.enabled.map((r) => projectRuleLabels[r]),
       rules.custom,
+      rules.agentProfile ? agentProfileInstructions(rules.agentProfile) : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -428,6 +417,35 @@ export function registerProjectGpt(
     }),
   );
   app.put("/api/projects/:id/gpt/rules", (req) => service.rules(projectId(req.params), req.body));
+  app.get("/api/projects/:id/agent-profile", (req) =>
+    service.profiles.snapshot(projectId(req.params)),
+  );
+  app.put("/api/projects/:id/agent-profile", async (req) => {
+    const body = z
+      .object({
+        rules: rulesSchema,
+        revision,
+        binding: z.string().regex(/^[a-f0-9]{64}$/),
+        fingerprint: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .nullable(),
+      })
+      .strict()
+      .parse(req.body);
+    const id = projectId(req.params);
+    await service.profiles.save(id, body.rules, body);
+    return service.profiles.snapshot(id);
+  });
+  app.post("/api/projects/:id/agent-profile/cancel", async (req) => {
+    const body = z
+        .object({ revision, binding: z.string().regex(/^[a-f0-9]{64}$/) })
+        .strict()
+        .parse(req.body),
+      id = projectId(req.params);
+    await service.profiles.cancel(id, body);
+    return service.profiles.snapshot(id);
+  });
   const collaboration = sessions.projectInstructions;
   sessions.projectInstructions = (id) =>
     [collaboration(id), service.instructions(id)].filter(Boolean).join("\n") || null;

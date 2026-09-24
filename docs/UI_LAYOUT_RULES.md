@@ -36,3 +36,11 @@ Keep message, recurrence, timezone/date/time and equal-width footer actions in
 explicit rows. The editor scrolls independently while Save and Close remain
 reachable at keyboard height. Keep its draft separate from the normal composer;
 management stays bound to the originating chat role without a Project picker.
+
+Project profiles: put optional advanced settings behind one disclosure in
+creation. Reuse one editor in Overview and Project GPT; show four primary
+choices, with workflow/priorities and exact file preview in disclosures. Use
+two aligned field columns on wide screens and one on phones. Protect the title
+and Close control, keep comparison/apply actions in an equal-width footer and
+retain the draft beneath nested windows. Selects need a visible theme-colored
+arrow; removing native appearance must not remove their selection affordance.

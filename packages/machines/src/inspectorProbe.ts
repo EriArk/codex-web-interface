@@ -12,6 +12,7 @@ export async function inspectorProbe(
   root: string,
   request: InspectRequest,
 ): Promise<
+  | import("@codex-web/shared").ProjectRulesFile
   | ProjectDirectory
   | ProjectGit
   | ProjectDiff
@@ -221,67 +222,213 @@ export async function inspectorProbe(
       child.on("close", (code) => finish(code ?? 1));
     });
 
-  if (request.op === "project-rules") {
+  if (
+    request.op === "project-rules" ||
+    request.op === "project-rules-read" ||
+    request.op === "project-rules-cancel"
+  ) {
     const file = await scoped("CODEXWEB.md", true),
       marker = "<!-- CodexWeb: personal project rules -->";
+    const crypto = await import("node:crypto");
+    const read = async (): Promise<import("@codex-web/shared").ProjectRulesFile> => {
+      await scoped("CODEXWEB.md", true);
+      const stat = await fs.lstat(file).catch((e) => {
+        if (e.code === "ENOENT") return null;
+        throw e;
+      });
+      if (stat && (!stat.isFile() || stat.size > 32768))
+        return {
+          path: "CODEXWEB.md",
+          content: "",
+          fingerprint: null,
+          editable: false,
+          reason: "Файл слишком большой или не является документом.",
+        };
+      const bytes = stat ? await fs.readFile(file) : null;
+      const content = bytes?.toString("utf8") ?? "";
+      const tracked = await git(["ls-files", "--", "CODEXWEB.md"]);
+      const editable =
+        (!bytes || content.startsWith(marker)) &&
+        !tracked.text.trim() &&
+        (!tracked.code || tracked.notRepository);
+      return {
+        path: "CODEXWEB.md",
+        content,
+        fingerprint: bytes ? crypto.createHash("sha256").update(bytes).digest("hex") : null,
+        editable,
+        ...(!editable
+          ? {
+              reason:
+                "Существующий или отслеживаемый Git файл сохранён. Сначала разреши конфликт вручную.",
+            }
+          : {}),
+      };
+    };
+    const key = request.key;
+    if (key && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(key)) fail();
+    const stateRoot = paths.join(
+      process.env.LOCALAPPDATA ||
+        paths.join((await import("node:os")).homedir(), ".local", "share"),
+      "CodexWeb",
+      "project-profiles",
+      crypto.createHash("sha256").update(actualRoot).digest("hex"),
+    );
+    const receiptPath = key ? paths.join(stateRoot, key + ".json") : null;
+    const receipt = async () =>
+      receiptPath
+        ? JSON.parse(
+            await fs.readFile(receiptPath, "utf8").catch((e) => {
+              if (e.code === "ENOENT") return "null";
+              throw e;
+            }),
+          )
+        : null;
+    if (request.op === "project-rules-read") {
+      const record = await receipt();
+      return { ...(await read()), ...(key ? { receipt: record?.state ?? "unknown" } : {}) };
+    }
     if (
-      Buffer.byteLength(request.content) > 16384 ||
+      Buffer.byteLength(request.content) > 32768 ||
       (request.content && !request.content.startsWith(marker))
     )
       fail();
-    const existing = await fs.readFile(file, "utf8").catch((e) => {
-      if (e.code === "ENOENT") return "";
-      throw e;
-    });
-    if (existing && !existing.startsWith(marker)) throw Error("PROJECT_RULES_UNMANAGED");
-    if (!existing && !request.content) return { path: "CODEXWEB.md" };
-    const tracked = await git(["ls-files", "--", "CODEXWEB.md"]);
-    if (tracked.code || tracked.text.trim()) throw Error("PROJECT_RULES_TRACKED");
-    if (!request.content) {
-      await fs.unlink(file);
-      return { path: "CODEXWEB.md" };
+    if (request.op !== "project-rules-cancel" && !(await read()).editable)
+      throw Error("PROJECT_RULES_UNMANAGED");
+    if (!key || !receiptPath) fail();
+    await fs.mkdir(stateRoot, { recursive: true, mode: 0o700 });
+    const previous = await receipt();
+    if (previous) {
+      if (previous.content !== request.content || previous.expected !== request.expected)
+        throw Error("PROJECT_RULES_KEY_CONFLICT");
+      if (request.op !== "project-rules-cancel" || previous.state !== "running")
+        return { ...(await read()), receipt: previous.state };
     }
-    const top = await git(["rev-parse", "--show-toplevel"]);
-    const exclude = await git([
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-path",
-      "info/exclude",
-    ]);
-    if (top.code || exclude.code) throw Error("GIT_UNAVAILABLE");
-    const excludePath = exclude.text.trim();
-    if (!paths.isAbsolute(excludePath)) fail();
-    const stat = await fs.lstat(excludePath).catch((e) => {
-      if (e.code === "ENOENT") return null;
-      throw e;
+    const lockPath = paths.join(stateRoot, "write.lock");
+    const lock = await fs.open(lockPath, "wx").catch(async (e) => {
+      if (e.code !== "EEXIST") throw e;
+      const old = await fs.readFile(lockPath, "utf8");
+      const pid = Number(old);
+      if (!Number.isSafeInteger(pid) || pid < 1) throw Error("PROJECT_RULES_BUSY");
+      try {
+        process.kill(pid, 0);
+      } catch (err) {
+        if (
+          (err as NodeJS.ErrnoException).code === "ESRCH" &&
+          (await fs.readFile(lockPath, "utf8")) === old
+        ) {
+          await fs.unlink(lockPath);
+          return fs.open(lockPath, "wx");
+        }
+      }
+      throw Error("PROJECT_RULES_BUSY");
     });
-    if (stat?.isSymbolicLink() || (stat && !stat.isFile())) fail();
-    const pattern =
-      "/" +
-      paths
-        .relative(top.text.trim(), file)
-        .split(paths.sep)
-        .join("/")
-        .replace(/([\\*?[\]#! ])/g, "\\$1");
-    const excluded = await fs.readFile(excludePath, "utf8").catch((e) => {
-      if (e.code === "ENOENT") return "";
-      throw e;
-    });
-    if (!excluded.split(/\r?\n/).includes(pattern)) {
-      await fs.mkdir(paths.dirname(excludePath), { recursive: true });
-      await fs.appendFile(
-        excludePath,
-        `${excluded.endsWith("\n") || !excluded ? "" : "\n"}${pattern}\n`,
-      );
-    }
-    const temp = file + "." + (await import("node:crypto")).randomUUID() + ".tmp";
+    let finished = false,
+      started = false;
+    const record = { content: request.content, expected: request.expected, state: "running" };
+    const persist = async (state: string) => {
+      const temp = receiptPath + ".tmp";
+      const handle = await fs.open(temp, "w", 0o600);
+      try {
+        await handle.writeFile(JSON.stringify({ ...record, state }));
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await fs.rename(temp, receiptPath!);
+    };
     try {
-      await fs.writeFile(temp, request.content, { flag: "wx" });
-      await fs.rename(temp, file);
+      await lock.writeFile(String(process.pid));
+      const existingReceipt = await receipt();
+      if (existingReceipt) {
+        if (
+          existingReceipt.content !== request.content ||
+          existingReceipt.expected !== request.expected
+        )
+          throw Error("PROJECT_RULES_KEY_CONFLICT");
+        if (request.op !== "project-rules-cancel" || existingReceipt.state !== "running")
+          return { ...(await read()), receipt: existingReceipt.state };
+      }
+      if (request.op === "project-rules-cancel") {
+        await persist("failed");
+        return { ...(await read()), receipt: "failed" };
+      }
+      await persist("running");
+      started = true;
+      const before = await read();
+      if (!before.editable) throw Error("PROJECT_RULES_UNMANAGED");
+      if (request.expected === undefined || before.fingerprint !== request.expected)
+        return {
+          ...before,
+          editable: false,
+          reason: "CODEXWEB.md изменён после просмотра. Сравни с актуальной версией.",
+        };
+      if (!before.fingerprint && !request.content) {
+        finished = true;
+        return before;
+      }
+      const top = await git(["rev-parse", "--show-toplevel"]);
+      if (!top.code) {
+        const exclude = await git([
+          "rev-parse",
+          "--path-format=absolute",
+          "--git-path",
+          "info/exclude",
+        ]);
+        if (exclude.code) throw Error("GIT_UNAVAILABLE");
+        const excludePath = exclude.text.trim();
+        if (!paths.isAbsolute(excludePath)) fail();
+        const stat = await fs.lstat(excludePath).catch((e) => {
+          if (e.code === "ENOENT") return null;
+          throw e;
+        });
+        if (stat?.isSymbolicLink() || (stat && !stat.isFile())) fail();
+        const pattern =
+          "/" +
+          paths
+            .relative(top.text.trim(), file)
+            .split(paths.sep)
+            .join("/")
+            .replace(/([\\*?[\]#! ])/g, "\\$1");
+        const excluded = await fs.readFile(excludePath, "utf8").catch((e) => {
+          if (e.code === "ENOENT") return "";
+          throw e;
+        });
+        if (!excluded.split(/\r?\n/).includes(pattern)) {
+          await fs.mkdir(paths.dirname(excludePath), { recursive: true });
+          await fs.appendFile(
+            excludePath,
+            `${excluded.endsWith("\n") || !excluded ? "" : "\n"}${pattern}\n`,
+          );
+        }
+      } else if (!top.notRepository) throw Error("GIT_UNAVAILABLE");
+      const latest = await read();
+      if (latest.fingerprint !== before.fingerprint || !latest.editable)
+        return { ...latest, editable: false, reason: "Файл изменён во время сохранения." };
+      if (!request.content) {
+        await fs.unlink(file);
+        finished = true;
+        return read();
+      }
+      const temp = file + "." + crypto.randomUUID() + ".tmp";
+      try {
+        await fs.writeFile(temp, request.content, { flag: "wx" });
+        const fresh = await read();
+        if (fresh.fingerprint !== before.fingerprint || !fresh.editable)
+          return { ...fresh, editable: false, reason: "Файл изменён во время сохранения." };
+        await fs.rename(temp, file);
+      } finally {
+        await fs.unlink(temp).catch(() => {});
+      }
+      finished = true;
+      return read();
     } finally {
-      await fs.unlink(temp).catch(() => {});
+      try {
+        if (started) await persist(finished ? "complete" : "failed");
+      } finally {
+        await lock.close();
+        await fs.unlink(lockPath);
+      }
     }
-    return { path: "CODEXWEB.md" };
   }
   if (request.op === "repository" || request.op === "releases") {
     const top = await git(["rev-parse", "--show-toplevel"]);

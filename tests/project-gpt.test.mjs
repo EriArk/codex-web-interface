@@ -7,6 +7,12 @@ import { join } from "node:path";
 import test from "node:test";
 import { ProjectGpts } from "../apps/hub/dist/project-gpt.js";
 import { inspectorProbe } from "../packages/machines/dist/inspectorProbe.js";
+import {
+  agentProfileOptions,
+  agentProfileSchema,
+  agentTemplate,
+  renderProjectRules,
+} from "../packages/shared/dist/index.js";
 import { nativeWorkspaceFixture } from "./fixtures/native-workspace.mjs";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
@@ -360,4 +366,164 @@ test("Invitation preferences merge once, survive a retry and can be declined wit
   await service.rules("project", { enabled: ["tests"], custom: "Изменено позже" });
   await new ProjectGpts(f.sessions, { job: () => null }).invitationRules("project", key, selected);
   assert.deepEqual(service.get("project").rules, { enabled: ["tests"], custom: "Изменено позже" });
+});
+
+for (const template of Object.keys(agentProfileOptions.template)) {
+  test(`agent template ${template} preserves mandatory rules and custom text`, () => {
+    const profile = agentTemplate(template);
+    profile.customRules = "Сохраняй Qt.\n\nФизическая проверка — отдельно.";
+    assert.equal(agentProfileSchema.parse(profile).template, template);
+    const text = renderProjectRules({ enabled: [], custom: "", agentProfile: profile });
+    assert.ok(text.includes(profile.customRules));
+    assert.match(text, /AGENTS.md/);
+    assert.match(text, /не даёт прав/);
+    assert.match(text, /Не делай force push/);
+    assert.equal(
+      agentProfileSchema.safeParse({ ...profile, bypassPermissions: true }).success,
+      false,
+    );
+  });
+}
+
+test("profile HTTP revision, file conflict, removal and GPT/Codex future bootstrap", async (t) => {
+  const f = await fixture(t);
+  const path = "/api/projects/project/agent-profile";
+  const get = async () => {
+    const r = await f.app.inject({ url: path, headers: f.headers });
+    assert.equal(r.statusCode, 200, r.body);
+    return r.json();
+  };
+  const put = (base, rules) =>
+    f.app.inject({
+      method: "PUT",
+      url: path,
+      headers: f.headers,
+      payload: {
+        rules,
+        revision: base.revision,
+        fingerprint: base.file.fingerprint,
+        binding: base.binding,
+      },
+    });
+  assert.equal((await f.app.inject({ url: path })).statusCode, 401);
+  const before = await get();
+  assert.equal(before.rules.agentProfile, undefined);
+  const rules = {
+    enabled: ["tests"],
+    custom: "",
+    agentProfile: { ...agentTemplate("hardware"), customRules: "Use actual physical constraints" },
+  };
+  const saved = await put(before, rules);
+  assert.equal(saved.statusCode, 200, saved.body);
+  assert.match(
+    f.sessions.projectInstructions("project"),
+    /Shared agreement[\s\S]*physical constraints/,
+  );
+  assert.match((await f.request("GET")).json().context, /physical constraints/);
+  assert.match((await f.request("GET")).json().context, /not permission to implement/);
+  assert.equal(f.native.state.sends, 0);
+  assert.equal((await put(before, { ...rules, custom: "stale" })).statusCode, 409);
+  const current = await get();
+  await writeFile(join(f.root, "CODEXWEB.md"), current.file.content + "Manual edit\n");
+  const conflict = await get();
+  assert.equal(conflict.file.editable, false);
+  assert.equal((await put(conflict, { ...rules, custom: "do not overwrite" })).statusCode, 409);
+  assert.match(await readFile(join(f.root, "CODEXWEB.md"), "utf8"), /Manual edit/);
+  await writeFile(join(f.root, "CODEXWEB.md"), current.file.content);
+  assert.equal(
+    (await put(await get(), { enabled: [], custom: "", agentProfile: null })).statusCode,
+    200,
+  );
+  await assert.rejects(access(join(f.root, "CODEXWEB.md")));
+});
+
+test("profile lost write acknowledgement reconciles once after restart without replay", async (t) => {
+  const f = await fixture(t),
+    profiles = f.projectGpts.profiles,
+    original = profiles.probe;
+  let writes = 0;
+  profiles.probe = async (...args) => {
+    const value = await original(...args);
+    if (args[2].op === "project-rules") {
+      writes++;
+      throw Error("lost acknowledgement");
+    }
+    return value;
+  };
+  const rules = { enabled: [], custom: "", agentProfile: agentTemplate("web") };
+  await assert.rejects(profiles.save("project", rules), /lost acknowledgement/);
+  const restarted = new ProjectGpts(
+    f.sessions,
+    { job: () => null },
+    undefined,
+    "local-owner",
+    f.projectGpts.authorizationScope,
+  );
+  const confirmed = await restarted.profiles.snapshot("project");
+  assert.equal(confirmed.pending, false);
+  assert.deepEqual(confirmed.rules, rules);
+  assert.equal(confirmed.revision, 1);
+  await restarted.profiles.save("project", rules);
+  assert.equal(writes, 1);
+});
+
+test("profile refuses changed authority and active project work without changing file", async (t) => {
+  const f = await fixture(t),
+    profiles = f.projectGpts.profiles;
+  const old = await profiles.snapshot("project");
+  f.changeContext();
+  const rules = { enabled: [], custom: "", agentProfile: agentTemplate("backend") };
+  await assert.rejects(
+    profiles.save("project", rules, { ...old, fingerprint: old.file.fingerprint }),
+    (e) => e.code === "PROFILE_CHANGED",
+  );
+  f.store.db.prepare("UPDATE threads SET status='running' WHERE id=?").run(f.thread.id);
+  await assert.rejects(profiles.save("project", rules), (e) => e.code === "PROJECT_BUSY");
+  await assert.rejects(access(join(f.root, "CODEXWEB.md")));
+});
+
+test("machine profile receipts reject stale comparison and never replay an old write", async (t) => {
+  const f = await fixture(t),
+    content = renderProjectRules({
+      enabled: [],
+      custom: "",
+      agentProfile: agentTemplate("research"),
+    });
+  const request = { op: "project-rules", key: randomUUID(), expected: null, content };
+  const first = await inspectorProbe(f.root, request);
+  assert.equal(first.content, content);
+  await writeFile(join(f.root, "CODEXWEB.md"), content + "manual");
+  const again = await inspectorProbe(f.root, request);
+  assert.equal(again.content, content + "manual");
+  const rejected = await inspectorProbe(f.root, { ...request, key: randomUUID() });
+  assert.equal(rejected.editable, false);
+  const status = await inspectorProbe(f.root, { op: "project-rules-read", key: request.key });
+  assert.equal(status.receipt, "complete");
+});
+
+test("explicit cancellation fences a delayed profile write and retains editable draft semantics", async (t) => {
+  const f = await fixture(t),
+    profiles = f.projectGpts.profiles,
+    probe = profiles.probe;
+  let delayed;
+  profiles.probe = async (...args) => {
+    if (args[2].op === "project-rules") {
+      delayed = args;
+      throw Error("not acknowledged");
+    }
+    return probe(...args);
+  };
+  const rules = { enabled: [], custom: "", agentProfile: agentTemplate("game") };
+  await assert.rejects(profiles.save("project", rules), /not acknowledged/);
+  const pending = await profiles.snapshot("project");
+  assert.equal(pending.pending, true);
+  await profiles.cancel("project", pending);
+  assert.equal((await profiles.snapshot("project")).pending, false);
+  const late = await probe(...delayed);
+  assert.equal(late.receipt, "failed");
+  assert.equal(late.content, "");
+  await assert.rejects(access(join(f.root, "CODEXWEB.md")));
+  profiles.probe = probe;
+  await profiles.save("project", rules);
+  assert.deepEqual((await profiles.snapshot("project")).rules, rules);
 });

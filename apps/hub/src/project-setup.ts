@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { posix, win32 } from "node:path";
 import { runProjectSetup, setupMessage } from "@codex-web/machines";
 import {
+  agentProfileSchema,
   HubError,
   type ProjectSetupInput,
   type ProjectSetupOperation,
@@ -12,8 +13,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Sessions } from "./sessions.js";
 
+const machineInput = ({ agentProfile: _profile, ...input }: ProjectSetupInput) => input;
 const inputSchema = z
   .object({
+    agentProfile: agentProfileSchema.nullable().optional(),
     machineId: z.string().min(1).max(100),
     name: z.string().trim().min(1).max(120),
     workingDirectory: z.string().min(1).max(2048),
@@ -33,6 +36,10 @@ export function registerProjectSetup(
   app: FastifyInstance,
   sessions: Sessions,
   probe = runProjectSetup,
+  applyProfile?: (
+    id: string,
+    profile: NonNullable<ProjectSetupInput["agentProfile"]>,
+  ) => Promise<unknown>,
 ) {
   const db = sessions.store.db,
     running = new Map<string, Promise<void>>(),
@@ -100,7 +107,7 @@ export function registerProjectSetup(
       const result = (await probe(machine, {
         op: "apply",
         id,
-        input: op.input,
+        input: machineInput(op.input),
         fingerprint: op.inspection.fingerprint,
       })) as SetupMachineReceipt;
       if (!result || result.id !== id)
@@ -117,6 +124,12 @@ export function registerProjectSetup(
       const project = await register(op);
       if (!project) throw Error("PROJECT_CREATE_UNCONFIRMED");
       op.project = project;
+      if (op.input.agentProfile) {
+        op.phase = "agent-profile";
+        put(op);
+        if (!applyProfile) throw Error("PROFILE_UNAVAILABLE");
+        await applyProfile(project.id, op.input.agentProfile);
+      }
       op.state = "complete";
       op.phase = "complete";
       delete op.error;
@@ -181,7 +194,7 @@ export function registerProjectSetup(
     const job = (async () => {
       const inspection = (await probe(sessions.catalog.machine(input.machineId), {
         op: "inspect",
-        input,
+        input: machineInput(input),
       })) as SetupInspection;
       if (!inspection?.fingerprint || !Array.isArray(inspection.steps))
         throw new HubError(503, "SETUP_UNAVAILABLE", setupMessage("SETUP_UNAVAILABLE"));
@@ -205,7 +218,7 @@ export function registerProjectSetup(
   app.get("/api/project-setup/:id", async (req) => {
     const id = identifier(req.params),
       op = get(id);
-    if (op.state === "unknown" || op.state === "running") {
+    if ((op.state === "unknown" || op.state === "running") && op.phase !== "agent-profile") {
       try {
         const status = (await probe(sessions.catalog.machine(op.input.machineId), {
           op: "status",

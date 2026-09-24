@@ -5,7 +5,11 @@ export const projectRuleLabels = {
   dependencies: "Согласовывать новые зависимости",
   issues: "Предлагать технические issues для отдельной работы",
 } as const;
-export type ProjectRules = { enabled: (keyof typeof projectRuleLabels)[]; custom: string };
+export type ProjectRules = {
+  enabled: (keyof typeof projectRuleLabels)[];
+  custom: string;
+  agentProfile?: import("./agent-profile.js").AgentProfile | null;
+};
 export type ProjectGpt = {
   projectId: string;
   name: string;

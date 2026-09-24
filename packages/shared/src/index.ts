@@ -415,6 +415,7 @@ export interface NativePlanAction {
   message: string;
 }
 
+export * from "./agent-profile.js";
 export * from "./brainstorm.js";
 export * from "./codex-schedule.js";
 export * from "./collaboration.js";

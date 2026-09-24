@@ -1,5 +1,6 @@
 import type { ProjectSetupInput, ProjectSetupOperation, SetupRepository } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AdvancedAgentSettings, ProfilePreview } from "./AgentProfileEditor";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -59,6 +60,7 @@ const labels: Record<string, string> = {
   "link-origin": "Подключить origin",
   clone: "Клонировать репозиторий",
   "register-project": "Подключить проект в CodexWeb",
+  "agent-profile": "Применить профиль поведения",
   complete: "Проект готов",
   review: "Проверь перед созданием",
 };
@@ -439,6 +441,11 @@ function ProjectDialogContent({
         ))}
       </ol>
       <div className="setup-body">
+        {step === 3 && operation?.input.agentProfile && (
+          <ProfilePreview
+            rules={{ enabled: [], custom: "", agentProfile: operation.input.agentProfile }}
+          />
+        )}
         {step === 0 && (
           <>
             <label className="field-label">
@@ -483,6 +490,12 @@ function ProjectDialogContent({
                 ))}
               </select>
             </label>
+            <fieldset disabled={locked} className="agent-setup-fields">
+              <AdvancedAgentSettings
+                value={input.agentProfile ?? null}
+                onChange={(agentProfile) => setField({ agentProfile })}
+              />
+            </fieldset>
             {pending.length > 0 && (
               <details className="setup-pending">
                 <summary>

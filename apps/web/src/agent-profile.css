@@ -1,0 +1,168 @@
+@import "./workspace-window.css";
+.agent-profile-editor,
+.agent-advanced,
+.agent-profile-body fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.agent-profile-editor label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.agent-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.agent-profile-editor :is(input, select, textarea) {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+.agent-profile-editor select {
+  width: 100%;
+  min-height: 44px;
+}
+.agent-profile-editor textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+}
+.agent-profile-editor label.agent-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.agent-check input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.agent-profile-editor details > summary,
+.agent-preview > summary,
+.agent-advanced > summary {
+  min-height: 44px;
+  cursor: pointer;
+  align-content: center;
+}
+.agent-profile-editor details[open] > summary {
+  margin-bottom: 10px;
+}
+.agent-preview pre,
+.agent-comparison pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-height: 340px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+:root[data-theme] dialog.agent-profile-window {
+  display: none;
+  max-width: 900px;
+  inset-inline: 0;
+  margin-inline: auto;
+}
+:root[data-theme] dialog.agent-profile-window[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.agent-profile-window .notebook-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.agent-profile-window .notebook-heading > div {
+  display: grid;
+  min-width: 0;
+}
+.agent-profile-window .notebook-heading small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-profile-body {
+  overflow: auto;
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+.agent-profile-body fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.agent-profile-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 6px 6px;
+}
+.agent-profile-footer button {
+  min-height: 44px;
+  min-width: 0;
+}
+.agent-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.agent-comparison > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.agent-comparison > details {
+  grid-column: 1 / -1;
+}
+.agent-comparison ul,
+.agent-profile-editor ul {
+  padding-left: 20px;
+}
+@media (max-width: 620px) {
+  .agent-fields,
+  .agent-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .agent-profile-body {
+    padding: 12px;
+  }
+  :root[data-theme] dialog.agent-profile-window {
+    width: calc(100vw - 16px);
+  }
+}
+
+.agent-setup-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.agent-profile-window:focus {
+  outline: none;
+}
+.agent-profile-editor input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+:root[data-theme] .agent-profile-editor label select[aria-label] {
+  appearance: none;
+  background-color: var(--paper);
+  color: var(--ink);
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}

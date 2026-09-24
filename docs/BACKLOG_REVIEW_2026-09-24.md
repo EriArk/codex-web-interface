@@ -73,3 +73,16 @@ Next proposed stage: **#208 — advanced project profiles**, **Высокое (`
 Unify optional project instructions, reusable profile selection and its compact
 editor across project creation and GPT/Codex. Preserve existing AGENTS.md and
 keep the ordinary creation flow small. Wait for the owner's continuation.
+
+## Project profiles pass — 24 September
+
+The #208 structured profile editor now spans optional project creation (including
+Brainstorm handoff), Project Overview and Project GPT. It includes eight templates,
+exact CODEXWEB preview, review/apply, personal drafts, conflict protection and
+receipt-based recovery/cancellation. See [behavior and verification](PROJECT_AGENT_PROFILES.md).
+Personal CODEXWEB remains excluded from Git under the existing owner decision.
+
+Next proposed stage: **#206 — global typed assistant**, **Высокое (`high`)**.
+Start with project/source selection and a reviewed handoff to existing GPT/Codex
+tools. Preserve their exact identities, drafts and authorization; do not create
+an unrestricted shell or another parallel task executor. Wait for continuation.

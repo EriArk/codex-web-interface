@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { agentTemplate } from "../packages/shared/dist/index.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
 const input = {
@@ -194,4 +195,42 @@ test("late setup status cannot roll a completed Hub operation back to running", 
   );
   finishRead();
   assert.equal((await read).json().state, "complete");
+});
+
+test("advanced setup keeps helper contract unchanged and applies profile once after registration", async (t) => {
+  const seen = [];
+  const f = await handoffFixture(undefined, undefined, {
+    projectSetupProbe: async (_m, r) => {
+      if (r.input) assert.equal(r.input.agentProfile, undefined);
+      if (r.op === "inspect") return inspection;
+      return { id: r.id, state: "complete", phase: "register-project" };
+    },
+  });
+  t.after(() => f.close());
+  f.sessions.catalog.refresh = async () => {};
+  f.sessions.catalog.createProject = async () => f.sessions.project("project");
+  f.projectGpts.rules = async (id, rules) => {
+    seen.push({ id, rules });
+  };
+  const id = randomUUID(),
+    profile = agentTemplate("hardware");
+  const r = await f.app.inject({
+    method: "POST",
+    url: "/api/project-setup/prepare",
+    headers: { ...f.headers, "idempotency-key": id },
+    payload: { ...input, agentProfile: profile },
+  });
+  assert.equal(r.statusCode, 200, r.body);
+  assert.deepEqual(r.json().input.agentProfile, profile);
+  const request = {
+    method: "POST",
+    url: `/api/project-setup/${id}/execute`,
+    headers: f.headers,
+    payload: {},
+  };
+  await f.app.inject(request);
+  await until(() => seen.length === 1);
+  await f.app.inject(request);
+  assert.equal(seen.length, 1);
+  assert.deepEqual(seen[0].rules.agentProfile, profile);
 });

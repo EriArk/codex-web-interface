@@ -1,4 +1,5 @@
 export type ProjectSetupInput = {
+  agentProfile?: import("./agent-profile.js").AgentProfile | null;
   machineId: string;
   name: string;
   workingDirectory: string;
