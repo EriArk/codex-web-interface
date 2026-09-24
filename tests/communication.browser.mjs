@@ -13,7 +13,6 @@ async function client(headers) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
-    reducedMotion: "reduce",
     serviceWorkers: "allow",
   });
   contexts.push(context);
@@ -24,9 +23,21 @@ async function client(headers) {
   await page.goto(f.base);
   return page;
 }
+async function paintTheme(page, theme) {
+  await page.bringToFront();
+  await page.evaluate((t) => {
+    document.documentElement.dataset.theme = t;
+    document.documentElement.dataset.caseColor =
+      t === "hitech-2000s" ? "turquoise" : t === "classic-dark" ? "blue" : "green";
+  }, theme);
+  // WebKit may suspend animation frames in the other authenticated context.
+  // Allow its style/viewport paint to settle before measuring or capturing it.
+  await page.waitForTimeout(200);
+}
 async function open(page) {
   const drawer = page.getByRole("button", { name: "Открыть проекты", exact: true });
-  if (await drawer.isVisible()) await drawer.click();
+  await expect(drawer).toBeVisible();
+  await drawer.click();
   await expect(
     page.locator(".workspace-shortcuts").getByRole("button", { name: "Отчёты", exact: true }),
   ).toHaveCount(0);
@@ -95,8 +106,11 @@ try {
   await share.getByRole("checkbox").check();
   await expect(share.getByRole("button", { name: "Отправить", exact: true })).toBeEnabled();
   for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
-    await owner.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
-    await owner.screenshot({ path: `.local/qa-communication/${engine}-share-${theme}.png` });
+    await paintTheme(owner, theme);
+    await owner.screenshot({
+      animations: "disabled",
+      path: `.local/qa-communication/${engine}-share-${theme}.png`,
+    });
     assert(await share.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
     const geometry = await share.evaluate((el) => {
       const audience = el.querySelector(".result-share-audience").getBoundingClientRect();
@@ -151,7 +165,7 @@ try {
       )
       .toBe(size.height);
     for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
-      await friend.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await paintTheme(friend, theme);
       const box = await friendWin.evaluate((el) => {
         const r = el.getBoundingClientRect(),
           c = el.querySelector('[aria-label="Закрыть общение"]').getBoundingClientRect();
@@ -174,6 +188,7 @@ try {
         JSON.stringify({ theme, size, box }),
       );
       await friend.screenshot({
+        animations: "disabled",
         path: `.local/qa-communication/${engine}-${theme}-${size.width}x${size.height}.png`,
       });
     }
