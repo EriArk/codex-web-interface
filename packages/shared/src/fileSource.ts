@@ -1,8 +1,13 @@
 /** Existing authenticated file capabilities only. Never a URL fetcher or host-path reader. */
 export function isFileSource(value: unknown): boolean {
   if (typeof value !== "string" || value.length > 8192) return false;
-  if (/^\/api\/team\/brainstorm\/[a-f0-9-]{36}\/chat\/files\/[a-f0-9-]{36}$/.test(value))
+  if (
+    /^\/api\/team\/(?:conversations|spaces|brainstorm)\/[a-f0-9-]{36}\/chat\/files\/[a-f0-9-]{36}$/.test(
+      value,
+    )
+  )
     return true;
+  if (/^\/api\/team\/result-shares\/[a-f0-9-]{36}\/content$/.test(value)) return true;
   if (/^\/api\/team\/projects\/[a-f0-9-]{36}\/assets\/[a-f0-9-]{36}$/.test(value)) return true;
   if (/^\/api\/projects\/[a-zA-Z0-9_-]+\/files\/content\?[^#]+$/.test(value)) {
     const q = new URLSearchParams(value.split("?")[1]);

@@ -14,18 +14,19 @@ const absent = () => new HubError(404, "SPACE_FILE_MISSING", "Файл недо�
 const imageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 export class CollaborationChat {
   readonly root: string;
+  resultCards?: (chatId: string, messageId: string) => NonNullable<SpaceChatMessage["results"]>;
   private swept = 0;
   constructor(
     readonly spaces: {
       team: CollaborationSpaces["team"];
       access: (actor: string, id: string) => unknown;
     },
-    private namespace: "space" | "brainstorm" = "space",
+    private namespace: "space" | "brainstorm" | "conversation" = "space",
   ) {
     this.root = join(
       dirname(spaces.team.registry.path),
       "space-chat-files",
-      ...(namespace === "brainstorm" ? ["brainstorm"] : []),
+      ...(namespace !== "space" ? [namespace] : []),
     );
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     this.db.exec(`
@@ -45,6 +46,16 @@ export class CollaborationChat {
         messageSeq INTEGER REFERENCES space_chat_messages(seq) ON DELETE CASCADE);
       CREATE INDEX IF NOT EXISTS space_chat_file_message ON space_chat_files(messageSeq);
     `);
+    if (
+      namespace === "conversation" &&
+      !this.db
+        .prepare("PRAGMA table_info(conversation_chat_messages)")
+        .all()
+        .some((r) => r.name === "mentions")
+    )
+      this.db.exec(
+        "ALTER TABLE conversation_chat_messages ADD COLUMN mentions TEXT NOT NULL DEFAULT '[]'",
+      );
   }
   private get db() {
     const db = this.spaces.team.db;
@@ -52,8 +63,11 @@ export class CollaborationChat {
       this.namespace === "space"
         ? value
         : value
-            .replaceAll("space_chat_", "brainstorm_chat_")
-            .replaceAll("collaboration_spaces", "brainstorm_rooms");
+            .replaceAll("space_chat_", this.namespace + "_chat_")
+            .replaceAll(
+              "collaboration_spaces",
+              this.namespace === "brainstorm" ? "brainstorm_rooms" : "human_conversations",
+            );
     return {
       prepare: (value: string) => db.prepare(sql(value)),
       exec: (value: string) => db.exec(sql(value)),
@@ -102,7 +116,11 @@ export class CollaborationChat {
       id: String(row.id),
       author: { id: author.id, name: author.name },
       text: String(row.text),
+      ...(row.mentions ? { mentions: JSON.parse(String(row.mentions)) } : {}),
       createdAt: Number(row.createdAt),
+      ...(this.resultCards
+        ? { results: this.resultCards(String(row.spaceId), String(row.id)) }
+        : {}),
       files: this.db
         .prepare("SELECT * FROM space_chat_files WHERE messageSeq=? ORDER BY rowid")
         .all(row.seq as number)
@@ -137,32 +155,60 @@ export class CollaborationChat {
       .run(spaceId, actor, seq);
     return { ok: true };
   }
-  send(actor: string, spaceId: string, key: string, input: { text: string; files: string[] }) {
+  send(
+    actor: string,
+    spaceId: string,
+    key: string,
+    input: { text: string; files: string[]; mentions?: string[] },
+  ) {
     this.spaces.access(actor, spaceId);
-    return this.spaces.team.once(actor, "spaces.chat:" + spaceId, key, input, () => {
-      const rows = input.files.map((id) => {
-        const row = this.db
-          .prepare(
-            "SELECT * FROM space_chat_files WHERE id=? AND spaceId=? AND authorId=? AND messageSeq IS NULL",
+    return this.spaces.team.once(
+      actor,
+      (this.namespace === "conversation" ? "conversation.chat:" : "spaces.chat:") + spaceId,
+      key,
+      input,
+      () => {
+        const rows = input.files.map((id) => {
+          const row = this.db
+            .prepare(
+              "SELECT * FROM space_chat_files WHERE id=? AND spaceId=? AND authorId=? AND messageSeq IS NULL",
+            )
+            .get(id, spaceId, actor);
+          if (!row) throw absent();
+          readSharedFile(this.root, { ...this.file(row), sha256: String(row.sha256) });
+          return row;
+        });
+        const mentions = (input.mentions ?? []).map((userId) => {
+          if (
+            this.namespace !== "conversation" ||
+            !this.db
+              .prepare(
+                "SELECT 1 FROM human_members WHERE conversationId=? AND userId=? AND active=1",
+              )
+              .get(spaceId, userId)
           )
-          .get(id, spaceId, actor);
-        if (!row) throw absent();
-        readSharedFile(this.root, { ...this.file(row), sha256: String(row.sha256) });
-        return row;
-      });
-      const id = key;
-      this.db
-        .prepare(
-          "INSERT INTO space_chat_messages(id,spaceId,authorId,text,createdAt) VALUES(?,?,?,?,?)",
-        )
-        .run(id, spaceId, actor, input.text, Date.now());
-      const row = this.db.prepare("SELECT * FROM space_chat_messages WHERE id=?").get(id)!;
-      for (const file of rows)
+            throw absent();
+          const user = this.spaces.team.registry.active(userId);
+          return { id: user.id, name: user.name };
+        });
+        const id = key;
         this.db
-          .prepare("UPDATE space_chat_files SET messageSeq=? WHERE id=?")
-          .run(row.seq as number, String(file.id));
-      return this.message(row);
-    });
+          .prepare(
+            "INSERT INTO space_chat_messages(id,spaceId,authorId,text,createdAt) VALUES(?,?,?,?,?)",
+          )
+          .run(id, spaceId, actor, input.text, Date.now());
+        if (this.namespace === "conversation")
+          this.db
+            .prepare("UPDATE space_chat_messages SET mentions=? WHERE id=?")
+            .run(JSON.stringify(mentions), id);
+        const row = this.db.prepare("SELECT * FROM space_chat_messages WHERE id=?").get(id)!;
+        for (const file of rows)
+          this.db
+            .prepare("UPDATE space_chat_files SET messageSeq=? WHERE id=?")
+            .run(row.seq as number, String(file.id));
+        return this.message(row);
+      },
+    );
   }
   stage(actor: string, spaceId: string, name: string, mime: string, data: Buffer): SpaceChatFile {
     this.spaces.access(actor, spaceId);

@@ -49,6 +49,8 @@ export type SpaceChatMessage = {
   author: CollaborationPerson;
   text: string;
   files: SpaceChatFile[];
+  mentions?: CollaborationPerson[];
+  results?: import("./communication.js").SharedResultCard[];
   createdAt: number;
 };
 export type SpaceChatPage = { messages: SpaceChatMessage[]; more: boolean };

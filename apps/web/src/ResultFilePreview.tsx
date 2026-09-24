@@ -3,6 +3,7 @@ import { workspaceUrl } from "./accountStorage";
 import { isDownloadUrl } from "./DownloadLink";
 import { FilePreview } from "./FilePreview";
 import { FileViewerDialog } from "./FileViewerDialog";
+import { ResultShareButton } from "./ResultSharing";
 import { resultPreview } from "./resultPreview";
 import type { Result } from "./types";
 
@@ -79,17 +80,20 @@ export function ResultFilePreview({ result, onClose }: { result: Result; onClose
       source={path}
       onClose={onClose}
       actions={
-        isDownloadUrl(path) ? (
-          <a
-            className="secondary"
-            href={workspaceUrl(path)}
-            download={title}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Скачать файл
-          </a>
-        ) : null
+        <>
+          <ResultShareButton result={result} />
+          {isDownloadUrl(path) ? (
+            <a
+              className="secondary"
+              href={workspaceUrl(path)}
+              download={title}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Скачать файл
+            </a>
+          ) : null}
+        </>
       }
     >
       {error ? (

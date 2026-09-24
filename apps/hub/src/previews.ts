@@ -9,6 +9,7 @@ import type { Store, ThreadRecord } from "./store.js";
 export const previewFrameSources = (origin: string) => [
   origin.replace(/\/$/, "") + "/api/previews/",
   origin.replace(/\/$/, "") + "/api/gpt/previews/",
+  origin.replace(/\/$/, "") + "/api/team/result-shares/",
 ];
 export function assertPreviewFrame(headers: Record<string, unknown>) {
   if (headers["sec-fetch-dest"] !== "iframe" || headers["sec-fetch-site"] !== "same-origin")

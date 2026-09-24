@@ -344,7 +344,14 @@ export function ResultFeed({
   return (
     <Results
       key={sourceRevision ?? 0}
-      results={all}
+      results={all.map((r) =>
+        r.threadId
+          ? r
+          : {
+              ...r,
+              threadId: endpoint.match(/\/(?:threads|conversations)\/([^/]+)\/results/)?.[1],
+            },
+      )}
       visible={visible}
       focusId={focusId}
       selection={selection?.request === reveal ? selection : null}

@@ -36,7 +36,6 @@ export function ProjectNavigation({
   onSettings,
   onNotebook,
   onPlans,
-  onReports,
   onPlan,
   onOverview,
   onClient,
@@ -60,7 +59,6 @@ export function ProjectNavigation({
   onSettings: () => void;
   onNotebook?: () => void;
   onPlans?: () => void;
-  onReports?: () => void;
   onPlan?: () => void;
   onOverview?: (id: string) => void;
   onClient?: (value: "codex" | "gpt") => void;
@@ -552,12 +550,7 @@ export function ProjectNavigation({
         )}
       </div>
       <div className="nav-bottom">
-        <WorkspaceLinks
-          onTasks={onPlan}
-          onNotes={onNotebook}
-          onPlans={onPlans}
-          onReports={onReports}
-        >
+        <WorkspaceLinks onTasks={onPlan} onNotes={onNotebook} onPlans={onPlans}>
           <SpaceBell spaces={spaces} />
         </WorkspaceLinks>
         <NavigationFooter

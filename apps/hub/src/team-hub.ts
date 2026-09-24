@@ -18,6 +18,8 @@ import { BrainstormVoice } from "./brainstorm-voice.js";
 import { collaborationPolicy } from "./collaboration-policy.js";
 import { registerCollaborationSpaces } from "./collaboration-routes.js";
 import { CollaborationSpaces } from "./collaboration-spaces.js";
+import { Communication } from "./communication.js";
+import { registerCommunication } from "./communication-routes.js";
 import { deploymentBlockers } from "./deployment-status.js";
 import { ENGINE_PROTOCOL, engineTerminalWork } from "./engine-client.js";
 import { prepareEngineSocket } from "./engine-socket.js";
@@ -516,6 +518,12 @@ export async function createTeamHub(config: HubConfig, options: Options) {
     return { ok: true };
   });
   const actor = (req: FastifyRequest) => auth.session(req).user.id;
+  registerCommunication(
+    app,
+    new Communication(teamProjects, brainstorm, collaboration),
+    actor,
+    personal,
+  );
   registerBrainstorm(app, brainstorm, collaboration, actor, personal, personalRoomGpt);
   registerTeamProjects(app, teamProjects, actor, personal);
   registerTechnicalPreviews(app, auth, true);

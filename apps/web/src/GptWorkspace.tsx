@@ -29,6 +29,7 @@ import { EntityMenu, type LibraryChange, type LibraryEntity, libraryEvent } from
 import { useGptNativeOperations } from "./GptNativeOperations";
 import { GptProgress } from "./GptProgress";
 import { GptProjectPending } from "./GptProjectContent";
+import { GptResultHandoffs } from "./GptResultHandoffs";
 import { beginGptHistory, gptCache, saveGptCache } from "./gptCache";
 import { mergeGptJobs, showGptJob, waitingGptJob } from "./gptState";
 import { IssueCollect, useIssueCode } from "./IssueDrawer";
@@ -1552,7 +1553,6 @@ export function GptWorkspace({
           onTasks={() => openNotebook("tasks")}
           onNotes={() => openNotebook()}
           onPlans={() => openNotebook("plans")}
-          onReports={() => openNotebook("reports")}
         />
       )}
 
@@ -2061,6 +2061,15 @@ export function GptWorkspace({
                 void send();
               }}
             >
+              <GptResultHandoffs
+                key={selected}
+                threadId={selected}
+                files={files}
+                disabled={busy || uploading || files.length >= 8}
+                onAttach={(file) =>
+                  setFiles((old) => (old.some((v) => v.id === file.id) ? old : [...old, file]))
+                }
+              />
               {activityHandoff && (
                 <fieldset className="activity-context" aria-label="Контекст Activity">
                   <Icon name="history" size={17} />

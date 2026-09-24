@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityAttentionWindow } from "./ActivityDiscussion";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { BrainstormWindow } from "./Brainstorm";
+import { CommunicationNotices, useHumanConversations } from "./Communication";
 import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
 import type { ProjectSetupSeed } from "./ProjectDialog";
@@ -50,8 +51,10 @@ export function SpaceModeControl({ spaces }: { spaces: SpacesController }) {
   );
 }
 export function SpaceBell({ spaces }: { spaces: SpacesController }) {
+  const conversations = useHumanConversations();
   if (!spaces.enabled) return null;
   const count =
+    conversations.items.reduce((n, c) => n + (c.muted ? 0 : c.unread), 0) +
     spaces.catalog.invitations.length +
     spaces.catalog.spaces.reduce(
       (sum, s) =>
@@ -273,6 +276,7 @@ function SpaceWindowContent({
   useWorkspaceDialog(dialog);
   const target = spaces.window!;
   const receiptAction = useSharedAction();
+  const conversations = useHumanConversations();
   const invitation =
     "id" in target ? spaces.catalog.invitations.find((i) => i.spaceId === target.id) : undefined;
   const space = "id" in target ? spaces.catalog.spaces.find((s) => s.id === target.id) : undefined;
@@ -340,12 +344,14 @@ function SpaceWindowContent({
         )}
         {target.kind === "invitations" && (
           <>
+            <CommunicationNotices />
             {receiptAction.error && (
               <p className="notice" role="alert">
                 {receiptAction.error}
               </p>
             )}
-            {spaces.catalog.invitations.length === 0 &&
+            {!conversations.items.some((c) => c.unread && !c.muted) &&
+              spaces.catalog.invitations.length === 0 &&
               !spaces.catalog.spaces.some(
                 (s) =>
                   s.unread > 0 ||

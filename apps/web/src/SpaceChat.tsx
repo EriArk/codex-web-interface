@@ -9,11 +9,19 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { pageWorkspace, accountLocalStorage as storage, workspaceUrl } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
+import { DownloadLink } from "./DownloadLink";
+import { HumanReferenceLink, HumanReferencePicker } from "./HumanReferences";
 import { Icon } from "./icons";
+import { ResultShareButton, SharedResult } from "./ResultSharing";
 import type { SpacesController } from "./useCollaborationSpaces";
 import "./space-chat.css";
 
-type Draft = { text: string; files: SpaceChatFile[]; key: string };
+type Draft = {
+  text: string;
+  files: SpaceChatFile[];
+  key: string;
+  mentions?: { id: string; name: string }[];
+};
 const blank = (): Draft => ({ text: "", files: [], key: crypto.randomUUID() });
 function loadDraft(name: string): Draft {
   try {
@@ -37,6 +45,7 @@ export function SpaceChat({
   visible = true,
   readOnly = false,
   onFile,
+  members,
 }: {
   space: Pick<CollaborationSpace, "id">;
   spaces: Pick<SpacesController, "open" | "refresh">;
@@ -44,6 +53,7 @@ export function SpaceChat({
   visible?: boolean;
   readOnly?: boolean;
   onFile?: (file: SpaceChatFile) => void;
+  members?: { id: string; name: string }[];
 }) {
   const path = endpoint ?? `/team/spaces/${space.id}/chat`,
     draftName = `space-chat-draft:${endpoint ?? space.id}`;
@@ -190,7 +200,11 @@ export function SpaceChat({
       const message = await api<SpaceChatMessage>(path, {
         method: "POST",
         key: outgoing.key,
-        body: { text: outgoing.text.trim(), files: outgoing.files.map((f) => f.id) },
+        body: {
+          text: outgoing.text.trim(),
+          files: outgoing.files.map((f) => f.id),
+          ...(members ? { mentions: outgoing.mentions?.map((m) => m.id) ?? [] } : {}),
+        },
       });
       if (draftRef.current.key === outgoing.key) save(blank());
       stick.current = true;
@@ -295,15 +309,16 @@ export function SpaceChat({
                 })}
               </time>
             </header>
+            {m.mentions?.length ? (
+              <small>{m.mentions.map((v) => "@" + v.name).join(" · ")}</small>
+            ) : null}
             <div className="space-chat-text">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 skipHtml
                 components={{
                   a: ({ href, children }) => (
-                    <a href={href} target="_blank" rel="noopener noreferrer">
-                      {children}
-                    </a>
+                    <HumanReferenceLink href={href}>{children}</HumanReferenceLink>
                   ),
                   img: ({ src, alt }) => (
                     <a href={src} target="_blank" rel="noopener noreferrer">
@@ -315,41 +330,73 @@ export function SpaceChat({
                 {m.text}
               </ReactMarkdown>
             </div>
-            {m.files.map((f) => (
-              <a
-                className="space-chat-file"
-                href={workspaceUrl(`/api${path}/files/${f.id}`)}
-                key={f.id}
-                target="_blank"
-                rel="noopener noreferrer"
-                download={f.name}
-                onClick={
-                  onFile
-                    ? (e) => {
-                        e.preventDefault();
-                        onFile(f);
-                      }
-                    : undefined
-                }
-              >
-                {f.mime.startsWith("image/") ? (
-                  <img
-                    src={workspaceUrl(`/api${path}/files/${f.id}`)}
-                    alt={f.name}
-                    loading="lazy"
-                    onLoad={() => {
-                      if (stick.current && list.current)
-                        list.current.scrollTop = list.current.scrollHeight;
-                    }}
-                  />
-                ) : (
-                  <Icon name="file" />
-                )}
-                <span>
-                  {f.name} <small>{Math.max(1, Math.ceil(f.bytes / 1024))} КБ</small>
-                </span>
-              </a>
+            {m.results?.map((card) => (
+              <SharedResult key={card.id} card={card} />
             ))}
+            {m.files.map((f) =>
+              onFile ? (
+                <a
+                  className="space-chat-file"
+                  href={workspaceUrl(`/api${path}/files/${f.id}`)}
+                  key={f.id}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={f.name}
+                  onClick={
+                    onFile
+                      ? (e) => {
+                          e.preventDefault();
+                          onFile(f);
+                        }
+                      : undefined
+                  }
+                >
+                  {f.mime.startsWith("image/") ? (
+                    <img
+                      src={workspaceUrl(`/api${path}/files/${f.id}`)}
+                      alt={f.name}
+                      loading="lazy"
+                      onLoad={() => {
+                        if (stick.current && list.current)
+                          list.current.scrollTop = list.current.scrollHeight;
+                      }}
+                    />
+                  ) : (
+                    <Icon name="file" />
+                  )}
+                  <span>
+                    {f.name} <small>{Math.max(1, Math.ceil(f.bytes / 1024))} КБ</small>
+                  </span>
+                </a>
+              ) : (
+                <div key={f.id} className="space-chat-file-actions">
+                  <DownloadLink href={`/api${path}/files/${f.id}`} name={f.name} mime={f.mime}>
+                    {f.mime.startsWith("image/") && (
+                      <img
+                        className="human-file-thumbnail"
+                        src={workspaceUrl(`/api${path}/files/${f.id}`)}
+                        alt=""
+                        loading="lazy"
+                      />
+                    )}
+                    {f.name}
+                  </DownloadLink>
+                  {path.startsWith("/team/conversations/") && m.author.id === pageWorkspace && (
+                    <ResultShareButton
+                      result={{
+                        id: f.id,
+                        threadId: space.id,
+                        title: f.name,
+                        type: "file",
+                        createdAt: new Date(m.createdAt).toISOString(),
+                        turnId: null,
+                        payload: { url: `/api${path}/files/${f.id}`, mime: f.mime, bytes: f.bytes },
+                      }}
+                    />
+                  )}
+                </div>
+              ),
+            )}
           </article>
         ))}
       </section>
@@ -389,6 +436,60 @@ export function SpaceChat({
           </p>
         )}
         {uploading && <small role="status">Загружаем файлы…</small>}
+        {members && (
+          <div className="chat-mentions">
+            <HumanReferencePicker
+              onChoose={(text) =>
+                save({
+                  ...draftRef.current,
+                  key: crypto.randomUUID(),
+                  text: draftRef.current.text + (draftRef.current.text ? "\n" : "") + text,
+                })
+              }
+            />
+            <select
+              aria-label="Упомянуть участника"
+              value=""
+              onChange={(e) => {
+                const member = members.find((m) => m.id === e.target.value);
+                if (member)
+                  save({
+                    ...draftRef.current,
+                    key: crypto.randomUUID(),
+                    mentions: [
+                      ...(draftRef.current.mentions ?? []).filter((m) => m.id !== member.id),
+                      member,
+                    ],
+                  });
+              }}
+            >
+              <option value="">@ Участник</option>
+              {members
+                .filter((m) => m.id !== pageWorkspace)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+            </select>
+            {draft.mentions?.map((m) => (
+              <button
+                type="button"
+                className="secondary"
+                key={m.id}
+                onClick={() =>
+                  save({
+                    ...draftRef.current,
+                    key: crypto.randomUUID(),
+                    mentions: draftRef.current.mentions?.filter((v) => v.id !== m.id),
+                  })
+                }
+              >
+                @{m.name} ×
+              </button>
+            ))}
+          </div>
+        )}
         <div className="space-chat-input-row">
           <input
             ref={picker}

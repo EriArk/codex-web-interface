@@ -63,6 +63,7 @@ import { registerQueue } from "./queue.js";
 import { registerQuickCapture } from "./quick-capture.js";
 import { registerRelays } from "./relay-routes.js";
 import { connectRemote, remoteProvider } from "./remote.js";
+import { installResultCaptureLimit } from "./result-capture-limit.js";
 import { resolveResultReference, resultReferenceSchema } from "./result-references.js";
 import { Sessions } from "./sessions.js";
 import { registerSpeech } from "./speech.js";
@@ -738,6 +739,7 @@ export async function createApp(
       .send(image.data);
   });
   registerFilePreviews(app, auth);
+  installResultCaptureLimit(app);
   registerTechnicalPreviews(app, auth);
   registerProjectInspector(app, sessions);
   registerProjectSetup(app, sessions, options.projectSetupProbe);

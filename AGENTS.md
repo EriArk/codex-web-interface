@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested communication entry (2026-09-24)
+
+- Put “Общение” in the lower workspace shortcuts beside Tasks, Notes and Notifications in both clients. Remove Reports from that row; the owner does not use it. Keep the separate Space chat entry in the workspace header.
+
+
 ## Owner-requested full Space access (2026-09-23)
 
 - «Полный доступ» (`direct`) includes automatic GitHub **Write**, explicitly chosen by the owner; never substitute Admin. Preserve existing higher roles.

@@ -4,6 +4,7 @@ import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
 import { PreviewViewer } from "./PreviewViewer";
 import { ResultFilePreview } from "./ResultFilePreview";
+import { ResultShareButton } from "./ResultSharing";
 import { resultPreview } from "./resultPreview";
 import type { Result } from "./types";
 
@@ -46,6 +47,7 @@ export function ResultInspector({
         )}
       </div>
       <div className="result-artifact-actions">
+        <ResultShareButton result={result} />
         {kind !== "card" && !opened && (
           <button type="button" className="secondary" onClick={() => setOpened(true)}>
             Предпросмотр

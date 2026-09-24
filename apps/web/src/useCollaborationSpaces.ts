@@ -62,6 +62,20 @@ export function useCollaborationSpaces() {
       document.removeEventListener("visibilitychange", update);
     };
   }, [refresh]);
+  useEffect(() => {
+    const show = (e: Event) => {
+      const target = (e as CustomEvent<SpaceWindow>).detail;
+      if (target?.kind !== "brainstorm" && target?.kind !== "project") return;
+      const claimed = e as Event & { sharedReferenceHandled?: boolean };
+      if (claimed.sharedReferenceHandled) return;
+      claimed.sharedReferenceHandled = true;
+      // The target window authorizes against current server membership; a stale catalog
+      // must not silently swallow a reference which the server has just admitted.
+      open(target);
+    };
+    globalThis.addEventListener("open-shared-reference", show);
+    return () => globalThis.removeEventListener("open-shared-reference", show);
+  }, []);
   return {
     enabled: !!pageWorkspace,
     catalog,

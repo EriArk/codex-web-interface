@@ -184,30 +184,36 @@ function copySharedFiles(db: DatabaseSync, source: string, destination: string) 
     });
 }
 function chatRows(db: DatabaseSync) {
-  return (["space", "brainstorm"] as const).flatMap((namespace) => {
-    const table = `${namespace}_chat_files`;
-    if (!db.prepare("SELECT name FROM sqlite_master WHERE name=?").get(table)) return [];
-    return db
-      .prepare(`SELECT id,bytes,sha256 FROM ${table} ORDER BY id`)
-      .all()
-      .map((row) => ({
-        namespace,
-        id: z.string().uuid().parse(row.id),
-        bytes: z
-          .number()
-          .int()
-          .min(0)
-          .max(32 * 1024 ** 2)
-          .parse(row.bytes),
-        sha256: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/)
-          .parse(row.sha256),
-      }));
-  });
+  return (["space", "brainstorm", "conversation", "shared_result"] as const).flatMap(
+    (namespace) => {
+      const table =
+        namespace === "shared_result" ? "shared_result_files" : `${namespace}_chat_files`;
+      if (!db.prepare("SELECT name FROM sqlite_master WHERE name=?").get(table)) return [];
+      return db
+        .prepare(`SELECT id,bytes,sha256 FROM ${table} ORDER BY id`)
+        .all()
+        .map((row) => ({
+          namespace,
+          id: z.string().uuid().parse(row.id),
+          bytes: z
+            .number()
+            .int()
+            .min(0)
+            .max(32 * 1024 ** 2)
+            .parse(row.bytes),
+          sha256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .parse(row.sha256),
+        }));
+    },
+  );
 }
-function chatRoot(root: string, namespace: "space" | "brainstorm") {
-  return join(root, "space-chat-files", ...(namespace === "brainstorm" ? ["brainstorm"] : []));
+function chatRoot(
+  root: string,
+  namespace: "space" | "brainstorm" | "conversation" | "shared_result",
+) {
+  return join(root, "space-chat-files", ...(namespace !== "space" ? [namespace] : []));
 }
 function copyChatFiles(db: DatabaseSync, source: string, destination: string) {
   for (const file of chatRows(db)) {

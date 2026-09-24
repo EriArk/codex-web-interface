@@ -1,0 +1,284 @@
+:root[data-theme] dialog.communication-window.workspace-window[open],
+:root[data-theme] dialog.result-share-window.workspace-window[open] {
+  width: min(1080px, calc(100vw - 24px));
+  max-width: none;
+  height: min(860px, calc(var(--app-height, 100dvh) - 24px));
+  max-height: none;
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  left: 0;
+  right: 0;
+  bottom: auto;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+:root[data-theme] dialog.result-share-window.workspace-window[open] {
+  width: min(620px, calc(100vw - 24px));
+}
+.communication-window .notebook-heading,
+.result-share-window .notebook-heading {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.communication-window .notebook-heading > div,
+.result-share-window .notebook-heading > div {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+.communication-window .notebook-heading small,
+.communication-window .notebook-heading strong,
+.result-share-window .notebook-heading small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.communication-window .icon-button,
+.result-share-window .icon-button {
+  color: var(--ink);
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.communication-body {
+  display: grid;
+  grid-template-columns: minmax(200px, 28%) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.communication-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding: 12px;
+}
+.communication-list > button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  text-align: start;
+}
+.communication-list > button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.communication-content {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.communication-chat:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.communication-chat[hidden] {
+  display: none;
+}
+.communication-chat .space-chat-messages {
+  flex: 1;
+  min-height: 0;
+}
+.communication-toolbar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+.communication-toolbar > button {
+  min-height: 44px;
+}
+.result-share-window footer {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.communication-create,
+.result-share-body {
+  padding: 16px;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+.communication-members {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.result-share-destinations {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+.result-share-destinations button {
+  min-height: 44px;
+  text-align: start;
+}
+.result-share-grant {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-block: 12px;
+}
+.result-share-audience {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+}
+.shared-result-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
+.shared-result-card > small {
+  opacity: 0.8;
+}
+.shared-result-html {
+  flex: 1;
+  width: 100%;
+  min-height: 100%;
+  border: 0;
+  background: white;
+}
+@media (max-width: 680px) {
+  .communication-body {
+    display: flex;
+    flex-direction: column;
+  }
+  .communication-body[data-selected="true"] .communication-list {
+    display: none;
+  }
+  .communication-body[data-selected="false"] .communication-list {
+    max-height: 38%;
+    flex-shrink: 0;
+  }
+  .communication-content {
+    flex: 1;
+  }
+  .communication-toolbar {
+    gap: 6px;
+    padding: 8px;
+  }
+  .communication-toolbar button {
+    padding: 6px;
+  }
+}
+
+.gpt-result-handoffs {
+  max-height: 160px;
+  overflow: auto;
+}
+.gpt-result-handoffs > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+.gpt-result-handoffs span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-mentions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+.chat-mentions select {
+  width: auto;
+  min-height: 44px;
+  max-width: 180px;
+}
+
+.space-chat-file-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.human-file-thumbnail {
+  width: 60px;
+  height: 48px;
+  object-fit: cover;
+}
+
+.human-reference-choices {
+  max-height: 180px;
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+}
+
+/* Keep the new surfaces on the shared screen material, separate from the casing. */
+:root .workspace-window > :is(.communication-body, .result-share-body) {
+  background: var(--window-screen);
+  color: var(--ink);
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  box-shadow: var(--window-screen-shadow);
+}
+:root .result-share-body > *,
+:root .communication-create > * {
+  flex-shrink: 0;
+}
+:root .result-share-body .team-contacts {
+  gap: 8px;
+}
+:root .result-share-body .team-contact-list {
+  max-height: 160px;
+  overflow: auto;
+}
+:root .result-share-body .team-contacts .shared-actions:empty {
+  display: none;
+}
+:root .result-share-body .result-share-destinations {
+  grid-template-columns: minmax(0, 1fr);
+  max-height: 180px;
+  min-width: 0;
+}
+:root .result-share-destinations > button {
+  min-width: 0;
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  justify-content: flex-start;
+}
+:root .result-share-body label.result-share-audience {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.4;
+  padding-block: 8px;
+}
+:root .result-share-body .result-share-audience input {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  flex: 0 0 22px;
+  accent-color: var(--accent);
+}
+:root .communication-window .space-chat-input-row .icon-button {
+  color: var(--ink);
+}
+:root .communication-window .space-chat-input-row .primary.icon-button {
+  color: var(--window-key-ink);
+}
+:root .communication-window .space-chat-input-row svg {
+  color: inherit;
+}

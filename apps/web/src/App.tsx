@@ -1153,7 +1153,6 @@ function Workspace({
       onNotebook={() => openNotebook()}
       onPlan={() => openNotebook("tasks")}
       onPlans={() => openNotebook("plans")}
-      onReports={() => openNotebook("reports")}
       onOverview={openProjectOverview}
       onThread={selectThread}
       onNewThread={newThread}

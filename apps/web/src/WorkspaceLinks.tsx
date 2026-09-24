@@ -1,24 +1,22 @@
 import type { ReactNode } from "react";
+import { CommunicationLauncher } from "./Communication";
 import { Icon } from "./icons";
 import "./workspace-links.css";
 export function WorkspaceLinks({
   onTasks,
   onNotes,
   onPlans,
-  onReports,
   children,
 }: {
   onTasks?: () => void;
   onNotes?: () => void;
   onPlans?: () => void;
-  onReports?: () => void;
   children?: ReactNode;
 }) {
   const links = [
     ["Задачи", "check", onTasks],
     ["Заметки", "file", onNotes],
     ["Планы", "plan", onPlans],
-    ["Отчёты", "report", onReports],
   ] as const;
   return (
     <nav className="workspace-shortcuts" aria-label="Рабочие разделы">
@@ -30,6 +28,7 @@ export function WorkspaceLinks({
             <span>{label}</span>
           </button>
         ))}
+      <CommunicationLauncher />
       {children}
     </nav>
   );

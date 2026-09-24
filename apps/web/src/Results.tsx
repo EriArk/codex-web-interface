@@ -11,6 +11,7 @@ import { workspaceMediaUrl } from "./accountStorage.ts";
 import { DownloadLink } from "./DownloadLink";
 import { ResultFilters } from "./ResultFilters";
 import { ResultInspector } from "./ResultInspector";
+import { ResultShareButton } from "./ResultSharing";
 import { resultPreview } from "./resultPreview";
 import "./resultCategories.css";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -273,6 +274,7 @@ export function Results({
                     </span>
                   )}
                 </div>
+                <ResultShareButton result={r} />
                 {r.type === "reasoning" && (
                   <details className="result-reasoning-details">
                     <summary>
