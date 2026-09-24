@@ -1,0 +1,118 @@
+:root dialog.workspace-window.workspace-help,
+:root[data-theme] dialog.workspace-window.workspace-help[open] {
+  box-sizing: border-box;
+  width: min(660px, calc(100vw - 24px));
+  max-width: none;
+  height: min(660px, calc(var(--app-height, 100dvh) - 24px));
+  max-height: none;
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  bottom: auto;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  padding: 8px;
+  overflow: hidden;
+  background: var(--window-shell);
+  color: var(--window-ink);
+  border-color: var(--window-edge);
+  box-shadow: var(--window-frame-shadow);
+}
+.workspace-help[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.workspace-help:focus {
+  outline: none;
+}
+.help-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  padding: 4px 8px 10px;
+  gap: 12px;
+}
+.help-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.help-heading .icon-button,
+.workspace-help-button {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  flex: none;
+  padding: 0;
+}
+.help-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.help-tabs button {
+  min-height: 44px;
+  background: var(--window-key);
+  color: var(--window-key-ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--window-key-shadow);
+}
+.help-tabs button[aria-pressed="true"] {
+  background: var(--window-pressed);
+  box-shadow: var(--window-pressed-shadow);
+}
+.help-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+.help-topic {
+  display: grid;
+  gap: 6px;
+}
+.help-topic select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+.help-keys {
+  margin: 16px 0;
+}
+.help-keys > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 2fr) minmax(0, 3fr);
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.help-keys dd {
+  margin: 0;
+}
+.help-keys kbd {
+  font: inherit;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.help-heading-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+@media (max-width: 500px) {
+  .help-keys > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+}

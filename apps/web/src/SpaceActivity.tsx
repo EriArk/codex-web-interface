@@ -309,7 +309,11 @@ export function SpaceActivity({
   };
   const usedGroupKeys = new Set<string>();
   return (
-    <section className="space-activity" aria-label="Активность пространства">
+    <section
+      data-help-context="activity"
+      className="space-activity"
+      aria-label="Активность пространства"
+    >
       <div className="activity-toolbar">
         <label>
           <span>Проект</span>

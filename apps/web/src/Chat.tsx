@@ -21,6 +21,7 @@ import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { ContextUsage } from "./ContextUsage";
 import { CopyButton } from "./CopyButton";
+import { composerShortcut } from "./composerShortcut";
 import { useDictation } from "./Dictation";
 import { useIssueCode } from "./IssueDrawer";
 import { Icon } from "./icons";
@@ -991,12 +992,7 @@ export function Chat({
             aria-label="Сообщение Codex"
             disabled={!threadId || handoff.pending}
             maxLength={32000}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                void send();
-              }
-            }}
+            onKeyDown={composerShortcut}
           />
           <div className="composer-submit">
             {dictation.button}

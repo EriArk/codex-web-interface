@@ -58,6 +58,7 @@ import { useNavigation } from "./useNavigation";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
 import { useWorkspace } from "./useWorkspace";
+import { WorkspaceHelp } from "./WorkspaceHelp";
 import { WorkspaceSettings } from "./WorkspaceSettings";
 
 const GptWorkspace = lazy(() =>
@@ -1750,6 +1751,7 @@ function Workspace({
   return (
     <>
       {workspace}
+      <WorkspaceHelp topic={client === "gpt" ? "gpt" : "codex"} />
       <WorkspaceSettings
         open={settings}
         onClose={() => setSettings(false)}

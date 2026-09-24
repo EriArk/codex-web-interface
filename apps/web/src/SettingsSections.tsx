@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { HelpButton } from "./WorkspaceHelp";
 import "./settings-sections.css";
 
 export type SettingsCategory =
@@ -77,6 +78,7 @@ export function SettingsSections({
             {categories.find((c) => c.id === active)?.title}
           </span>
         </h2>
+        <HelpButton />
         <button
           type="button"
           className="icon-button panel-close"

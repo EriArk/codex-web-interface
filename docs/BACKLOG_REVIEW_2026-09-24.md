@@ -147,3 +147,24 @@ Next proposed stage: **5 — contextual in-app help and shortcuts**, **Сред�
 (`medium`)**. Add concise context-specific help and a discoverable shortcut list
 using existing themed windows, without introductory tours or workflow gates.
 Wait for the owner's continuation before beginning it.
+
+
+## Help/shortcuts continuation — 24 September
+
+Stage **5** is implemented: question-mark entry in Settings and file viewing/
+editing, one themed help window, topic descriptions and keyboard reference. F1
+selects the current file/editor/brainstorm/activity context, otherwise the active
+Codex/GPT client. Remote/terminal keyboard ownership is preserved. Nested help
+retains parent dialogs, focus and drafts. Ctrl/Command+Enter uses the existing
+submit button in both Codex and GPT; disabled readiness, repeat and IME are guarded.
+
+Chromium/WebKit verify exact submit counts, disabled/IME/repeat/Alt handling,
+newline behavior, contextual F1, Escape/focus restoration, terminal key ownership,
+and four-theme phone/keyboard/tablet/wide layouts. Screenshots inspected; physical
+phone/tablet acceptance remains pending. No Hub or installed PC helper contract
+changed. The approved implementation queue **6 -> 2 -> 4 -> 1 -> 5** is complete.
+
+Next proposed pass: end-to-end automated verification of **file -> editor ->
+integrated GitHub -> shared materials**, including interrupted saves and retained
+drafts, with **Высокое (`high`)**. Wait for continuation. Keep physical-device
+acceptance separate and deferred until the owner is available.

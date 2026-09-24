@@ -88,3 +88,9 @@ is secondary. Preserve the parent archive beneath a nested viewer. Render dense
 spreadsheet grids in their own horizontal/vertical scroller and paginate long
 content; never let cell widths stretch the surrounding dialog. Hide unused page
 navigation for a single page. Keep format caveats in one quiet disclosure.
+
+Contextual help: use a compact question-mark key in Settings/file headers and a
+single shared dialog. Keep topic selection and the keyboard reference in two
+explicit tabs, with a independently scrolling body and a fixed reachable Close.
+Preserve the parent window, focus and draft. Modal geometry must override general
+workspace-window theme/mobile rules. No automatic tours, banners or setup gates.

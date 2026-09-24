@@ -57,7 +57,7 @@
 }
 .file-viewer-window-controls {
   display: grid;
-  grid-template-columns: repeat(3, 44px);
+  grid-template-columns: repeat(4, 44px);
   gap: 6px;
 }
 .file-viewer-window-controls button {

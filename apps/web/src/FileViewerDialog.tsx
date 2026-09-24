@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import { ViewerEditButton } from "./ViewerEditButton";
+import { HelpButton } from "./WorkspaceHelp";
 import "./file-viewer.css";
 import "./workspace-window.css";
 
@@ -35,6 +36,7 @@ export function FileViewerDialog({
     <dialog
       ref={dialog}
       className="file-viewer-dialog"
+      data-help-context="files"
       data-expanded={expanded}
       aria-label="Просмотр файла"
       tabIndex={-1}
@@ -56,6 +58,7 @@ export function FileViewerDialog({
           </small>
         </div>
         <div className="file-viewer-window-controls">
+          <HelpButton topic="files" />
           <button
             type="button"
             className="icon-button"

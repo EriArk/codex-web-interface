@@ -79,6 +79,7 @@ function RoomDialog({
   useWorkspaceDialog(dialog);
   return (
     <dialog
+      data-help-context="brainstorm"
       ref={dialog}
       tabIndex={-1}
       className={`workspace-window brainstorm-dialog${large ? " brainstorm-large project-gpt-window" : ""}`}

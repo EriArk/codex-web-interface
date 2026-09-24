@@ -24,6 +24,7 @@ import {
 } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
+import { composerShortcut } from "./composerShortcut";
 import { useDictation } from "./Dictation";
 import { DownloadLink } from "./DownloadLink";
 import { EntityMenu, type LibraryChange, type LibraryEntity, libraryEvent } from "./EntityMenu";
@@ -2171,6 +2172,7 @@ export function GptWorkspace({
                 <AutoTextarea
                   ref={composer}
                   aria-label="Сообщение GPT"
+                  onKeyDown={composerShortcut}
                   placeholder={
                     activityHandoff
                       ? "Что изменилось? Или задай свой вопрос…"

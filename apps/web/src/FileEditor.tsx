@@ -15,6 +15,7 @@ import { FileEditorPreview } from "./FileEditorPreview";
 import { githubDraftStorage } from "./githubDraftStorage";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
+import { HelpButton } from "./WorkspaceHelp";
 import "./file-editor.css";
 
 export default function FileEditor({
@@ -334,6 +335,7 @@ export default function FileEditor({
       ref={dialog}
       tabIndex={-1}
       className="workspace-window file-editor"
+      data-help-context="editor"
       aria-label={`Редактор ${path}`}
       onCancel={(e) => {
         e.preventDefault();
@@ -350,6 +352,7 @@ export default function FileEditor({
           </strong>
           <small>{copy ? "Редактируемая копия" : `${projectName} · Рабочая копия`}</small>
         </div>
+        <HelpButton topic="editor" />
         <button
           type="button"
           className="icon-button"
