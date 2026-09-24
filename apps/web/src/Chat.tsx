@@ -20,6 +20,7 @@ import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
 import { ConnectionRecovery, type RecoveryOutcome } from "./ConnectionRecovery";
 import { ContextUsage } from "./ContextUsage";
 import { CopyButton } from "./CopyButton";
+import { ChatNavigation } from "./ChatNavigation";
 import { useDictation } from "./Dictation";
 import { useIssueCode } from "./IssueDrawer";
 import { Icon } from "./icons";
@@ -279,7 +280,7 @@ export function Chat({
   onResult: (id: string, category?: ResultCategory) => void;
   onArtifact?: (request: ArtifactRequest) => void;
   onReconnect: () => Promise<RecoveryOutcome>;
-  onLatest: () => void;
+  onLatest: () => void | Promise<void>;
 }) {
   const speechScope = `codex:${threadId}`;
   const reviews = useThreadReviews("codex", threadId);
@@ -374,8 +375,7 @@ export function Chat({
   useEffect(() => {
     setDetailsOpen(false);
   }, [threadId]);
-  const [draft, setDraft] = useState(""),
-    [newMessages, setNewMessages] = useState(false);
+  const [draft, setDraft] = useState("");
   const active = ["running", "starting", "waiting_approval"].includes(state.thread.status);
   const external = state.thread.activitySource === "external";
   useLayoutEffect(() => {
@@ -400,10 +400,7 @@ export function Chat({
       pendingHeight.current = undefined;
       return;
     }
-    if (atBottom.current) {
-      el.scrollTop = el.scrollHeight;
-      setNewMessages(false);
-    } else setNewMessages(true);
+    if (atBottom.current) el.scrollTop = el.scrollHeight;
   }, [threadId, state.messages, state.loadingOlder, visible]);
   const liveTurn = useRef("");
   const liveScope = useRef("");
@@ -526,29 +523,21 @@ export function Chat({
           positions.set(threadId, el.scrollTop);
           if (!completionLocked.current)
             atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-          if (atBottom.current) setNewMessages(false);
         }}
       >
-        {newMessages && (
-          <button
-            type="button"
-            className="new-message-button secondary"
-            onClick={() => {
-              atBottom.current = true;
-              setNewMessages(false);
-              if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
-            }}
-          >
-            К новым сообщениям ↓
-          </button>
-        )}
         <div className="chat-content" ref={content}>
           {(state.contextTurn || state.hasNewer) && (
             <div className="history-loader">
               <span className="small muted">
                 {state.contextTurn ? "Фрагмент диалога" : "В Codex появились новые сообщения"}
               </span>
-              <button type="button" className="secondary" onClick={onLatest}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  void Promise.resolve(onLatest()).catch(() => {});
+                }}
+              >
                 К последним сообщениям
               </button>
             </div>
@@ -612,6 +601,11 @@ export function Chat({
                     key={message.id}
                     data-turn={message.turnId ?? ""}
                     data-message={message.id}
+                    data-chat-nav={
+                      message.phase !== "commentary" && message.phase !== "analysis"
+                        ? "true"
+                        : undefined
+                    }
                   >
                     <div className="message-meta">
                       <span className="avatar">{message.role === "user" ? "Я" : "C"}</span>
@@ -803,6 +797,23 @@ export function Chat({
           )}
         </div>
       </div>
+      <ChatNavigation
+        scroller={scroller}
+        visible={visible && !!threadId && !state.loading}
+        hasOlder={state.hasMore}
+        loadingOlder={state.loadingOlder}
+        loadOlder={older}
+        hasNewer={!!(state.contextTurn || state.hasNewer)}
+        loadNewer={async () => {
+          await onLatest();
+        }}
+        onNavigate={() => {
+          atBottom.current = false;
+        }}
+        onEnd={() => {
+          atBottom.current = true;
+        }}
+      />
       <UpdateNotice visible={visible} busy={busy || attachments.busy} />
       {threadId && (
         <ConnectionRecovery

@@ -1530,7 +1530,14 @@ function Workspace({
               setArtifactRequest(request);
             }}
             onReconnect={resume}
-            onLatest={() => void refresh().catch((e) => setNotice(messageOf(e)))}
+            onLatest={async () => {
+              try {
+                await refresh();
+              } catch (e) {
+                setNotice(messageOf(e));
+                throw e;
+              }
+            }}
           />
           <PaneDivider
             value={rightWidth || (legacyLayout ? 38 : 34)}

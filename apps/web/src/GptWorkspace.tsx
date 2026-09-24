@@ -23,6 +23,7 @@ import {
 } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
+import { ChatNavigation } from "./ChatNavigation";
 import { useDictation } from "./Dictation";
 import { DownloadLink } from "./DownloadLink";
 import { EntityMenu, type LibraryChange, type LibraryEntity, libraryEvent } from "./EntityMenu";
@@ -1846,6 +1847,7 @@ export function GptWorkspace({
                     className={"message " + message.role}
                     key={message.id}
                     data-message={message.id}
+                    data-chat-nav="true"
                   >
                     <div className="message-header">
                       <span className="avatar">{message.role === "user" ? "Я" : "G"}</span>
@@ -1997,6 +1999,30 @@ export function GptWorkspace({
                 ))}
             </div>
           </div>
+          <ChatNavigation
+            scroller={scroll}
+            visible={view === "chat" && (!!selected || messages.length > 0)}
+            hasOlder={!!before}
+            loadingOlder={loading}
+            loadOlder={async () => {
+              if (!before) return;
+              sticky.current = false;
+              await history(selected, before);
+            }}
+            hasNewer={!!(contextMessage || hasNewer)}
+            loadingNewer={loading}
+            loadNewer={async () => {
+              await history(selected, undefined, true);
+            }}
+            onNavigate={() => {
+              sticky.current = false;
+              requestAnimationFrame(() => rememberScroll());
+            }}
+            onEnd={() => {
+              sticky.current = true;
+              requestAnimationFrame(() => rememberScroll());
+            }}
+          />
           <div className="gpt-composer-wrap">
             {nativeOperations.panel}
             <GptProjectPending />
