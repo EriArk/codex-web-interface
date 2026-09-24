@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { CodexSchedules } from "../apps/hub/dist/codex-schedules.js";
 import { GptService } from "../apps/hub/dist/gpt.js";
 import { Library } from "../apps/hub/dist/library.js";
 import { createSnapshot, restoreSnapshot, verifySnapshot } from "../apps/hub/dist/maintenance.js";
@@ -219,6 +220,33 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
         "request-fingerprint",
         "opaque-credit",
       );
+    const schedules = new CodexSchedules(
+      source.db,
+      {
+        resolve() {
+          return { threadId: thread.id, nativeId: "native-id", revision: 1 };
+        },
+        async send() {
+          throw Error("must not send");
+        },
+      },
+      () => Date.parse("2026-09-24T10:00Z"),
+    );
+    const scheduled = schedules.create(
+      randomUUID(),
+      {
+        key: "binding",
+        role: "work",
+        name: "P",
+        revision: 1,
+        projectId: "p",
+        stamp: "binding-stamp",
+      },
+      {
+        text: "Do not replay after backup restore",
+        rule: { date: "2026-09-25", time: "10:00", timezone: "UTC", weekdays: [] },
+      },
+    );
     const snapshot = await createSnapshot(config, join(root, "backups"));
     const manifest = await verifySnapshot(snapshot);
     assert.equal(manifest.format, 2);
@@ -231,6 +259,12 @@ test("workspace backup restores GPT bytes, saved HTML and pins without replaying
     const target = join(root, "restore");
     await restoreSnapshot(snapshot, target);
     restored = new Store(join(target, "app.db"));
+    const restoredSchedule = JSON.parse(
+      restored.db.prepare("SELECT value FROM codex_schedules WHERE id=?").get(scheduled.id).value,
+    );
+    assert.equal(restoredSchedule.state, "paused");
+    assert.equal(restoredSchedule.nextAt, null);
+    assert.equal(restoredSchedule.revision, scheduled.revision + 1);
     const reset = restored.db.prepare("SELECT * FROM usage_reset_operations").get();
     assert.equal(reset.id, "retained-reset-key");
     assert.equal(reset.creditId, "opaque-credit");

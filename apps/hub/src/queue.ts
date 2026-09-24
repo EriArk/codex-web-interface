@@ -34,6 +34,18 @@ export class QueueService {
   private changed(id: string, details: Record<string, unknown> = {}) {
     this.sessions.emit("event", this.store.append(id, "queue.changed", details));
   }
+  /** Scheduled work waits behind the existing queue and shares its mutation lock. */
+  async whenEmpty<T>(id: string, send: () => Promise<T>): Promise<T> {
+    return this.locked(id, async () => {
+      const queue = await this.native(id);
+      if (
+        queue.length ||
+        this.store.db.prepare("SELECT 1 FROM queue_transfers WHERE threadId=? LIMIT 1").get(id)
+      )
+        throw new HubError(409, "QUEUE_BUSY", "Ожидает сообщений в очереди.");
+      return send();
+    });
+  }
   private async native(id: string): Promise<Submission[]> {
     const t = this.sessions.thread(id),
       rpc = await this.sessions.queueClient(id);

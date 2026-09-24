@@ -10,6 +10,7 @@ import {
   turnSettingsSchema,
 } from "@codex-web/shared";
 import { Artifacts } from "./artifacts.js";
+import { observeScheduleReceipt } from "./codex-schedules.js";
 import { GeneratedArtifacts } from "./generatedArtifacts.js";
 import { gptResultContent } from "./gpt-result-content.js";
 import { type EntityAction, Library } from "./library.js";
@@ -650,6 +651,8 @@ export class Catalog {
       (type === "userMessage" ? this.attachedMessage(thread.id, inputs) : undefined) ||
       str(item.clientId, 200) ||
       str(item.id, 200);
+    if (type === "userMessage")
+      observeScheduleReceipt(this.store.db, messageId, thread.codexThreadId, turnId);
     if (type === "userMessage")
       this.store.db
         .prepare(

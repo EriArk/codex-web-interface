@@ -30,3 +30,9 @@ a Preview tab, or a duplicate Preview button. Sharing/downloading stay together
 as equal-width actions on the original card. Long filenames wrap without changing
 peer control widths; keep keyboard-accessible open buttons and existing exact
 source navigation from messages.
+
+Codex schedules: one clock in the chat header opens a protected-title window.
+Keep message, recurrence, timezone/date/time and equal-width footer actions in
+explicit rows. The editor scrolls independently while Save and Close remain
+reachable at keyboard height. Keep its draft separate from the normal composer;
+management stays bound to the originating chat role without a Project picker.

@@ -29,6 +29,7 @@ import { MAX_FILE_BYTES } from "./attachments.js";
 import { Auth } from "./auth.js";
 import { registerBridgeDoctor } from "./bridge-doctor.js";
 import { registerChunkUploads } from "./chunk-uploads.js";
+import { registerCodexSchedules } from "./codex-schedule-routes.js";
 import { registerCommandOutput } from "./command-output.js";
 import { registerContentSearch } from "./content-search.js";
 import { registerDeploymentStatus } from "./deployment-status.js";
@@ -764,6 +765,12 @@ export async function createApp(
     options.collaborationPolicy?.gptScope,
   );
   registerIntake(app, intake);
+  const codexSchedules = registerCodexSchedules(
+    app,
+    intake,
+    queue,
+    options.collaborationPolicy?.gptScope,
+  );
   const issueDrawer = new IssueDrawer(
     sessions,
     gpt,
@@ -1033,6 +1040,7 @@ export async function createApp(
   }
   app.addHook("onClose", async () => {
     unsubscribeRevocation();
+    await codexSchedules.close();
     for (const socket of sockets.keys()) socket.close(1001, "Server restarting");
     await bridgeDoctor.close();
     await preparation.close();
@@ -1051,6 +1059,7 @@ export async function createApp(
     projectWork,
     projectGpts,
     intake,
+    codexSchedules,
     issueDrawer,
     preparation,
   };

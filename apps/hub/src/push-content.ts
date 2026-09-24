@@ -52,6 +52,7 @@ export function notificationText(value: unknown, limit = 180): string {
   );
 }
 const details: Record<string, string> = {
+  schedule: "Открой расписание в панели чата: отправка требует проверки.",
   completed: "Ответ готов — открой чат, чтобы посмотреть результат.",
   question: "Ответь на вопрос, чтобы Codex продолжил работу.",
   approval: "Подтверди или отклони действие в чате.",
@@ -60,6 +61,7 @@ const details: Record<string, string> = {
   test: "Здесь будут проект, чат и краткий итог. Нажатие откроет нужный диалог.",
 };
 const statuses: Record<string, string> = {
+  schedule: "Расписание требует проверки",
   completed: "Готово",
   question: "Нужен ответ",
   approval: "Нужно разрешение",

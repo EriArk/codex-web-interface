@@ -60,3 +60,16 @@ Next proposed pass: **#214 — Codex scheduled messages**, **Высокое (`hi
 Keep it chat-bound, with timezone/recurrence editing, cancellation, exact account /
 machine/thread binding, durable receipts and uncertain-send reconciliation.
 Wait for the owner's continuation before starting that pass.
+
+## Codex schedules pass — 24 September
+
+The #214 Project Work / persistent Intake scope is implemented: chat-toolbar
+one-time and weekday schedules, named zones, confirmed Current Chat rotation,
+revision-bound management, native queue ordering and exact uncertain receipts.
+See [behavior and bounds](CODEX_SCHEDULES.md). Assistant/Bridge roles that do not
+yet exist as supported chat surfaces remain outside this pass.
+
+Next proposed stage: **#208 — advanced project profiles**, **Высокое (`high`)**.
+Unify optional project instructions, reusable profile selection and its compact
+editor across project creation and GPT/Codex. Preserve existing AGENTS.md and
+keep the ordinary creation flow small. Wait for the owner's continuation.

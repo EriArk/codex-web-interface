@@ -84,6 +84,7 @@ export type PushOptions = {
   projectName?: (id: string) => string | undefined;
 };
 const titles: Record<string, string> = {
+  schedule: "Проверь сообщение по расписанию",
   completed: "Работа завершена",
   question: "Нужен ответ на вопрос",
   approval: "Нужно разрешение",
@@ -418,6 +419,29 @@ export function registerPush(
       | undefined;
     if (!n) throw new HubError(404, "PUSH_EXPIRED", "Уведомление больше недоступно.");
     if (n.kind === "test") return { client: "codex" };
+    if (n.kind === "schedule" && n.client === "codex") {
+      const row = store.db
+        .prepare(
+          "SELECT s.value FROM codex_schedules s JOIN codex_schedule_runs r ON r.scheduleId=s.id WHERE r.id=?",
+        )
+        .get(n.eventKey?.slice("schedule:".length) ?? "");
+      if (!row) throw new HubError(404, "PUSH_EXPIRED", "Расписание больше недоступно.");
+      const target = JSON.parse(String(row.value)).target;
+      const current =
+        target.role === "work"
+          ? store.db
+              .prepare("SELECT threadId FROM project_current_chats WHERE scopeKey=?")
+              .get("codex:" + target.projectId)?.threadId
+          : n.target;
+      return {
+        client: "codex",
+        schedule: {
+          projectId: target.projectId,
+          threadId: String(current || n.target),
+          chatRole: target.role,
+        },
+      };
+    }
     if (n.client === "codex") {
       const t = store.thread(n.target);
       if (deleted(store, "codex", t.id) || deleted(store, "codex", t.codexThreadId))

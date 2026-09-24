@@ -262,6 +262,7 @@ export function useNotificationPresence(client: "codex" | "gpt", target: string,
   }, [active, client, target]);
 }
 export type NotificationTarget = {
+  schedule?: { projectId: string; threadId: string; chatRole: "work" | "intake" };
   id: string;
   client: "codex" | "gpt";
   threadId?: string;

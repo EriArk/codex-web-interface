@@ -23,6 +23,7 @@ import {
 import { accessCapabilities, requireAccess, threadAccess, turnAccess } from "./access.js";
 import { Attachments } from "./attachments.js";
 import { Catalog, type CatalogProject } from "./catalog.js";
+import { observeScheduleReceipt } from "./codex-schedules.js";
 import { elicitationResponse, parseElicitation } from "./elicitation.js";
 import { ExternalActivity } from "./externalActivity.js";
 import type { EntityAction, EntityKind } from "./library.js";
@@ -1686,6 +1687,7 @@ export class Sessions extends EventEmitter {
       const item = record(p.item),
         content = Array.isArray(item.content) ? item.content.map(record) : [];
       const messageId = text(item.clientId) || text(item.id);
+      observeScheduleReceipt(this.store.db, messageId, t.codexThreadId, turnId || "");
       this.store.db
         .prepare(
           "DELETE FROM queue_transfers WHERE threadId=? AND ((id=? AND state IN ('enqueue_pending','enqueue_unknown')) OR (state IN ('pending','steered','unknown') AND json_extract(value, '$.clientUserMessageId')=?))",

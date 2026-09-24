@@ -16,6 +16,7 @@ import {
 } from "./accountStorage.ts";
 import { ApiError, api, configureApi, messageOf } from "./api";
 import { Chat } from "./Chat";
+import { CodexScheduleButton, CodexScheduleWindow } from "./CodexSchedules";
 import { CollaborationWindow, SpaceChatButton } from "./CollaborationSpaces";
 import type { RecoveryOutcome } from "./ConnectionRecovery";
 import { ContentSearch, type SearchRequest } from "./ContentSearch";
@@ -497,6 +498,7 @@ function Workspace({
       !notebook,
   );
   const [notificationTarget, setNotificationTarget] = useState<NotificationTarget | undefined>();
+  const [scheduleNotice, setScheduleNotice] = useState<NotificationTarget["schedule"]>();
   const notificationHandled = useCallback((id: string) => {
     clearNotification(id);
     setNotificationTarget(undefined);
@@ -519,6 +521,11 @@ function Workspace({
           setSettings(false);
           setView("chat");
           setClient(target.client);
+          if (target.schedule) {
+            setScheduleNotice(target.schedule);
+            clearNotification(id);
+            return;
+          }
           if (target.client === "gpt") setNotificationTarget({ ...target, id });
           else if (target.threadId && target.projectId) {
             // The target can be older than the first catalog page; do not replace it with page[0].
@@ -1238,6 +1245,13 @@ function Workspace({
           <NavigationDivider />
         </aside>
         <header className="workspace-header">
+          {scheduleNotice && (
+            <CodexScheduleWindow
+              key={scheduleNotice.projectId + scheduleNotice.chatRole + scheduleNotice.threadId}
+              {...scheduleNotice}
+              onClose={() => setScheduleNotice(undefined)}
+            />
+          )}
           <button
             type="button"
             className="icon-button menu-button"
@@ -1322,6 +1336,13 @@ function Workspace({
             <Icon name="plus" />
           </button>
           <SpaceChatButton spaces={spaces} projectId={projectId} />
+          {!spaceHome && projectId && threadId && !project?.unassigned && (
+            <CodexScheduleButton
+              key={projectId + ":" + threadId}
+              projectId={projectId}
+              threadId={threadId}
+            />
+          )}
           <button
             type="button"
             className="icon-button header-files"

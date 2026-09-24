@@ -245,6 +245,7 @@ export async function createTeamHub(config: HubConfig, options: Options) {
             },
             authorizeExecution: () => {
               registry.active(userId);
+              if (closing) throw new HubError(503, "WORKSPACE_CLOSING", "Сервис переподключается.");
               if (maintenanceActive()) throw maintenanceError();
               if (reconfiguring.has(userId))
                 throw new HubError(503, "WORKSPACE_RECONFIGURING", "Применяется подключение.");

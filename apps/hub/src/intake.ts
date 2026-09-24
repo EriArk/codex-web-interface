@@ -234,7 +234,7 @@ export class ProjectIntake {
       throw fail();
     return value;
   }
-  async send(id: string, key: string, raw: unknown) {
+  async send(id: string, key: string, raw: unknown, beforeCommit?: () => void) {
     const body = input.parse(raw),
       stamp = this.stamp(id),
       b = this.bindings.ensure(this.scope(id));
@@ -343,7 +343,13 @@ export class ProjectIntake {
             [],
             key,
             true,
-            { instructions, beforeCommit: () => this.check(id, request.stamp, request.revision) },
+            {
+              instructions,
+              beforeCommit: () => {
+                this.check(id, request.stamp, request.revision);
+                beforeCommit?.();
+              },
+            },
           ),
       );
     } catch (e) {

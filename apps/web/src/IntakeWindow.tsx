@@ -13,6 +13,7 @@ import type { ArtifactRequest } from "./ArtifactMarkdown";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { ApprovalCard, MessageText } from "./Chat";
+import { CodexScheduleButton } from "./CodexSchedules";
 import { ComposerOptions } from "./ComposerOptions";
 import { CopyButton } from "./CopyButton";
 import { IssueCollect, IssueDrawerButton } from "./IssueDrawer";
@@ -252,6 +253,14 @@ export function IntakeWindow({
           <small>Только чтение</small>
         </div>
         <IssueDrawerButton targetId={projectId} className="icon-button intake-issues" />
+        {data?.threadId && (
+          <CodexScheduleButton
+            key={projectId + ":" + data.threadId}
+            projectId={projectId}
+            threadId={data.threadId}
+            chatRole="intake"
+          />
+        )}
         {data?.threadId && (
           <button
             type="button"

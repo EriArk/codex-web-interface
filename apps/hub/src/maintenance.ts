@@ -436,6 +436,18 @@ export async function restoreSnapshot(snapshot: string, target: string): Promise
         "BEGIN IMMEDIATE; DELETE FROM sessions; DELETE FROM bootstrap; UPDATE commands SET state='unknown' WHERE state='pending'; UPDATE threads SET status='unknown' WHERE status IN ('starting','running','waiting_approval'); COMMIT;",
       );
       db.exec("UPDATE usage_reset_operations SET state='unknown' WHERE state='pending'");
+      // A backup predates possible native sends; restored future intents need a new decision.
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='codex_schedules'").get()) {
+        db.exec(
+          "UPDATE codex_schedules SET value=json_set(value,'$.state','paused','$.nextAt',NULL,'$.revision',json_extract(value,'$.revision')+1) WHERE json_extract(value,'$.state')='scheduled'",
+        );
+        db.exec(
+          "UPDATE codex_schedule_runs SET value=json_set(value,'$.state','unknown','$.error','Восстановлено из резервной копии. Проверь исходный чат; повторной отправки не будет.') WHERE json_extract(value,'$.state') IN ('waiting','running')",
+        );
+        db.exec(
+          "UPDATE codex_schedules SET value=json_set(value,'$.last',json((SELECT value FROM codex_schedule_runs r WHERE r.id=json_extract(codex_schedules.value,'$.last.id')))) WHERE json_extract(value,'$.last.state') IN ('waiting','running')",
+        );
+      }
       // A queued job in an older backup may have already reached ChatGPT since
       // that snapshot. Restoration must not replay it, even if submitted was false.
       db.prepare(
