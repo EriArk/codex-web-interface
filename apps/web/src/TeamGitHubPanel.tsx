@@ -55,6 +55,7 @@ const empty = (): Draft => ({
 const names = {
   "repository-branch": "Новая ветка",
   "repository-pr": "Новый PR",
+  "repository-tree": "Файлы и папки",
   "repository-file": "Изменение файла GitHub",
   "preparation-branch": "Ветка подготовки",
   "preparation-files": "Документы проекта",

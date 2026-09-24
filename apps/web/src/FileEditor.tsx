@@ -9,10 +9,11 @@ import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { accountLocalStorage as storage } from "./accountStorage";
+import { accountLocalStorage } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
 import { FileCopySave } from "./FileCopySave";
 import { FileEditorPreview } from "./FileEditorPreview";
+import { githubDraftStorage } from "./githubDraftStorage";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./file-editor.css";
@@ -78,12 +79,13 @@ export default function FileEditor({
       );
     return text.match(/\r\n|\r|\n/)?.[0] ?? "\n";
   };
-  const persist = () => {
+  const storage = copy?.source.startsWith("github:") ? githubDraftStorage : accountLocalStorage;
+  const persist = async () => {
     if (!baseline.current || !editor.current) return false;
     try {
-      if (current() === baseline.current.text && !pending.current) storage.removeItem(key);
+      if (current() === baseline.current.text && !pending.current) await storage.removeItem(key);
       else
-        storage.setItem(
+        await storage.setItem(
           key,
           JSON.stringify({ baseline: baseline.current, text: current(), pending: pending.current }),
         );
@@ -106,7 +108,10 @@ export default function FileEditor({
     )
       return;
     if (copy) {
+      saving.current = true;
+      setBusy(true);
       try {
+        if (!(await persist())) return;
         await (reviewSave ?? setCopyToSave)(
           new File([(base.bom ? "\ufeff" : "") + current()], path.split("/").at(-1)!, {
             type: "text/plain",
@@ -114,6 +119,9 @@ export default function FileEditor({
         );
       } catch (e) {
         setError(messageOf(e));
+      } finally {
+        saving.current = false;
+        if (active.current) setBusy(false);
       }
       return;
     }
@@ -130,8 +138,8 @@ export default function FileEditor({
       };
     const operation = pending.current,
       text = operation.text;
-    persist();
     try {
+      if (!(await persist())) return;
       const result = await api<FileSnapshot>(url, {
         method: "POST",
         body: {
@@ -210,12 +218,12 @@ export default function FileEditor({
       };
     };
     void read()
-      .then((snapshot) => {
+      .then(async (snapshot) => {
         if (!alive || !host.current) return;
         let text = snapshot.text ?? "";
         baseline.current = snapshot;
         try {
-          const draft = JSON.parse(storage.getItem(key) ?? "null");
+          const draft = JSON.parse((await storage.getItem(key)) ?? "null");
           if (
             draft?.baseline?.path === path &&
             draft.baseline.checkout === snapshot.checkout &&
@@ -228,6 +236,7 @@ export default function FileEditor({
             if (draft.baseline.fingerprint !== snapshot.fingerprint) setConflict(snapshot);
           }
         } catch {}
+        if (!alive || !host.current) return;
         // A changed disk version must not change the restored draft's line endings.
         lineSeparator.current = separatorOf(baseline.current?.text ?? "");
         separatorOf(text);
@@ -506,8 +515,13 @@ export default function FileEditor({
             type="button"
             className="secondary"
             disabled={!!pending.current}
-            onClick={() => {
-              storage.removeItem(key);
+            onClick={async () => {
+              try {
+                await storage.removeItem(key);
+              } catch (e) {
+                setError(messageOf(e));
+                return;
+              }
               baseline.current = null;
               onClose();
             }}
@@ -520,8 +534,8 @@ export default function FileEditor({
           <button
             type="button"
             className="secondary"
-            onClick={() => {
-              if (persist()) onClose();
+            onClick={async () => {
+              if (await persist()) onClose();
             }}
           >
             Закрыть с черновиком

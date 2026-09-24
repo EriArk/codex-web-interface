@@ -141,7 +141,7 @@ const fs=require('node:fs'),p=process.env.GH_WORK_FIXTURE,s=JSON.parse(fs.readFi
 fs.appendFileSync(p.replace('github.json','calls.jsonl'),JSON.stringify({method,endpoint,body})+'\\n');
 const answer=(status,value)=>{process.stdout.write('HTTP/2.0 '+status+' Test\\r\\nContent-Type: application/json\\r\\n\\r\\n'+(value==null?'':JSON.stringify(value)));if(status>=400)process.exitCode=1;};
 const persist=()=>fs.writeFileSync(p,JSON.stringify(s));
-const changed=value=>{persist();if(s.drop){s.unavailable=true;s.drop=false;persist();process.exitCode=1;return;}answer(value==null?204:201,value);};
+const changed=value=>{persist();if(s.replyLostAt===raw){s.replyLostAt=null;persist();process.exitCode=1;return;}if(s.drop || s.dropEndpoint===raw){s.dropEndpoint=null;s.unavailable=true;s.drop=false;persist();process.exitCode=1;return;}answer(value==null?204:201,value);};
 const base='repos/Owner/Project',raw=endpoint?.split('?')[0],parts=raw?.split('/')||[],n=Number(parts[4]);
 if(method!=='GET'&&s.reject){answer(s.reject,{});return;}
 if(s.unavailable){answer(503,{});return;}
@@ -150,10 +150,27 @@ if(raw==='users/Friend'){answer(200,{id:s.targetId||12,login:'Friend'});return;}
 if(raw==='repos/Author/Shared'){answer(s.targetAccepted?200:404,{id:77,full_name:'Author/Shared',permissions:{push:true}});return;}
 if(raw==='user/repository_invitations'){answer(200,s.received||[]);return;}
 if(raw==='user/repository_invitations/301'&&method==='PATCH'){s.targetAccepted=true;s.received=[];changed(null);return;}
-if(raw===base){answer(s.access==='unavailable'?404:200,{id:s.repositoryId,full_name:'Owner/Project',default_branch:'main',has_issues:true,permissions:{admin:s.access==='admin',maintain:s.access==='maintain',push:s.access==='write',triage:s.access==='triage',pull:true}});return;}
+if(raw===base){answer(s.access==='unavailable'?404:200,{id:s.repositoryId,node_id:'R_Test',full_name:'Owner/Project',default_branch:'main',has_issues:true,permissions:{admin:s.access==='admin',maintain:s.access==='maintain',push:s.access==='write',triage:s.access==='triage',pull:true}});return;}
 if(s.preparation){
 const crypto=require('node:crypto'),blob=content=>{const b=Buffer.from(content,'base64');return crypto.createHash('sha1').update('blob '+b.length+'\\0').update(b).digest('hex');};
 const commit=(branch,message,files,parent)=>{const sha=crypto.createHash('sha1').update(message+JSON.stringify(files)).digest('hex'),tree={...(s.commits[parent]?.tree||{}),...Object.fromEntries(files.map(f=>[f.path,f.content]))};for(const f of files)if(f.content===null)delete tree[f.path];s.commits[sha]={sha,commit:{message},parents:parent?[{sha:parent}]:[],author:s.identity,tree};s.refs[branch]=sha;return sha;};
+
+const cp=require('node:child_process'),git=(args,input)=>cp.execFileSync('git',args,{input,encoding:'utf8'}).trim();
+const makeTree=entries=>{const dirs=new Map([['',[]]]);for(const e of entries){const parts=e.path.split('/'),name=parts.pop();let dir='';for(const p of parts){dir=dir?dir+'/'+p:p;if(!dirs.has(dir))dirs.set(dir,[]);}dirs.get(parts.join('/')).push({...e,path:name});}let root;for(const dir of [...dirs.keys()].sort((a,b)=>b.length-a.length)){const sha=git(['mktree','--missing'],dirs.get(dir).map(e=>e.mode+' '+e.type+' '+e.sha+'\\t'+e.path+'\\n').join(''));if(!dir)root=sha;else{const parts=dir.split('/'),name=parts.pop();dirs.get(parts.join('/')).push({path:name,sha,type:'tree',mode:'040000'});}}return root;};
+const listTree=sha=>git(['ls-tree','-r','-t',sha]).split('\\n').filter(Boolean).map(line=>{const [metadata,...name]=line.split('\\t'),[mode,type,sha]=metadata.split(' ');return {mode,type,sha,path:name.join('\\t')};});
+const initialTree=commit=>makeTree(Object.entries(commit.tree).map(([path,content])=>({path,type:(s.modes?.[path]==='160000'?'commit':'blob'),mode:s.modes?.[path]||'100644',sha:git(['hash-object','-w','--stdin'],Buffer.from(content,'base64'))})));
+if(parts[3]==='git'&&parts[4]==='commits'){
+ if(method==='POST'){const person=a=>a.name+' <'+a.email+'> '+Math.floor(new Date(a.date).getTime()/1000)+' +0000',raw='tree '+body.tree+'\\nparent '+body.parents[0]+'\\nauthor '+person(body.author)+'\\ncommitter '+person(body.committer)+'\\n\\n'+body.message,sha=git(['hash-object','-t','commit','-w','--stdin'],raw);s.gitCommits={...s.gitCommits,[sha]:{sha,tree:{sha:body.tree},parents:body.parents.map(sha=>({sha}))}};changed(s.gitCommits[sha]);return;}
+ const c=s.gitCommits?.[parts[5]] || s.commits[parts[5]];answer(c?200:404,c?(c.commit?{sha:parts[5],tree:{sha:initialTree(c)}}:c):{});return;
+}
+if(parts[3]==='git'&&parts[4]==='trees'){
+ if(method==='POST'){const sha=makeTree(body.tree);changed({sha});return;}
+ try{answer(200,{sha:parts[5],tree:listTree(parts[5]),truncated:!!s.truncated});}catch{answer(404,{});}return;
+}
+if(parts[3]==='git'&&parts[4]==='blobs'){
+ try{const content=cp.execFileSync('git',['cat-file','blob',parts[5]]);answer(200,{sha:parts[5],size:content.length,encoding:'base64',content:content.toString('base64')});}catch{answer(404,{});}return;
+}
+if(endpoint==='graphql'&&body.variables.input.refUpdates){const r=body.variables.input.refUpdates[0],branch=r.name.replace('refs/heads/','');if(s.refs[branch]!==r.beforeOid){answer(200,{errors:[{type:'STALE_DATA'}]});return;}s.refs[branch]=r.afterOid;changed({data:{updateRefs:{clientMutationId:null}}});return;}
 if(parts[3]==='commits'&&parts.length===5){const ref=decodeURIComponent(parts[4]),sha=s.refs[ref]||ref,c=s.commits[sha];answer(c?200:409,c||{message:'Git Repository is empty.'});return;}
 if(parts[3]==='git'&&parts[4]==='ref'){const ref=decodeURIComponent(parts.slice(6).join('/'));answer(s.refs[ref]?200:404,{object:{sha:s.refs[ref]}});return;}
 if(parts[3]==='git'&&parts[4]==='refs'&&method==='POST'){s.refs[body.ref.replace('refs/heads/','')]=body.sha;changed({object:{sha:body.sha}});return;}
@@ -971,4 +988,221 @@ test("manual file operations refuse occupied destinations, wrong fingerprints, d
   await f.save({ refs: { main: "b".repeat(40) } });
   assert.equal((await f.apply(op)).state, "failed");
   assert.equal((await f.calls()).filter((v) => v.method === "POST").length, 0);
+});
+
+test("tree moves preserve nested binary objects/modes and recover each lost acknowledgement without replay", async (t) => {
+  const f = await fixture(t),
+    head = f.sha;
+  const tree = {
+    "docs/a.txt": Buffer.from("alpha").toString("base64"),
+    "docs/nested/tool": Buffer.from("binary\0").toString("base64"),
+    "docs/link": Buffer.from("../a.txt").toString("base64"),
+    "keep.txt": Buffer.from("keep").toString("base64"),
+  };
+  for (const phase of ["trees", "commits", "graphql"]) {
+    await f.save({
+      preparation: true,
+      refs: { main: head },
+      commits: { [head]: { commit: { message: "base" }, tree } },
+      modes: { "docs/nested/tool": "100755", "docs/link": "120000" },
+      gitCommits: {},
+      unavailable: false,
+      dropEndpoint: null,
+    });
+    const read = await f.probe({
+      op: "observe",
+      query: { kind: "repository-files", branch: "main", path: "docs" },
+    });
+    assert.equal(read.repositoryFiles.directory.files, 3);
+    const input = {
+      kind: "repository-tree",
+      branch: "main",
+      head,
+      title: "Move directory " + phase,
+      files: [
+        {
+          path: "docs",
+          previous: read.repositoryFiles.directory.sha,
+          content: null,
+          moveTo: "renamed/docs",
+        },
+      ],
+    };
+    await assert.rejects(
+      f.prepare({ ...input, files: [{ ...input.files[0], moveTo: "keep.txt" }] }),
+      /GITHUB_WORK_CHANGED/,
+    );
+    const p = await f.prepare(input),
+      start = (await f.calls()).length;
+    await f.save({
+      dropEndpoint: phase === "graphql" ? "graphql" : "repos/Owner/Project/git/" + phase,
+    });
+    assert.equal((await f.apply(p)).state, "unknown");
+    await f.save({ unavailable: false });
+    let r = await f.probe({ op: "status", id: p.id });
+    if (phase !== "graphql") {
+      assert.equal(r.state, "prepared");
+      r = await f.apply(p);
+    }
+    assert.equal(r.state, "completed");
+    const state = await f.get(),
+      entries = f.git("ls-tree", "-r", state.gitCommits[r.result.sha].tree.sha);
+    assert.match(entries, /100755 blob [a-f0-9]+\trenamed\/docs\/nested\/tool/);
+    assert.match(entries, /120000 blob [a-f0-9]+\trenamed\/docs\/link/);
+    assert.match(entries, /keep.txt/);
+    assert.doesNotMatch(entries, /\tdocs\//);
+    await f.apply(p);
+    const writes = (await f.calls()).slice(start).filter((c) => c.method !== "GET");
+    assert.deepEqual(
+      writes.map((c) => c.endpoint),
+      ["repos/Owner/Project/git/trees", "repos/Owner/Project/git/commits", "graphql"],
+    );
+  }
+});
+
+test("directory deletion checks full immutable tree and exact HEAD", async (t) => {
+  const f = await fixture(t),
+    tree = {
+      "docs/file": Buffer.from("x").toString("base64"),
+      keep: Buffer.from("y").toString("base64"),
+    };
+  await f.save({
+    preparation: true,
+    refs: { main: f.sha },
+    commits: { [f.sha]: { commit: { message: "base" }, tree } },
+  });
+  const data = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch: "main", path: "docs" },
+  });
+  const input = {
+    kind: "repository-tree",
+    branch: "main",
+    head: f.sha,
+    title: "Delete folder",
+    files: [
+      { path: "docs", previous: data.repositoryFiles.directory.sha, content: null, moveTo: null },
+    ],
+  };
+  await f.save({ truncated: true });
+  await assert.rejects(f.prepare(input), /GITHUB_WORK_REQUEST/);
+  await f.save({ truncated: false });
+  const p = await f.prepare(input);
+  await f.save({ refs: { main: "b".repeat(40) } });
+  assert.equal((await f.apply(p)).state, "failed");
+  await f.save({ refs: { main: f.sha } });
+  const r = await f.apply(await f.prepare(input));
+  assert.equal(r.state, "completed");
+  assert.match(f.git("ls-tree", "-r", (await f.get()).gitCommits[r.result.sha].tree.sha), /\tkeep/);
+  assert.doesNotMatch(
+    f.git("ls-tree", "-r", (await f.get()).gitCommits[r.result.sha].tree.sha),
+    /docs/,
+  );
+});
+
+test("manual GitHub text supports 2 MiB through durable receipts and rejects excess", async (t) => {
+  const f = await fixture(t),
+    content = Buffer.alloc(2 * 1024 * 1024, "x").toString("base64");
+  await f.save({
+    preparation: true,
+    refs: { main: f.sha },
+    commits: { [f.sha]: { commit: { message: "base" }, tree: { "large.txt": content } } },
+  });
+  const view = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch: "main", path: "large.txt" },
+  });
+  assert.equal(view.repositoryFiles.file.content, content);
+  const input = {
+    kind: "repository-file",
+    branch: "main",
+    head: f.sha,
+    title: "Large file",
+    files: [
+      {
+        path: "large.txt",
+        previous: view.repositoryFiles.file.sha,
+        content: Buffer.alloc(2 * 1024 * 1024, "y").toString("base64"),
+      },
+    ],
+  };
+  const p = await f.prepare(input);
+  assert.equal((await f.apply(p)).state, "completed");
+  assert.equal((await f.probe({ op: "status", id: p.id })).state, "completed");
+  await assert.rejects(
+    f.prepare({
+      ...input,
+      files: [{ ...input.files[0], content: Buffer.alloc(2 * 1024 * 1024 + 1).toString("base64") }],
+    }),
+    /GITHUB_WORK_REQUEST/,
+  );
+});
+
+test("an absent immutable object ends its intent without any branch update", async (t) => {
+  const f = await fixture(t),
+    tree = { "file.txt": Buffer.from("content").toString("base64") };
+  await f.save({
+    preparation: true,
+    refs: { main: f.sha },
+    commits: { [f.sha]: { commit: { message: "base" }, tree } },
+  });
+  const data = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch: "main", path: "file.txt" },
+  });
+  const p = await f.prepare({
+    kind: "repository-tree",
+    branch: "main",
+    head: f.sha,
+    title: "Move",
+    files: [
+      {
+        path: "file.txt",
+        previous: data.repositoryFiles.file.sha,
+        content: null,
+        moveTo: "other.txt",
+      },
+    ],
+  });
+  await f.save({ reject: 503 });
+  assert.equal((await f.apply(p)).state, "unknown");
+  await f.save({ reject: 0 });
+  assert.equal((await f.probe({ op: "status", id: p.id })).state, "failed");
+  assert.equal((await f.apply(p)).state, "failed");
+  assert.equal((await f.calls()).filter((c) => c.method !== "GET").length, 1);
+  assert.equal((await f.get()).refs.main, f.sha);
+});
+
+test("lost immutable acknowledgement is confirmed once by hash before the next phase", async (t) => {
+  const f = await fixture(t),
+    tree = { "file.txt": Buffer.from("confirmed").toString("base64") };
+  await f.save({
+    preparation: true,
+    refs: { main: f.sha },
+    commits: { [f.sha]: { commit: { message: "base" }, tree } },
+  });
+  const data = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch: "main", path: "file.txt" },
+  });
+  const p = await f.prepare({
+    kind: "repository-tree",
+    branch: "main",
+    head: f.sha,
+    title: "Bounded read",
+    files: [
+      {
+        path: "file.txt",
+        previous: data.repositoryFiles.file.sha,
+        content: null,
+        moveTo: "confirmed.txt",
+      },
+    ],
+  });
+  await f.save({ replyLostAt: "repos/Owner/Project/git/trees" });
+  assert.equal((await f.apply(p)).state, "completed");
+  assert.deepEqual(
+    (await f.calls()).filter((c) => c.method !== "GET").map((c) => c.endpoint),
+    ["repos/Owner/Project/git/trees", "repos/Owner/Project/git/commits", "graphql"],
+  );
 });

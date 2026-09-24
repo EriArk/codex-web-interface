@@ -31,7 +31,7 @@ export const repositoryFileInput = z
         z
           .object({
             path: repositoryFilePathSchema,
-            content: z.string().max(131072).nullable(),
+            content: z.string().max(2796204).nullable(),
             previous: z
               .string()
               .regex(/^[a-f0-9]{40}$/)
@@ -43,6 +43,26 @@ export const repositoryFileInput = z
       .min(1)
       .max(16),
     title: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export const repositoryTreeInput = z
+  .object({
+    kind: z.literal("repository-tree"),
+    branch: z.string().min(1).max(240),
+    head: z.string().regex(/^[a-f0-9]{40}$/),
+    title: z.string().trim().min(1).max(200),
+    files: z
+      .array(
+        z
+          .object({
+            path: repositoryFilePathSchema,
+            previous: z.string().regex(/^[a-f0-9]{40}$/),
+            content: z.null(),
+            moveTo: repositoryFilePathSchema.nullable(),
+          })
+          .strict(),
+      )
+      .length(1),
   })
   .strict();
 export const repositoryBranchInput = z
@@ -65,6 +85,7 @@ export const repositoryPrInput = z
   .strict();
 export const repositoryEditInput = z.discriminatedUnion("kind", [
   repositoryFileInput,
+  repositoryTreeInput,
   repositoryBranchInput,
   repositoryPrInput,
 ]);
@@ -72,11 +93,13 @@ export type RepositoryFiles = {
   branch: string;
   head: string;
   path: string;
+  directory?: { sha: string; files: number };
   entries?: { name: string; path: string; kind: "file" | "directory" }[];
   file?: { path: string; sha: string; content: string | null; bytes: number };
 };
 export const githubWorkInputSchema = z.discriminatedUnion("kind", [
   repositoryFileInput,
+  repositoryTreeInput,
   repositoryBranchInput,
   repositoryPrInput,
   preparationBranchInput,

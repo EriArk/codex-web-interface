@@ -93,6 +93,26 @@ test("repository editor persists intent, isolates source bindings, and reconcile
   assert.equal((await call(`/${interrupted}/status`)).json().state, "failed");
   assert(!deploymentBlockers(f.store).some((v) => v.kind === "repository_file"));
   for (const mutation of [
+    {
+      ...input,
+      files: [
+        {
+          path: "large.txt",
+          previous: null,
+          content: Buffer.alloc(2 * 1024 * 1024, "x").toString("base64"),
+        },
+      ],
+    },
+    {
+      ...input,
+      kind: "repository-tree",
+      files: [{ path: "docs", previous: "b".repeat(40), content: null, moveTo: "archived/docs" }],
+    },
+    {
+      ...input,
+      kind: "repository-tree",
+      files: [{ path: "docs", previous: "b".repeat(40), content: null, moveTo: null }],
+    },
     { ...input, files: [{ path: "new.md", previous: null, content: "" }] },
     {
       ...input,
@@ -126,7 +146,7 @@ test("repository editor persists intent, isolates source bindings, and reconcile
   scope = { ...scope, root: "C:/Other" };
   assert.equal((await call(`/${id}/confirm`, { fingerprint: "fingerprint" })).statusCode, 409);
   assert.equal((await call(`/${randomUUID()}/prepare`, body)).statusCode, 409);
-  assert.equal(applies, 6);
+  assert.equal(applies, 9);
   const otherId = randomUUID(),
     otherBinding = createHash("sha256").update(JSON.stringify(scope)).digest("hex");
   assert.equal(

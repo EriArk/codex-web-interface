@@ -152,7 +152,8 @@ async function runFixedProjectWorker<T>(
     );
     child.stdout.on("data", (b) => {
       output += b.toString("utf8");
-      if (output.length > 2097152) finish(false);
+      if (Buffer.byteLength(output) > (request.op === "github" ? 8 * 1024 * 1024 : 2097152))
+        finish(false);
     });
     child.stderr.on("data", () => {});
     child.stdin.on("error", () => finish(false));

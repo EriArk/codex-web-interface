@@ -112,16 +112,26 @@ try {
                   branch: body.branch || "main",
                   head: "a".repeat(40),
                   path: body.path,
-                  ...(body.path
+                  ...(body.path === "docs"
                     ? {
-                        file: {
-                          path: body.path,
-                          sha: "b".repeat(40),
-                          content: Buffer.from("# Original\r\n").toString("base64"),
-                          bytes: 12,
-                        },
+                        directory: { sha: "d".repeat(40), files: 2 },
+                        entries: [{ name: "nested", path: "docs/nested", kind: "directory" }],
                       }
-                    : { entries: [{ name: "README.md", path: "README.md", kind: "file" }] }),
+                    : body.path
+                      ? {
+                          file: {
+                            path: body.path,
+                            sha: "b".repeat(40),
+                            content: Buffer.from("# Original\r\n").toString("base64"),
+                            bytes: 12,
+                          },
+                        }
+                      : {
+                          entries: [
+                            { name: "README.md", path: "README.md", kind: "file" },
+                            { name: "docs", path: "docs", kind: "directory" },
+                          ],
+                        }),
                 },
               },
             });
@@ -362,9 +372,10 @@ try {
           }
         }
         await finishCommit();
-        assert.equal(operation.receipt.input.files.length, 2);
+        assert.equal(operation.receipt.input.kind, "repository-tree");
+        assert.equal(operation.receipt.input.files.length, 1);
         assert.equal(operation.receipt.input.files[0].content, null);
-        assert.equal(operation.receipt.input.files[1].previous, null);
+        assert.ok(operation.receipt.input.files[0].moveTo);
         await gh.getByRole("button", { name: "Удалить", exact: true }).click();
         await expect(review).toContainText("Удаление");
         await expect(review).toContainText("docs/renamed.md");
@@ -375,6 +386,39 @@ try {
         assert.equal(operation.receipt.input.files[0].content, null);
         assert.equal(commits, 4);
         await expect(gh.getByRole("button", { name: "README.md", exact: true })).toBeVisible();
+        await gh.getByRole("button", { name: "docs", exact: true }).click();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.screenshot({ path: `.local/qa-manual-edit/${engine}-directory-phone.png` });
+        await gh.getByRole("button", { name: "Переименовать папку", exact: true }).click();
+        await gh.getByLabel("Путь файла", { exact: true }).fill("archive/docs");
+        await gh.getByRole("button", { name: "Проверить переименование", exact: true }).click();
+        await expect(review).toContainText("Файлов в папке: 2");
+        await page.screenshot({ path: `.local/qa-manual-edit/${engine}-directory-review.png` });
+        await finishCommit();
+        assert.equal(operation.receipt.input.files[0].moveTo, "archive/docs");
+        await gh.getByRole("button", { name: "Открыть ветку", exact: true }).click();
+        await gh.getByRole("button", { name: "docs", exact: true }).click();
+        await gh.getByRole("button", { name: "Удалить папку", exact: true }).click();
+        await finishCommit();
+        assert.equal(operation.receipt.input.files[0].moveTo, null);
+        await gh.getByRole("button", { name: "Новая папка", exact: true }).click();
+        await gh.getByLabel("Путь файла", { exact: true }).fill("new-folder");
+        await gh.getByRole("button", { name: "Открыть редактор", exact: true }).click();
+        await editor.getByRole("button", { name: "Проверить изменения", exact: true }).click();
+        await finishCommit();
+        assert.equal(operation.receipt.input.files[0].path, "new-folder/.gitkeep");
+        // IndexedDB persists an actual large review beyond the old localStorage quota.
+        await gh.getByRole("button", { name: "Редактировать файл", exact: true }).click();
+        const large = "Large UTF-8 line αβγ\n".repeat(30000);
+        await expect(editor.locator(".cm-content")).toBeVisible();
+        await page.evaluate((text) => window.setFixtureEditorText(text), large);
+        await editor.getByRole("button", { name: "Проверить изменения", exact: true }).click();
+        await expect(review).toBeVisible();
+        await page.reload();
+        await page.getByRole("button", { name: "Файлы GitHub", exact: true }).click();
+        await expect(review).toContainText("Large UTF-8 line");
+        await finishCommit();
+        assert.ok(operation.receipt.input.files[0].content.length > 524288);
         console.log(
           engine +
             ": create/rename/delete review, cancel, restored editor and no-replay recovery passed",
@@ -385,6 +429,40 @@ try {
           engine +
             ": branch/commit/PR each dispatched once; reload/drafts/internal PR viewer passed",
         );
+      const quota = await page.evaluate(async () => {
+        const storage = window.fixtureDrafts,
+          key = "workspace-github-file-review:quota-first";
+        await storage.setItem(key, "original");
+        let refused = false;
+        for (let i = 0; i < 40; i++) {
+          try {
+            await storage.setItem("workspace-github-file-review:quota-" + i, "value");
+          } catch {
+            refused = true;
+            break;
+          }
+        }
+        const kept = await storage.getItem(key);
+        window.dispatchEvent(new Event("private-session-ended"));
+        let revoked = false;
+        try {
+          await storage.setItem(key, "late");
+        } catch {
+          revoked = true;
+        }
+        return {
+          refused,
+          kept,
+          revoked,
+          journalCleared: !Object.keys(localStorage).some((k) => k.includes("quota-first")),
+        };
+      });
+      assert.deepEqual(quota, {
+        refused: true,
+        kept: "original",
+        revoked: true,
+        journalCleared: true,
+      });
       assert.deepEqual(errors, []);
       console.log(
         engine +

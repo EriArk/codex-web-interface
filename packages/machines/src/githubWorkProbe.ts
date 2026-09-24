@@ -115,7 +115,7 @@ export async function githubWorkProbe(
           env,
           windowsHide: true,
           timeout: 25000,
-          maxBuffer: 4 * 1024 * 1024,
+          maxBuffer: 16 * 1024 * 1024,
           encoding: "utf8",
         },
         (error, output) => resolve({ code: error ? 1 : 0, output }),
@@ -339,8 +339,9 @@ export async function githubWorkProbe(
       (manual ? repositoryFilePath(f.path) : preparationPath(f.path)) &&
         ((manual && f.content === null && sha(f.previous)) ||
           (typeof f.content === "string" &&
-            f.content.length <= 131072 &&
-            Buffer.from(f.content, "base64").toString("base64") === f.content)) &&
+            f.content.length <= (manual ? 2796204 : 131072) &&
+            Buffer.from(f.content, "base64").toString("base64") === f.content &&
+            (!manual || Buffer.byteLength(f.content, "base64") <= 2 * 1024 * 1024))) &&
         (f.previous === null || sha(f.previous)),
     );
   };
@@ -409,7 +410,124 @@ export async function githubWorkProbe(
     for (const p of paths) files.push(await readDocument(p, revision));
     return { branch: repo.default_branch as string, head: revision, files };
   };
+  type TreeEntry = { path: string; mode: string; type: string; sha: string };
+  const trees = new Map<string, TreeEntry[]>();
+  const treeIndex = async (head: string): Promise<TreeEntry[]> => {
+    const cached = trees.get(head);
+    if (cached) return cached;
+    const commit = await must(`${prefix}/git/commits/${head}`);
+    valid(sha(commit.tree?.sha));
+    const tree = await must(`${prefix}/git/trees/${commit.tree.sha}?recursive=1`);
+    valid(tree.truncated === false && Array.isArray(tree.tree) && tree.tree.length <= 50000);
+    const seen = new Set<string>();
+    for (const e of tree.tree) {
+      valid(
+        typeof e.path === "string" &&
+          e.path.length <= 4096 &&
+          !e.path.includes("\0") &&
+          e.path.split("/").every((v: string) => v && v !== "." && v !== "..") &&
+          sha(e.sha) &&
+          (
+            {
+              "040000": "tree",
+              "100644": "blob",
+              "100755": "blob",
+              "120000": "blob",
+              "160000": "commit",
+            } as Record<string, string>
+          )[e.mode] === e.type &&
+          !seen.has(e.path),
+      );
+      seen.add(e.path);
+    }
+    const entries = tree.tree.map((e: TreeEntry) => ({
+      path: e.path,
+      mode: e.mode,
+      type: e.type,
+      sha: e.sha,
+    }));
+    trees.set(head, entries);
+    return entries;
+  };
+  const gitHash = (type: string, bytes: Buffer) =>
+    crypto.createHash("sha1").update(`${type} ${bytes.length}\0`).update(bytes).digest("hex");
+  const treeHash = (leaves: TreeEntry[]) => {
+    const dirs = new Map<string, TreeEntry[]>([["", []]]);
+    for (const leaf of leaves) {
+      const parts = leaf.path.split("/"),
+        name = parts.pop()!;
+      let parent = "";
+      for (const p of parts) {
+        parent = parent ? parent + "/" + p : p;
+        if (!dirs.has(parent)) dirs.set(parent, []);
+      }
+      dirs.get(parts.join("/"))!.push({ ...leaf, path: name });
+    }
+    let root = "";
+    for (const dir of [...dirs.keys()].sort(
+      (a, b) => b.split("/").length - a.split("/").length || b.length - a.length,
+    )) {
+      const entries = dirs.get(dir)!;
+      entries.sort((a, b) =>
+        Buffer.compare(
+          Buffer.from(a.path + (a.type === "tree" ? "/" : "")),
+          Buffer.from(b.path + (b.type === "tree" ? "/" : "")),
+        ),
+      );
+      const id = gitHash(
+        "tree",
+        Buffer.concat(
+          entries.map((e) =>
+            Buffer.concat([
+              Buffer.from(`${e.type === "tree" ? "40000" : e.mode} ${e.path}\0`),
+              Buffer.from(e.sha, "hex"),
+            ]),
+          ),
+        ),
+      );
+      if (!dir) {
+        root = id;
+        continue;
+      }
+      const parts = dir.split("/"),
+        name = parts.pop()!;
+      dirs.get(parts.join("/"))!.push({ path: name, mode: "040000", type: "tree", sha: id });
+    }
+    return root;
+  };
+  const treePlan = async (v: Extract<GitHubWorkInput, { kind: "repository-tree" }>) => {
+    const all = await treeIndex(v.head),
+      f = v.files[0]!,
+      source = all.find((e) => e.path === f.path);
+    if (!source || source.sha !== f.previous) fail("GITHUB_WORK_CHANGED");
+    if (
+      f.moveTo &&
+      all.some(
+        (e) =>
+          e.path === f.moveTo ||
+          e.path.startsWith(f.moveTo + "/") ||
+          (e.type !== "tree" && f.moveTo!.startsWith(e.path + "/")),
+      )
+    )
+      fail("GITHUB_WORK_CHANGED");
+    const parents = new Set(all.map((e) => e.path.split("/").slice(0, -1).join("/")));
+    const leaves = all.filter((e) => e.type !== "tree" || !parents.has(e.path)),
+      affected = leaves.filter((e) => e.path === f.path || e.path.startsWith(f.path + "/"));
+    valid(affected.length > 0);
+    const entries = leaves.filter((e) => !affected.includes(e));
+    if (f.moveTo)
+      entries.push(
+        ...affected.map((e) => ({ ...e, path: f.moveTo + e.path.slice(f.path.length) })),
+      );
+    return { entries, sha: treeHash(entries) };
+  };
   const preparationPreflight = async (v: GitHubWorkInput) => {
+    if (v.kind === "repository-tree") {
+      const ref = await must(`${prefix}/git/ref/heads/${encodeURIComponent(v.branch)}`);
+      if (ref.object?.sha !== v.head) fail("GITHUB_WORK_CHANGED");
+      await treePlan(v);
+      return;
+    }
     if (v.kind === "preparation-branch" || v.kind === "repository-branch") {
       const r = await http(`${prefix}/git/ref/heads/${encodeURIComponent(v.branch)}`);
       if (r.status !== 404) fail("GITHUB_WORK_CHANGED");
@@ -515,6 +633,15 @@ export async function githubWorkProbe(
       };
       if (Array.isArray(value)) {
         if (value.length >= 1000) fail("GITHUB_WORK_DATA");
+        if (q.path) {
+          const tree = await treeIndex(head),
+            entry = tree.find((e) => e.path === q.path && e.type === "tree");
+          valid(!!entry);
+          snapshot.directory = {
+            sha: entry!.sha,
+            files: tree.filter((e) => e.type !== "tree" && e.path.startsWith(q.path + "/")).length,
+          };
+        }
         snapshot.entries = value
           .filter(
             (e: any) =>
@@ -536,12 +663,20 @@ export async function githubWorkProbe(
             !value.submodule_git_url &&
             Number.isSafeInteger(value.size),
         );
+        if (value.size <= 2 * 1024 * 1024 && value.encoding !== "base64") {
+          const blob = await must(`${prefix}/git/blobs/${value.sha}`);
+          valid(blob.sha === value.sha && blob.size === value.size && blob.encoding === "base64");
+          value.content = blob.content;
+          value.encoding = blob.encoding;
+        }
         snapshot.file = {
           path: q.path,
           sha: value.sha,
           bytes: value.size,
           content:
-            value.size <= 98304 && value.encoding === "base64" && typeof value.content === "string"
+            value.size <= 2 * 1024 * 1024 &&
+            value.encoding === "base64" &&
+            typeof value.content === "string"
               ? value.content.replace(/\s/g, "")
               : null,
         };
@@ -839,7 +974,29 @@ export async function githubWorkProbe(
   };
   const validateInput = (v: GitHubWorkInput) => {
     valid(object(v));
-    if (v.kind === "repository-branch") {
+    if (v.kind === "repository-tree") {
+      exact(v, ["kind", "branch", "head", "title", "files"]);
+      valid(
+        branch(v.branch) &&
+          sha(v.head) &&
+          scalar(v.title, 200) &&
+          !!v.title.trim() &&
+          Array.isArray(v.files) &&
+          v.files.length === 1,
+      );
+      const f = v.files[0]!;
+      exact(f, ["path", "previous", "content", "moveTo"]);
+      valid(
+        repositoryFilePath(f.path) &&
+          sha(f.previous) &&
+          f.content === null &&
+          (f.moveTo === null ||
+            (repositoryFilePath(f.moveTo) &&
+              f.moveTo !== f.path &&
+              !f.moveTo.startsWith(f.path + "/") &&
+              !f.path.startsWith(f.moveTo + "/"))),
+      );
+    } else if (v.kind === "repository-branch") {
       exact(v, ["kind", "branch", "base", "head"]);
       valid(branch(v.branch) && branch(v.base) && v.branch !== v.base && sha(v.head));
     } else if (v.kind === "preparation-branch") {
@@ -861,7 +1018,8 @@ export async function githubWorkProbe(
       });
 
       valid(
-        v.files.reduce((n, f) => n + (f.content?.length ?? 0), 0) <= 131072 &&
+        v.files.reduce((n, f) => n + (f.content?.length ?? 0), 0) <=
+          (v.kind === "repository-file" ? 2796204 : 131072) &&
           new Set(
             v.files.map((f) => (v.kind === "repository-file" ? f.path : f.path.toLowerCase())),
           ).size === v.files.length &&
@@ -960,6 +1118,14 @@ export async function githubWorkProbe(
     repository: string;
     public: GitHubWorkReceipt;
     attempt?: number;
+    treeWrite?: {
+      tree: string;
+      commit: string;
+      phase: "tree" | "commit" | "ref";
+      author: { name: string; email: string; date: string };
+      message: string;
+      response?: { status: number; sha?: string };
+    };
   };
   const seededHead = async (branchName: string, head: string) => {
     for (const name of (await fs.readdir(stateRoot))
@@ -967,7 +1133,7 @@ export async function githubWorkProbe(
       .slice(0, 5000)) {
       const target = path.join(stateRoot, name),
         stat = await fs.lstat(target);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 262144) continue;
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8 * 1024 * 1024) continue;
       let seed: any;
       try {
         seed = JSON.parse(await fs.readFile(target, "utf8"));
@@ -993,7 +1159,7 @@ export async function githubWorkProbe(
   const read = async (): Promise<Saved | null> => {
     try {
       const s = await fs.lstat(file);
-      if (!s.isFile() || s.isSymbolicLink() || s.size > 262144) fail("GITHUB_WORK_PATH");
+      if (!s.isFile() || s.isSymbolicLink() || s.size > 8 * 1024 * 1024) fail("GITHUB_WORK_PATH");
       return JSON.parse(await fs.readFile(file, "utf8"));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -1114,7 +1280,8 @@ export async function githubWorkProbe(
       for (const name of files) {
         const p = path.join(stateRoot, name),
           stat = await fs.lstat(p);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 262144) fail("GITHUB_WORK_PATH");
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8 * 1024 * 1024)
+          fail("GITHUB_WORK_PATH");
         const prior = JSON.parse(await fs.readFile(p, "utf8")) as Saved;
         if (
           prior.repository.toLowerCase() === repository.toLowerCase() &&
@@ -1256,7 +1423,127 @@ export async function githubWorkProbe(
       }
       return fail("GITHUB_WORK_CHANGED");
     };
+    const reconcileTree = async () => {
+      if (input.kind !== "repository-tree") return fail("GITHUB_WORK_REQUEST");
+      await matchingAccount();
+      const p = saved!.treeWrite;
+      if (!p) return finish("unknown", "GITHUB_WORK_UNKNOWN");
+      const ref = await http(`${prefix}/git/ref/heads/${encodeURIComponent(input.branch)}`);
+      if (ref.status === 200 && ref.value?.object?.sha === p.commit)
+        return finish("completed", undefined, {
+          sha: p.commit,
+          branch: input.branch,
+          url: `https://github.com/${repository}/commit/${p.commit}`,
+        });
+      if (p.phase === "ref" && ref.status === 200 && sha(ref.value?.object?.sha)) {
+        const ancestry = await http(`${prefix}/compare/${p.commit}...${ref.value.object.sha}`);
+        if (
+          ancestry.status === 200 &&
+          ancestry.value?.base_commit?.sha === p.commit &&
+          ["ahead", "identical"].includes(ancestry.value?.status)
+        )
+          return finish("completed", undefined, {
+            sha: p.commit,
+            branch: input.branch,
+            url: `https://github.com/${repository}/commit/${p.commit}`,
+          });
+      }
+      if (p.phase !== "ref") {
+        const object = await http(
+          `${prefix}/git/${p.phase === "tree" ? "trees" : "commits"}/${p[p.phase]}`,
+        );
+        if (object.status === 200 && object.value?.sha === p[p.phase]) {
+          p.phase = p.phase === "tree" ? "commit" : "ref";
+          delete saved!.attempt;
+          return finish("prepared");
+        }
+        // No branch update has been attempted in these phases. An absent immutable
+        // object can terminate this intent; an eventual orphan cannot change a branch.
+        if (object.status === 404 && ref.status === 200 && ref.value?.object?.sha === input.head)
+          return finish("failed", "GITHUB_WORK_CHANGED");
+      }
+      return finish("unknown", "GITHUB_WORK_UNKNOWN");
+    };
+    const applyTree = async () => {
+      if (input.kind !== "repository-tree") return fail("GITHUB_WORK_REQUEST");
+      const plan = await treePlan(input);
+      if (!saved!.treeWrite) {
+        const id = receipt.snapshot.identity,
+          epoch = Math.floor(receipt.createdAt / 1000),
+          author = {
+            name: id.login,
+            email: `${id.id}+${id.login}@users.noreply.github.com`,
+            date: new Date(epoch * 1000).toISOString(),
+          },
+          message = input.title + "\n\n" + marker + "\n";
+        const person = `${author.name} <${author.email}> ${epoch} +0000`;
+        const commit = gitHash(
+          "commit",
+          Buffer.from(
+            `tree ${plan.sha}\nparent ${input.head}\nauthor ${person}\ncommitter ${person}\n\n${message}`,
+          ),
+        );
+        saved!.treeWrite = { tree: plan.sha, commit, phase: "tree", author, message };
+        await write(saved!);
+      }
+      const p = saved!.treeWrite!;
+      for (const phase of ["tree", "commit", "ref"] as const) {
+        if (p.phase !== phase) continue;
+        await matchingAccount();
+        await preparationPreflight(input);
+        const repo = phase === "ref" ? await must(prefix) : null;
+        saved!.attempt = Date.now();
+        await finish("running");
+        const r =
+          phase === "tree"
+            ? await http(`${prefix}/git/trees`, "POST", { tree: plan.entries })
+            : phase === "commit"
+              ? await http(`${prefix}/git/commits`, "POST", {
+                  tree: p.tree,
+                  parents: [input.head],
+                  author: p.author,
+                  committer: p.author,
+                  message: p.message,
+                })
+              : await http("graphql", "POST", {
+                  query:
+                    "mutation($input:UpdateRefsInput!){updateRefs(input:$input){clientMutationId}}",
+                  variables: {
+                    input: {
+                      repositoryId: repo.node_id,
+                      refUpdates: [
+                        {
+                          name: "refs/heads/" + input.branch,
+                          beforeOid: input.head,
+                          afterOid: p.commit,
+                          force: false,
+                        },
+                      ],
+                    },
+                  },
+                });
+        p.response = { status: r.status, ...(sha(r.value?.sha) ? { sha: r.value.sha } : {}) };
+        await write(saved!);
+        if (r.status >= 400 && r.status < 500 && r.status !== 408)
+          return finish("failed", "GITHUB_WORK_CHANGED");
+        if (phase === "ref") return reconcileTree();
+        if (r.status < 200 || r.status >= 300 || r.value?.sha !== p[phase]) {
+          // One bounded read can confirm the exact immutable object after a lost reply.
+          // It never repeats the POST or authorizes a second ref update.
+          const observed = await http(
+            `${prefix}/git/${phase === "tree" ? "trees" : "commits"}/${p[phase]}`,
+          );
+          if (observed.status !== 200 || observed.value?.sha !== p[phase])
+            return finish("unknown", "GITHUB_WORK_UNKNOWN");
+        }
+        p.phase = phase === "tree" ? "commit" : "ref";
+        delete saved!.attempt;
+        await finish("prepared");
+      }
+      return reconcileTree();
+    };
     const reconcile = async () => {
+      if (input.kind === "repository-tree") return reconcileTree();
       await matchingAccount();
       if (input.kind === "preparation-branch" || input.kind === "repository-branch") {
         const v = await http(`${prefix}/git/ref/heads/${encodeURIComponent(input.branch)}`);
@@ -1398,6 +1685,7 @@ export async function githubWorkProbe(
       )
         fail("GITHUB_WORK_CHANGED");
       await preparationPreflight(input);
+      if (input.kind === "repository-tree") return await applyTree();
       let endpoint: string, method: string, payload: unknown;
       if (input.kind === "preparation-branch" || input.kind === "repository-branch") {
         endpoint = `${prefix}/git/refs`;

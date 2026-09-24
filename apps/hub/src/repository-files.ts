@@ -122,7 +122,7 @@ export function registerRepositoryFiles(
     v.state = r.state;
     return put(v);
   };
-  app.post(root + "/:id/prepare", { bodyLimit: 512 * 1024 }, (req) => {
+  app.post(root + "/:id/prepare", { bodyLimit: 4 * 1024 * 1024 }, (req) => {
     const { project, id } = params(req.params);
     return serial(project, async () => {
       const body = z

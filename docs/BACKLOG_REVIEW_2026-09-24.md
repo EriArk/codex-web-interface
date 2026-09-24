@@ -86,3 +86,24 @@ Next proposed stage: **#206 — global typed assistant**, **Высокое (`hig
 Start with project/source selection and a reviewed handoff to existing GPT/Codex
 tools. Preserve their exact identities, drafts and authorization; do not create
 an unrestricted shell or another parallel task executor. Wait for continuation.
+
+
+## Owner-selected remaining-work order (24 September)
+
+The owner declined the global assistant (#206); it is not the next stage.
+The agreed order is **6 -> 2 -> 4 -> 1 -> 5** from the remaining-work list:
+
+1. **6: Larger GitHub text and directory operations** — implemented together
+   with durable drafts, Windows transport/helper updates and recovery; see
+   [File editor](FILE_EDITOR.md).
+2. **2: GPT native history** — incremental history storage/processing, avoiding
+   repeated full-chat processing while preserving message/result identities,
+   receipt isolation, partial responses and fast cached navigation.
+3. **4: Activity and Notifications** — finish remaining event coverage through
+   the internal viewers with continuous feeds and account-local caches.
+4. **1: Archive and Office viewers** — extend the universal file workspace.
+5. **5: Help and shortcuts** — contextual in-app help and a concise shortcut list.
+
+Installation/maintenance consolidation (old item 3) is not in this queue.
+The next proposed stage is **2, GPT history**, **Высокое (`high`)**. Wait for
+continuation before starting it. Converter work remains deferred.

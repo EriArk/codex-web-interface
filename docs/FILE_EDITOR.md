@@ -172,3 +172,48 @@ screenshots inspected. Installed helper verification uses actual Hub -> SSH ->
 Scheduled Task preparations/status reads for all three operations without
 creating/deleting files in the live repository. Physical device acceptance remains
 pending.
+
+## Larger GitHub text and directory operations (24 September)
+
+Manual GitHub text creation/editing now uses the common editor's 2 MiB byte
+budget. Hub request limits, the fixed SSH worker, native receipt reads and
+response limits agree. Contents responses above 1 MiB are resolved through the
+exact immutable blob. Text without a conventional extension can also open in
+CodeMirror; invalid UTF-8/binary content is not silently converted.
+
+New folder creates an explicit `.gitkeep` through the editor/review. Rename and
+delete work for files and whole directories. Tree operations use existing Git
+object references, preserving binary bytes, executable bits, symlinks and
+submodule references without downloading blobs. Occupied destinations and
+moving a directory into itself are refused. Truncated trees or trees above
+50,000 entries cannot be partially applied. The review identifies both paths
+and the directory's file count; all changes form one commit.
+
+Tree/commit objects have deterministic identities persisted before dispatch.
+Every phase rechecks the acting numeric identity, repository, source SHA and
+branch HEAD. The final [updateRefs compare-and-swap](https://docs.github.com/en/graphql/reference/git#updaterefs)
+uses exact before/after OIDs without force. A lost immutable-object reply permits
+one exact read, never a repeated POST. Explicit status can resume at the next
+confirmed phase. An absent immutable object can end its intent because no ref
+update was attempted; a possible orphan cannot change a branch. Uncertain ref
+updates remain reconciliation-only. Existing branch protection still applies;
+these Git database commits are attributed to the verified user's numeric noreply
+identity and are not automatically GitHub-signed.
+
+Large browser drafts use account-scoped IndexedDB (32 entries / 64 MiB, no
+pending-work eviction). A small synchronous journal protects quick field edits;
+large bytes and operation intents are durable before dispatch. Logout clears
+private drafts and prevents late callbacks from repopulating storage. Legacy
+localStorage drafts remain readable. Editor -> review -> editor keeps the exact
+source and does not leave an active editor to recreate a discarded draft.
+
+Verification: focused helper/Hub checks include 2 MiB durable receipts,
+directory moves/deletion, fingerprints/HEAD/collisions, binary objects/modes,
+truncated-tree refusal and dropped replies at all three phases. Chromium and
+WebKit exercise creation, folders, large draft reload, branch/commit/PR and
+single dispatch, with screenshots in all four themes and keyboard/tablet/phone
+layouts. Real Hub -> SSH -> installed Scheduled Task verified 2 MiB read/write,
+blob fallback, directory move/deletion and exact-step recovery in a disposable
+branch. Its final tree matched its starting tree; the branch was removed with
+an exact-tip CAS. Windows worker/probe backups and hashes accompany release
+verification. Physical-device acceptance remains pending.

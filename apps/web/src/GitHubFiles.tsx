@@ -1,5 +1,4 @@
 import {
-  editableFile,
   type GitHubWorkInput,
   type GitHubWorkObservation,
   type GitHubWorkReceipt,
@@ -9,8 +8,8 @@ import {
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ActivitySourceWindow } from "./ActivitySourceWindow";
-import { accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
+import { githubDraftStorage as storage } from "./githubDraftStorage";
 import "./space-activity.css";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
@@ -32,7 +31,7 @@ type Review = {
   prStep?: Step;
   source?: string;
   id: string;
-  input: Extract<GitHubWorkReceipt["input"], { kind: "repository-file" }>;
+  input: Extract<GitHubWorkReceipt["input"], { kind: "repository-file" | "repository-tree" }>;
   binding: string;
   repositoryId: number;
   identityId: number;
@@ -115,22 +114,28 @@ function GitHubFiles({
       baseBranch?: string;
       observation: GitHubWorkObservation & { binding: string };
     } | null>(null);
-  const [fileAction, setFileAction] = useState<"create" | "rename" | null>(null);
+  const [fileAction, setFileAction] = useState<"create" | "folder" | "rename" | null>(null);
   const [destination, setDestination] = useState("");
   const [review, setReview] = useState<Review | null>(null);
   // Restore after the parent modal enters the top layer, so recovery stays on top.
   useEffect(() => {
-    try {
-      const saved = JSON.parse(storage.getItem(key) ?? "null");
-      if (
-        saved?.input?.kind === "repository-file" &&
-        typeof saved.oldText === "string" &&
-        typeof saved.newText === "string"
-      )
-        setReview(saved);
-    } catch {
-      /* Unavailable local storage leaves the browser usable. */
-    }
+    let alive = true;
+    void storage
+      .getItem(key)
+      .then((raw) => {
+        const saved = JSON.parse(raw ?? "null");
+        if (
+          alive &&
+          ["repository-file", "repository-tree"].includes(saved?.input?.kind) &&
+          typeof saved.oldText === "string" &&
+          typeof saved.newText === "string"
+        )
+          setReview(saved);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, [key]);
   const live = useRef(true),
     lock = useRef(false);
@@ -163,6 +168,16 @@ function GitHubFiles({
       live.current = false;
     };
   }, []);
+  const forgetReview = async (source?: string) => {
+    try {
+      if (source) await storage.removeItem(`workspace-file-copy:${source}`);
+      await storage.removeItem(key);
+      return true;
+    } catch (e) {
+      setError(messageOf(e));
+      return false;
+    }
+  };
   const snapshot = data?.repositoryFiles;
   const editFile = () => {
     try {
@@ -180,25 +195,24 @@ function GitHubFiles({
       setError("Файл не является текстом UTF-8.");
     }
   };
-  const beginAction = (action: "create" | "rename") => {
+  const beginAction = (action: "create" | "folder" | "rename") => {
     setError("");
     setFileAction(action);
     const directory = snapshot?.file
       ? snapshot.path.split("/").slice(0, -1).join("/")
       : snapshot?.path;
-    setDestination(action === "rename" ? snapshot!.file!.path : directory ? `${directory}/` : "");
+    setDestination(action === "rename" ? snapshot!.path : directory ? `${directory}/` : "");
   };
-  const reviewAction = (action: "rename" | "delete") => {
+  const reviewAction = async (action: "rename" | "delete") => {
     try {
-      if (!data || !snapshot?.file) return;
-      const f = snapshot.file;
+      if (!data || !snapshot || (!snapshot.file && !snapshot.directory)) return;
+      const f = snapshot.file ?? { ...snapshot.directory!, path: snapshot.path, content: null };
       if (
         action === "rename" &&
         (!repositoryFilePathSchema.safeParse(destination).success || destination === f.path)
       )
         throw Error("Укажи новый путь файла внутри репозитория.");
-      if (action === "rename" && f.content === null)
-        throw Error("Содержимое файла недоступно для переименования.");
+
       let text = "";
       try {
         if (f.content !== null) text = decode(f.content);
@@ -216,19 +230,21 @@ function GitHubFiles({
         oldText: text,
         newText: action === "delete" ? "" : text,
         input: {
-          kind: "repository-file",
+          kind: "repository-tree",
           branch: snapshot.branch,
           head: snapshot.head,
           title: `${action === "rename" ? "Rename" : "Delete"} ${f.path}`.slice(0, 200),
           files: [
-            { path: f.path, previous: f.sha, content: null },
-            ...(action === "rename"
-              ? [{ path: destination, previous: null, content: f.content! }]
-              : []),
+            {
+              path: f.path,
+              previous: f.sha,
+              content: null,
+              moveTo: action === "rename" ? destination : null,
+            },
           ],
         },
       };
-      storage.setItem(key, JSON.stringify(next));
+      await storage.setItem(key, JSON.stringify(next));
       setReview(next);
       setFileAction(null);
     } catch (e) {
@@ -240,16 +256,17 @@ function GitHubFiles({
       if (!data || !snapshot) return;
       if (!repositoryFilePathSchema.safeParse(destination).success)
         throw Error("Укажи путь файла внутри репозитория.");
-      const source = `github:${data.repositoryId}:${data.identity.id}:${snapshot.branch}:${snapshot.head}:new:${destination}`;
+      const target = fileAction === "folder" ? `${destination}/.gitkeep` : destination;
+      const source = `github:${data.repositoryId}:${data.identity.id}:${snapshot.branch}:${snapshot.head}:new:${target}`;
       const next: RepositoryFiles = {
         branch: snapshot.branch,
         head: snapshot.head,
-        path: destination,
-        file: { path: destination, sha: "", content: "", bytes: 0 },
+        path: target,
+        file: { path: target, sha: "", content: "", bytes: 0 },
       };
       setEdit({
         newFile: true,
-        file: new File([""], destination.split("/").at(-1)!, { type: "text/plain" }),
+        file: new File([""], target.split("/").at(-1)!, { type: "text/plain" }),
         source,
         snapshot: next,
         observation: { ...data, repositoryFiles: next },
@@ -320,17 +337,29 @@ function GitHubFiles({
               >
                 Новый файл
               </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => beginAction("folder")}
+              >
+                Новая папка
+              </button>
             </div>
             {fileAction && (
               <form
                 className="github-file-action-form"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  fileAction === "create" ? createFile() : reviewAction("rename");
+                  fileAction !== "rename" ? createFile() : reviewAction("rename");
                 }}
               >
                 <label>
-                  {fileAction === "create" ? "Путь нового файла" : "Новый путь файла"}
+                  {fileAction === "folder"
+                    ? "Путь новой папки"
+                    : fileAction === "create"
+                      ? "Путь нового файла"
+                      : "Новый путь"}
                   <input
                     aria-label="Путь файла"
                     value={destination}
@@ -339,6 +368,9 @@ function GitHubFiles({
                     autoFocus
                   />
                 </label>
+                {fileAction === "folder" && (
+                  <p>Папку сохранит файл .gitkeep. Его содержимое откроется в редакторе.</p>
+                )}
                 <div className="github-file-review-tools">
                   <button type="button" className="secondary" onClick={() => setFileAction(null)}>
                     Отмена
@@ -347,11 +379,11 @@ function GitHubFiles({
                     type="submit"
                     className="primary"
                     aria-label={
-                      fileAction === "create" ? "Открыть редактор" : "Проверить переименование"
+                      fileAction !== "rename" ? "Открыть редактор" : "Проверить переименование"
                     }
                     disabled={busy || !destination}
                   >
-                    {fileAction === "create" ? "В редактор" : "Проверить"}
+                    {fileAction !== "rename" ? "В редактор" : "Проверить"}
                   </button>
                 </div>
               </form>
@@ -381,13 +413,35 @@ function GitHubFiles({
                 <span>{e.name}</span>
               </button>
             ))}
+            {snapshot.directory && (
+              <div className="github-file-review-tools">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  aria-label="Переименовать папку"
+                  onClick={() => beginAction("rename")}
+                >
+                  Переименовать
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  aria-label="Удалить папку"
+                  onClick={() => reviewAction("delete")}
+                >
+                  Удалить
+                </button>
+              </div>
+            )}
             {snapshot.file && (
               <>
                 <div className="github-file-management">
                   <button
                     className="primary"
                     type="button"
-                    disabled={!editableFile(snapshot.file.path) || snapshot.file.content === null}
+                    disabled={snapshot.file.content === null}
                     onClick={editFile}
                   >
                     Редактировать файл
@@ -395,7 +449,7 @@ function GitHubFiles({
                   <button
                     type="button"
                     className="secondary"
-                    disabled={busy || snapshot.file.content === null}
+                    disabled={busy}
                     onClick={() => beginAction("rename")}
                   >
                     Переименовать
@@ -418,7 +472,7 @@ function GitHubFiles({
                           return "Не текст UTF-8";
                         }
                       })()
-                    : "Для редактирования доступны текстовые файлы до 96 КБ."}
+                    : "Для редактирования доступны текстовые файлы до 2 МБ."}
                 </pre>
               </>
             )}
@@ -437,8 +491,8 @@ function GitHubFiles({
             onSaved={() => {}}
             reviewSave={async (file) => {
               const bytes = await file.arrayBuffer();
-              if (bytes.byteLength > 98304) {
-                throw Error("Прямое сохранение GitHub поддерживает текст до 96 КБ.");
+              if (bytes.byteLength > 2 * 1024 * 1024) {
+                throw Error("Прямое сохранение GitHub поддерживает текст до 2 МБ.");
               }
               const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes),
                 oldText = decode(edit.snapshot.file!.content!);
@@ -479,8 +533,9 @@ function GitHubFiles({
                   ],
                 },
               };
-              storage.setItem(key, JSON.stringify(next));
+              await storage.setItem(key, JSON.stringify(next));
               setReview(next);
+              setEdit(null);
             }}
           />
         </Suspense>
@@ -496,7 +551,8 @@ function GitHubFiles({
             review.action !== "delete" &&
             review.action !== "rename" &&
             (edit || review.origin?.repositoryFiles?.file?.content != null)
-              ? () => {
+              ? async () => {
+                  if (!(await forgetReview())) return;
                   const origin = review.origin ?? edit!.observation;
                   const original = origin.repositoryFiles!.file!;
                   const bytes = Uint8Array.from(atob(original.content!), (c) => c.charCodeAt(0));
@@ -514,26 +570,26 @@ function GitHubFiles({
                       head: review.input.head,
                     },
                   });
-                  storage.removeItem(key);
                   setReview(null);
                 }
               : undefined
           }
           onClose={onClose}
-          onCancelChange={() => {
-            storage.removeItem(key);
+          onCancelChange={async () => {
+            if (!(await forgetReview())) return;
             setReview(null);
             setEdit(null);
           }}
-          onDone={() => {
-            storage.removeItem(key);
-            storage.removeItem(`workspace-file-copy:${review.source}`);
+          onDone={async () => {
+            if (!(await forgetReview(review.source))) return;
             setReview(null);
             setEdit(null);
             void read(
               review.action === "delete"
                 ? ""
-                : (review.input.files.find((f) => f.content !== null)?.path ?? ""),
+                : review.input.kind === "repository-tree"
+                  ? (review.input.files[0]!.moveTo ?? "")
+                  : (review.input.files.find((f) => f.content !== null)?.path ?? ""),
               review.input.branch,
             );
           }}
@@ -577,10 +633,10 @@ function GitHubFileReview({
     [],
   );
   const [inspectPr, setInspectPr] = useState(false);
-  const update = (next: Review) => {
+  const update = async (next: Review) => {
+    onChange(next);
     try {
-      storage.setItem(storageKey, JSON.stringify(next));
-      onChange(next);
+      await storage.setItem(storageKey, JSON.stringify(next));
       return true;
     } catch {
       setError("Не удалось сохранить черновик на устройстве.");
@@ -634,7 +690,7 @@ function GitHubFileReview({
           : action === "prepare"
             ? { id: step.id, state: "preparing" }
             : step.operation;
-      if (!update(keep(pending))) return;
+      if (!(await update(keep(pending)))) return;
       const operation = await api<Operation>(`${base}/${step.id}/${action}`, {
         method: "POST",
         body:
@@ -650,7 +706,7 @@ function GitHubFileReview({
               : {},
       });
       const next = keep(operation);
-      storage.setItem(storageKey, JSON.stringify(next));
+      await storage.setItem(storageKey, JSON.stringify(next));
       if (live.current) onChange(next);
     } catch (e) {
       if (live.current) {
@@ -709,8 +765,8 @@ function GitHubFileReview({
         v.repositoryId !== value.repositoryId ||
         !v.repositoryFiles ||
         (value.action !== "create" &&
-          (!v.repositoryFiles.file ||
-            (value.action !== "delete" && v.repositoryFiles.file.content === null)))
+          (!(v.repositoryFiles.file || v.repositoryFiles.directory) ||
+            (!value.action && v.repositoryFiles.file?.content === null)))
       )
         throw Error("Доступ или источник изменился. Открой файл заново.");
       const next: Review = {
@@ -724,7 +780,7 @@ function GitHubFileReview({
             ? ""
             : (() => {
                 try {
-                  return decode(v.repositoryFiles!.file!.content ?? "");
+                  return decode(v.repositoryFiles!.file?.content ?? "");
                 } catch {
                   return "";
                 }
@@ -743,18 +799,19 @@ function GitHubFileReview({
           ...value.input,
           head: v.repositoryFiles.head,
           files:
-            value.action === "create"
-              ? value.input.files
-              : value.input.files.map((f, index) =>
-                  index === 0
-                    ? { ...f, previous: v.repositoryFiles!.file!.sha }
-                    : value.action === "rename"
-                      ? { ...f, content: v.repositoryFiles!.file!.content! }
-                      : f,
-                ),
-        },
+            value.input.kind === "repository-tree"
+              ? [
+                  {
+                    ...value.input.files[0],
+                    previous: (v.repositoryFiles.file ?? v.repositoryFiles.directory)!.sha,
+                  },
+                ]
+              : value.action === "create"
+                ? value.input.files
+                : value.input.files.map((f) => ({ ...f, previous: v.repositoryFiles!.file!.sha })),
+        } as Review["input"],
       };
-      storage.setItem(storageKey, JSON.stringify(next));
+      await storage.setItem(storageKey, JSON.stringify(next));
       if (live.current) onChange(next);
     } catch (e) {
       if (live.current) setError(messageOf(e));
@@ -855,16 +912,27 @@ function GitHubFileReview({
                 {value.input.files.map((f) => (
                   <li key={f.path}>
                     <strong>
-                      {f.content === null
-                        ? "Удаление"
-                        : f.previous === null
-                          ? "Создание"
-                          : "Изменение"}
+                      {"moveTo" in f && f.moveTo
+                        ? "Перенос"
+                        : f.content === null
+                          ? "Удаление"
+                          : f.previous === null
+                            ? "Создание"
+                            : "Изменение"}
                     </strong>
-                    <span>{f.path}</span>
+                    <span>
+                      {f.path}
+                      {"moveTo" in f && f.moveTo ? ` → ${f.moveTo}` : ""}
+                    </span>
                   </li>
                 ))}
               </ul>
+              {value.origin?.repositoryFiles?.directory && (
+                <p>
+                  Файлов в папке: {value.origin.repositoryFiles.directory.files}. Операция затронет
+                  всё содержимое.
+                </p>
+              )}
               {value.action === "rename" ? (
                 <p>Содержимое сохраняется без изменений. Оба пути войдут в один коммит.</p>
               ) : (
