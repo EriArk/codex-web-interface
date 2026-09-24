@@ -300,10 +300,142 @@ export async function githubWorkProbe(
       url: `${url}/issues/${n}#issuecomment-${v.id}`,
     };
   };
+  const sha = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{40}$/.test(v);
+  const branch = (v: unknown): v is string =>
+    scalar(v, 240) &&
+    !!v &&
+    !/[~^:?*\\\s[]/.test(v) &&
+    !v.includes("..") &&
+    !v.includes("@{") &&
+    !v.startsWith("-") &&
+    v.split("/").every((p) => p && !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock"));
+  const preparationPath = (v: unknown): v is string =>
+    typeof v === "string" &&
+    v.length <= 240 &&
+    /^(?:[A-Za-z0-9_-]+\.(?:md|txt)|(?:docs|references)\/[A-Za-z0-9_./ -]+\.(?:md|txt|json|csv|svg|png|jpg|jpeg|webp|pdf))$/i.test(
+      v,
+    ) &&
+    v
+      .split("/")
+      .every(
+        (p) =>
+          p &&
+          p !== "." &&
+          p !== ".." &&
+          !p.startsWith(".") &&
+          !/[. ]$/.test(p) &&
+          !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p),
+      ) &&
+    !/(?:^|\/)(?:AGENTS|CODEXWEB)\.md$/i.test(v);
+  const preparationFile = (f: any) => {
+    exact(f, ["path", "content", "previous"]);
+    valid(
+      preparationPath(f.path) &&
+        typeof f.content === "string" &&
+        f.content.length <= 131072 &&
+        Buffer.from(f.content, "base64").toString("base64") === f.content &&
+        (f.previous === null || sha(f.previous)),
+    );
+  };
+  const missingPath = async (name: string, ref: string) => {
+    const parts = name.split("/");
+    for (let n = 0; n < parts.length; n++) {
+      const parent = parts.slice(0, n).map(encodeURIComponent).join("/");
+      const listing = await must(
+        `${prefix}/contents${parent ? "/" + parent : ""}?ref=${encodeURIComponent(ref)}`,
+      );
+      if (!Array.isArray(listing) || listing.length >= 1000) fail("GITHUB_WORK_DATA");
+      const entry = listing.find(
+        (v: any) => typeof v.name === "string" && v.name.toLowerCase() === parts[n]!.toLowerCase(),
+      );
+      if (!entry) return;
+      if (entry.name !== parts[n] || entry.type !== "dir" || n === parts.length - 1)
+        fail("GITHUB_WORK_CHANGED");
+    }
+  };
+  const readDocument = async (name: string, ref: string | null) => {
+    if (!ref) return { path: name, sha: null, content: null, bytes: 0 };
+    const r = await http(
+      `${prefix}/contents/${name.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
+    );
+    if (r.status === 404) {
+      await missingPath(name, ref);
+      return { path: name, sha: null, content: null, bytes: 0 };
+    }
+    const f = r.value;
+    if (
+      r.status !== 200 ||
+      f?.type !== "file" ||
+      !sha(f.sha) ||
+      f.submodule_git_url ||
+      f.target ||
+      f.path !== name ||
+      !Number.isSafeInteger(f.size)
+    )
+      fail("GITHUB_WORK_DATA");
+    const bytes = f.size;
+    return {
+      path: name,
+      sha: f.sha as string,
+      content:
+        /\.(md|txt|json|csv|svg)$/i.test(name) &&
+        bytes <= 32768 &&
+        f.encoding === "base64" &&
+        typeof f.content === "string"
+          ? Buffer.from(f.content.replace(/\s/g, ""), "base64").toString("utf8")
+          : null,
+      bytes,
+    };
+  };
+  const preparationRepository = async (paths: string[]) => {
+    const repo = await must(prefix);
+    valid(branch(repo.default_branch));
+    const head = await http(`${prefix}/commits/${encodeURIComponent(repo.default_branch)}`);
+    if (head.status !== 200 && head.status !== 409) fail("GITHUB_WORK_UNAVAILABLE");
+    if (head.status === 409 && !/empty/i.test(String(head.value?.message ?? "")))
+      fail("GITHUB_WORK_UNAVAILABLE");
+    if (head.status === 200 && !sha(head.value?.sha)) fail("GITHUB_WORK_DATA");
+    const revision = head.status === 409 ? null : (head.value.sha as string);
+    const files = [];
+    for (const p of paths) files.push(await readDocument(p, revision));
+    return { branch: repo.default_branch as string, head: revision, files };
+  };
+  const preparationPreflight = async (v: GitHubWorkInput) => {
+    if (v.kind === "preparation-branch") {
+      const r = await http(`${prefix}/git/ref/heads/${v.branch}`);
+      if (r.status !== 404) fail("GITHUB_WORK_CHANGED");
+      const repo = await preparationRepository([]);
+      if (repo.head !== v.head) fail("GITHUB_WORK_CHANGED");
+    } else if (v.kind === "preparation-seed") {
+      const repo = await preparationRepository([]);
+      if (repo.head || repo.branch !== v.branch || v.file.previous !== null)
+        fail("GITHUB_WORK_CHANGED");
+    } else if (v.kind === "preparation-files" || v.kind === "preparation-pr") {
+      const r = await must(`${prefix}/git/ref/heads/${v.branch}`);
+      if (r.object?.sha !== v.head) fail("GITHUB_WORK_CHANGED");
+      if (v.kind === "preparation-files") {
+        if (
+          !v.branch.startsWith("codexweb/prepare/") &&
+          ((await preparationRepository([])).branch !== v.branch ||
+            !(await seededHead(v.branch, v.head)))
+        )
+          fail("GITHUB_WORK_CHANGED");
+        for (const f of v.files)
+          if ((await readDocument(f.path, v.head)).sha !== f.previous) fail("GITHUB_WORK_CHANGED");
+      }
+    }
+  };
   const validateQuery = (q: GitHubWorkQuery) => {
     valid(object(q));
     if (q.kind === "identity" || q.kind === "activity") exact(q, ["kind"]);
-    else if (q.kind === "evidence") {
+    else if (q.kind === "preparation") {
+      exact(q, ["kind", "paths"]);
+      valid(
+        Array.isArray(q.paths) &&
+          q.paths.length <= 20 &&
+          q.paths.every((p) => preparationPath(p) || ["AGENTS.md", "CODEXWEB.md"].includes(p)),
+      );
+    } else if (q.kind === "evidence") {
       exact(q, ["kind", "source"]);
       valid(
         typeof q.source === "string" &&
@@ -330,7 +462,9 @@ export async function githubWorkProbe(
       result: GitHubWorkObservation = { ...access, query: q };
     if (q.kind === "identity") return result;
     if (access.access === "unavailable") fail("GITHUB_WORK_ACCESS");
-    if (q.kind === "evidence") {
+    if (q.kind === "preparation") {
+      result.preparation = await preparationRepository(q.paths);
+    } else if (q.kind === "evidence") {
       const [kind, id] = q.source.split(":");
       let snapshot: any,
         files: any[] = [],
@@ -541,7 +675,45 @@ export async function githubWorkProbe(
   };
   const validateInput = (v: GitHubWorkInput) => {
     valid(object(v));
-    if (v.kind === "issue-create") {
+    if (v.kind === "preparation-branch") {
+      exact(v, ["kind", "branch", "head"]);
+      valid(/^codexweb\/prepare\/[a-f0-9-]{36}$/.test(v.branch) && sha(v.head));
+    } else if (v.kind === "preparation-files") {
+      exact(v, ["kind", "branch", "head", "files", "title"]);
+      valid(
+        branch(v.branch) &&
+          sha(v.head) &&
+          scalar(v.title, 200) &&
+          !!v.title.trim() &&
+          Array.isArray(v.files) &&
+          v.files.length > 0 &&
+          v.files.length <= 16,
+      );
+      v.files.forEach(preparationFile);
+      valid(
+        v.files.reduce((n, f) => n + f.content.length, 0) <= 131072 &&
+          new Set(v.files.map((f) => f.path.toLowerCase())).size === v.files.length &&
+          v.files.every(
+            (f) =>
+              !v.files.some((g) => g.path.toLowerCase().startsWith(f.path.toLowerCase() + "/")),
+          ),
+      );
+    } else if (v.kind === "preparation-seed") {
+      exact(v, ["kind", "branch", "file", "title"]);
+      valid(branch(v.branch) && scalar(v.title, 200) && !!v.title.trim());
+      preparationFile(v.file);
+      valid(v.file.previous === null);
+    } else if (v.kind === "preparation-pr") {
+      exact(v, ["kind", "branch", "head", "base", "title", "body"]);
+      valid(
+        /^codexweb\/prepare\/[a-f0-9-]{36}$/.test(v.branch) &&
+          sha(v.head) &&
+          branch(v.base) &&
+          scalar(v.title, 200) &&
+          !!v.title.trim() &&
+          text(v.body, 16000),
+      );
+    } else if (v.kind === "issue-create") {
       exact(v, ["kind", "title", "body"]);
       valid(scalar(v.title, 200) && !!v.title.trim() && text(v.body, 16000) && !!v.body.trim());
     } else if (v.kind === "comment") {
@@ -611,12 +783,39 @@ export async function githubWorkProbe(
     public: GitHubWorkReceipt;
     attempt?: number;
   };
+  const seededHead = async (branchName: string, head: string) => {
+    for (const name of (await fs.readdir(stateRoot))
+      .filter((n) => /^[a-f0-9-]{36}\.json$/.test(n))
+      .slice(0, 5000)) {
+      const target = path.join(stateRoot, name),
+        stat = await fs.lstat(target);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 262144) continue;
+      let seed: any;
+      try {
+        seed = JSON.parse(await fs.readFile(target, "utf8"));
+      } catch {
+        continue;
+      }
+      const r = seed?.public;
+      if (
+        seed.root === root &&
+        seed.repository === repository &&
+        r?.input?.kind === "preparation-seed" &&
+        r.input.branch === branchName &&
+        r.state === "completed" &&
+        r.result?.sha === head &&
+        r.snapshot?.identity?.id === identity(await must("user")).id
+      )
+        return true;
+    }
+    return false;
+  };
   const file = path.join(stateRoot, request.id + ".json"),
     lock = path.join(stateRoot, hash(repository.toLowerCase()) + ".lock");
   const read = async (): Promise<Saved | null> => {
     try {
       const s = await fs.lstat(file);
-      if (!s.isFile() || s.isSymbolicLink() || s.size > 150000) fail("GITHUB_WORK_PATH");
+      if (!s.isFile() || s.isSymbolicLink() || s.size > 262144) fail("GITHUB_WORK_PATH");
       return JSON.parse(await fs.readFile(file, "utf8"));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -692,6 +891,11 @@ export async function githubWorkProbe(
       if (access.access === "unavailable" || !access.repositoryId) fail("GITHUB_WORK_ACCESS");
       if (["invite", "remove"].includes(input.kind) && access.access !== "admin")
         fail("GITHUB_WORK_ACCESS");
+      if (
+        input.kind.startsWith("preparation-") &&
+        !["write", "maintain", "admin"].includes(access.access)
+      )
+        fail("GITHUB_WORK_ACCESS");
       if (input.kind === "issue-create" && !access.issues) fail("GITHUB_WORK_ACCESS");
       if (
         input.kind === "issue-state" &&
@@ -732,7 +936,7 @@ export async function githubWorkProbe(
       for (const name of files) {
         const p = path.join(stateRoot, name),
           stat = await fs.lstat(p);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 150000) fail("GITHUB_WORK_PATH");
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 262144) fail("GITHUB_WORK_PATH");
         const prior = JSON.parse(await fs.readFile(p, "utf8")) as Saved;
         if (
           prior.repository.toLowerCase() === repository.toLowerCase() &&
@@ -744,6 +948,7 @@ export async function githubWorkProbe(
         original = await baseline();
       verifyAccess(snapshot, original);
       await verifyTarget();
+      await preparationPreflight(input);
       const receipt: GitHubWorkReceipt = {
         id: request.id,
         input,
@@ -875,7 +1080,61 @@ export async function githubWorkProbe(
     };
     const reconcile = async () => {
       await matchingAccount();
-      if (input.kind === "accept-invitation") {
+      if (input.kind === "preparation-branch") {
+        const v = await http(`${prefix}/git/ref/heads/${input.branch}`);
+        if (v.status === 200 && v.value?.object?.sha === input.head)
+          return finish("completed", undefined, { sha: input.head, branch: input.branch });
+      } else if (input.kind === "preparation-files" || input.kind === "preparation-seed") {
+        const v = await http(`${prefix}/commits/${encodeURIComponent(input.branch)}`);
+        const c = v.value;
+        const files = input.kind === "preparation-files" ? input.files : [input.file];
+        if (
+          v.status === 200 &&
+          sha(c?.sha) &&
+          c.commit?.message === input.title + "\n\n" + marker &&
+          c.author?.id === receipt.snapshot.identity.id &&
+          (input.kind === "preparation-files"
+            ? c.parents?.length === 1 && c.parents[0].sha === input.head
+            : c.parents?.length === 0)
+        ) {
+          let exactFiles = true;
+          for (const f of files) {
+            const bytes = Buffer.from(f.content, "base64");
+            const blob = crypto
+              .createHash("sha1")
+              .update(`blob ${bytes.length}\0`)
+              .update(bytes)
+              .digest("hex");
+            if ((await readDocument(f.path, c.sha)).sha !== blob) exactFiles = false;
+          }
+          if (exactFiles)
+            return finish("completed", undefined, {
+              sha: c.sha,
+              branch: input.branch,
+              url: `${url}/commit/${c.sha}`,
+            });
+        }
+      } else if (input.kind === "preparation-pr") {
+        const list = await must(
+          `${prefix}/pulls?state=all&head=${encodeURIComponent(repository.split("/")[0] + ":" + input.branch)}&base=${encodeURIComponent(input.base)}&per_page=100`,
+        );
+        if (!Array.isArray(list)) fail("GITHUB_WORK_DATA");
+        const matches = list.filter(
+          (v: any) =>
+            v.user?.id === receipt.snapshot.identity.id &&
+            v.body === input.body + "\n\n" + marker &&
+            v.head?.sha === input.head &&
+            v.title === input.title &&
+            v.base?.ref === input.base,
+        );
+        if (matches.length === 1 && number(matches[0].number))
+          return finish("completed", undefined, {
+            number: matches[0].number,
+            url: `${url}/pull/${matches[0].number}`,
+            sha: input.head,
+            branch: input.branch,
+          });
+      } else if (input.kind === "accept-invitation") {
         if (await acceptedInvitation())
           return finish("completed", undefined, { state: "accepted" });
       } else if (input.kind === "invite" || input.kind === "remove") {
@@ -951,8 +1210,47 @@ export async function githubWorkProbe(
           current.state !== receipt.baseline?.state)
       )
         fail("GITHUB_WORK_CHANGED");
+      await preparationPreflight(input);
       let endpoint: string, method: string, payload: unknown;
-      if (input.kind === "accept-invitation") {
+      if (input.kind === "preparation-branch") {
+        endpoint = `${prefix}/git/refs`;
+        method = "POST";
+        payload = { ref: "refs/heads/" + input.branch, sha: input.head };
+      } else if (input.kind === "preparation-seed") {
+        endpoint = `${prefix}/contents/${input.file.path.split("/").map(encodeURIComponent).join("/")}`;
+        method = "PUT";
+        payload = {
+          branch: input.branch,
+          message: input.title + "\n\n" + marker,
+          content: input.file.content,
+        };
+      } else if (input.kind === "preparation-files") {
+        endpoint = "graphql";
+        method = "POST";
+        payload = {
+          query:
+            "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}",
+          variables: {
+            input: {
+              branch: { repositoryNameWithOwner: repository, branchName: input.branch },
+              expectedHeadOid: input.head,
+              message: { headline: input.title, body: marker },
+              fileChanges: {
+                additions: input.files.map((f) => ({ path: f.path, contents: f.content })),
+              },
+            },
+          },
+        };
+      } else if (input.kind === "preparation-pr") {
+        endpoint = `${prefix}/pulls`;
+        method = "POST";
+        payload = {
+          head: input.branch,
+          base: input.base,
+          title: input.title,
+          body: input.body + "\n\n" + marker,
+        };
+      } else if (input.kind === "accept-invitation") {
         if (await acceptedInvitation())
           return finish("completed", undefined, { state: "accepted" });
         endpoint = `user/repository_invitations/${await pendingInvitation()}`;

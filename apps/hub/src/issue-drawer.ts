@@ -149,6 +149,12 @@ export class IssueDrawer {
     if (!row) throw missing();
     return JSON.parse(String(row.value));
   }
+  async waitForPublication() {
+    await this.pending;
+  }
+  item(id: string) {
+    return this.public(this.own(id));
+  }
   list(since?: string) {
     if (since === this.version) return { version: this.version, unchanged: true as const };
     return {

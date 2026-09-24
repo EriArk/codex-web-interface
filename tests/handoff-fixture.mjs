@@ -78,9 +78,8 @@ export async function handoffFixture(
   const setupToken = randomBytes(32).toString("base64url");
   let running = true,
     operation = null;
-  const { app, push, projectWork, projectGpts, gpt, intake, issueDrawer } = await createApp(
-    config,
-    {
+  const { app, push, projectWork, projectGpts, gpt, intake, issueDrawer, preparation } =
+    await createApp(config, {
       store,
       sessions,
       setupToken,
@@ -100,8 +99,7 @@ export async function handoffFixture(
         }
         return { available: true, running, activityKnown: true, activeTasks: 0, operation };
       },
-    },
-  );
+    });
   const password = "Isolated handoff " + randomUUID();
   const enrolled = await app.inject({
     method: "POST",
@@ -121,6 +119,7 @@ export async function handoffFixture(
     projectGpts,
     intake,
     issueDrawer,
+    preparation,
     gpt,
     store,
     sessions,

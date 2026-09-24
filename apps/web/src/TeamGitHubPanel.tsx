@@ -53,6 +53,10 @@ const empty = (): Draft => ({
   state: "closed",
 });
 const names = {
+  "preparation-branch": "Ветка подготовки",
+  "preparation-files": "Документы проекта",
+  "preparation-seed": "Первый документ",
+  "preparation-pr": "PR подготовки",
   "issue-create": "Новый issue",
   comment: "Комментарий",
   "issue-state": "Состояние issue",

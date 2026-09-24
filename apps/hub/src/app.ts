@@ -54,6 +54,7 @@ import type { ProjectActionPolicy } from "./project-actions.js";
 import { registerProjectCores } from "./project-core.js";
 import { registerProjectDelivery } from "./project-delivery.js";
 import { registerProjectGpt } from "./project-gpt.js";
+import { ProjectPreparations, registerProjectPreparation } from "./project-preparation.js";
 import { registerProjectSetup } from "./project-setup.js";
 import { registerProjectWork } from "./project-work.js";
 import { registerProjectInspector } from "./projectInspector.js";
@@ -766,6 +767,8 @@ export async function createApp(
     options.collaborationPolicy?.issuesPublished,
   );
   registerIssueDrawer(app, issueDrawer);
+  const preparation = new ProjectPreparations(sessions, gpt, projectGpts, issueDrawer);
+  registerProjectPreparation(app, preparation, projectWork);
   registerNativePlans(app, new NativePlans(sessions, projectWork.context));
   registerRelays(app, sessions, projectWork, queue);
   registerGuiPreviews(app, sessions, artifacts, projectWork.context, options.guiPreviewProbe);
@@ -1027,10 +1030,23 @@ export async function createApp(
     unsubscribeRevocation();
     for (const socket of sockets.keys()) socket.close(1001, "Server restarting");
     await bridgeDoctor.close();
+    await preparation.close();
     await issueDrawer.close();
     await push.close();
     await sessions.close();
     if (!options.keepStoreOpen) store.close();
   });
-  return { app, store, sessions, auth, push, gpt, projectWork, projectGpts, intake, issueDrawer };
+  return {
+    app,
+    store,
+    sessions,
+    auth,
+    push,
+    gpt,
+    projectWork,
+    projectGpts,
+    intake,
+    issueDrawer,
+    preparation,
+  };
 }

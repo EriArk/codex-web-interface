@@ -112,6 +112,13 @@ export function deploymentBlockers(
     "SELECT count(*) n FROM project_relays WHERE state IN ('running','unknown')",
     "Обмен проектов ещё не подтверждён",
   );
+  if (store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='project_preparations'").get()) {
+    add(
+      "project_preparation",
+      "SELECT count(*) n FROM project_preparations p WHERE p.state='running' OR (p.state='paused' AND EXISTS (SELECT 1 FROM json_each(json_extract(p.value,'$.steps')) s WHERE json_extract(s.value,'$.sent')=1 AND COALESCE(json_extract(s.value,'$.receipt.state'),'unknown') NOT IN ('completed','failed')))",
+      "Подготовка проекта ещё не завершена",
+    );
+  }
   const preferences = store.preferences();
   if (store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='issue_drawer_batches'").get()) {
     add(

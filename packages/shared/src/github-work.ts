@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  type PreparationRepository,
+  preparationBranchInput,
+  preparationFilesInput,
+  preparationPrInput,
+  preparationSeedInput,
+} from "./project-preparation.js";
 
 export const githubLoginSchema = z
   .string()
@@ -6,6 +13,10 @@ export const githubLoginSchema = z
 const number = z.number().int().positive().max(2147483647);
 const body = z.string().min(1).max(16000);
 export const githubWorkInputSchema = z.discriminatedUnion("kind", [
+  preparationBranchInput,
+  preparationFilesInput,
+  preparationSeedInput,
+  preparationPrInput,
   z
     .object({ kind: z.literal("issue-create"), title: z.string().trim().min(1).max(200), body })
     .strict(),
@@ -32,6 +43,9 @@ export const githubWorkInputSchema = z.discriminatedUnion("kind", [
 ]);
 export type GitHubWorkInput = z.infer<typeof githubWorkInputSchema>;
 export const githubWorkQuerySchema = z.discriminatedUnion("kind", [
+  z
+    .object({ kind: z.literal("preparation"), paths: z.array(z.string().min(1).max(240)).max(20) })
+    .strict(),
   z
     .object({
       kind: z.literal("evidence"),
@@ -106,6 +120,7 @@ export interface GitHubWorkComment {
   url: string;
 }
 export type GitHubWorkObservation = GitHubRepositoryAccess & {
+  preparation?: PreparationRepository;
   commit?: GitHubCommitDetail;
   evidence?: { source: string; text: string; truncated: boolean };
   activity?: GitHubActivitySource[];
@@ -168,7 +183,14 @@ export interface GitHubWorkReceipt {
   createdAt: number;
   updatedAt: number;
   code?: string;
-  result?: { url?: string; number?: number; state?: string; login?: string };
+  result?: {
+    url?: string;
+    number?: number;
+    state?: string;
+    login?: string;
+    sha?: string;
+    branch?: string;
+  };
 }
 export type GitHubWorkProbeRequest =
   | { op: "observe"; repository: string; query: GitHubWorkQuery }

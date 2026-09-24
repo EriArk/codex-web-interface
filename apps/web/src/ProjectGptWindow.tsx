@@ -1,6 +1,7 @@
 import {
   type ActivityGptHandoff,
   type GptConversation,
+  type NotebookLink,
   type ProjectGpt,
   type ProjectRules,
   projectRuleLabels,
@@ -13,6 +14,9 @@ import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./project-gpt.css";
 
+const Preparation = lazy(() =>
+  import("./ProjectPreparation").then((m) => ({ default: m.ProjectPreparation })),
+);
 const Workspace = lazy(() => import("./GptWorkspace").then((m) => ({ default: m.GptWorkspace })));
 export function ProjectGptWindow({
   projectId,
@@ -21,6 +25,7 @@ export function ProjectGptWindow({
   onSettings,
   onRemote,
   initialHandoff,
+  onPrepared,
 }: {
   projectId: string;
   name: string;
@@ -28,6 +33,7 @@ export function ProjectGptWindow({
   onSettings: () => void;
   onRemote: () => void;
   initialHandoff?: ActivityGptHandoff;
+  onPrepared: (target: NotebookLink) => void;
 }) {
   const handoffKey = `project-activity-handoff:${projectId}`;
   const [handoff, setHandoff] = useState<ActivityGptHandoff | null>(() => {
@@ -47,6 +53,7 @@ export function ProjectGptWindow({
   useWorkspaceDialog(dialog);
   const [data, setData] = useState<ProjectGpt | null>(null),
     [error, setError] = useState("");
+  const [preparing, setPreparing] = useState(false);
   const [configure, setConfigure] = useState(false),
     [busy, setBusy] = useState(false);
   const [rules, setRules] = useState<ProjectRules>({ enabled: [], custom: "" });
@@ -110,6 +117,14 @@ export function ProjectGptWindow({
           <strong>GPT проекта</strong>
           <small>{name}</small>
         </div>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Подготовить для Codex"
+          onClick={() => setPreparing(true)}
+        >
+          <Icon name="file" />
+        </button>
         <IssueDrawerButton targetId={projectId} />
         <button
           type="button"
@@ -271,7 +286,7 @@ export function ProjectGptWindow({
                   setChoice(value.nativeId ?? "");
                 }}
                 settings={false}
-                overlayOpen={configure}
+                overlayOpen={configure || preparing}
                 onCodex={onClose}
                 onNotificationHandled={() => {}}
                 onSettings={() => {
@@ -286,6 +301,16 @@ export function ProjectGptWindow({
             </Suspense>
           </div>
         </>
+      )}
+      {preparing && (
+        <Suspense fallback={null}>
+          <Preparation
+            projectId={projectId}
+            name={name}
+            onClose={() => setPreparing(false)}
+            onOpen={onPrepared}
+          />
+        </Suspense>
       )}
     </dialog>
   );

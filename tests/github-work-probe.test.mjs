@@ -137,7 +137,7 @@ async function fixture(t) {
   await writeFile(
     join(bin, "gh"),
     `#!/usr/bin/env node
-const fs=require('node:fs'),p=process.env.GH_WORK_FIXTURE,s=JSON.parse(fs.readFileSync(p,'utf8')),args=process.argv.slice(2),method=args[args.indexOf('--method')+1],endpoint=args.find(x=>x==='user'||x.startsWith('user/')||x.startsWith('users/')||x.startsWith('repos/')||x.startsWith('search/issues')),body=args.includes('--input')?JSON.parse(fs.readFileSync(0,'utf8')):undefined;
+const fs=require('node:fs'),p=process.env.GH_WORK_FIXTURE,s=JSON.parse(fs.readFileSync(p,'utf8')),args=process.argv.slice(2),method=args[args.indexOf('--method')+1],endpoint=args.find(x=>x==='graphql'||x==='user'||x.startsWith('user/')||x.startsWith('users/')||x.startsWith('repos/')||x.startsWith('search/issues')),body=args.includes('--input')?JSON.parse(fs.readFileSync(0,'utf8')):undefined;
 fs.appendFileSync(p.replace('github.json','calls.jsonl'),JSON.stringify({method,endpoint,body})+'\\n');
 const answer=(status,value)=>{process.stdout.write('HTTP/2.0 '+status+' Test\\r\\nContent-Type: application/json\\r\\n\\r\\n'+(value==null?'':JSON.stringify(value)));if(status>=400)process.exitCode=1;};
 const persist=()=>fs.writeFileSync(p,JSON.stringify(s));
@@ -150,7 +150,17 @@ if(raw==='users/Friend'){answer(200,{id:s.targetId||12,login:'Friend'});return;}
 if(raw==='repos/Author/Shared'){answer(s.targetAccepted?200:404,{id:77,full_name:'Author/Shared',permissions:{push:true}});return;}
 if(raw==='user/repository_invitations'){answer(200,s.received||[]);return;}
 if(raw==='user/repository_invitations/301'&&method==='PATCH'){s.targetAccepted=true;s.received=[];changed(null);return;}
-if(raw===base){answer(s.access==='unavailable'?404:200,{id:s.repositoryId,full_name:'Owner/Project',has_issues:true,permissions:{admin:s.access==='admin',maintain:s.access==='maintain',push:s.access==='write',triage:s.access==='triage',pull:true}});return;}
+if(raw===base){answer(s.access==='unavailable'?404:200,{id:s.repositoryId,full_name:'Owner/Project',default_branch:'main',has_issues:true,permissions:{admin:s.access==='admin',maintain:s.access==='maintain',push:s.access==='write',triage:s.access==='triage',pull:true}});return;}
+if(s.preparation){
+const crypto=require('node:crypto'),blob=content=>{const b=Buffer.from(content,'base64');return crypto.createHash('sha1').update('blob '+b.length+'\\0').update(b).digest('hex');};
+const commit=(branch,message,files,parent)=>{const sha=crypto.createHash('sha1').update(message+JSON.stringify(files)).digest('hex'),tree={...(s.commits[parent]?.tree||{}),...Object.fromEntries(files.map(f=>[f.path,f.content]))};s.commits[sha]={sha,commit:{message},parents:parent?[{sha:parent}]:[],author:s.identity,tree};s.refs[branch]=sha;return sha;};
+if(parts[3]==='commits'&&parts.length===5){const ref=decodeURIComponent(parts[4]),sha=s.refs[ref]||ref,c=s.commits[sha];answer(c?200:409,c||{message:'Git Repository is empty.'});return;}
+if(parts[3]==='git'&&parts[4]==='ref'){const ref=parts.slice(6).join('/');answer(s.refs[ref]?200:404,{object:{sha:s.refs[ref]}});return;}
+if(parts[3]==='git'&&parts[4]==='refs'&&method==='POST'){s.refs[body.ref.replace('refs/heads/','')]=body.sha;changed({object:{sha:body.sha}});return;}
+if(parts[3]==='contents'){const name=parts.slice(4).map(decodeURIComponent).join('/');if(method==='PUT'){const sha=commit(body.branch,body.message,[{path:name,content:body.content}],null);changed({commit:{sha}});return;}const ref=new URLSearchParams(endpoint.split('?')[1]).get('ref'),content=s.commits[ref]?.tree[name];if(content===undefined){const prefix=name?name+'/':'',entries=[...new Set(Object.keys(s.commits[ref]?.tree||{}).filter(k=>k.startsWith(prefix)).map(k=>k.slice(prefix.length).split('/')[0]))].map(v=>({name:v,type:Object.hasOwn(s.commits[ref]?.tree||{},prefix+v)?'file':'dir'}));if(entries.length || !name){answer(200,entries);return;}}answer(content===undefined?404:200,{type:'file',path:name,sha:content===undefined?undefined:blob(content),size:content===undefined?0:Buffer.from(content,'base64').length,encoding:'base64',content});return;}
+if(endpoint==='graphql'){const v=body.variables.input,branch=v.branch.branchName;if(s.refs[branch]!==v.expectedHeadOid){answer(200,{errors:[{type:'STALE_DATA'}]});return;}const oid=commit(branch,v.message.headline+'\\n\\n'+v.message.body,v.fileChanges.additions.map(f=>({path:f.path,content:f.contents})),v.expectedHeadOid);changed({data:{createCommitOnBranch:{commit:{oid}}}});return;}
+if(parts[3]==='pulls'&&parts.length===4&&method==='POST'){const value={number:78,user:s.identity,title:body.title,body:body.body,head:{sha:s.refs[body.head],ref:body.head,repo:{full_name:'Owner/Project'}},base:{ref:body.base},state:'open'};s.prs.push(value);changed(value);return;}
+}
 if(endpoint?.startsWith('search/issues')){const q=new URLSearchParams(endpoint.split('?')[1]);answer(200,{items:q.get('q').includes('is:pr')?s.prs:s.issues});return;}
 if(parts[3]==='commits'&&parts.length===4){answer(200,[{sha:'b'.repeat(40),commit:{message:'Exact commit\\nPrivate body not indexed',author:{name:'Unlinked author'},committer:{date:'2026-09-23T10:00:00Z'}},author:null}]);return;}
 if(parts[3]==='commits'&&parts.length===5){answer(200,{sha:parts[4],commit:{message:'Exact change'},parents:[{sha:'c'.repeat(40)}],stats:{additions:1,deletions:0},files:[{filename:'src/nullable.ts',status:'modified',additions:1,deletions:0,patch:'+ nullable: true'}]});return;}
@@ -538,4 +548,155 @@ test("machine account bootstrap needs no checkout and cannot perform repository 
     (await f.calls()).filter((c) => c.method !== "GET").map((c) => c.endpoint),
     ["user/repository_invitations/301"],
   );
+});
+
+const preparationBranch = () => `codexweb/prepare/${randomUUID()}`;
+const encoded = (text) => Buffer.from(text).toString("base64");
+async function preparationFixture(t, empty = false) {
+  const f = await fixture(t),
+    head = "a".repeat(40);
+  await f.save({
+    preparation: true,
+    refs: empty ? {} : { main: head },
+    commits: empty
+      ? {}
+      : {
+          [head]: {
+            sha: head,
+            commit: { message: "Existing" },
+            parents: [],
+            author: { id: 11, login: "Owner" },
+            tree: { "README.md": encoded("Original\r\n"), "AGENTS.md": encoded("Keep policy") },
+          },
+        },
+  });
+  return f;
+}
+test("preparation observes immutable docs, creates isolated atomic package and reconciles lost file acknowledgement without replay", async (t) => {
+  const f = await preparationFixture(t),
+    branch = preparationBranch();
+  const repo = await f.probe({
+    op: "observe",
+    query: { kind: "preparation", paths: ["README.md", "AGENTS.md", "docs/NEW.md"] },
+  });
+  assert.equal(repo.preparation.files[0].content, "Original\r\n");
+  assert.equal(repo.preparation.files[2].sha, null);
+  assert((await f.calls()).every((v) => v.method === "GET"));
+  assert.equal(
+    (await f.apply(await f.prepare({ kind: "preparation-branch", branch, head: f.sha }))).state,
+    "completed",
+  );
+  const files = [
+    {
+      path: "README.md",
+      content: encoded("Reviewed\r\n"),
+      previous: repo.preparation.files[0].sha,
+    },
+    { path: "docs/NEW.md", content: encoded("New"), previous: null },
+  ];
+  const p = await f.prepare({
+    kind: "preparation-files",
+    branch,
+    head: f.sha,
+    title: "Reviewed package",
+    files,
+  });
+  await f.save({ drop: true });
+  assert.equal((await f.apply(p)).state, "unknown");
+  await f.save({ unavailable: false });
+  const r = await f.probe({ op: "status", id: p.id });
+  assert.equal(r.state, "completed");
+  assert.equal((await f.apply(p)).state, "completed");
+  assert.equal((await f.get()).refs.main, f.sha);
+  assert.equal((await f.calls()).filter((v) => v.endpoint === "graphql").length, 1);
+  const pr = await f.prepare({
+    kind: "preparation-pr",
+    branch,
+    head: r.result.sha,
+    base: "main",
+    title: "Reviewed package",
+    body: "Docs",
+  });
+  await f.save({ drop: true });
+  assert.equal((await f.apply(pr)).state, "unknown");
+  await f.save({ unavailable: false });
+  assert.equal((await f.probe({ op: "status", id: pr.id })).result.number, 78);
+  assert.equal((await f.apply(pr)).state, "completed");
+  assert.equal(
+    (await f.calls()).filter((v) => v.method === "POST" && v.endpoint.endsWith("/pulls")).length,
+    1,
+  );
+});
+test("preparation refuses stale heads, identity changes, policy files, path aliases and default-branch writes", async (t) => {
+  const f = await preparationFixture(t),
+    branch = preparationBranch(),
+    file = { path: "docs/a.md", content: encoded("a"), previous: null };
+  for (const path of ["AGENTS.md", "docs/agents.md", "CODEXWEB.md", "docs/../x.md", "docs/CON.txt"])
+    await assert.rejects(
+      f.prepare({
+        kind: "preparation-files",
+        branch,
+        head: f.sha,
+        title: "x",
+        files: [{ ...file, path }],
+      }),
+      /GITHUB_WORK_REQUEST/,
+    );
+  await assert.rejects(
+    f.prepare({
+      kind: "preparation-files",
+      branch,
+      head: f.sha,
+      title: "x",
+      files: [file, { ...file, path: "docs/A.md" }],
+    }),
+    /GITHUB_WORK_REQUEST/,
+  );
+  await assert.rejects(
+    f.prepare({
+      kind: "preparation-files",
+      branch: "main",
+      head: f.sha,
+      title: "x",
+      files: [file],
+    }),
+    /GITHUB_WORK_CHANGED/,
+  );
+  await assert.rejects(
+    f.probe({ op: "observe", query: { kind: "preparation", paths: ["readme.md"] } }),
+    /GITHUB_WORK_CHANGED/,
+  );
+  const p = await f.prepare({ kind: "preparation-branch", branch, head: f.sha });
+  await f.save({ identity: { id: 99, login: "Other" } });
+  assert.equal((await f.apply(p)).state, "failed");
+  assert((await f.calls()).every((v) => v.method === "GET"));
+  await f.save({
+    identity: { id: 11, login: "Owner" },
+    refs: { main: "b".repeat(40) },
+    commits: { ["b".repeat(40)]: { sha: "b".repeat(40), tree: {} } },
+  });
+  await assert.rejects(
+    f.prepare({ kind: "preparation-branch", branch: preparationBranch(), head: f.sha }),
+    /GITHUB_WORK_CHANGED/,
+  );
+});
+test("empty repository uses a single seed then an expected-head atomic commit, bound to its seed receipt", async (t) => {
+  const f = await preparationFixture(t, true),
+    file = { path: "README.md", content: encoded("Hello"), previous: null };
+  const seed = await f.prepare({ kind: "preparation-seed", branch: "main", file, title: "Start" });
+  const r = await f.apply(seed);
+  assert.equal(r.state, "completed");
+  const next = await f.prepare({
+    kind: "preparation-files",
+    branch: "main",
+    head: r.result.sha,
+    title: "Docs",
+    files: [{ ...file, path: "docs/NEW.md" }],
+  });
+  assert.equal((await f.apply(next)).state, "completed");
+  await assert.rejects(
+    f.prepare({ kind: "preparation-seed", branch: "main", file, title: "Again" }),
+    /GITHUB_WORK_CHANGED/,
+  );
+  assert.equal((await f.calls()).filter((v) => v.method !== "GET").length, 2);
 });

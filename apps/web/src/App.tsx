@@ -1645,6 +1645,12 @@ function Workspace({
             projectId={projectGpt.id}
             name={projectGpt.name}
             initialHandoff={projectGpt.handoff}
+            onPrepared={(target) => {
+              setProjectGpt(null);
+              setOverviewId("");
+              openMachineProject(target.projectId!, false);
+              openNotebookTarget(target);
+            }}
             onClose={() => setProjectGpt(null)}
             onSettings={() => setSettings(true)}
             onRemote={() => setPcRemote(true)}
