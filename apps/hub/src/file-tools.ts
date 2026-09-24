@@ -77,25 +77,19 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
         grants.delete(body.capability);
       return { capability: "" };
     }
-    sessions.assertWritable(c.project.id);
+    sessions.authorizeExecution();
     const expected = checkout(req);
-    const release = sessions.beginProjectDelivery(c.project.id);
-    try {
-      await verifyProjectRoot(c.machine, c.project.workingDirectory);
-      current(req, expected);
-      if (c.machine.type !== "local-linux" && !c.machine.codex.activityNode)
-        throw new HubError(
-          409,
-          "FILE_UNAVAILABLE",
-          "На компьютере не настроены файловые операции.",
-        );
-      while (grants.size >= 128) grants.delete(grants.keys().next().value!);
-      const capability = randomUUID();
-      grants.set(capability, { scope: scope(req), expires: Date.now() + 30 * 60 * 1000 });
-      return { capability, checkout: checkout(req) };
-    } finally {
-      release();
-    }
+    // Opening tools grants no mutation. Manual writes remain available during
+    // native work; every write retains authorization and fingerprint checks.
+    await verifyProjectRoot(c.machine, c.project.workingDirectory);
+    sessions.authorizeExecution();
+    current(req, expected);
+    if (c.machine.type !== "local-linux" && !c.machine.codex.activityNode)
+      throw new HubError(409, "FILE_UNAVAILABLE", "На компьютере не настроены файловые операции.");
+    while (grants.size >= 128) grants.delete(grants.keys().next().value!);
+    const capability = randomUUID();
+    grants.set(capability, { scope: scope(req), expires: Date.now() + 30 * 60 * 1000 });
+    return { capability, checkout: checkout(req) };
   });
   app.get("/api/projects/:id/file-tools", async (req) => {
     const c = context(req);
@@ -141,8 +135,8 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
       throw new HubError(403, "FILE_LOCKED", "Разблокируй файлы для этой рабочей копии.");
     if ((b.op === "save" || b.op === "create") && !editableFile(b.path))
       throw new HubError(400, "FILE_FORMAT", "Выбери текстовый файл с поддерживаемым расширением.");
-    sessions.assertWritable(c.project.id);
-    const release = sessions.beginProjectDelivery(c.project.id);
+    sessions.authorizeExecution();
+    const release = sessions.beginManualFileOperation(c.project.id);
     try {
       const { capability: _, ...operation } = b;
       const value = await runFileTools(

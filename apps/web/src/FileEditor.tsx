@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
+import { FileCopySave } from "./FileCopySave";
 import { FileEditorPreview } from "./FileEditorPreview";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
@@ -23,6 +24,8 @@ export default function FileEditor({
   path,
   onClose,
   onSaved,
+  copy,
+  reviewSave,
 }: {
   projectId: string;
   capability: string;
@@ -30,6 +33,8 @@ export default function FileEditor({
   path: string;
   onClose: () => void;
   onSaved: () => void;
+  copy?: { file: File; source: string };
+  reviewSave?: (file: File) => void | Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     host = useRef<HTMLDivElement>(null);
@@ -43,7 +48,8 @@ export default function FileEditor({
     [closing, setClosing] = useState(false),
     [wrap, setWrap] = useState(false),
     [conflict, setConflict] = useState<FileSnapshot | null>(null),
-    [preview, setPreview] = useState<File | null>(null);
+    [preview, setPreview] = useState<File | null>(null),
+    [copyToSave, setCopyToSave] = useState<File | null>(null);
   const wrapping = useRef(new Compartment()),
     syntax = useRef(new Compartment()),
     endings = useRef(new Compartment());
@@ -58,7 +64,9 @@ export default function FileEditor({
   } | null>(null);
   const active = useRef(true);
   const lineSeparator = useRef("\n");
-  const key = `workspace-file-draft:${projectId}:${path}`,
+  const key = copy
+      ? `workspace-file-copy:${copy.source}`
+      : `workspace-file-draft:${projectId}:${path}`,
     url = `/projects/${encodeURIComponent(projectId)}/file-tools`;
   const exactLines = (text: string) => text.replace(/\r\n|\r|\n/g, lineSeparator.current);
   const current = () => exactLines(editor.current?.state.sliceDoc() ?? "");
@@ -90,8 +98,25 @@ export default function FileEditor({
   };
   const save = async () => {
     const base = baseline.current;
-    if (!base || !editor.current || saving.current || (current() === base.text && !pending.current))
+    if (
+      !base ||
+      !editor.current ||
+      saving.current ||
+      (!copy && current() === base.text && !pending.current)
+    )
       return;
+    if (copy) {
+      try {
+        await (reviewSave ?? setCopyToSave)(
+          new File([(base.bom ? "\ufeff" : "") + current()], path.split("/").at(-1)!, {
+            type: "text/plain",
+          }),
+        );
+      } catch (e) {
+        setError(messageOf(e));
+      }
+      return;
+    }
     saving.current = true;
     setBusy(true);
     setError("");
@@ -160,9 +185,31 @@ export default function FileEditor({
     let alive = true,
       timer: ReturnType<typeof setTimeout>;
     const controller = new AbortController();
-    void api<FileSnapshot>(`${url}?op=read&path=${encodeURIComponent(path)}`, {
-      signal: controller.signal,
-    })
+    const read = async (): Promise<FileSnapshot> => {
+      if (!copy)
+        return api<FileSnapshot>(`${url}?op=read&path=${encodeURIComponent(path)}`, {
+          signal: controller.signal,
+        });
+      if (copy.file.size > 2 * 1024 * 1024) throw Error("Редактор поддерживает текст до 2 МБ.");
+      const bytes = await copy.file.arrayBuffer();
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      if (text.includes("\0"))
+        throw Error("Это двоичный файл, текстовый редактор его не изменяет.");
+      const fingerprint = Array.from(
+        new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+        (v) => v.toString(16).padStart(2, "0"),
+      ).join("");
+      return {
+        path,
+        kind: "file",
+        size: copy.file.size,
+        fingerprint,
+        text,
+        checkout: copy.source,
+        bom: new Uint8Array(bytes).slice(0, 3).join(",") === "239,187,191",
+      };
+    };
+    void read()
       .then((snapshot) => {
         if (!alive || !host.current) return;
         let text = snapshot.text ?? "";
@@ -294,7 +341,7 @@ export default function FileEditor({
             {path}
             {dirty ? " *" : ""}
           </strong>
-          <small>{projectName} · Рабочая копия</small>
+          <small>{copy ? "Редактируемая копия" : `${projectName} · Рабочая копия`}</small>
         </div>
         <button
           type="button"
@@ -311,10 +358,16 @@ export default function FileEditor({
           <button
             type="button"
             className="primary"
-            disabled={!loaded || (!dirty && !pending.current) || busy}
+            disabled={!loaded || (!copy && !dirty && !pending.current) || busy}
             onClick={() => void save()}
           >
-            {busy ? "Сохраняю…" : "Сохранить"}
+            {busy
+              ? "Сохраняю…"
+              : reviewSave
+                ? "Проверить изменения"
+                : copy
+                  ? "Сохранить как…"
+                  : "Сохранить"}
           </button>
           <button
             type="button"
@@ -474,6 +527,23 @@ export default function FileEditor({
             Закрыть с черновиком
           </button>
         </div>
+      )}
+      {copyToSave && (
+        <FileCopySave
+          file={copyToSave}
+          onClose={() => setCopyToSave(null)}
+          onSaved={async () => {
+            const text = new TextDecoder("utf-8", { fatal: true }).decode(
+              await copyToSave.arrayBuffer(),
+            );
+            if (!active.current || !baseline.current) return;
+            baseline.current = { ...baseline.current, text };
+            setDirty(current() !== text);
+            persist();
+            setCopyToSave(null);
+            if (closing && current() === text) onClose();
+          }}
+        />
       )}
       {preview && <FileEditorPreview file={preview} onClose={() => setPreview(null)} />}
     </dialog>,

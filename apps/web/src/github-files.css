@@ -1,0 +1,103 @@
+@import "./workspace-window.css";
+:root[data-theme] dialog.workspace-window:is(.github-files, .github-file-review) {
+  width: min(1000px, calc(100vw - 24px));
+  height: min(850px, calc(var(--app-height, 100dvh) - 24px));
+  inset-inline: 0;
+  margin-inline: auto;
+  margin-block: 0;
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  bottom: auto;
+  transform: translateY(-50%);
+  max-width: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
+}
+:is(.github-files, .github-file-review) .panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+:is(.github-files, .github-file-review) .panel-heading > div {
+  min-width: 0;
+  display: grid;
+}
+:is(.github-files, .github-file-review) small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.github-file-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.github-file-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.github-file-branch,
+.github-file-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+.github-file-branch label,
+.github-file-body label {
+  display: grid;
+  gap: 6px;
+}
+.github-file-branch input,
+.github-file-body input {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+}
+.github-file-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+:is(.github-files, .github-file-review):focus {
+  outline: none;
+}
+.github-file-entry {
+  background: var(--window-screen);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.github-file-body {
+  padding: 12px;
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  background: var(--window-screen);
+  box-shadow: var(--window-screen-shadow);
+}
+.github-file-path {
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+.github-file-path span {
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.github-file-review-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 520px;
+  margin-top: 12px;
+}

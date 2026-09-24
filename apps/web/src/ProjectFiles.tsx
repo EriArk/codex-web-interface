@@ -10,6 +10,7 @@ import { CopyButton } from "./CopyButton";
 import { DownloadLink } from "./DownloadLink";
 import { FileBatchActions } from "./FileBatchActions";
 import { FileManagerActions } from "./FileManagerActions";
+import { GitHubFilesButton } from "./GitHubFiles";
 import { GuiPreviewButton } from "./GuiPreviewHost";
 import { Icon } from "./icons";
 import { DeliveryButton } from "./ProjectDeliveryHost";
@@ -211,14 +212,51 @@ export function ProjectFiles({
     setSelected((old) => (old === value ? "" : value));
     setFileError("");
   };
+  const accessRequest = useRef(false);
+  const setFileAccess = async (unlock: boolean) => {
+    if (unlock && grant.current) return grant.current;
+    if (accessRequest.current) throw Error("Дождись завершения разблокировки файлов.");
+    const revision = scopeRevision.current;
+    accessRequest.current = true;
+    setUnlocking(true);
+    try {
+      const value = await api<{ capability: string; checkout?: string }>(
+        `${base}/file-tools/access`,
+        {
+          method: "POST",
+          body: { unlock, ...(!unlock && grant.current ? { capability: grant.current } : {}) },
+        },
+      );
+      if (!scopeActive.current || scopeRevision.current !== revision) {
+        if (value.capability)
+          void api(`${base}/file-tools/access`, {
+            method: "POST",
+            body: { unlock: false, capability: value.capability },
+          }).catch(() => {});
+        return "";
+      }
+      grant.current = value.capability;
+      setCapability(value.capability);
+      setCheckout(value.checkout ?? "");
+      return value.capability;
+    } finally {
+      accessRequest.current = false;
+      setUnlocking(false);
+    }
+  };
+  const editFile = async (file: string, signal?: AbortSignal) => {
+    const token = await setFileAccess(true);
+    if (token && !signal?.aborted && scopeActive.current) setEditorPath(file);
+  };
   const download = (file: string) => (
     <DownloadLink
       href={`/api${base}/files/content?path=${encodeURIComponent(file)}${mode === "git" && staged ? "&version=index" : ""}`}
       name={file.split("/").at(-1)}
       sourceRevision={revision}
+      editLabel={capability ? "Редактировать" : "Разблокировать и редактировать"}
       onEdit={
-        capability && editableFile(file) && !(mode === "git" && staged)
-          ? () => setEditorPath(file)
+        editableFile(file) && !(mode === "git" && staged)
+          ? (signal) => editFile(file, signal)
           : undefined
       }
     >
@@ -230,10 +268,24 @@ export function ProjectFiles({
     <section className="inspector-selected" aria-label="Выбранный файл">
       <div className="inspector-actions">
         {download(selected)}
-        {capability && editableFile(selected) && (
-          <button type="button" className="secondary" onClick={() => setEditorPath(selected)}>
+        {editableFile(selected) && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={unlocking}
+            onClick={() => {
+              setFileError("");
+              void editFile(selected).catch((e) => {
+                if (scopeActive.current) setFileError(messageOf(e));
+              });
+            }}
+          >
             <Icon name="edit" size={16} />
-            {mode === "git" && staged ? "Редактировать рабочий файл" : "Редактировать"}
+            {!capability
+              ? "Разблокировать и редактировать"
+              : mode === "git" && staged
+                ? "Редактировать рабочий файл"
+                : "Редактировать"}
           </button>
         )}
         {mode === "git" && <CopyButton text={selected} label="Копировать путь" />}
@@ -370,44 +422,33 @@ export function ProjectFiles({
           <Icon name="close" />
         </button>
       </header>
+      {error && (
+        <p className="notice" role="alert">
+          {error}
+        </p>
+      )}
       <div className="project-tool-actions">
+        {mode === "git" && visible && (
+          <GitHubFilesButton projectId={projectId} projectName={projectName} />
+        )}
         <button
           type="button"
           className="secondary"
           disabled={unlocking || !!editorPath}
           aria-pressed={!!capability}
-          onClick={async () => {
-            const revision = scopeRevision.current;
-            setUnlocking(true);
+          onClick={() => {
             setError("");
-            try {
-              const value = await api<{ capability: string; checkout?: string }>(
-                `${base}/file-tools/access`,
-                {
-                  method: "POST",
-                  body: { unlock: !capability, ...(capability ? { capability } : {}) },
-                },
-              );
-              if (!scopeActive.current || scopeRevision.current !== revision) {
-                if (value.capability)
-                  void api(`${base}/file-tools/access`, {
-                    method: "POST",
-                    body: { unlock: false, capability: value.capability },
-                  }).catch(() => {});
-                return;
-              }
-              grant.current = value.capability;
-              setCapability(value.capability);
-              setCheckout(value.checkout ?? "");
-            } catch (e) {
+            void setFileAccess(!capability).catch((e) => {
               if (scopeActive.current) setError(messageOf(e));
-            } finally {
-              setUnlocking(false);
-            }
+            });
           }}
         >
           <Icon name="lock" size={16} />
-          {capability ? "Заблокировать файлы" : "Разблокировать файлы"}
+          {unlocking
+            ? "Проверяю доступ…"
+            : capability
+              ? "Заблокировать файлы"
+              : "Разблокировать файлы"}
         </button>
         {mode === "files" && visible && capability && (
           <ProjectFileUpload
@@ -618,11 +659,6 @@ export function ProjectFiles({
           {busy && (
             <p role="status">
               <span className="spinner" /> Загружаю…
-            </p>
-          )}
-          {error && (
-            <p className="notice" role="alert">
-              {error}
             </p>
           )}
           {mode === "files" && directory && (

@@ -2,11 +2,11 @@
 
 ## User flow
 
-Files and Git open locked. **Разблокировать файлы** obtains a short-lived grant for the current login session, personal Project, machine and checkout. Existing project activity/handoff guards apply when unlocking and on each mutation. Closing the window or changing Project releases the grant; reloading starts locked. This controls CodexWeb file actions, not arbitrary commands in the user's own terminal.
+Files and Git open locked. **Разблокировать файлы** obtains a short-lived grant for the current login session, personal Project, machine and checkout. Owner update, 24 September: manual writes and uploads remain available while native Codex work runs. Unlock verifies the checkout without acquiring the native/Git idle guard; manual mutations serialize only with other manual writes to the same machine/checkout. Authentication and execution authority still apply. Closing the window or changing Project releases the grant; reloading starts locked. This controls CodexWeb file actions, not arbitrary commands in the user's own terminal.
 
-Supported text files expose **Редактировать** after unlocking. Git explicitly edits the working file, including when viewing a staged diff. CodeMirror loads lazily and provides highlighting, line numbers, search, undo/redo, wrapping and Ctrl/Cmd+S. Save refreshes Files/Git without staging, committing or disturbing the chat draft. Dirty close offers saving, discarding, continuing or retaining the local draft.
+Supported text files expose **Разблокировать и редактировать** while locked, and **Редактировать** after unlocking. Git explicitly edits the working file, including when viewing a staged diff. CodeMirror loads lazily and provides highlighting, line numbers, search, undo/redo, wrapping and Ctrl/Cmd+S. Save refreshes Files/Git without staging, committing or disturbing the chat draft. Dirty close offers saving, discarding, continuing or retaining the local draft.
 
-The working-copy full viewer also exposes **Редактировать** while Files is unlocked. The editor opens above the mounted viewer; successful saving refreshes its bytes, and closing returns to the same file. The Git index viewer, saved Results, uploads and shared publications do not silently acquire a writable working-copy identity. Git's separate, explicitly named working-file edit action remains available.
+The universal viewer exposes editing for supported text from every entry point. An exact working-copy URL obtains its own grant when needed. The editor opens above the mounted viewer; successful saving refreshes its bytes, and closing returns to the same file. The Git index viewer, saved Results, uploads and shared publications do not silently acquire a writable working-copy identity. Git's separate, explicitly named working-file edit action remains available.
 
 **Предпросмотр** opens a frozen snapshot of the current editor draft in the common file workspace without writing the project. Markdown renders as a document, HTML uses the existing isolated private sandbox, SVG uses the static sanitizer, and other supported sources remain text. **К редактору** and Escape return to the mounted editor with its undo history and draft intact. **Скачать черновик** exports its exact UTF-8 bytes, including retained BOM/line endings, independently of saving the project. The toolbar groups save/preview and text controls in explicit rows; editor dialogs are centered on the available viewport independently of parent windows.
 
@@ -51,7 +51,7 @@ Upload routes require the same session/project/checkout-bound write grant on eve
 
 For local Linux execution, receipts live beside the personal runtime database on its persistent volume, not in the disposable engine container home. Windows receipts remain on the execution machine in the user's private `.codex-web/file-operations` directory.
 
-Filesystem checks cannot form a transaction with arbitrary external editors/processes. The normal Hub work guard prevents competing known Codex operations; fingerprint checks detect observed external changes. In particular, atomic replacement is not an OS-level compare-and-swap against an unrelated process writing in the final check/replace interval. Do not claim universal race-free filesystem access. Partial/unknown operations may require inspecting the actual files and the retained private receipt/recovery bytes.
+Filesystem checks cannot form a transaction with arbitrary external editors/processes. The owner explicitly permits concurrent native and manual work; fingerprint checks detect observed external changes. In particular, atomic replacement is not an OS-level compare-and-swap against an unrelated process writing in the final check/replace interval. Do not claim universal race-free filesystem access. Partial/unknown operations may require inspecting the actual files and the retained private receipt/recovery bytes.
 
 ## Bounds
 
@@ -72,3 +72,33 @@ An unresolved save receipt requires close handling even if the user undoes text 
 - Actual existing Hub → system SSH → Windows Node transport exercised only in a disposable project-local fixture: create/read/save/move/delete and completed receipt recovery. No desktop restart or live source-file mutation.
 
 This feature completes the implementation session following the [draft review](FILES_DRAFT_REVIEW_2026-09-23.md). Installation status is tracked separately by the normal guarded updater and its checkpoint receipts.
+
+
+## Universal editing and direct GitHub files (24 September)
+
+Results, uploads and immutable shared publications open complete UTF-8 bytes in
+CodeMirror as an editable copy (up to 2 MiB), never just the viewer excerpt.
+Save As offers an exact-byte download or an explicitly chosen project/folder.
+Project saving reuses the ordinary chunk upload, receipt and replace/rename/skip
+collision flow. The source artifact stays unchanged. Working-copy URLs preserve
+the exact project and path; successful saves refresh the mounted viewer.
+
+Git → Files GitHub reads a selected branch and immutable HEAD through the
+installed Windows GitHub worker. Supported UTF-8 files up to 96 KiB open in the
+same editor. A separate review shows the diff, branch, filename and commit title;
+preparation checks repository/account, old file SHA and branch HEAD. The explicit
+commit uses expectedHeadOid; protected-branch policy is honored by GitHub.
+Manual edits may target policy files and the default branch. Existing automated
+project-preparation restrictions remain separate and unchanged.
+
+Per-account SQLite `repository_file_operations` records intent before dispatch
+and retains machine receipts. Unknown outcomes block only a fresh operation for
+that project and are checked by status; repeated confirmation never replays a
+commit. Active/unknown writes also participate in deployment admission. Local
+checkout files are not changed by the remote commit. Private recovery drafts are
+account-local and retain exact repository/identity/branch/source context.
+
+Verification: focused Hub/file/upload/GitHub worker tests cover active Codex,
+identity changes, stale branch/file versions, path checks, lost acknowledgements
+and single-commit reconciliation. Browser acceptance and installed worker checks
+are recorded in the release evidence; physical-device acceptance remains pending.

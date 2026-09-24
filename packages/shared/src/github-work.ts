@@ -12,7 +12,43 @@ export const githubLoginSchema = z
   .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/);
 const number = z.number().int().positive().max(2147483647);
 const body = z.string().min(1).max(16000);
+export const repositoryFilePathSchema = z
+  .string()
+  .min(1)
+  .max(240)
+  .refine(
+    (v) =>
+      Array.from(v).every((c) => c !== "\\" && c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127) &&
+      v.split("/").every((p) => !!p && p !== "." && p !== ".." && p.toLowerCase() !== ".git"),
+  );
+export const repositoryFileInput = z
+  .object({
+    kind: z.literal("repository-file"),
+    branch: z.string().min(1).max(240),
+    head: z.string().regex(/^[a-f0-9]{40}$/),
+    files: z
+      .array(
+        z
+          .object({
+            path: repositoryFilePathSchema,
+            content: z.string().max(131072),
+            previous: z.string().regex(/^[a-f0-9]{40}$/),
+          })
+          .strict(),
+      )
+      .length(1),
+    title: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export type RepositoryFiles = {
+  branch: string;
+  head: string;
+  path: string;
+  entries?: { name: string; path: string; kind: "file" | "directory" }[];
+  file?: { path: string; sha: string; content: string | null; bytes: number };
+};
 export const githubWorkInputSchema = z.discriminatedUnion("kind", [
+  repositoryFileInput,
   preparationBranchInput,
   preparationFilesInput,
   preparationSeedInput,
@@ -43,6 +79,13 @@ export const githubWorkInputSchema = z.discriminatedUnion("kind", [
 ]);
 export type GitHubWorkInput = z.infer<typeof githubWorkInputSchema>;
 export const githubWorkQuerySchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("repository-files"),
+      branch: z.string().max(240),
+      path: repositoryFilePathSchema.or(z.literal("")),
+    })
+    .strict(),
   z
     .object({ kind: z.literal("preparation"), paths: z.array(z.string().min(1).max(240)).max(20) })
     .strict(),
@@ -121,6 +164,7 @@ export interface GitHubWorkComment {
 }
 export type GitHubWorkObservation = GitHubRepositoryAccess & {
   preparation?: PreparationRepository;
+  repositoryFiles?: RepositoryFiles;
   commit?: GitHubCommitDetail;
   evidence?: { source: string; text: string; truncated: boolean };
   activity?: GitHubActivitySource[];

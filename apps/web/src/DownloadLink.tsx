@@ -1,5 +1,5 @@
 import { isFileSource } from "@codex-web/shared";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { workspaceUrl } from "./accountStorage.ts";
 import { FilePreview } from "./FilePreview";
 import { FileViewerDialog } from "./FileViewerDialog";
@@ -73,6 +73,7 @@ export function DownloadLink({
   className = "secondary",
   directDownload = false,
   onEdit,
+  editLabel = "Редактировать",
   sourceRevision = 0,
 }: {
   href?: string;
@@ -81,8 +82,9 @@ export function DownloadLink({
   children: ReactNode;
   className?: string;
   directDownload?: boolean;
-  /** Only supplied by the unlocked, exact working-copy owner. Saved artifacts are immutable. */
-  onEdit?: () => void;
+  /** Working-copy action, including explicit unlock. Other sources use the common copy editor. */
+  onEdit?: (signal?: AbortSignal) => void | Promise<void>;
+  editLabel?: string;
   sourceRevision?: number;
 }) {
   const [open, setOpen] = useState(false),
@@ -91,6 +93,25 @@ export function DownloadLink({
     [error, setError] = useState(""),
     [direct, setDirect] = useState<{ name: string; bytes: number } | null>(null),
     [retry, setRetry] = useState(0);
+  const editRequest = useRef<AbortController | null>(null);
+  const [editing, setEditing] = useState(false),
+    [editError, setEditError] = useState("");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Closing or changing source cancels this exact editor launch.
+  useEffect(() => {
+    setEditing(false);
+    setEditError("");
+    return () => {
+      editRequest.current?.abort();
+      editRequest.current = null;
+    };
+  }, [open, href]);
+  useEffect(() => {
+    const saved = (event: Event) => {
+      if ((event as CustomEvent).detail?.source === href) setRetry((v) => v + 1);
+    };
+    window.addEventListener("workspace-file-saved", saved);
+    return () => window.removeEventListener("workspace-file-saved", saved);
+  }, [href]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly starts a fresh bounded download.
   useEffect(() => {
     if (!open) {
@@ -224,12 +245,37 @@ export function DownloadLink({
           name={direct?.name || file?.name || name}
           file={file}
           source={href}
+          editProvided={!!onEdit}
           onClose={() => setOpen(false)}
           actions={
             <>
               {onEdit && (
-                <button type="button" className="secondary" onClick={onEdit}>
-                  Редактировать
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={editing}
+                  onClick={async () => {
+                    if (editRequest.current) return;
+                    const controller = new AbortController();
+                    editRequest.current = controller;
+                    setEditing(true);
+                    setEditError("");
+                    try {
+                      await onEdit(controller.signal);
+                    } catch (e) {
+                      if (!controller.signal.aborted)
+                        setEditError(
+                          e instanceof Error ? e.message : "Не удалось открыть редактор.",
+                        );
+                    } finally {
+                      if (!controller.signal.aborted) {
+                        editRequest.current = null;
+                        setEditing(false);
+                      }
+                    }
+                  }}
+                >
+                  {editing ? "Открываю редактор…" : editLabel}
                 </button>
               )}
               {file && shareable ? (
@@ -284,6 +330,7 @@ export function DownloadLink({
             </div>
           )}
           {error && <p role="alert">{error}</p>}
+          {editError && <p role="alert">{editError}</p>}
           {error && (
             <button type="button" onClick={() => setRetry((v) => v + 1)}>
               Повторить

@@ -157,7 +157,7 @@ const commit=(branch,message,files,parent)=>{const sha=crypto.createHash('sha1')
 if(parts[3]==='commits'&&parts.length===5){const ref=decodeURIComponent(parts[4]),sha=s.refs[ref]||ref,c=s.commits[sha];answer(c?200:409,c||{message:'Git Repository is empty.'});return;}
 if(parts[3]==='git'&&parts[4]==='ref'){const ref=parts.slice(6).join('/');answer(s.refs[ref]?200:404,{object:{sha:s.refs[ref]}});return;}
 if(parts[3]==='git'&&parts[4]==='refs'&&method==='POST'){s.refs[body.ref.replace('refs/heads/','')]=body.sha;changed({object:{sha:body.sha}});return;}
-if(parts[3]==='contents'){const name=parts.slice(4).map(decodeURIComponent).join('/');if(method==='PUT'){const sha=commit(body.branch,body.message,[{path:name,content:body.content}],null);changed({commit:{sha}});return;}const ref=new URLSearchParams(endpoint.split('?')[1]).get('ref'),content=s.commits[ref]?.tree[name];if(content===undefined){const prefix=name?name+'/':'',entries=[...new Set(Object.keys(s.commits[ref]?.tree||{}).filter(k=>k.startsWith(prefix)).map(k=>k.slice(prefix.length).split('/')[0]))].map(v=>({name:v,type:Object.hasOwn(s.commits[ref]?.tree||{},prefix+v)?'file':'dir'}));if(entries.length || !name){answer(200,entries);return;}}answer(content===undefined?404:200,{type:'file',path:name,sha:content===undefined?undefined:blob(content),size:content===undefined?0:Buffer.from(content,'base64').length,encoding:'base64',content});return;}
+if(parts[3]==='contents'){const name=parts.slice(4).map(decodeURIComponent).join('/');if(method==='PUT'){const sha=commit(body.branch,body.message,[{path:name,content:body.content}],null);changed({commit:{sha}});return;}const ref=new URLSearchParams(endpoint.split('?')[1]).get('ref'),content=s.commits[ref]?.tree[name];if(content===undefined){const prefix=name?name+'/':'',entries=[...new Set(Object.keys(s.commits[ref]?.tree||{}).filter(k=>k.startsWith(prefix)).map(k=>k.slice(prefix.length).split('/')[0]))].map(v=>({name:v,path:prefix+v,type:Object.hasOwn(s.commits[ref]?.tree||{},prefix+v)?'file':'dir'}));if(entries.length || !name){answer(200,entries);return;}}answer(content===undefined?404:200,{type:'file',path:name,sha:content===undefined?undefined:blob(content),size:content===undefined?0:Buffer.from(content,'base64').length,encoding:'base64',content});return;}
 if(endpoint==='graphql'){const v=body.variables.input,branch=v.branch.branchName;if(s.refs[branch]!==v.expectedHeadOid){answer(200,{errors:[{type:'STALE_DATA'}]});return;}const oid=commit(branch,v.message.headline+'\\n\\n'+v.message.body,v.fileChanges.additions.map(f=>({path:f.path,content:f.contents})),v.expectedHeadOid);changed({data:{createCommitOnBranch:{commit:{oid}}}});return;}
 if(parts[3]==='pulls'&&parts.length===4&&method==='POST'){const value={number:78,user:s.identity,title:body.title,body:body.body,head:{sha:s.refs[body.head],ref:body.head,repo:{full_name:'Owner/Project'}},base:{ref:body.base},state:'open'};s.prs.push(value);changed(value);return;}
 }
@@ -728,4 +728,74 @@ test("activity attention uses numeric recipients and bounded head-specific check
   assert.equal(value.activity.find((v) => v.kind === "pr").checks.state, "success");
   assert(!value.activity.find((v) => v.kind === "pr").attention.some((v) => v.kind === "checks"));
   assert((await f.calls()).every((c) => c.method === "GET"));
+});
+
+test("direct repository files read immutable sources and commit any text path on the chosen branch exactly once", async (t) => {
+  const f = await preparationFixture(t);
+  const listing = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch: "", path: "" },
+  });
+  assert.equal(listing.repositoryFiles.branch, "main");
+  assert(listing.repositoryFiles.entries.some((v) => v.path === "AGENTS.md"));
+  const read = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch: "main", path: "AGENTS.md" },
+  });
+  const file = read.repositoryFiles.file;
+  const input = {
+    kind: "repository-file",
+    branch: "main",
+    head: f.sha,
+    title: "Manual policy edit",
+    files: [{ path: file.path, previous: file.sha, content: encoded("Owner reviewed\r\n") }],
+  };
+  const p = await f.prepare(input);
+  await f.save({ drop: true });
+  assert.equal((await f.apply(p)).state, "unknown");
+  await f.save({ unavailable: false });
+  const done = await f.probe({ op: "status", id: p.id });
+  assert.equal(done.state, "completed");
+  assert.equal((await f.apply(p)).state, "completed");
+  const state = await f.get();
+  assert.equal(state.refs.main, done.result.sha);
+  assert.equal(state.commits[state.refs.main].tree["AGENTS.md"], input.files[0].content);
+  assert.equal(state.commits[state.refs.main].tree["README.md"], encoded("Original\r\n"));
+  assert.equal((await f.calls()).filter((v) => v.endpoint === "graphql").length, 1);
+});
+
+test("direct repository file edits refuse stale heads, changed file fingerprints, account/access changes and traversal", async (t) => {
+  const f = await preparationFixture(t);
+  const read = await f.probe({
+    op: "observe",
+    query: { kind: "repository-files", branch: "main", path: "README.md" },
+  });
+  const input = {
+    kind: "repository-file",
+    branch: "main",
+    head: f.sha,
+    title: "Manual edit",
+    files: [
+      { path: "README.md", previous: read.repositoryFiles.file.sha, content: encoded("New") },
+    ],
+  };
+  for (const path of ["../secret", "a/../README.md", ".git/config", "a//b"])
+    await assert.rejects(
+      f.prepare({ ...input, files: [{ ...input.files[0], path }] }),
+      /GITHUB_WORK_REQUEST/,
+    );
+  await assert.rejects(
+    f.prepare({ ...input, files: [{ ...input.files[0], previous: "f".repeat(40) }] }),
+    /GITHUB_WORK_CHANGED/,
+  );
+  const p = await f.prepare(input);
+  await f.save({ identity: { id: 99, login: "Owner" } });
+  assert.equal((await f.apply(p)).state, "failed");
+  await f.save({ identity: { id: 11, login: "Owner" }, access: "read" });
+  await assert.rejects(f.prepare(input), /GITHUB_WORK_ACCESS/);
+  await f.save({ access: "write" });
+  const p2 = await f.prepare(input);
+  await f.save({ refs: { main: "b".repeat(40) } });
+  assert.equal((await f.apply(p2)).state, "failed");
+  assert((await f.calls()).every((v) => v.method === "GET"));
 });

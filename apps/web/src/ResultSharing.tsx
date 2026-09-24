@@ -462,6 +462,7 @@ export function SharedResult({ card }: { card: SharedResultCard }) {
       {opened && (error || !current || html) ? (
         <FileViewerDialog
           name={card.title}
+          source={!error && current ? url : undefined}
           onClose={() => setOpened(false)}
           actions={
             !error && current ? (

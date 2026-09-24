@@ -53,6 +53,7 @@ const empty = (): Draft => ({
   state: "closed",
 });
 const names = {
+  "repository-file": "Изменение файла GitHub",
   "preparation-branch": "Ветка подготовки",
   "preparation-files": "Документы проекта",
   "preparation-seed": "Первый документ",

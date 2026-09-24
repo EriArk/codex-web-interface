@@ -309,6 +309,12 @@ export async function githubWorkProbe(
     !v.includes("@{") &&
     !v.startsWith("-") &&
     v.split("/").every((p) => p && !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock"));
+  const repositoryFilePath = (v: unknown): v is string =>
+    typeof v === "string" &&
+    v.length > 0 &&
+    v.length <= 240 &&
+    Array.from(v).every((c) => c !== "\\" && c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127) &&
+    v.split("/").every((p) => !!p && p !== "." && p !== ".." && p.toLowerCase() !== ".git");
   const preparationPath = (v: unknown): v is string =>
     typeof v === "string" &&
     v.length <= 240 &&
@@ -327,10 +333,10 @@ export async function githubWorkProbe(
           !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p),
       ) &&
     !/(?:^|\/)(?:AGENTS|CODEXWEB)\.md$/i.test(v);
-  const preparationFile = (f: any) => {
+  const preparationFile = (f: any, manual = false) => {
     exact(f, ["path", "content", "previous"]);
     valid(
-      preparationPath(f.path) &&
+      (manual ? repositoryFilePath(f.path) : preparationPath(f.path)) &&
         typeof f.content === "string" &&
         f.content.length <= 131072 &&
         Buffer.from(f.content, "base64").toString("base64") === f.content &&
@@ -410,11 +416,16 @@ export async function githubWorkProbe(
       const repo = await preparationRepository([]);
       if (repo.head || repo.branch !== v.branch || v.file.previous !== null)
         fail("GITHUB_WORK_CHANGED");
-    } else if (v.kind === "preparation-files" || v.kind === "preparation-pr") {
+    } else if (
+      v.kind === "preparation-files" ||
+      v.kind === "repository-file" ||
+      v.kind === "preparation-pr"
+    ) {
       const r = await must(`${prefix}/git/ref/heads/${v.branch}`);
       if (r.object?.sha !== v.head) fail("GITHUB_WORK_CHANGED");
-      if (v.kind === "preparation-files") {
+      if (v.kind === "preparation-files" || v.kind === "repository-file") {
         if (
+          v.kind === "preparation-files" &&
           !v.branch.startsWith("codexweb/prepare/") &&
           ((await preparationRepository([])).branch !== v.branch ||
             !(await seededHead(v.branch, v.head)))
@@ -428,7 +439,10 @@ export async function githubWorkProbe(
   const validateQuery = (q: GitHubWorkQuery) => {
     valid(object(q));
     if (q.kind === "identity" || q.kind === "activity") exact(q, ["kind"]);
-    else if (q.kind === "preparation") {
+    else if (q.kind === "repository-files") {
+      exact(q, ["kind", "branch", "path"]);
+      valid((q.branch === "" || branch(q.branch)) && (q.path === "" || repositoryFilePath(q.path)));
+    } else if (q.kind === "preparation") {
       exact(q, ["kind", "paths"]);
       valid(
         Array.isArray(q.paths) &&
@@ -462,7 +476,56 @@ export async function githubWorkProbe(
       result: GitHubWorkObservation = { ...access, query: q };
     if (q.kind === "identity") return result;
     if (access.access === "unavailable") fail("GITHUB_WORK_ACCESS");
-    if (q.kind === "preparation") {
+    if (q.kind === "repository-files") {
+      const repo = await must(prefix),
+        selected = q.branch || repo.default_branch;
+      valid(branch(selected));
+      const tip = await must(`${prefix}/git/ref/heads/${selected}`);
+      valid(sha(tip.object?.sha));
+      const head = tip.object.sha as string;
+      const value = await must(
+        `${prefix}/contents${q.path ? "/" + q.path.split("/").map(encodeURIComponent).join("/") : ""}?ref=${head}`,
+      );
+      const snapshot: NonNullable<GitHubWorkObservation["repositoryFiles"]> = {
+        branch: selected,
+        head,
+        path: q.path,
+      };
+      if (Array.isArray(value)) {
+        if (value.length >= 1000) fail("GITHUB_WORK_DATA");
+        snapshot.entries = value
+          .filter(
+            (e: any) =>
+              (e.type === "file" || e.type === "dir") &&
+              repositoryFilePath(e.path) &&
+              e.path === (q.path ? q.path + "/" : "") + e.name,
+          )
+          .map((e: any) => ({
+            name: e.name,
+            path: e.path,
+            kind: e.type === "dir" ? "directory" : "file",
+          }));
+      } else {
+        valid(
+          value?.type === "file" &&
+            value.path === q.path &&
+            sha(value.sha) &&
+            !value.target &&
+            !value.submodule_git_url &&
+            Number.isSafeInteger(value.size),
+        );
+        snapshot.file = {
+          path: q.path,
+          sha: value.sha,
+          bytes: value.size,
+          content:
+            value.size <= 98304 && value.encoding === "base64" && typeof value.content === "string"
+              ? value.content.replace(/\s/g, "")
+              : null,
+        };
+      }
+      result.repositoryFiles = snapshot;
+    } else if (q.kind === "preparation") {
       result.preparation = await preparationRepository(q.paths);
     } else if (q.kind === "evidence") {
       const [kind, id] = q.source.split(":");
@@ -757,7 +820,7 @@ export async function githubWorkProbe(
     if (v.kind === "preparation-branch") {
       exact(v, ["kind", "branch", "head"]);
       valid(/^codexweb\/prepare\/[a-f0-9-]{36}$/.test(v.branch) && sha(v.head));
-    } else if (v.kind === "preparation-files") {
+    } else if (v.kind === "preparation-files" || v.kind === "repository-file") {
       exact(v, ["kind", "branch", "head", "files", "title"]);
       valid(
         branch(v.branch) &&
@@ -768,7 +831,10 @@ export async function githubWorkProbe(
           v.files.length > 0 &&
           v.files.length <= 16,
       );
-      v.files.forEach(preparationFile);
+      v.files.forEach((f) => {
+        preparationFile(f, v.kind === "repository-file");
+      });
+      if (v.kind === "repository-file") valid(v.files.length === 1 && sha(v.files[0]?.previous));
       valid(
         v.files.reduce((n, f) => n + f.content.length, 0) <= 131072 &&
           new Set(v.files.map((f) => f.path.toLowerCase())).size === v.files.length &&
@@ -971,7 +1037,7 @@ export async function githubWorkProbe(
       if (["invite", "remove"].includes(input.kind) && access.access !== "admin")
         fail("GITHUB_WORK_ACCESS");
       if (
-        input.kind.startsWith("preparation-") &&
+        (input.kind.startsWith("preparation-") || input.kind === "repository-file") &&
         !["write", "maintain", "admin"].includes(access.access)
       )
         fail("GITHUB_WORK_ACCESS");
@@ -1163,16 +1229,20 @@ export async function githubWorkProbe(
         const v = await http(`${prefix}/git/ref/heads/${input.branch}`);
         if (v.status === 200 && v.value?.object?.sha === input.head)
           return finish("completed", undefined, { sha: input.head, branch: input.branch });
-      } else if (input.kind === "preparation-files" || input.kind === "preparation-seed") {
+      } else if (
+        input.kind === "preparation-files" ||
+        input.kind === "repository-file" ||
+        input.kind === "preparation-seed"
+      ) {
         const v = await http(`${prefix}/commits/${encodeURIComponent(input.branch)}`);
         const c = v.value;
-        const files = input.kind === "preparation-files" ? input.files : [input.file];
+        const files = input.kind !== "preparation-seed" ? input.files : [input.file];
         if (
           v.status === 200 &&
           sha(c?.sha) &&
           c.commit?.message === input.title + "\n\n" + marker &&
           c.author?.id === receipt.snapshot.identity.id &&
-          (input.kind === "preparation-files"
+          (input.kind !== "preparation-seed"
             ? c.parents?.length === 1 && c.parents[0].sha === input.head
             : c.parents?.length === 0)
         ) {
@@ -1303,7 +1373,7 @@ export async function githubWorkProbe(
           message: input.title + "\n\n" + marker,
           content: input.file.content,
         };
-      } else if (input.kind === "preparation-files") {
+      } else if (input.kind === "preparation-files" || input.kind === "repository-file") {
         endpoint = "graphql";
         method = "POST";
         payload = {

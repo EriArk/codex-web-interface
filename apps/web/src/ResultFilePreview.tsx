@@ -17,6 +17,15 @@ export function ResultFilePreview({ result, onClose }: { result: Result; onClose
     [url, setUrl] = useState(""),
     [error, setError] = useState(""),
     [truncated, setTruncated] = useState(false);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const saved = (event: Event) => {
+      if ((event as CustomEvent).detail?.source === path) setRevision((v) => v + 1);
+    };
+    window.addEventListener("workspace-file-saved", saved);
+    return () => window.removeEventListener("workspace-file-saved", saved);
+  }, [path]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: An exact working-source save refreshes the viewer bytes.
   useEffect(() => {
     setFile(null);
     setUrl("");
@@ -72,7 +81,7 @@ export function ResultFilePreview({ result, onClose }: { result: Result; onClose
       controller.abort();
       if (resource) URL.revokeObjectURL(resource);
     };
-  }, [path, mime, title, kind, limit]);
+  }, [path, mime, title, kind, limit, revision]);
   return (
     <FileViewerDialog
       name={title}

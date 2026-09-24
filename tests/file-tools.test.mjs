@@ -184,7 +184,7 @@ test("source changed during delete capture is retained and restored, never recur
   }
   assert.equal(await fs.readFile(file, "utf8"), "external edit");
 });
-test("Hub write grants bind session, project, root, relock and active work", async (t) => {
+test("Hub manual grants bind session, project, root and relock while allowing active native work", async (t) => {
   const root = await fixture(t),
     f = await handoffFixture();
   t.after(() => f.close());
@@ -198,6 +198,7 @@ test("Hub write grants bind session, project, root, relock and active work", asy
       headers,
       payload: body,
     });
+  f.store.db.prepare("UPDATE threads SET status='running' WHERE id=?").run(f.thread.id);
   const unlocked = await post("/access", { unlock: true });
   assert.equal(unlocked.statusCode, 200, unlocked.body);
   const { capability } = unlocked.json();
@@ -207,7 +208,7 @@ test("Hub write grants bind session, project, root, relock and active work", asy
   assert((await fs.readdir(join(f.sessions.config.hub.resultsPath, "file-operations"))).length > 0);
   await assert.rejects(fs.stat(join(root, "..", ".codex-web")), { code: "ENOENT" });
   f.store.db.prepare("UPDATE threads SET status='running' WHERE id=?").run(f.thread.id);
-  assert.equal((await post("", { ...body, id: randomUUID(), path: "busy.txt" })).statusCode, 409);
+  assert.equal((await post("", { ...body, id: randomUUID(), path: "busy.txt" })).statusCode, 200);
   f.store.db.prepare("UPDATE threads SET status='idle' WHERE id=?").run(f.thread.id);
   f.sessions.config.projects[0].workingDirectory = root + "/different";
   assert.equal((await post("", body)).statusCode, 403);

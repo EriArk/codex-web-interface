@@ -119,6 +119,15 @@ export function deploymentBlockers(
       "Подготовка проекта ещё не завершена",
     );
   }
+  if (
+    store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='repository_file_operations'").get()
+  ) {
+    add(
+      "repository_file",
+      "SELECT count(*) n FROM repository_file_operations WHERE json_extract(value,'$.state') IN ('preparing','running','unknown')",
+      "Сохранение файла GitHub ещё не подтверждено",
+    );
+  }
   const preferences = store.preferences();
   if (store.db.prepare("SELECT 1 FROM sqlite_master WHERE name='issue_drawer_batches'").get()) {
     add(

@@ -8,6 +8,7 @@ import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import "./project-file-upload.css";
 
 type Row = {
+  copyId?: string;
   id: string;
   name: string;
   originalName: string;
@@ -36,6 +37,8 @@ export function ProjectFileUpload({
   checkout,
   folder,
   onDone,
+  initialFile,
+  onDismiss,
 }: {
   projectId: string;
   projectName: string;
@@ -43,6 +46,8 @@ export function ProjectFileUpload({
   checkout: string;
   folder: string;
   onDone: (path: string) => void;
+  initialFile?: File;
+  onDismiss?: () => void;
 }) {
   const [opened, setOpened] = useState(false),
     [rows, setRows] = useState<Row[]>([]),
@@ -114,6 +119,32 @@ export function ProjectFileUpload({
       window.removeEventListener("private-session-ended", end);
     };
   }, [key]);
+  // A frozen edited copy enters the normal upload/replacement flow, never a second writer.
+  const seeded = useRef("");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Seed this frozen copy once after restoring the ordinary queue.
+  useEffect(() => {
+    if (!initialFile || seeded.current) return;
+    seeded.current = crypto.randomUUID();
+    try {
+      const row: Row = {
+        copyId: seeded.current,
+        id: crypto.randomUUID(),
+        name: initialFile.name,
+        originalName: initialFile.name,
+        bytes: initialFile.size,
+        folder,
+        status: "queued",
+        offset: 0,
+        started: false,
+      };
+      files.current.set(row.id, initialFile);
+      update([...records.current.filter((r) => !["done", "cancelled"].includes(r.status)), row]);
+      setOpened(true);
+    } catch (e) {
+      setError(messageOf(e));
+      setOpened(true);
+    }
+  }, [initialFile, folder]);
   const pathOf = (row: Row) => (row.folder ? row.folder + "/" + row.name : row.name);
   const cancelRow = async (row: Row) => {
     const state = row.started
@@ -124,7 +155,7 @@ export function ProjectFileUpload({
       : null;
     if (state?.result?.file) {
       change(row.id, { status: "done", offset: row.bytes, error: undefined });
-      onDone(state.result.file.path);
+      if (!initialFile || row.copyId === seeded.current) onDone(state.result.file.path);
       return false;
     }
     change(row.id, { status: "cancelled", error: undefined });
@@ -185,7 +216,7 @@ export function ProjectFileUpload({
       }
       if (state.result?.file) {
         change(initial.id, { status: "done", offset: initial.bytes });
-        onDone(state.result.file.path);
+        if (!initialFile || initial.copyId === seeded.current) onDone(state.result.file.path);
         return;
       }
       if (state.bytes !== initial.bytes || state.offset < 0 || state.offset > initial.bytes)
@@ -217,7 +248,7 @@ export function ProjectFileUpload({
       });
       change(initial.id, { status: "done", error: undefined });
       files.current.delete(initial.id);
-      onDone(result.file.path);
+      if (!initialFile || initial.copyId === seeded.current) onDone(result.file.path);
     } catch (e) {
       if (!active.current) return;
       const row = { ...initial, started };
@@ -275,6 +306,7 @@ export function ProjectFileUpload({
     paused.current = true;
     control.current?.abort.abort();
     setOpened(false);
+    onDismiss?.();
   };
   const pending = rows.filter((r) => !["done", "cancelled"].includes(r.status)).length;
   return (

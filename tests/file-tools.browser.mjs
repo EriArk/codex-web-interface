@@ -86,10 +86,13 @@ for (const [engine, type] of [
     const text = async (value) => {
       await editor.locator(".cm-content").fill(value);
     };
+    f.store.db.prepare("UPDATE threads SET status='running' WHERE id=?").run(f.thread.id);
     await open();
     await expect(pane.getByRole("button", { name: "Редактировать", exact: true })).toHaveCount(0);
     await pane.getByRole("button", { name: "Открыть файл", exact: true }).click();
-    await expect(viewer.getByRole("button", { name: "Редактировать", exact: true })).toHaveCount(0);
+    await expect(
+      viewer.getByRole("button", { name: "Разблокировать и редактировать", exact: true }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(viewer).toHaveCount(0);
     await expect(pane).toBeVisible();
@@ -118,6 +121,7 @@ for (const [engine, type] of [
     await expect
       .poll(() => readFile(join(root, "sample.ts"), "utf8"))
       .toBe("export const value = 2;\r\n");
+    f.store.db.prepare("UPDATE threads SET status='idle' WHERE id=?").run(f.thread.id);
     assert.match(git("diff").toString(), /value = 2/);
     assert.equal(git("diff", "--cached").toString(), "");
     await editor.getByRole("button", { name: "Закрыть редактор", exact: true }).click();

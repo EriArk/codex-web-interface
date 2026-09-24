@@ -64,6 +64,7 @@ import { registerQueue } from "./queue.js";
 import { registerQuickCapture } from "./quick-capture.js";
 import { registerRelays } from "./relay-routes.js";
 import { connectRemote, remoteProvider } from "./remote.js";
+import { registerRepositoryFiles } from "./repository-files.js";
 import { installResultCaptureLimit } from "./result-capture-limit.js";
 import { resolveResultReference, resultReferenceSchema } from "./result-references.js";
 import { Sessions } from "./sessions.js";
@@ -781,6 +782,7 @@ export async function createApp(
     options.collaborationPolicy?.issuesPublished,
   );
   registerIssueDrawer(app, issueDrawer);
+  registerRepositoryFiles(app, sessions, issueDrawer);
   const preparation = new ProjectPreparations(sessions, gpt, projectGpts, issueDrawer);
   registerProjectPreparation(app, preparation, projectWork);
   registerNativePlans(app, new NativePlans(sessions, projectWork.context));

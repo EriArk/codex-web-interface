@@ -312,6 +312,23 @@ export class Sessions extends EventEmitter {
   }
   private machineWrites = new Map<string, number>();
   private deliveryProjects = new Set<string>();
+  private manualFileWrites = new Set<string>();
+  beginManualFileOperation(projectId: string): () => void {
+    this.authorizeExecution();
+    const p = this.project(projectId),
+      machine = this.catalog.machine(p.machineId);
+    const path =
+      machine.type === "ssh-windows"
+        ? win32.resolve(p.workingDirectory).toLowerCase()
+        : posix.resolve(p.workingDirectory);
+    const key = JSON.stringify([p.machineId, path]);
+    if (this.manualFileWrites.has(key))
+      throw new HubError(409, "FILE_BUSY", "Дождись завершения предыдущей файловой операции.");
+    this.manualFileWrites.add(key);
+    return () => {
+      this.manualFileWrites.delete(key);
+    };
+  }
   beginProjectDelivery(projectId: string): () => void {
     const p = this.project(projectId);
     const windows = this.catalog.machine(p.machineId).type === "ssh-windows";

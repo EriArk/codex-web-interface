@@ -2,6 +2,7 @@ import { type ReactNode, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
+import { ViewerEditButton } from "./ViewerEditButton";
 import "./file-viewer.css";
 import "./workspace-window.css";
 
@@ -14,6 +15,7 @@ export function FileViewerDialog({
   children,
   actions,
   draft = false,
+  editProvided = false,
 }: {
   name: string;
   file?: File | null;
@@ -22,6 +24,7 @@ export function FileViewerDialog({
   children: ReactNode;
   actions?: ReactNode;
   draft?: boolean;
+  editProvided?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [properties, setProperties] = useState(false),
@@ -123,7 +126,10 @@ export function FileViewerDialog({
       </div>
       <footer className="file-viewer-footer">
         <span>{draft ? "Без сохранения в проект" : "Исходный файл"}</span>
-        <div className="file-viewer-actions">{actions}</div>
+        <div className="file-viewer-actions">
+          {!draft && !editProvided && <ViewerEditButton name={name} source={source} file={file} />}
+          {actions}
+        </div>
       </footer>
     </dialog>,
     document.body,

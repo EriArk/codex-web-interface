@@ -44,3 +44,11 @@ two aligned field columns on wide screens and one on phones. Protect the title
 and Close control, keep comparison/apply actions in an equal-width footer and
 retain the draft beneath nested windows. Selects need a visible theme-colored
 arrow; removing native appearance must not remove their selection affordance.
+
+Manual editing: all text viewers lead to the same CodeMirror workspace. Keep
+Save As destination fields and download/project actions in explicit equal-width
+rows. GitHub files use a protected title, branch row, independently scrolling
+file body and separate review footer. Give workspace-specific modal geometry
+higher specificity than generic theme/mobile dialog rules, including when loaded
+from a lazy viewer. Restore nested recovery dialogs after the parent reaches the
+native top layer, so the parent never covers their controls.

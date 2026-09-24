@@ -155,7 +155,7 @@ test("Hub project chunks, reselected prefix, cancel, exact completion, replaceme
     200,
   );
   h.store.db.prepare("UPDATE threads SET status='running' WHERE id=?").run(h.thread.id);
-  assert.equal((await call("POST", "/complete", {})).statusCode, 409);
+  assert.equal((await call("POST", "/complete", {})).statusCode, 200);
   h.store.db.prepare("UPDATE threads SET status='idle' WHERE id=?").run(h.thread.id);
   const result = await call("POST", "/complete", {});
   assert.equal(result.statusCode, 200, result.body);

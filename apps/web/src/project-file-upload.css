@@ -1,4 +1,4 @@
-:root[data-theme] dialog.project-file-upload {
+:root[data-theme] dialog.workspace-window.project-file-upload {
   width: min(720px, calc(100vw - 16px));
   max-width: none;
   height: min(760px, calc(var(--app-height, 100dvh) - 16px));

@@ -39,8 +39,8 @@ export function registerProjectFileUploads(
       authorize();
       const project = sessions.project(spec.projectId!),
         machine = sessions.catalog.machine(project.machineId);
-      sessions.assertWritable(project.id);
-      const release = sessions.beginProjectDelivery(project.id);
+      sessions.authorizeExecution();
+      const release = sessions.beginManualFileOperation(project.id);
       try {
         const deadline =
           Date.now() + Math.max(40000, Math.min(1800000, (spec.bytes / 262144) * 1000));
@@ -113,8 +113,8 @@ export function registerProjectFileUploads(
       }
       const project = sessions.project(bound.projectId),
         machine = sessions.catalog.machine(project.machineId);
-      sessions.assertWritable(project.id);
-      const release = sessions.beginProjectDelivery(project.id);
+      sessions.authorizeExecution();
+      const release = sessions.beginManualFileOperation(project.id);
       try {
         await runFileTools(
           machine,

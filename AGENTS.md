@@ -1,5 +1,21 @@
 # AGENTS.md
 
+## Owner-requested unrestricted manual file work (2026-09-24)
+
+- Manual file editing, upload and management remain available while Codex tasks
+  run, including in the same project. The owner accepts responsibility for
+  concurrent manual changes. Do not reuse native execution/Git idle guards to
+  disable these tools. Preserve authentication, exact checkout capabilities,
+  file fingerprint conflict choices and durable receipts.
+- Offer the common syntax-highlighting editor wherever a supported text file
+  is viewed. Working-copy sources edit the exact file; immutable Results and
+  attachments open an editable copy with explicit save destination/download.
+  Never infer a writable project path from an artifact's display filename.
+- Direct manual GitHub text editing is an explicit owner workflow: use the
+  integrated branch/tree/editor/review with exact expected HEAD and file SHA,
+  acting numeric identity and durable receipts. Allow policy-file and default
+  branch edits where GitHub permits; uncertain commits are reconciled, not replayed.
+
 ## Owner-requested GPT fault isolation (2026-09-24)
 
 - A failed or uncertain chat must not block unrelated GPT chats. Scope mutation and dispatch guards to the exact conversation/project while retaining account and receipt validation.
