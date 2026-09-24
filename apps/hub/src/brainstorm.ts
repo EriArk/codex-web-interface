@@ -35,6 +35,12 @@ export const roomCardSchema = z
       )
       .max(2000),
     revision: z.number().int().nonnegative(),
+    group: z.string().trim().max(80).optional(),
+    links: z
+      .array(z.string().uuid())
+      .max(20)
+      .refine((v) => new Set(v).size === v.length)
+      .optional(),
   })
   .strict()
   .refine((v) => (v.kind !== "file" || !!v.fileId) && (v.kind !== "link" || !!v.url));
@@ -221,6 +227,27 @@ export class BrainstormRooms {
         previous = db.prepare("SELECT * FROM brainstorm_cards WHERE id=?").get(id);
       if (previous && previous.roomId !== roomId) throw missing();
       if ((previous?.revision ?? 0) !== input.revision || previous?.deleted) throw changed();
+      const old: BrainstormCard | undefined = previous
+        ? JSON.parse(String(previous.value))
+        : undefined;
+      const group = input.group ?? old?.group ?? "";
+      const links = input.links ?? old?.links ?? [];
+      for (const target of links) {
+        const linked = db
+          .prepare("SELECT roomId,deleted FROM brainstorm_cards WHERE id=?")
+          .get(target);
+        if (
+          target === id ||
+          !linked ||
+          linked.roomId !== roomId ||
+          (linked.deleted && !old?.links?.includes(target))
+        )
+          throw new HubError(
+            409,
+            "BOARD_LINK_UNAVAILABLE",
+            "Связанная карточка недоступна в этой комнате.",
+          );
+      }
       if (
         !previous &&
         Number(
@@ -236,6 +263,8 @@ export class BrainstormRooms {
         updatedAt = Date.now();
       const card: BrainstormCard = {
         ...input,
+        group,
+        links,
         ...(file ? { file: { name: file.name, mime: file.mime, bytes: file.bytes } } : {}),
         id,
         revision: input.revision + 1,
@@ -291,21 +320,8 @@ export class BrainstormRooms {
       )
       .all(id)
       .map((r) => JSON.parse(String(r.value)));
-    const messages = this.chat
-      .page(actor, id, {})
-      .messages.slice(-12)
-      .map((m) => ({ author: m.author.name, text: m.text.slice(0, 1000), files: m.files }));
-    return JSON.stringify({
-      room: { id, title: room.title, description: room.description },
-      cards: cards.map((c) => ({
-        id: c.id,
-        title: c.title,
-        text: c.text.slice(0, 1000),
-        url: c.url,
-        fileId: c.fileId,
-      })),
-      messages,
-    }).slice(0, 24000);
+    const messages = this.chat.page(actor, id, {}).messages.slice(-12);
+    return JSON.stringify(brainstormSnapshotContext({ room, cards, messages }));
   }
   snapshot(
     actor: string,
@@ -389,6 +405,12 @@ export function brainstormSnapshotContext(snapshot: BrainstormConversion["snapsh
     },
     cards: snapshot.cards.slice(0, 60).map((c) => ({
       id: c.id,
+      group: take(c.group ?? "", 80),
+      links: (c.links ?? []).slice(0, 5).filter(() => {
+        if (remaining < 36) return false;
+        remaining -= 36;
+        return true;
+      }),
       title: take(c.title, 180),
       text: take(c.text),
       url: take(c.url, 2000),

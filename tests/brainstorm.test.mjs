@@ -87,6 +87,73 @@ const until = async (fn) => {
   throw Error("Timed out");
 };
 
+test("Board groups and exact links survive edits, deltas and snapshots without crossing rooms", async (t) => {
+  const f = await fixture(t),
+    a = randomUUID(),
+    b = randomUUID(),
+    foreign = randomUUID();
+  f.rooms.put(f.owner, f.room.id, a, randomUUID(), card({ title: "Design" }));
+  f.rooms.put(f.friend, f.second.id, foreign, randomUUID(), card());
+  const before = f.rooms.state(f.owner, f.room.id).version;
+  const grouped = f.rooms.put(
+    f.friend,
+    f.room.id,
+    b,
+    randomUUID(),
+    card({ group: "  Interface  ", links: [a] }),
+  );
+  assert.equal(grouped.group, "Interface");
+  assert.equal(
+    JSON.parse(f.rooms.context(f.owner, f.room.id)).cards.find((c) => c.id === b).group,
+    "Interface",
+  );
+  assert.deepEqual(f.rooms.state(f.owner, f.room.id, before).cards[0].links, [a]);
+  const legacy = f.rooms.put(
+    f.owner,
+    f.room.id,
+    b,
+    randomUUID(),
+    card({ revision: 1, text: "Older client text" }),
+  );
+  assert.equal(legacy.group, "Interface");
+  assert.deepEqual(legacy.links, [a]);
+  for (const target of [foreign, b, randomUUID()])
+    assert.throws(
+      () =>
+        f.rooms.put(f.owner, f.room.id, b, randomUUID(), card({ revision: 2, links: [target] })),
+      { code: "BOARD_LINK_UNAVAILABLE" },
+    );
+  assert.throws(
+    () => f.rooms.put(f.friend, f.room.id, b, randomUUID(), card({ revision: 1, group: "Stale" })),
+    { code: "ROOM_CHANGED" },
+  );
+  const snapshot = f.rooms.snapshot(f.owner, f.room.id, randomUUID(), {
+    title: "Ideas",
+    cardIds: [a, b],
+    messageIds: [],
+    summary: "",
+    participants: [],
+  });
+  assert.deepEqual(snapshot.snapshot.cards.find((c) => c.id === b).links, [a]);
+  assert.match(JSON.stringify(brainstormSnapshotContext(snapshot.snapshot)), /Interface/);
+  f.rooms.remove(f.owner, f.room.id, a, randomUUID(), 1);
+  // A formerly linked deleted card remains provenance; new links to it are rejected.
+  f.rooms.put(f.owner, f.room.id, b, randomUUID(), card({ revision: 2, links: [a] }));
+  assert.throws(
+    () => f.rooms.put(f.owner, f.room.id, randomUUID(), randomUUID(), card({ links: [a] })),
+    { code: "BOARD_LINK_UNAVAILABLE" },
+  );
+  const cleared = f.rooms.put(
+    f.owner,
+    f.room.id,
+    b,
+    randomUUID(),
+    card({ revision: 3, links: [], group: "" }),
+  );
+  assert.deepEqual(cleared.links, []);
+  assert.equal(cleared.group, "");
+});
+
 test("Public rooms, private preferences, exact optimistic edits and incremental removal survive restart", async (t) => {
   const f = await fixture(t),
     r = f.room.id,

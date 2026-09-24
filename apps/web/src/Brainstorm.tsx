@@ -254,6 +254,8 @@ const newCard = (count: number, text = ""): CardDraft => ({
   y: 24 + Math.floor(count / 3) * 300,
   width: 310,
   points: [],
+  group: "",
+  links: [],
   revision: 0,
 });
 const bodyOf = ({
@@ -275,6 +277,12 @@ export function BrainstormWindow({
   onProject: (id: string) => void;
 }) {
   const path = `${root}/${id}`;
+  const [filter, setFilter] = useState(() =>
+    saved(`brainstorm-filter:${id}`, { text: "", group: "" }),
+  );
+  const [filtersOpen, setFiltersOpen] = useState(!!(filter.text || filter.group));
+  const [focusedCard, setFocusedCard] = useState<string | null>(null);
+  const board = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<BrainstormState | null>(null),
     [cards, setCards] = useState<BrainstormCard[]>([]),
     [tab, setTab] = useState<"board" | "chat" | "gpt">("board");
@@ -346,6 +354,34 @@ export function BrainstormWindow({
     setCards((old) => [...old.filter((c) => c.id !== result.id), result]);
   };
   const room = state?.room;
+  const groups = [...new Set(cards.map((c) => c.group || "").filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const search = filter.text.trim().normalize("NFKC").toLocaleLowerCase();
+  const filtered = !!(search || filter.group);
+  const visibleCards = cards.filter(
+    (c) =>
+      (!filter.group || (filter.group === "none" ? !c.group : c.group === filter.group.slice(6))) &&
+      (!search ||
+        [c.title, c.text, c.url, c.group, c.file?.name]
+          .filter(Boolean)
+          .join("\n")
+          .normalize("NFKC")
+          .toLocaleLowerCase()
+          .includes(search)),
+  );
+  useEffect(() => persist(`brainstorm-filter:${id}`, filter), [id, filter]);
+  useEffect(() => {
+    if (!focusedCard) return;
+    const target = board.current?.querySelector<HTMLElement>(`[data-card="${focusedCard}"]`);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "center", inline: "center" });
+    setFocusedCard(null);
+  }, [focusedCard]);
+  const openCard = (cardId: string) => {
+    setFilter({ text: "", group: "" });
+    setFocusedCard(cardId);
+  };
   const openFile = (file: { id: string; name: string; mime?: string; bytes?: number }) =>
     setPreview({
       id: file.id,
@@ -408,12 +444,17 @@ export function BrainstormWindow({
             </p>
           )}
           <div className="brainstorm-pane" hidden={tab !== "board"}>
-            <div className="brainstorm-toolbar">
+            <div className="brainstorm-toolbar" data-owner={room.owner.id === pageWorkspace}>
               <button
                 className="secondary"
                 type="button"
                 disabled={room.closed}
-                onClick={() => setEdit(newCard(cards.length))}
+                onClick={() =>
+                  setEdit({
+                    ...newCard(cards.length),
+                    group: filter.group.startsWith("group:") ? filter.group.slice(6) : "",
+                  })
+                }
               >
                 <Icon name="plus" /> Материал
               </button>
@@ -427,12 +468,99 @@ export function BrainstormWindow({
                   <Icon name="folder" /> Создать проект
                 </button>
               )}
+              <button
+                type="button"
+                className="secondary icon-button"
+                aria-label="Поиск и группы"
+                aria-expanded={filtersOpen}
+                aria-pressed={filtered}
+                onClick={() => setFiltersOpen((v) => !v)}
+              >
+                <Icon name="search" />
+              </button>
             </div>
+            {filtersOpen && (
+              <div className="brainstorm-filters">
+                <input
+                  type="search"
+                  aria-label="Поиск по доске"
+                  placeholder="Найти на доске…"
+                  maxLength={240}
+                  value={filter.text}
+                  onChange={(e) => setFilter({ ...filter, text: e.target.value })}
+                />
+                <select
+                  aria-label="Группа карточек"
+                  value={filter.group}
+                  onChange={(e) => setFilter({ ...filter, group: e.target.value })}
+                >
+                  <option value="">Все группы</option>
+                  <option value="none">Без группы</option>
+                  {groups.map((g) => (
+                    <option key={g} value={`group:${g}`}>
+                      {g}
+                    </option>
+                  ))}
+                  {filter.group.startsWith("group:") && !groups.includes(filter.group.slice(6)) && (
+                    <option value={filter.group}>{filter.group.slice(6)}</option>
+                  )}
+                </select>
+                {filtered && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setFilter({ text: "", group: "" })}
+                  >
+                    Сбросить · {visibleCards.length} из {cards.length}
+                  </button>
+                )}
+              </div>
+            )}
             <div className="brainstorm-board-scroll shared-scroll">
               <div
-                className="brainstorm-board"
-                style={{ minHeight: Math.max(600, ...cards.map((c) => c.y + 290)) }}
+                ref={board}
+                className={`brainstorm-board${filtered ? " brainstorm-filtered" : ""}`}
+                style={{
+                  minHeight: Math.max(600, ...cards.map((c) => c.y + 330)),
+                  minWidth: Math.max(1060, ...cards.map((c) => c.x + c.width + 24)),
+                }}
               >
+                {!filtered && (
+                  <svg className="brainstorm-connections" aria-hidden="true">
+                    <defs>
+                      <marker
+                        id={`arrow-${id}`}
+                        markerWidth="8"
+                        markerHeight="8"
+                        refX="7"
+                        refY="4"
+                        orient="auto"
+                      >
+                        <path d="M0,0 L8,4 L0,8" fill="currentColor" />
+                      </marker>
+                    </defs>
+                    {cards.flatMap((c) =>
+                      (c.links ?? []).flatMap((target) => {
+                        const to = cards.find((v) => v.id === target);
+                        if (!to) return [];
+                        const direction = to.x + to.width / 2 >= c.x + c.width / 2 ? 1 : -1;
+                        const fromX = direction === 1 ? c.x + c.width : c.x,
+                          toX = direction === 1 ? to.x : to.x + to.width;
+                        const lane = Math.max(0, Math.min(c.y, to.y) - 12);
+                        return [
+                          <path
+                            key={`${c.id}:${target}`}
+                            d={`M${fromX},${c.y + 28} H${fromX + direction * 12} V${lane} H${toX - direction * 12} V${to.y + 28} H${toX}`}
+                            markerEnd={`url(#arrow-${id})`}
+                          />,
+                        ];
+                      }),
+                    )}
+                  </svg>
+                )}
+                {!!cards.length && !visibleCards.length && (
+                  <p className="brainstorm-empty">Карточек по этому запросу нет.</p>
+                )}
                 {!cards.length && (
                   <div className="brainstorm-empty">
                     <h3>С чего начнём?</h3>
@@ -441,17 +569,18 @@ export function BrainstormWindow({
                     </p>
                   </div>
                 )}
-                {cards.map((c) => (
+                {visibleCards.map((c) => (
                   <article
                     key={c.id}
                     className="brainstorm-card"
                     style={{ left: c.x, top: c.y, width: c.width }}
                     data-card={c.id}
+                    tabIndex={-1}
                   >
                     <header>
                       <MoveCard
                         card={c}
-                        disabled={room.closed || action.busy}
+                        disabled={room.closed || action.busy || filtered}
                         onMove={(value) => void action.run(() => saveCard(value))}
                       />
                       <button
@@ -464,6 +593,18 @@ export function BrainstormWindow({
                         <Icon name="edit" />
                       </button>
                     </header>
+                    {c.group && (
+                      <button
+                        type="button"
+                        className="brainstorm-group"
+                        onClick={() => {
+                          setFilter({ text: "", group: `group:${c.group}` });
+                          setFiltersOpen(true);
+                        }}
+                      >
+                        {c.group}
+                      </button>
+                    )}
                     {c.kind === "drawing" && (
                       <svg viewBox="0 0 1000 600" role="img" aria-label={c.title || "Рисунок"}>
                         <path
@@ -510,6 +651,30 @@ export function BrainstormWindow({
                       </button>
                     )}
                     <small>{c.author.name}</small>
+                    {cards.some(
+                      (v) => (c.links ?? []).includes(v.id) || (v.links ?? []).includes(c.id),
+                    ) && (
+                      <details className="brainstorm-card-links">
+                        <summary>Связанные идеи</summary>
+                        <div>
+                          {cards
+                            .filter(
+                              (v) =>
+                                (c.links ?? []).includes(v.id) || (v.links ?? []).includes(c.id),
+                            )
+                            .map((v) => (
+                              <button
+                                type="button"
+                                className="secondary"
+                                key={v.id}
+                                onClick={() => openCard(v.id)}
+                              >
+                                {(c.links ?? []).includes(v.id) ? "→" : "←"} {v.title || "Материал"}
+                              </button>
+                            ))}
+                        </div>
+                      </details>
+                    )}
                   </article>
                 ))}
               </div>
@@ -588,6 +753,7 @@ export function BrainstormWindow({
           {edit && (
             <CardEditor
               roomId={id}
+              cards={cards}
               value={edit}
               current={cards.find((c) => c.id === edit.id)}
               onChange={setEdit}
@@ -639,6 +805,7 @@ export function BrainstormWindow({
 }
 function CardEditor({
   roomId,
+  cards,
   value,
   current,
   onChange,
@@ -647,6 +814,7 @@ function CardEditor({
   onDelete,
 }: {
   roomId: string;
+  cards: BrainstormCard[];
   value: CardDraft;
   current?: BrainstormCard;
   onChange: (value: CardDraft) => void;
@@ -656,7 +824,8 @@ function CardEditor({
 }) {
   const action = useSharedAction(),
     [confirm, setConfirm] = useState(false),
-    [drawing, setDrawing] = useState(false);
+    [drawing, setDrawing] = useState(false),
+    [linkQuery, setLinkQuery] = useState("");
   const patch = (d: Partial<CardDraft>) => onChange({ ...value, ...d });
   return (
     <RoomDialog
@@ -707,6 +876,79 @@ function CardEditor({
             onChange={(e) => patch({ title: e.target.value })}
           />
         </label>
+        <details>
+          <summary>
+            Группа и связи{value.group ? ` · ${value.group}` : ""}
+            {value.links?.length ? ` · ${value.links.length}` : ""}
+          </summary>
+          <label>
+            Группа
+            <input
+              aria-label="Название группы"
+              maxLength={80}
+              list={`groups-${roomId}`}
+              value={value.group ?? ""}
+              onChange={(e) => patch({ group: e.target.value })}
+              placeholder="Без группы"
+            />
+          </label>
+          <datalist id={`groups-${roomId}`}>
+            {[...new Set(cards.map((c) => c.group).filter(Boolean))].map((g) => (
+              <option key={g} value={g} />
+            ))}
+          </datalist>
+          <label>
+            Связать с идеями
+            <input
+              type="search"
+              aria-label="Найти связанную идею"
+              maxLength={240}
+              value={linkQuery}
+              onChange={(e) => setLinkQuery(e.target.value)}
+            />
+          </label>
+          <div className="brainstorm-link-choices">
+            {cards
+              .filter(
+                (c) =>
+                  c.id !== value.id &&
+                  `${c.title}\n${c.text}`
+                    .toLocaleLowerCase()
+                    .includes(linkQuery.toLocaleLowerCase()),
+              )
+              .map((c) => (
+                <label className="brainstorm-check" key={c.id}>
+                  <input
+                    type="checkbox"
+                    checked={(value.links ?? []).includes(c.id)}
+                    disabled={
+                      !(value.links ?? []).includes(c.id) && (value.links?.length ?? 0) >= 20
+                    }
+                    onChange={(e) =>
+                      patch({
+                        links: e.target.checked
+                          ? [...(value.links ?? []), c.id]
+                          : (value.links ?? []).filter((id) => id !== c.id),
+                      })
+                    }
+                  />
+                  {c.title || "Материал"}
+                </label>
+              ))}
+            {(value.links ?? [])
+              .filter((id) => !cards.some((c) => c.id === id))
+              .map((id) => (
+                <label className="brainstorm-check" key={id}>
+                  <input
+                    type="checkbox"
+                    checked
+                    onChange={() => patch({ links: value.links!.filter((v) => v !== id) })}
+                  />
+                  Удалённая карточка
+                </label>
+              ))}
+          </div>
+        </details>
         {value.kind === "link" && (
           <label>
             Адрес

@@ -24,6 +24,8 @@ export interface BrainstormCard {
   y: number;
   width: number;
   points: number[][];
+  group?: string;
+  links?: string[];
   revision: number;
   author: { id: string; name: string };
   updatedAt: number;

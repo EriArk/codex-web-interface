@@ -64,6 +64,7 @@ try {
       const page = await browser.newPage({ viewport: { width: 390, height: 844 } }),
         errors = [],
         requests = [];
+      page.setDefaultTimeout(15000);
       page.on("pageerror", (e) => {
         errors.push(e.message);
         console.error(e.stack);
@@ -302,6 +303,9 @@ try {
       await page.getByRole("button", { name: "Материал", exact: true }).click();
       await page.getByLabel("Название", { exact: true }).fill("Новая мысль");
       await page.getByLabel("Текст", { exact: true }).fill("Exact new note\nSecond line");
+      await page.getByText("Группа и связи", { exact: true }).click();
+      await page.getByRole("combobox", { name: "Название группы", exact: true }).fill("Интерфейс");
+      await page.getByRole("checkbox", { name: "Первый шаг", exact: true }).check();
       for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
         await page.evaluate((theme) => {
           document.documentElement.dataset.theme = theme;
@@ -312,6 +316,29 @@ try {
       }
       await page.getByRole("button", { name: "Опубликовать", exact: true }).click();
       await page.getByText("Новая мысль", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "Поиск и группы", exact: true }).click();
+      await page
+        .getByRole("searchbox", { name: "Поиск по доске", exact: true })
+        .fill("SECOND LINE");
+      await expect(page.locator(".brainstorm-card")).toHaveCount(1);
+      await page
+        .getByRole("combobox", { name: "Группа карточек", exact: true })
+        .selectOption("group:Интерфейс");
+      await page.reload();
+      await expect(page.locator(".brainstorm-card")).toHaveCount(1);
+      await expect(
+        page.getByRole("searchbox", { name: "Поиск по доске", exact: true }),
+      ).toHaveValue("SECOND LINE");
+      await page.getByText("Связанные идеи", { exact: true }).click();
+      await page.getByRole("button", { name: "→ Первый шаг", exact: true }).click();
+      await expect(page.locator(".brainstorm-card")).toHaveCount(3);
+      await expect(
+        page.locator('[data-card="33333333-3333-4333-8333-333333333333"]'),
+      ).toBeFocused();
+      await expect(
+        page.getByRole("searchbox", { name: "Поиск по доске", exact: true }),
+      ).toHaveValue("");
+      await page.getByRole("button", { name: "Поиск и группы", exact: true }).click();
       assert.equal(
         requests.filter((r) => r.method === "PUT" && r.path.includes("/cards/")).length,
         1,
@@ -491,7 +518,7 @@ try {
       );
       assert.deepEqual(errors, []);
       console.log(
-        `${engine}: room board/chat continuity, exact edits, private GPT, snapshots, all four themes and constrained layouts passed. Recovered Project receipt, lost completion acknowledgement and cancelled late microphone permission passed.`,
+        `${engine}: room board/chat continuity, exact edits, private GPT, snapshots, all four themes and constrained layouts passed. Recovered Project receipt, lost completion acknowledgement and cancelled late microphone permission passed. Groups, persisted search and exact linked-card navigation passed.`,
       );
     } finally {
       await browser.close();
