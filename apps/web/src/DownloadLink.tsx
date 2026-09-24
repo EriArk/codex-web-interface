@@ -1,8 +1,11 @@
 import { isFileSource } from "@codex-web/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { workspaceUrl } from "./accountStorage.ts";
 import { FilePreview } from "./FilePreview";
 import { FileViewerDialog } from "./FileViewerDialog";
+import { Icon } from "./icons";
+import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import { ViewerEditButton } from "./ViewerEditButton";
 import "./download.css";
 
@@ -222,16 +225,37 @@ export function DownloadLink({
     typeof navigator.share === "function" &&
     typeof navigator.canShare === "function" &&
     navigator.canShare({ files: [file] });
+  const [sharing, setSharing] = useState(false);
+  const shareRequest = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Invalidate the exact share when its source or window changes.
+  useEffect(() => {
+    shareRequest.current++;
+    setSharing(false);
+    return () => {
+      shareRequest.current++;
+    };
+  }, [open, href]);
   const share = () => {
-    if (!file) return;
+    if (!file || sharing) return;
+    const request = ++shareRequest.current;
+    setSharing(true);
     setError("");
     // Run directly in this fresh tap; a slow fetch must not consume iOS user activation.
-    void navigator.share({ files: [file] }).catch((e) => {
-      if (e?.name !== "AbortError")
-        setError("Не удалось открыть меню сохранения. Попробуй ещё раз.");
-    });
+    void navigator
+      .share({ files: [file] })
+      .catch((e) => {
+        if (request === shareRequest.current && e?.name !== "AbortError")
+          setError("Не удалось открыть меню сохранения. Попробуй ещё раз.");
+      })
+      .finally(() => {
+        if (request === shareRequest.current) setSharing(false);
+      });
   };
-  if (directDownload)
+  // File-capable system sharing keeps standalone PWAs on their current screen.
+  // Do not navigate to a raw attachment: iOS may replace the PWA with unclosable Quick Look.
+  const systemSave =
+    typeof navigator.share === "function" && typeof navigator.canShare === "function";
+  if (directDownload && !systemSave)
     return isDownloadUrl(href) ? (
       <a
         className={className}
@@ -248,105 +272,180 @@ export function DownloadLink({
       <button type="button" className={className} onClick={() => setOpen(true)}>
         {children}
       </button>
-      {open && (
-        <FileViewerDialog
-          name={direct?.name || file?.name || name}
-          file={file}
-          source={href}
-          editProvided={!!onEdit}
-          onClose={() => setOpen(false)}
-          actions={
-            <>
-              {onEdit && (
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={editing}
-                  onClick={async () => {
-                    if (editRequest.current) return;
-                    const controller = new AbortController();
-                    editRequest.current = controller;
-                    setEditing(true);
-                    setEditError("");
-                    try {
-                      await onEdit(controller.signal);
-                    } catch (e) {
-                      if (!controller.signal.aborted)
-                        setEditError(
-                          e instanceof Error ? e.message : "Не удалось открыть редактор.",
-                        );
-                    } finally {
-                      if (!controller.signal.aborted) {
-                        editRequest.current = null;
-                        setEditing(false);
-                      }
-                    }
-                  }}
-                >
-                  {editing ? "Открываю редактор…" : editLabel}
-                </button>
-              )}
-              {file && shareable ? (
-                <button type="button" onClick={share}>
-                  Сохранить / поделиться
-                </button>
-              ) : isDownloadUrl(href) ? (
-                <a
-                  className="secondary"
-                  href={workspaceUrl(href)}
-                  download={file?.name || name}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Скачать файл
-                </a>
-              ) : null}
-            </>
-          }
-        >
+      {open && directDownload ? (
+        <SaveDialog name={direct?.name || file?.name || name} onClose={() => setOpen(false)}>
           {!file && !direct && !error && (
             <p role="status">
               <span className="spinner" /> Подготавливаю файл…
             </p>
           )}
-          {file && (
-            <FilePreview
-              key={file.name + retry}
-              file={file}
-              objectUrl={objectUrl}
-              source={href}
-              full
-            />
-          )}
-          {direct && (
-            <div className="download-actions">
-              <ViewerEditButton name={direct.name} source={href} />
-              <p>
-                {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
-                  direct.bytes / 1024 / 1024,
-                )}{" "}
-                МБ · Сохранение через загрузки браузера
-              </p>
-              <a
-                className="secondary"
-                href={workspaceUrl(href!)}
-                download={direct.name}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Скачать файл
-              </a>
-            </div>
-          )}
+          {file && shareable ? (
+            <button type="button" className="secondary" disabled={sharing} onClick={share}>
+              Сохранить / поделиться
+            </button>
+          ) : (file || direct) && isDownloadUrl(href) ? (
+            <a
+              className="secondary"
+              href={workspaceUrl(href)}
+              download={direct?.name || file?.name || name}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Скачать через браузер
+            </a>
+          ) : null}
           {error && <p role="alert">{error}</p>}
-          {editError && <p role="alert">{editError}</p>}
           {error && (
-            <button type="button" onClick={() => setRetry((v) => v + 1)}>
+            <button type="button" className="secondary" onClick={() => setRetry((v) => v + 1)}>
               Повторить
             </button>
           )}
-        </FileViewerDialog>
+        </SaveDialog>
+      ) : (
+        open && (
+          <FileViewerDialog
+            name={direct?.name || file?.name || name}
+            file={file}
+            source={href}
+            editProvided={!!onEdit}
+            onClose={() => setOpen(false)}
+            actions={
+              <>
+                {onEdit && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={editing}
+                    onClick={async () => {
+                      if (editRequest.current) return;
+                      const controller = new AbortController();
+                      editRequest.current = controller;
+                      setEditing(true);
+                      setEditError("");
+                      try {
+                        await onEdit(controller.signal);
+                      } catch (e) {
+                        if (!controller.signal.aborted)
+                          setEditError(
+                            e instanceof Error ? e.message : "Не удалось открыть редактор.",
+                          );
+                      } finally {
+                        if (!controller.signal.aborted) {
+                          editRequest.current = null;
+                          setEditing(false);
+                        }
+                      }
+                    }}
+                  >
+                    {editing ? "Открываю редактор…" : editLabel}
+                  </button>
+                )}
+                {file && shareable ? (
+                  <button type="button" className="secondary" disabled={sharing} onClick={share}>
+                    Сохранить / поделиться
+                  </button>
+                ) : isDownloadUrl(href) ? (
+                  <a
+                    className="secondary"
+                    href={workspaceUrl(href)}
+                    download={file?.name || name}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Скачать файл
+                  </a>
+                ) : null}
+              </>
+            }
+          >
+            {!file && !direct && !error && (
+              <p role="status">
+                <span className="spinner" /> Подготавливаю файл…
+              </p>
+            )}
+            {file && (
+              <FilePreview
+                key={file.name + retry}
+                file={file}
+                objectUrl={objectUrl}
+                source={href}
+                full
+              />
+            )}
+            {direct && (
+              <div className="download-actions">
+                <ViewerEditButton name={direct.name} source={href} />
+                <p>
+                  {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
+                    direct.bytes / 1024 / 1024,
+                  )}{" "}
+                  МБ · Сохранение через загрузки браузера
+                </p>
+                <a
+                  className="secondary"
+                  href={workspaceUrl(href!)}
+                  download={direct.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Скачать файл
+                </a>
+              </div>
+            )}
+            {error && <p role="alert">{error}</p>}
+            {editError && <p role="alert">{editError}</p>}
+            {error && (
+              <button type="button" onClick={() => setRetry((v) => v + 1)}>
+                Повторить
+              </button>
+            )}
+          </FileViewerDialog>
+        )
       )}
     </>
+  );
+}
+
+/** A save action stays separate from the full viewer and preserves the mounted source feed. */
+function SaveDialog({
+  name,
+  onClose,
+  children,
+}: {
+  name: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useWorkspaceDialog(dialog);
+  return createPortal(
+    <dialog
+      ref={dialog}
+      className="workspace-window result-save-dialog"
+      aria-label="Сохранить файл"
+      tabIndex={-1}
+      onCancel={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <header>
+        <div>
+          <strong>Сохранить файл</strong>
+          <p title={name}>{name}</p>
+        </div>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Закрыть сохранение"
+          onClick={onClose}
+        >
+          <Icon name="close" />
+        </button>
+      </header>
+      <div className="result-save-body">{children}</div>
+    </dialog>,
+    document.body,
   );
 }

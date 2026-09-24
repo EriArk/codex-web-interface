@@ -153,3 +153,60 @@ button.download-text {
 .file-html {
   display: block;
 }
+
+:root[data-theme] dialog.result-save-dialog[open],
+:root dialog.result-save-dialog[open] {
+  box-sizing: border-box;
+  width: min(520px, calc(100vw - 24px));
+  height: auto;
+  min-height: 0;
+  max-height: calc(var(--app-height, 100dvh) - 24px);
+  top: calc(var(--app-top, 0px) + var(--app-height, 100dvh) / 2);
+  bottom: auto;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  background: var(--window-shell);
+  color: var(--window-ink);
+  border-color: var(--window-edge);
+  box-shadow: var(--window-frame-shadow);
+}
+.result-save-dialog > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 12px;
+  align-items: start;
+  flex: none;
+}
+.result-save-dialog > header p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+.result-save-dialog .icon-button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.result-save-body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+}
+.result-save-body > button,
+.result-save-body > a {
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
+.result-save-dialog:focus {
+  outline: none;
+}
