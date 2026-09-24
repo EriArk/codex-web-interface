@@ -31,12 +31,17 @@ export const repositoryFileInput = z
         z
           .object({
             path: repositoryFilePathSchema,
-            content: z.string().max(131072),
-            previous: z.string().regex(/^[a-f0-9]{40}$/),
+            content: z.string().max(131072).nullable(),
+            previous: z
+              .string()
+              .regex(/^[a-f0-9]{40}$/)
+              .nullable(),
           })
-          .strict(),
+          .strict()
+          .refine((f) => f.content !== null || f.previous !== null),
       )
-      .length(1),
+      .min(1)
+      .max(16),
     title: z.string().trim().min(1).max(200),
   })
   .strict();

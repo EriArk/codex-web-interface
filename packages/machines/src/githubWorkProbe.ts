@@ -337,13 +337,14 @@ export async function githubWorkProbe(
     exact(f, ["path", "content", "previous"]);
     valid(
       (manual ? repositoryFilePath(f.path) : preparationPath(f.path)) &&
-        typeof f.content === "string" &&
-        f.content.length <= 131072 &&
-        Buffer.from(f.content, "base64").toString("base64") === f.content &&
+        ((manual && f.content === null && sha(f.previous)) ||
+          (typeof f.content === "string" &&
+            f.content.length <= 131072 &&
+            Buffer.from(f.content, "base64").toString("base64") === f.content)) &&
         (f.previous === null || sha(f.previous)),
     );
   };
-  const missingPath = async (name: string, ref: string) => {
+  const missingPath = async (name: string, ref: string, manual = false) => {
     const parts = name.split("/");
     for (let n = 0; n < parts.length; n++) {
       const parent = parts.slice(0, n).map(encodeURIComponent).join("/");
@@ -352,20 +353,22 @@ export async function githubWorkProbe(
       );
       if (!Array.isArray(listing) || listing.length >= 1000) fail("GITHUB_WORK_DATA");
       const entry = listing.find(
-        (v: any) => typeof v.name === "string" && v.name.toLowerCase() === parts[n]!.toLowerCase(),
+        (v: any) =>
+          typeof v.name === "string" &&
+          (manual ? v.name === parts[n] : v.name.toLowerCase() === parts[n]!.toLowerCase()),
       );
       if (!entry) return;
       if (entry.name !== parts[n] || entry.type !== "dir" || n === parts.length - 1)
         fail("GITHUB_WORK_CHANGED");
     }
   };
-  const readDocument = async (name: string, ref: string | null) => {
+  const readDocument = async (name: string, ref: string | null, manual = false) => {
     if (!ref) return { path: name, sha: null, content: null, bytes: 0 };
     const r = await http(
       `${prefix}/contents/${name.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
     );
     if (r.status === 404) {
-      await missingPath(name, ref);
+      await missingPath(name, ref, manual);
       return { path: name, sha: null, content: null, bytes: 0 };
     }
     const f = r.value;
@@ -450,7 +453,8 @@ export async function githubWorkProbe(
         )
           fail("GITHUB_WORK_CHANGED");
         for (const f of v.files)
-          if ((await readDocument(f.path, v.head)).sha !== f.previous) fail("GITHUB_WORK_CHANGED");
+          if ((await readDocument(f.path, v.head, v.kind === "repository-file")).sha !== f.previous)
+            fail("GITHUB_WORK_CHANGED");
       }
     }
   };
@@ -855,13 +859,19 @@ export async function githubWorkProbe(
       v.files.forEach((f) => {
         preparationFile(f, v.kind === "repository-file");
       });
-      if (v.kind === "repository-file") valid(v.files.length === 1 && sha(v.files[0]?.previous));
+
       valid(
-        v.files.reduce((n, f) => n + f.content.length, 0) <= 131072 &&
-          new Set(v.files.map((f) => f.path.toLowerCase())).size === v.files.length &&
+        v.files.reduce((n, f) => n + (f.content?.length ?? 0), 0) <= 131072 &&
+          new Set(
+            v.files.map((f) => (v.kind === "repository-file" ? f.path : f.path.toLowerCase())),
+          ).size === v.files.length &&
           v.files.every(
             (f) =>
-              !v.files.some((g) => g.path.toLowerCase().startsWith(f.path.toLowerCase() + "/")),
+              !v.files.some((g) =>
+                v.kind === "repository-file"
+                  ? g.path.startsWith(f.path + "/")
+                  : g.path.toLowerCase().startsWith(f.path.toLowerCase() + "/"),
+              ),
           ),
       );
     } else if (v.kind === "preparation-seed") {
@@ -1271,13 +1281,18 @@ export async function githubWorkProbe(
         ) {
           let exactFiles = true;
           for (const f of files) {
+            if (f.content === null) {
+              if ((await readDocument(f.path, c.sha, true)).sha !== null) exactFiles = false;
+              continue;
+            }
             const bytes = Buffer.from(f.content, "base64");
             const blob = crypto
               .createHash("sha1")
               .update(`blob ${bytes.length}\0`)
               .update(bytes)
               .digest("hex");
-            if ((await readDocument(f.path, c.sha)).sha !== blob) exactFiles = false;
+            if ((await readDocument(f.path, c.sha, input.kind === "repository-file")).sha !== blob)
+              exactFiles = false;
           }
           if (exactFiles)
             return finish("completed", undefined, {
@@ -1408,7 +1423,12 @@ export async function githubWorkProbe(
               expectedHeadOid: input.head,
               message: { headline: input.title, body: marker },
               fileChanges: {
-                additions: input.files.map((f) => ({ path: f.path, contents: f.content })),
+                additions: input.files
+                  .filter((f) => f.content !== null)
+                  .map((f) => ({ path: f.path, contents: f.content })),
+                deletions: input.files
+                  .filter((f) => f.content === null)
+                  .map((f) => ({ path: f.path })),
               },
             },
           },

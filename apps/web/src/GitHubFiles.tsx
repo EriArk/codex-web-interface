@@ -4,6 +4,7 @@ import {
   type GitHubWorkObservation,
   type GitHubWorkReceipt,
   type RepositoryFiles,
+  repositoryFilePathSchema,
 } from "@codex-web/shared";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -23,6 +24,7 @@ type Step = {
   operation?: Operation;
 };
 type Review = {
+  action?: "create" | "rename" | "delete";
   origin?: GitHubWorkObservation & { binding: string };
   baseBranch?: string;
   newBranch?: string;
@@ -106,12 +108,15 @@ function GitHubFiles({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [edit, setEdit] = useState<{
+      newFile?: boolean;
       file: File;
       source: string;
       snapshot: RepositoryFiles;
       baseBranch?: string;
       observation: GitHubWorkObservation & { binding: string };
     } | null>(null);
+  const [fileAction, setFileAction] = useState<"create" | "rename" | null>(null);
+  const [destination, setDestination] = useState("");
   const [review, setReview] = useState<Review | null>(null);
   // Restore after the parent modal enters the top layer, so recovery stays on top.
   useEffect(() => {
@@ -175,6 +180,86 @@ function GitHubFiles({
       setError("Файл не является текстом UTF-8.");
     }
   };
+  const beginAction = (action: "create" | "rename") => {
+    setError("");
+    setFileAction(action);
+    const directory = snapshot?.file
+      ? snapshot.path.split("/").slice(0, -1).join("/")
+      : snapshot?.path;
+    setDestination(action === "rename" ? snapshot!.file!.path : directory ? `${directory}/` : "");
+  };
+  const reviewAction = (action: "rename" | "delete") => {
+    try {
+      if (!data || !snapshot?.file) return;
+      const f = snapshot.file;
+      if (
+        action === "rename" &&
+        (!repositoryFilePathSchema.safeParse(destination).success || destination === f.path)
+      )
+        throw Error("Укажи новый путь файла внутри репозитория.");
+      if (action === "rename" && f.content === null)
+        throw Error("Содержимое файла недоступно для переименования.");
+      let text = "";
+      try {
+        if (f.content !== null) text = decode(f.content);
+      } catch {
+        /* Binary rename preserves original bytes. */
+      }
+      const next: Review = {
+        action,
+        origin: data,
+        baseBranch: snapshot.branch,
+        id: crypto.randomUUID(),
+        binding: data.binding,
+        repositoryId: data.repositoryId!,
+        identityId: data.identity.id,
+        oldText: text,
+        newText: action === "delete" ? "" : text,
+        input: {
+          kind: "repository-file",
+          branch: snapshot.branch,
+          head: snapshot.head,
+          title: `${action === "rename" ? "Rename" : "Delete"} ${f.path}`.slice(0, 200),
+          files: [
+            { path: f.path, previous: f.sha, content: null },
+            ...(action === "rename"
+              ? [{ path: destination, previous: null, content: f.content! }]
+              : []),
+          ],
+        },
+      };
+      storage.setItem(key, JSON.stringify(next));
+      setReview(next);
+      setFileAction(null);
+    } catch (e) {
+      setError(messageOf(e));
+    }
+  };
+  const createFile = () => {
+    try {
+      if (!data || !snapshot) return;
+      if (!repositoryFilePathSchema.safeParse(destination).success)
+        throw Error("Укажи путь файла внутри репозитория.");
+      const source = `github:${data.repositoryId}:${data.identity.id}:${snapshot.branch}:${snapshot.head}:new:${destination}`;
+      const next: RepositoryFiles = {
+        branch: snapshot.branch,
+        head: snapshot.head,
+        path: destination,
+        file: { path: destination, sha: "", content: "", bytes: 0 },
+      };
+      setEdit({
+        newFile: true,
+        file: new File([""], destination.split("/").at(-1)!, { type: "text/plain" }),
+        source,
+        snapshot: next,
+        observation: { ...data, repositoryFiles: next },
+      });
+      setFileAction(null);
+      setError("");
+    } catch (e) {
+      setError(messageOf(e));
+    }
+  };
   return createPortal(
     <dialog
       ref={dialog}
@@ -226,6 +311,51 @@ function GitHubFiles({
         {busy && <p role="status">Читаю GitHub…</p>}
         {snapshot && (
           <>
+            <div className="github-file-review-tools">
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => beginAction("create")}
+              >
+                Новый файл
+              </button>
+            </div>
+            {fileAction && (
+              <form
+                className="github-file-action-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  fileAction === "create" ? createFile() : reviewAction("rename");
+                }}
+              >
+                <label>
+                  {fileAction === "create" ? "Путь нового файла" : "Новый путь файла"}
+                  <input
+                    aria-label="Путь файла"
+                    value={destination}
+                    maxLength={240}
+                    onChange={(e) => setDestination(e.target.value)}
+                    autoFocus
+                  />
+                </label>
+                <div className="github-file-review-tools">
+                  <button type="button" className="secondary" onClick={() => setFileAction(null)}>
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary"
+                    aria-label={
+                      fileAction === "create" ? "Открыть редактор" : "Проверить переименование"
+                    }
+                    disabled={busy || !destination}
+                  >
+                    {fileAction === "create" ? "В редактор" : "Проверить"}
+                  </button>
+                </div>
+              </form>
+            )}
             <div className="github-file-path">
               <button
                 type="button"
@@ -253,14 +383,32 @@ function GitHubFiles({
             ))}
             {snapshot.file && (
               <>
-                <button
-                  className="primary"
-                  type="button"
-                  disabled={!editableFile(snapshot.file.path) || snapshot.file.content === null}
-                  onClick={editFile}
-                >
-                  Редактировать файл
-                </button>
+                <div className="github-file-management">
+                  <button
+                    className="primary"
+                    type="button"
+                    disabled={!editableFile(snapshot.file.path) || snapshot.file.content === null}
+                    onClick={editFile}
+                  >
+                    Редактировать файл
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy || snapshot.file.content === null}
+                    onClick={() => beginAction("rename")}
+                  >
+                    Переименовать
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => reviewAction("delete")}
+                  >
+                    Удалить
+                  </button>
+                </div>
                 <pre>
                   {snapshot.file.content !== null
                     ? (() => {
@@ -294,7 +442,7 @@ function GitHubFiles({
               }
               const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes),
                 oldText = decode(edit.snapshot.file!.content!);
-              if (text === oldText) {
+              if (text === oldText && !edit.newFile) {
                 throw Error("Файл не изменён.");
               }
               if (review) {
@@ -302,6 +450,7 @@ function GitHubFiles({
                 return;
               }
               const next: Review = {
+                action: edit.newFile ? "create" : undefined,
                 source: edit.source,
                 baseBranch: edit.baseBranch ?? edit.snapshot.branch,
                 origin: edit.observation,
@@ -315,11 +464,14 @@ function GitHubFiles({
                   kind: "repository-file",
                   branch: edit.snapshot.branch,
                   head: edit.snapshot.head,
-                  title: `Update ${edit.snapshot.file!.path}`,
+                  title: `${edit.newFile ? "Create" : "Update"} ${edit.snapshot.file!.path}`.slice(
+                    0,
+                    200,
+                  ),
                   files: [
                     {
                       path: edit.snapshot.file!.path,
-                      previous: edit.snapshot.file!.sha,
+                      previous: edit.newFile ? null : edit.snapshot.file!.sha,
                       content: btoa(
                         Array.from(new Uint8Array(bytes), (v) => String.fromCharCode(v)).join(""),
                       ),
@@ -341,12 +493,15 @@ function GitHubFiles({
           storageKey={key}
           onChange={setReview}
           onBack={
-            edit || review.origin?.repositoryFiles?.file?.content != null
+            review.action !== "delete" &&
+            review.action !== "rename" &&
+            (edit || review.origin?.repositoryFiles?.file?.content != null)
               ? () => {
                   const origin = review.origin ?? edit!.observation;
                   const original = origin.repositoryFiles!.file!;
                   const bytes = Uint8Array.from(atob(original.content!), (c) => c.charCodeAt(0));
                   setEdit({
+                    newFile: review.action === "create",
                     file: new File([bytes], original.path.split("/").at(-1)!, {
                       type: "text/plain",
                     }),
@@ -365,12 +520,22 @@ function GitHubFiles({
               : undefined
           }
           onClose={onClose}
+          onCancelChange={() => {
+            storage.removeItem(key);
+            setReview(null);
+            setEdit(null);
+          }}
           onDone={() => {
             storage.removeItem(key);
             storage.removeItem(`workspace-file-copy:${review.source}`);
             setReview(null);
             setEdit(null);
-            void read(review.input.files[0]!.path, review.input.branch);
+            void read(
+              review.action === "delete"
+                ? ""
+                : (review.input.files.find((f) => f.content !== null)?.path ?? ""),
+              review.input.branch,
+            );
           }}
         />
       )}
@@ -387,6 +552,7 @@ function GitHubFileReview({
   onClose,
   onDone,
   onBack,
+  onCancelChange,
 }: {
   value: Review;
   projectId: string;
@@ -396,6 +562,7 @@ function GitHubFileReview({
   onClose: () => void;
   onDone: () => void;
   onBack?: () => void;
+  onCancelChange: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog);
@@ -533,15 +700,17 @@ function GitHubFileReview({
         body: {
           kind: "repository-files",
           branch: value.input.branch,
-          path: value.input.files[0]!.path,
+          path: value.action === "create" ? "" : value.input.files[0]!.path,
         },
       });
       if (
         v.binding !== value.binding ||
         v.identity.id !== value.identityId ||
         v.repositoryId !== value.repositoryId ||
-        !v.repositoryFiles?.file ||
-        v.repositoryFiles.file.content === null
+        !v.repositoryFiles ||
+        (value.action !== "create" &&
+          (!v.repositoryFiles.file ||
+            (value.action !== "delete" && v.repositoryFiles.file.content === null)))
       )
         throw Error("Доступ или источник изменился. Открой файл заново.");
       const next: Review = {
@@ -550,12 +719,39 @@ function GitHubFileReview({
         operation: undefined,
         branchStep:
           value.branchStep?.operation?.state === "completed" ? value.branchStep : undefined,
-        oldText: decode(v.repositoryFiles.file.content),
-        origin: v,
+        oldText:
+          value.action === "create"
+            ? ""
+            : (() => {
+                try {
+                  return decode(v.repositoryFiles!.file!.content ?? "");
+                } catch {
+                  return "";
+                }
+              })(),
+        origin:
+          value.action === "create"
+            ? {
+                ...v,
+                repositoryFiles: {
+                  ...value.origin!.repositoryFiles!,
+                  head: v.repositoryFiles.head,
+                },
+              }
+            : v,
         input: {
           ...value.input,
           head: v.repositoryFiles.head,
-          files: [{ ...value.input.files[0]!, previous: v.repositoryFiles.file.sha }],
+          files:
+            value.action === "create"
+              ? value.input.files
+              : value.input.files.map((f, index) =>
+                  index === 0
+                    ? { ...f, previous: v.repositoryFiles!.file!.sha }
+                    : value.action === "rename"
+                      ? { ...f, content: v.repositoryFiles!.file!.content! }
+                      : f,
+                ),
         },
       };
       storage.setItem(storageKey, JSON.stringify(next));
@@ -655,7 +851,25 @@ function GitHubFileReview({
               />
             </label>
             <section aria-label="Изменения файла">
-              <pre>{diff(value.oldText, value.newText)}</pre>
+              <ul className="github-change-paths">
+                {value.input.files.map((f) => (
+                  <li key={f.path}>
+                    <strong>
+                      {f.content === null
+                        ? "Удаление"
+                        : f.previous === null
+                          ? "Создание"
+                          : "Изменение"}
+                    </strong>
+                    <span>{f.path}</span>
+                  </li>
+                ))}
+              </ul>
+              {value.action === "rename" ? (
+                <p>Содержимое сохраняется без изменений. Оба пути войдут в один коммит.</p>
+              ) : (
+                <pre>{diff(value.oldText, value.newText)}</pre>
+              )}
             </section>
           </>
         ) : (
@@ -725,6 +939,11 @@ function GitHubFileReview({
         )}
         {error && <p role="alert">{error}</p>}
         <div className="github-file-review-tools">
+          {target !== "pr" && (!state || state === "prepared" || state === "failed") && (
+            <button className="secondary" type="button" disabled={busy} onClick={onCancelChange}>
+              Отменить изменение
+            </button>
+          )}
           {onBack && target !== "pr" && (!state || state === "prepared" || state === "failed") && (
             <button className="secondary" type="button" disabled={busy} onClick={onBack}>
               К редактору

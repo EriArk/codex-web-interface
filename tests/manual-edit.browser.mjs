@@ -288,6 +288,98 @@ try {
       }
       await review.getByRole("button", { name: "Готово", exact: true }).click();
       assert.equal(commits, 1);
+      if (process.env.WITH_MANAGEMENT === "1") {
+        const finishCommit = async () => {
+          await review.getByRole("button", { name: "Подготовить коммит", exact: true }).click();
+          await review.getByRole("button", { name: "Создать коммит", exact: true }).click();
+          await expect(review.getByRole("alert")).toBeVisible();
+          await expect(
+            review.getByRole("button", { name: "Отменить изменение", exact: true }),
+          ).toHaveCount(0);
+          await page.reload();
+          await page.getByRole("button", { name: "Файлы GitHub", exact: true }).click();
+          await review.getByRole("button", { name: "Проверить результат", exact: true }).click();
+          await expect(review).toContainText("Коммит сохранён");
+          await review.getByRole("button", { name: "Готово", exact: true }).click();
+        };
+        await gh.getByRole("button", { name: "Новый файл", exact: true }).click();
+        await gh.getByLabel("Путь файла", { exact: true }).fill("docs/new.md");
+        await gh.getByRole("button", { name: "Открыть редактор", exact: true }).click();
+        await expect(editor.locator(".cm-content")).toBeEmpty();
+        await editor.getByRole("button", { name: "Проверить изменения", exact: true }).click();
+        await expect(review).toContainText("Создание");
+        await expect(review).toContainText("docs/new.md");
+        await page.reload();
+        await page.getByRole("button", { name: "Файлы GitHub", exact: true }).click();
+        await review.getByRole("button", { name: "К редактору", exact: true }).click();
+        await editor.locator(".cm-content").fill("# Created file");
+        await editor.getByRole("button", { name: "Проверить изменения", exact: true }).click();
+        await expect(review).toContainText("+# Created file");
+        await finishCommit();
+        assert.equal(operation.receipt.input.files[0].previous, null);
+        assert.equal(
+          Buffer.from(operation.receipt.input.files[0].content, "base64").toString(),
+          "# Created file",
+        );
+        await gh.getByRole("button", { name: "Переименовать", exact: true }).click();
+        await gh.getByLabel("Путь файла", { exact: true }).fill("docs/renamed.md");
+        for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+          await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+          for (const [label, width, height] of [
+            ["phone", 390, 844],
+            ["keyboard", 390, 460],
+            ["tablet", 768, 1024],
+          ]) {
+            await page.setViewportSize({ width, height });
+            const box = await gh.boundingBox();
+            assert(
+              box.x >= 0 &&
+                box.y >= 0 &&
+                box.x + box.width <= width + 1 &&
+                box.y + box.height <= height + 1,
+            );
+            await page.screenshot({
+              path: `.local/qa-manual-edit/${engine}-management-${theme}-${label}.png`,
+            });
+          }
+        }
+        await gh.getByRole("button", { name: "Проверить переименование", exact: true }).click();
+        await expect(review).toContainText("docs/new.md");
+        await expect(review).toContainText("docs/renamed.md");
+        await expect(review).toContainText("Оба пути войдут в один коммит");
+        for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+          await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+          for (const [label, width, height] of [
+            ["phone", 390, 844],
+            ["keyboard", 390, 460],
+            ["tablet", 768, 1024],
+            ["wide", 1366, 1024],
+          ]) {
+            await page.setViewportSize({ width, height });
+            await page.screenshot({
+              path: `.local/qa-manual-edit/${engine}-rename-${theme}-${label}.png`,
+            });
+          }
+        }
+        await finishCommit();
+        assert.equal(operation.receipt.input.files.length, 2);
+        assert.equal(operation.receipt.input.files[0].content, null);
+        assert.equal(operation.receipt.input.files[1].previous, null);
+        await gh.getByRole("button", { name: "Удалить", exact: true }).click();
+        await expect(review).toContainText("Удаление");
+        await expect(review).toContainText("docs/renamed.md");
+        await review.getByRole("button", { name: "Отменить изменение", exact: true }).click();
+        assert.equal(commits, 3);
+        await gh.getByRole("button", { name: "Удалить", exact: true }).click();
+        await finishCommit();
+        assert.equal(operation.receipt.input.files[0].content, null);
+        assert.equal(commits, 4);
+        await expect(gh.getByRole("button", { name: "README.md", exact: true })).toBeVisible();
+        console.log(
+          engine +
+            ": create/rename/delete review, cancel, restored editor and no-replay recovery passed",
+        );
+      }
       if (withPr)
         console.log(
           engine +

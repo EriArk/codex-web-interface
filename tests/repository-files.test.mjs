@@ -92,7 +92,16 @@ test("repository editor persists intent, isolates source bindings, and reconcile
     .run(JSON.stringify(missing), interrupted);
   assert.equal((await call(`/${interrupted}/status`)).json().state, "failed");
   assert(!deploymentBlockers(f.store).some((v) => v.kind === "repository_file"));
-  for (const input of [
+  for (const mutation of [
+    { ...input, files: [{ path: "new.md", previous: null, content: "" }] },
+    {
+      ...input,
+      files: [
+        { path: "README.md", previous: "b".repeat(40), content: null },
+        { path: "renamed.md", previous: null, content: "YWJj" },
+      ],
+    },
+    { ...input, files: [{ path: "README.md", previous: "b".repeat(40), content: null }] },
     { kind: "repository-branch", branch: "edit/readme", base: "main", head: "a".repeat(40) },
     {
       kind: "repository-pr",
@@ -104,7 +113,7 @@ test("repository editor persists intent, isolates source bindings, and reconcile
     },
   ]) {
     const next = randomUUID();
-    assert.equal((await call(`/${next}/prepare`, { ...body, input })).statusCode, 200);
+    assert.equal((await call(`/${next}/prepare`, { ...body, input: mutation })).statusCode, 200);
     assert.equal((await call(`/${next}/confirm`, { fingerprint: "fingerprint" })).statusCode, 500);
     const before = applies;
     assert.equal((await call(`/${next}/status`)).json().state, "completed");
@@ -117,7 +126,7 @@ test("repository editor persists intent, isolates source bindings, and reconcile
   scope = { ...scope, root: "C:/Other" };
   assert.equal((await call(`/${id}/confirm`, { fingerprint: "fingerprint" })).statusCode, 409);
   assert.equal((await call(`/${randomUUID()}/prepare`, body)).statusCode, 409);
-  assert.equal(applies, 3);
+  assert.equal(applies, 6);
   const otherId = randomUUID(),
     otherBinding = createHash("sha256").update(JSON.stringify(scope)).digest("hex");
   assert.equal(

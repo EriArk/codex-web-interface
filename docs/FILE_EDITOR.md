@@ -135,3 +135,40 @@ PR, draft recovery, exactly-once dispatch and internal PR inspection. Four-theme
 phone, keyboard-constrained, tablet and wide screenshots were captured, with
 representative screenshots visually inspected. Physical-device acceptance stays
 pending. Installed Windows helper and release evidence are recorded separately.
+
+
+## GitHub file management (24 September)
+
+The integrated GitHub file window now offers New file (path then CodeMirror),
+Rename (destination path) and Delete. Each action enters the same commit review;
+all affected paths are labeled as additions/changes/deletions. A rename submits
+the original deletion and byte-identical destination addition in one
+expected-HEAD commit. New directories follow from the file path. Empty new text
+files and case-only renames are supported. An occupied destination is refused;
+no implicit overwrite or local checkout mutation occurs. The existing branch
+creation and PR workflow remains available for these changes.
+
+The schema now allows explicit absence (`previous: null`) and deletion
+(`content: null`, requiring an old blob SHA). Machine preflight checks exact
+case-sensitive GitHub paths, old fingerprints and absence before one atomic
+GraphQL mutation. Automated project preparation retains its stricter path
+rules. Reconciliation checks added bytes and deleted paths at the exact commit;
+unknown operations cannot be cancelled into a new dispatch. Cancel before
+sending abandons only the local review. Creation drafts and confirmed branch
+choices survive review/editor transitions and page reloads.
+
+Creating/editing/renaming keeps the existing 96 KiB direct GitHub content budget;
+deletion needs metadata only. Binary files within that budget can be renamed
+without decoding. Larger transfers and directory-level remote operations are
+outside this text-editor stage. API mapping follows GitHub's
+[FileChanges contract](https://docs.github.com/en/graphql/reference/git#filechanges).
+
+Verification: 26 focused helper/Hub tests plus the extended Hub recovery test;
+Chromium and WebKit cover empty creation, restored creation editor, atomic rename,
+explicit deletion cancellation, lost replies, reload and single-dispatch status
+recovery, alongside branch/commit/PR and the universal editor. Four-theme phone,
+keyboard-height, tablet and wide screenshots were captured and representative
+screenshots inspected. Installed helper verification uses actual Hub -> SSH ->
+Scheduled Task preparations/status reads for all three operations without
+creating/deleting files in the live repository. Physical device acceptance remains
+pending.

@@ -58,3 +58,10 @@ explicit two-column row (one column on phones). PR base, title and description
 form a single aligned column; retain the protected heading, scrollable body and
 fixed equal-width confirmation footer. Show only controls for the current step.
 The resulting PR opens over the mounted review in the integrated viewer.
+
+GitHub file management: group Edit/Rename/Delete in an explicit action grid;
+Edit spans the phone row and the two management peers share the next row. Put
+new-path fields in a separate inset form with equal-width Cancel/Continue keys.
+Use short visible labels with full accessible names so phone button text never
+spills into a neighbor. The common commit review lists every affected path and
+keeps deletion/addition labels aligned; a rename is one reviewed operation.
