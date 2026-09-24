@@ -21,6 +21,13 @@ import {
 } from "react";
 import { pageWorkspace, accountLocalStorage as storage, workspaceUrl } from "./accountStorage";
 import { api, messageOf } from "./api";
+import {
+  BoardMove,
+  type CardPosition,
+  DrawingPad,
+  drawingPath,
+  WirePin,
+} from "./BrainstormGestures";
 import { BrainstormVoice } from "./BrainstormVoice";
 import { Icon } from "./icons";
 import { ProjectDialog, type ProjectSetupSeed } from "./ProjectDialog";
@@ -35,20 +42,6 @@ import "./brainstorm.css";
 
 const Workspace = lazy(() => import("./GptWorkspace").then((m) => ({ default: m.GptWorkspace })));
 const root = "/team/brainstorm";
-const drawingPath = (points: number[][]) => {
-  let move = true;
-  return points
-    .map(([x, y]) => {
-      if (x === -1) {
-        move = true;
-        return "";
-      }
-      const segment = `${move ? "M" : "L"}${x},${y}`;
-      move = false;
-      return segment;
-    })
-    .join(" ");
-};
 function saved<T>(key: string, fallback: T): T {
   try {
     return JSON.parse(storage.getItem(key) ?? "null") ?? fallback;
@@ -283,6 +276,11 @@ export function BrainstormWindow({
   const [filtersOpen, setFiltersOpen] = useState(!!(filter.text || filter.group));
   const [focusedCard, setFocusedCard] = useState<string | null>(null);
   const board = useRef<HTMLDivElement>(null);
+  const [movement, setMovement] = useState<CardPosition | null>(null);
+  const [wire, setWire] = useState<{
+    source: BrainstormCard;
+    point: { x: number; y: number } | null;
+  } | null>(null);
   const [state, setState] = useState<BrainstormState | null>(null),
     [cards, setCards] = useState<BrainstormCard[]>([]),
     [tab, setTab] = useState<"board" | "chat" | "gpt">("board");
@@ -351,15 +349,48 @@ export function BrainstormWindow({
       "PUT",
       bodyOf(value),
     );
-    setCards((old) => [...old.filter((c) => c.id !== result.id), result]);
+    setCards((old) =>
+      old.some((c) => c.id === result.id)
+        ? old.map((c) => (c.id === result.id ? result : c))
+        : [...old, result],
+    );
   };
+  const moveCard = (value: BrainstormCard) => {
+    setMovement({ id: value.id, x: value.x, y: value.y });
+    void action.run(async () => {
+      try {
+        await saveCard(value);
+      } finally {
+        setMovement(null);
+      }
+    });
+  };
+  const connect = (source: BrainstormCard, target: string | null) => {
+    setWire(null);
+    if (
+      !target ||
+      target === source.id ||
+      !cards.some((c) => c.id === target) ||
+      source.links?.includes(target)
+    )
+      return;
+    void action.run(async () => {
+      if ((source.links?.length ?? 0) >= 20)
+        throw Error("У карточки уже 20 связей. Удалите ненужную в редакторе.");
+      await saveCard({ ...source, links: [...(source.links ?? []), target] });
+    });
+  };
+  const placedCards = cards.map((c) =>
+    movement?.id === c.id ? { ...c, x: movement.x, y: movement.y } : c,
+  );
+  const placedById = new Map(placedCards.map((c) => [c.id, c]));
   const room = state?.room;
   const groups = [...new Set(cards.map((c) => c.group || "").filter(Boolean))].sort((a, b) =>
     a.localeCompare(b),
   );
   const search = filter.text.trim().normalize("NFKC").toLocaleLowerCase();
   const filtered = !!(search || filter.group);
-  const visibleCards = cards.filter(
+  const visibleCards = placedCards.filter(
     (c) =>
       (!filter.group || (filter.group === "none" ? !c.group : c.group === filter.group.slice(6))) &&
       (!search ||
@@ -392,6 +423,7 @@ export function BrainstormWindow({
       payload: { url: `/api${path}/chat/files/${file.id}`, mime: file.mime, bytes: file.bytes },
     });
   const selectTab = (value: typeof tab) => {
+    setWire(null);
     setTab(value);
     if (value === "chat") setChatMounted(true);
     if (value === "gpt") {
@@ -516,13 +548,31 @@ export function BrainstormWindow({
                 )}
               </div>
             )}
-            <div className="brainstorm-board-scroll shared-scroll">
+            {wire && (
+              <div className="brainstorm-wire-tools">
+                <span>Выберите вторую карточку</span>
+                <button type="button" className="secondary" onClick={() => setWire(null)}>
+                  Отмена
+                </button>
+              </div>
+            )}
+            <section
+              aria-label="Доска идей"
+              className="brainstorm-board-scroll shared-scroll"
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && wire) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setWire(null);
+                }
+              }}
+            >
               <div
                 ref={board}
                 className={`brainstorm-board${filtered ? " brainstorm-filtered" : ""}`}
                 style={{
-                  minHeight: Math.max(600, ...cards.map((c) => c.y + 330)),
-                  minWidth: Math.max(1060, ...cards.map((c) => c.x + c.width + 24)),
+                  minHeight: Math.max(600, ...placedCards.map((c) => c.y + 330)),
+                  minWidth: Math.max(1060, ...placedCards.map((c) => c.x + c.width + 24)),
                 }}
               >
                 {!filtered && (
@@ -539,9 +589,9 @@ export function BrainstormWindow({
                         <path d="M0,0 L8,4 L0,8" fill="currentColor" />
                       </marker>
                     </defs>
-                    {cards.flatMap((c) =>
+                    {placedCards.flatMap((c) =>
                       (c.links ?? []).flatMap((target) => {
-                        const to = cards.find((v) => v.id === target);
+                        const to = placedById.get(target);
                         if (!to) return [];
                         const direction = to.x + to.width / 2 >= c.x + c.width / 2 ? 1 : -1;
                         const fromX = direction === 1 ? c.x + c.width : c.x,
@@ -555,6 +605,12 @@ export function BrainstormWindow({
                           />,
                         ];
                       }),
+                    )}
+                    {wire?.point && (
+                      <path
+                        className="brainstorm-wire-preview"
+                        d={`M${wire.source.x + wire.source.width / 2},${wire.source.y + 28} Q${wire.point.x},${wire.source.y + 28} ${wire.point.x},${wire.point.y}`}
+                      />
                     )}
                   </svg>
                 )}
@@ -575,13 +631,30 @@ export function BrainstormWindow({
                     className="brainstorm-card"
                     style={{ left: c.x, top: c.y, width: c.width }}
                     data-card={c.id}
+                    data-wire-target={!!wire && wire.source.id !== c.id}
+                    data-moving={movement?.id === c.id}
                     tabIndex={-1}
                   >
                     <header>
-                      <MoveCard
+                      <BoardMove
                         card={c}
                         disabled={room.closed || action.busy || filtered}
-                        onMove={(value) => void action.run(() => saveCard(value))}
+                        onPreview={setMovement}
+                        onMove={moveCard}
+                      />
+                      <WirePin
+                        card={c}
+                        disabled={room.closed || action.busy}
+                        selected={wire?.source.id === c.id}
+                        onSelect={() =>
+                          wire ? connect(wire.source, c.id) : setWire({ source: c, point: null })
+                        }
+                        onDrag={(source, x, y) => {
+                          const rect = board.current!.getBoundingClientRect();
+                          setWire({ source, point: { x: x - rect.left, y: y - rect.top } });
+                        }}
+                        onDrop={connect}
+                        onCancel={() => setWire(null)}
                       />
                       <button
                         type="button"
@@ -678,7 +751,7 @@ export function BrainstormWindow({
                   </article>
                 ))}
               </div>
-            </div>
+            </section>
             {!!room.projects.length && (
               <div className="brainstorm-projects">
                 {room.projects.map((p) => (
@@ -824,7 +897,6 @@ function CardEditor({
 }) {
   const action = useSharedAction(),
     [confirm, setConfirm] = useState(false),
-    [drawing, setDrawing] = useState(false),
     [linkQuery, setLinkQuery] = useState("");
   const patch = (d: Partial<CardDraft>) => onChange({ ...value, ...d });
   return (
@@ -985,56 +1057,29 @@ function CardEditor({
         )}
         {value.kind === "drawing" && (
           <>
-            <svg
-              className="brainstorm-drawing"
-              viewBox="0 0 1000 600"
-              role="img"
-              aria-label="Поле рисунка"
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                setDrawing(true);
-                const r = e.currentTarget.getBoundingClientRect();
-                patch({
-                  points: [
-                    ...value.points.slice(0, 1998),
-                    [-1, -1],
-                    [
-                      Math.round(((e.clientX - r.left) / r.width) * 1000),
-                      Math.round(((e.clientY - r.top) / r.height) * 600),
-                    ],
-                  ],
-                });
-              }}
-              onPointerMove={(e) => {
-                if (!drawing || value.points.length >= 2000) return;
-                const r = e.currentTarget.getBoundingClientRect();
-                patch({
-                  points: [
-                    ...value.points,
-                    [
-                      Math.round(
-                        Math.max(0, Math.min(1000, ((e.clientX - r.left) / r.width) * 1000)),
-                      ),
-                      Math.round(
-                        Math.max(0, Math.min(600, ((e.clientY - r.top) / r.height) * 600)),
-                      ),
-                    ],
-                  ],
-                });
-              }}
-              onPointerUp={() => setDrawing(false)}
-              onPointerCancel={() => setDrawing(false)}
-            >
-              <path
-                d={drawingPath(value.points)}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="5"
-              />
-            </svg>
-            <button className="secondary" type="button" onClick={() => patch({ points: [] })}>
-              Очистить рисунок
-            </button>
+            <DrawingPad points={value.points} onChange={(points) => patch({ points })} />
+            <div className="brainstorm-grid">
+              <button
+                className="secondary"
+                type="button"
+                disabled={!value.points.length}
+                onClick={() => {
+                  let start = value.points.length - 1;
+                  while (start > 0 && value.points[start]?.[0] !== -1) start--;
+                  patch({ points: value.points.slice(0, start) });
+                }}
+              >
+                Отменить штрих
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                disabled={!value.points.length}
+                onClick={() => patch({ points: [] })}
+              >
+                Очистить рисунок
+              </button>
+            </div>
           </>
         )}
         <label>
@@ -1046,23 +1091,17 @@ function CardEditor({
             onChange={(e) => patch({ text: e.target.value })}
           />
         </label>
-        <details>
-          <summary>Положение на широкой доске</summary>
-          <div className="brainstorm-grid">
-            {(["x", "y", "width"] as const).map((k) => (
-              <label key={k}>
-                {k === "width" ? "Ширина" : k.toUpperCase()}
-                <input
-                  type="number"
-                  value={value[k]}
-                  min={k === "width" ? 220 : 0}
-                  max={k === "width" ? 800 : 5000}
-                  onChange={(e) => patch({ [k]: Number(e.target.value) })}
-                />
-              </label>
-            ))}
-          </div>
-        </details>
+        <label>
+          Размер карточки
+          <select value={value.width} onChange={(e) => patch({ width: Number(e.target.value) })}>
+            <option value={220}>Компактная</option>
+            <option value={310}>Обычная</option>
+            <option value={480}>Широкая</option>
+            {![220, 310, 480].includes(value.width) && (
+              <option value={value.width}>Текущий размер</option>
+            )}
+          </select>
+        </label>
         {action.error && (
           <p role="alert" className="notice">
             {action.error}
@@ -1107,75 +1146,6 @@ function CardEditor({
         )}
       </form>
     </RoomDialog>
-  );
-}
-function MoveCard({
-  card,
-  disabled,
-  onMove,
-}: {
-  card: BrainstormCard;
-  disabled: boolean;
-  onMove: (value: CardDraft) => void;
-}) {
-  const drag = useRef<{ x: number; y: number; node: HTMLElement; dx: number; dy: number } | null>(
-    null,
-  );
-  const title =
-    card.title || { note: "Мысль", link: "Ссылка", file: "Файл", drawing: "Рисунок" }[card.kind];
-  const finish = (save: boolean) => {
-    const d = drag.current;
-    drag.current = null;
-    if (!d) return;
-    d.node.style.transform = "";
-    if (save && (d.dx || d.dy)) onMove({ ...card, x: card.x + d.dx, y: card.y + d.dy });
-  };
-  return (
-    <button
-      type="button"
-      className="brainstorm-card-move"
-      disabled={disabled}
-      aria-label={`Переместить ${title}`}
-      onPointerDown={(e) => {
-        if (matchMedia("(max-width: 700px)").matches) return;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = {
-          x: e.clientX,
-          y: e.clientY,
-          node: e.currentTarget.closest("article")!,
-          dx: 0,
-          dy: 0,
-        };
-      }}
-      onPointerMove={(e) => {
-        const d = drag.current;
-        if (!d) return;
-        d.dx = Math.round(Math.max(-card.x, Math.min(5000 - card.x, e.clientX - d.x)));
-        d.dy = Math.round(Math.max(-card.y, Math.min(5000 - card.y, e.clientY - d.y)));
-        d.node.style.transform = `translate(${d.dx}px,${d.dy}px)`;
-      }}
-      onPointerUp={() => finish(true)}
-      onPointerCancel={() => finish(false)}
-      onKeyDown={(e) => {
-        const direction: { [key: string]: [number, number] } = {
-          ArrowLeft: [-24, 0],
-          ArrowRight: [24, 0],
-          ArrowUp: [0, -24],
-          ArrowDown: [0, 24],
-        };
-        const d = direction[e.key];
-        if (d) {
-          e.preventDefault();
-          onMove({
-            ...card,
-            x: Math.max(0, Math.min(5000, card.x + d[0])),
-            y: Math.max(0, Math.min(5000, card.y + d[1])),
-          });
-        }
-      }}
-    >
-      {title}
-    </button>
   );
 }
 function RoomSettings({

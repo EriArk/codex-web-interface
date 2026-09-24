@@ -209,7 +209,7 @@
 }
 .brainstorm-card header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr) 44px 44px;
   gap: 8px;
   align-items: center;
 }
@@ -460,4 +460,102 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
+}
+
+/* Gesture ownership belongs to the actual HTML touch surface, before pointerdown. */
+.brainstorm-ink-surface {
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.brainstorm-ink-surface,
+.brainstorm-ink-surface *,
+.brainstorm-wire-pin,
+.brainstorm-wire-pin * {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.brainstorm-ink-surface svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.brainstorm-wire-pin {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
+}
+.brainstorm-wire-pin[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.brainstorm-card[data-wire-target="true"] {
+  border-color: var(--accent);
+}
+.brainstorm-card[data-moving="true"] {
+  z-index: 2;
+}
+.brainstorm-wire-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+.brainstorm-wire-preview {
+  stroke-dasharray: 6 4;
+}
+.brainstorm-card-move {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.brainstorm-card-move > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brainstorm-grip {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+@media (min-width: 701px) {
+  .brainstorm-card-move,
+  .brainstorm-card-move * {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+@media (max-width: 700px) {
+  .brainstorm-grip {
+    display: none;
+  }
+}
+
+.brainstorm-pane {
+  position: relative;
+}
+.brainstorm-wire-tools {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  right: 12px;
+  z-index: 3;
+  background: var(--window-screen);
+  border: 1px solid var(--window-edge);
+  border-radius: 8px;
+}
+
+.brainstorm-card-move:disabled,
+.brainstorm-card-move:disabled * {
+  touch-action: auto;
+  cursor: default;
 }

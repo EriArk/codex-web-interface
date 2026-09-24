@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { chromium, expect, webkit } from "@playwright/test";
 import react from "../apps/web/node_modules/@vitejs/plugin-react/dist/index.js";
 import { build } from "../apps/web/node_modules/vite/dist/node/index.js";
+import { checkBrainstormGestures } from "./brainstorm-gestures.mjs";
 
 const dir = await mkdtemp(join(tmpdir(), "cw-room-ui-")),
   screens = resolve(process.env.QA_SCREENSHOTS || ".local/qa-brainstorm");
@@ -61,7 +62,7 @@ try {
   ]) {
     const browser = await type.launch();
     try {
-      const page = await browser.newPage({ viewport: { width: 390, height: 844 } }),
+      const page = await browser.newPage({ hasTouch: true, viewport: { width: 390, height: 844 } }),
         errors = [],
         requests = [];
       page.setDefaultTimeout(15000);
@@ -343,6 +344,7 @@ try {
         requests.filter((r) => r.method === "PUT" && r.path.includes("/cards/")).length,
         1,
       );
+      await checkBrainstormGestures({ page, engine, cards, requests, screens });
       for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
         await page.evaluate((theme) => {
           document.documentElement.dataset.theme = theme;

@@ -51,3 +51,13 @@ Each card can have a named group (up to 80 characters) and up to 20 directed lin
 The unfiltered wide board shows connection arrows. Both incoming and outgoing references are also available in the card's expandable list, including on phones. Clicking a reference clears filters and focuses the exact target. Filtered results use a readable grid without moving the original cards. A deleted target disappears from live navigation; its ID remains provenance in the source card and immutable snapshots until explicitly unlinked. New references to missing/deleted/foreign-room cards and self-links are rejected. Optimistic revisions protect group/link edits; older clients omitting the new fields preserve them.
 
 Snapshots/ZIP provenance retain all selected card metadata. Bounded room/Project GPT context includes group names and bounded link IDs; references to cards outside the selected snapshot do not import those cards automatically. No Windows helper contract or database schema version changes are required.
+
+### Direct manipulation and touch
+
+Tablet/desktop cards use a visible title/grip for free positioning; the numeric X/Y editor is removed. Size uses compact/normal/wide choices. Drag previews keep connections attached and remain at the dropped location until acknowledgement; one mutation preserves the starting revision, and pointer cancellation restores the saved position without writing. Edits preserve list order. Filtered grids and phone lists keep their saved spatial coordinates unchanged.
+
+Pull the connection pin onto another card to link it, or tap two pins (also supported on phones). Escape/Cancel or dropping outside a target discards the pending connection. Existing link editing removes links. Same-room identity, duplicate checks, the 20-link limit and optimistic revision checks still apply.
+
+Drawing uses an HTML touch boundary with captured primary-pointer strokes, coalesced samples and frame-bounded local rendering. Draft persistence happens once per completed/interrupted stroke rather than on every point. Undo removes only the last stroke. Touch scrolling is suppressed only on drawing/connection surfaces and enabled wide-card drag handles; normal board/editor scrolling remains available elsewhere.
+
+Verification adds actual Chromium touch input for tablet drag, cancellation, wire creation and phone drawing over existing strokes, plus outside-surface scrolling. WebKit verifies pointer behavior, touch pin selection and native non-passive touch cancellation boundaries; both engines cover exact writes, undo, published drawing points and themed layouts. This is browser automation, not physical iPhone/iPad acceptance. Existing 23 focused Brainstorm/Project GPT checks remain green; no helper or server contract changes.
