@@ -40,6 +40,9 @@ export async function checkBrainstormGestures({ page, engine, cards, requests, s
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(start.x + 50, start.y + 85, { steps: 8 });
+  for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    await handle.dispatchEvent(event, { pointerId: 999, pointerType: "touch", isPrimary: false });
+  }
   assert.equal(writes().length, count, "drag does not flood Hub with writes");
   await expect(source).toHaveCSS("left", `${before.x + 50}px`);
   await page.mouse.up();
@@ -111,6 +114,9 @@ export async function checkBrainstormGestures({ page, engine, cards, requests, s
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
     await page.mouse.move(end.x, end.y, { steps: 10 });
+  }
+  for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    await fromPin.dispatchEvent(event, { pointerId: 999, pointerType: "touch", isPrimary: false });
   }
   await expect(page.locator(".brainstorm-wire-preview")).toBeVisible();
   if (cdp) await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });

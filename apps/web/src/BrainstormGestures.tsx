@@ -150,10 +150,10 @@ export function BoardMove({
     next: BrainstormCard;
   } | null>(null);
   const title = card.title || "Материал";
-  const finish = (save: boolean) => {
+  const finish = (save: boolean, pointer?: number) => {
     const current = drag.current;
+    if (!current || (pointer !== undefined && pointer !== current.pointer)) return;
     drag.current = null;
-    if (!current) return;
     if (save && (current.card.x !== current.next.x || current.card.y !== current.next.y))
       onMove(current.next);
     else onPreview(null);
@@ -168,7 +168,13 @@ export function BoardMove({
       aria-label={`Переместить ${title}`}
       title="Перетащить карточку"
       onPointerDown={(e) => {
-        if (!e.isPrimary || e.button !== 0 || matchMedia("(max-width: 700px)").matches) return;
+        if (
+          drag.current ||
+          !e.isPrimary ||
+          e.button !== 0 ||
+          matchMedia("(max-width: 700px)").matches
+        )
+          return;
         e.preventDefault();
         e.stopPropagation();
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -200,9 +206,9 @@ export function BoardMove({
         };
         onPreview({ id: card.id, x: d.next.x, y: d.next.y });
       }}
-      onPointerUp={() => finish(true)}
-      onPointerCancel={() => finish(false)}
-      onLostPointerCapture={() => finish(false)}
+      onPointerUp={(e) => finish(true, e.pointerId)}
+      onPointerCancel={(e) => finish(false, e.pointerId)}
+      onLostPointerCapture={(e) => finish(false, e.pointerId)}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           finish(false);
@@ -269,7 +275,7 @@ export function WirePin({
       aria-pressed={selected}
       title="Потянуть связь к другой карточке"
       onPointerDown={(e) => {
-        if (!e.isPrimary || e.button !== 0) return;
+        if (drag.current || !e.isPrimary || e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -285,8 +291,8 @@ export function WirePin({
       }}
       onPointerUp={(e) => {
         const d = drag.current;
-        drag.current = null;
         if (!d || d.id !== e.pointerId) return;
+        drag.current = null;
         e.preventDefault();
         e.stopPropagation();
         if (d.moved) {
@@ -297,12 +303,13 @@ export function WirePin({
           onDrop(d.card, target && board?.contains(target) ? (target.dataset.card ?? null) : null);
         } else onSelect();
       }}
-      onPointerCancel={() => {
+      onPointerCancel={(e) => {
+        if (drag.current?.id !== e.pointerId) return;
         drag.current = null;
         onCancel();
       }}
-      onLostPointerCapture={() => {
-        if (drag.current) {
+      onLostPointerCapture={(e) => {
+        if (drag.current?.id === e.pointerId) {
           drag.current = null;
           onCancel();
         }
