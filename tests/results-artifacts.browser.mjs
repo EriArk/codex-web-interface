@@ -173,18 +173,26 @@ try {
       await expect(page.locator('[data-result="canvas"]')).toHaveCount(0);
       assert.equal(reads, 0);
       assert.equal(canvasBodyReads, 0);
-      await card.getByRole("button", { name: "Открыть файл" }).click();
-      await expect(page.locator(".result-inspector")).toBeVisible();
-      assert.equal(reads, 0);
+      for (const theme of ["organizer", "crt-green", "hitech-2000s", "classic-dark"]) {
+        await page.evaluate((t) => {
+          document.documentElement.dataset.theme = t;
+          document.documentElement.dataset.caseColor =
+            t === "hitech-2000s" ? "turquoise" : t === "classic-dark" ? "blue" : "green";
+        }, theme);
+        await page.waitForTimeout(150);
+        await page.screenshot({
+          animations: "disabled",
+          path: `.local/qa-results-artifacts/${name}-${theme}-cards.png`,
+        });
+      }
       const downloadEvent = page.waitForEvent("download");
-      await page.locator(".result-inspector").getByRole("link", { name: "Скачать файл" }).click();
+      await card.getByRole("link", { name: "Скачать", exact: true }).click();
       const download = await downloadEvent;
       assert.equal(await readFile(await download.path(), "utf8"), body);
       await expect(page.locator(".file-preview")).toHaveCount(0);
-      await page
-        .locator(".result-inspector")
-        .getByRole("button", { name: "Предпросмотр", exact: true })
-        .click();
+      await card.getByRole("button", { name: "Открыть Текст.md", exact: true }).click();
+      await expect(page.locator(".result-inspector")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Предпросмотр", exact: true })).toHaveCount(0);
       await expect(page.locator(".file-text")).toContainText("Привет");
       await expect(
         page.getByText("Показано начало файла. Полная версия доступна для скачивания."),
@@ -201,17 +209,18 @@ try {
         await page.screenshot({ path: `.local/qa-results-artifacts/${name}-${theme}.png` });
       }
       await page.getByRole("button", { name: "Закрыть просмотр" }).click();
-      await page.getByRole("button", { name: "Вернуться к результатам" }).click();
       await expect(
         page.locator('[data-result="binary"]').getByRole("button", { name: "Предпросмотр" }),
       ).toHaveCount(0);
       failPreview = true;
-      await card.getByRole("button", { name: "Предпросмотр" }).click();
+      await card.getByRole("button", { name: "Открыть Текст.md", exact: true }).click();
       await expect(
         page.getByText("Предпросмотр недоступен. Можно скачать исходный файл."),
       ).toBeVisible();
       await expect(
-        page.locator(".result-inspector").getByRole("link", { name: "Скачать файл" }),
+        page
+          .locator(".file-viewer-dialog")
+          .getByRole("link", { name: "Скачать файл", exact: true }),
       ).toBeVisible();
       await page.getByRole("button", { name: "Закрыть просмотр" }).click();
       await page
@@ -222,6 +231,13 @@ try {
       await expect(
         page.locator('[data-result="image"]').getByRole("link", { name: "Скачать" }),
       ).toBeVisible();
+      await page.getByRole("button", { name: "Открыть снимок", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Закрыть просмотр", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Закрыть просмотр", exact: true }).click();
+      await expect(page.locator(".screenshot-preview img")).toBeVisible();
+      await expect(page.locator(".result-inspector")).toHaveCount(0);
       assert.equal(canvasBodyReads, 0, "Canvas must not be read in the background");
       assert.equal(failures.length, 0, failures.join("\n"));
       console.log(

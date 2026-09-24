@@ -123,7 +123,8 @@ try {
   await expect(dialog.locator(".message-short-block")).toContainText("Короткий пример");
   await dialog.getByRole("button", { name: "Блок в результатах · 21 строк" }).click();
   const results = page.getByRole("dialog", { name: "Результаты разбора", exact: true });
-  await expect(results.locator(".result-inspector")).toContainText("Строка 21");
+  await expect(page.locator(".file-viewer-dialog")).toContainText("Строка 21");
+  await page.getByRole("button", { name: "Закрыть просмотр", exact: true }).click();
   await results.getByRole("button", { name: "Закрыть результаты разбора" }).click();
   await dialog
     .locator("summary")

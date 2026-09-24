@@ -3,6 +3,7 @@ import type {
   CollaborationSpace,
   GitHubActivitySource,
   SpaceActivityPage,
+  SpaceJournalEvent,
 } from "@codex-web/shared";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityDiscussion } from "./ActivityDiscussion";
@@ -17,6 +18,7 @@ import {
 import { ApiError, api, messageOf } from "./api";
 import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
+import { SharedResult } from "./ResultSharing";
 import "./space-activity.css";
 
 type Entry = GitHubActivitySource & { projectId: string; projectName: string };
@@ -61,6 +63,7 @@ export function SpaceActivity({
 }) {
   const cacheScope = activityScope(space);
   const [initial] = useState(() => readActivityView(cacheScope));
+  const [local, setLocal] = useState<SpaceJournalEvent[]>(initial.local);
   const [pages, setPages] = useState<SpaceActivityPage[]>(initial.pages),
     [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(!initial.pages.length),
@@ -82,6 +85,7 @@ export function SpaceActivity({
   const view = useRef(initial);
   view.current = {
     pages,
+    local,
     project,
     author,
     limit,
@@ -93,6 +97,7 @@ export function SpaceActivity({
   useEffect(() => {
     saveActivityView(cacheScope, {
       pages,
+      local,
       project,
       author,
       limit,
@@ -101,7 +106,7 @@ export function SpaceActivity({
       groups: groupKeys.current,
       scroll: scroll.current,
     });
-  }, [cacheScope, pages, project, author, limit, sources, expanded]);
+  }, [cacheScope, pages, local, project, author, limit, sources, expanded]);
   useEffect(
     () => () => saveActivityView(cacheScope, { ...view.current, scroll: scroll.current }),
     [cacheScope],
@@ -156,6 +161,18 @@ export function SpaceActivity({
     setErrors({});
     setBusy(true);
     setOpenError("");
+    const localRead = api<{ items: SpaceJournalEvent[] }>(`/team/spaces/${spaceId}/activity/local`)
+      .then((value) => {
+        if (generation.current === run) {
+          capture();
+          setLocal(value.items);
+        }
+      })
+      .catch((error) => {
+        if (generation.current !== run) return;
+        setErrors((old) => ({ ...old, local: messageOf(error) }));
+        if (error instanceof ApiError && [403, 404].includes(error.status)) setLocal([]);
+      });
     void (async () => {
       // Serial, finite reads only while opened. Filters never trigger native reads.
       for (const [projectId, copy] of projects) {
@@ -206,6 +223,7 @@ export function SpaceActivity({
           }
         }
       }
+      await localRead;
       if (generation.current === run) setBusy(false);
     })();
     return () => {
@@ -227,14 +245,30 @@ export function SpaceActivity({
     );
   const authors = [
     ...new Map(
-      entries.filter((e) => e.author).map((e) => [String(e.author!.id), e.author!.login]),
+      entries.filter((e) => e.author).map((e) => [String(e.author!.id), "@" + e.author!.login]),
     ).entries(),
+  ];
+  const localAuthors = [
+    ...new Map(local.map((e) => ["hub:" + e.author.id, e.author.name])).entries(),
   ];
   const filtered = groups(
     entries.filter(
       (e) => (!project || e.projectId === project) && (!author || String(e.author?.id) === author),
     ),
   );
+  const timeline = [
+    ...filtered.map((batch) => ({
+      batch,
+      at: batch[0]!.at,
+      key: batch[0]!.projectId + batch[0]!.key,
+    })),
+    ...local
+      .filter(
+        (e) =>
+          (!project || e.projectId === project) && (!author || "hub:" + e.author.id === author),
+      )
+      .map((event) => ({ event, at: new Date(event.at).toISOString(), key: event.id })),
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || a.key.localeCompare(b.key));
   const open = (entry: Entry) => {
     const page = pages.find((p) => p.projectId === entry.projectId);
     if (page)
@@ -296,7 +330,7 @@ export function SpaceActivity({
           </select>
         </label>
         <label>
-          <span>Автор · GitHub</span>
+          <span>Автор</span>
           <select
             aria-label="Автор активности"
             value={author}
@@ -306,9 +340,9 @@ export function SpaceActivity({
             }}
           >
             <option value="">Все авторы</option>
-            {authors.map(([id, name]) => (
+            {[...authors, ...localAuthors].map(([id, name]) => (
               <option key={id} value={id}>
-                @{name}
+                {name}
               </option>
             ))}
           </select>
@@ -331,7 +365,9 @@ export function SpaceActivity({
           scroll.current = e.currentTarget.scrollTop;
         }}
       >
-        {!entries.length && busy && <p className="activity-empty">Загружаем события…</p>}
+        {!entries.length && !local.length && busy && (
+          <p className="activity-empty">Загружаем события…</p>
+        )}
         {eligible
           .filter((p) => !project || p.id === project)
           .map((p) =>
@@ -349,11 +385,49 @@ export function SpaceActivity({
               </p>
             ) : null,
           )}
-        {!busy && !filtered.length && !Object.keys(errors).length && (
+        {!busy && !timeline.length && !Object.keys(errors).length && (
           <p className="activity-empty">Пока нет событий по этому выбору.</p>
         )}
+        {errors.local && <p role="status">{errors.local}</p>}
         {openError && <p role="status">{openError}</p>}
-        {filtered.slice(0, limit).map((batch, index) => {
+        {timeline.slice(0, limit).map((item, index) => {
+          if ("event" in item) {
+            const e = item.event;
+            return (
+              <div className="activity-group" key={e.id} data-activity-key={e.id}>
+                {(index === 0 || date(timeline[index - 1]!.at) !== date(item.at)) && (
+                  <h3 className="activity-date">{date(item.at)}</h3>
+                )}
+                <article className="activity-card">
+                  <span className="activity-symbol">
+                    <Icon name={e.kind === "result" ? "file" : "people"} size={19} />
+                  </span>
+                  <div className="activity-content">
+                    <div className="activity-meta">
+                      <strong>{e.author.name}</strong>
+                      <span>{e.projectName ?? space.title}</span>
+                      <time dateTime={item.at}>{time(item.at)}</time>
+                    </div>
+                    <h4>{e.title}</h4>
+                    {e.result ? (
+                      <SharedResult card={e.result} />
+                    ) : e.projectId ? (
+                      <div className="activity-primary-actions">
+                        <button
+                          className="secondary activity-open"
+                          type="button"
+                          onClick={() => onProject(e.projectId!)}
+                        >
+                          Открыть проект
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              </div>
+            );
+          }
+          const batch = item.batch;
           const first = batch[0]!,
             day = date(first.at);
           const groupId =
@@ -369,7 +443,7 @@ export function SpaceActivity({
           const page = pages.find((p) => p.projectId === first.projectId)!;
           return (
             <div className="activity-group" key={groupId} data-activity-key={groupId}>
-              {(index === 0 || date(filtered[index - 1]![0]!.at) !== day) && (
+              {(index === 0 || date(timeline[index - 1]!.at) !== day) && (
                 <h3 className="activity-date">{day}</h3>
               )}
               <article className="activity-card">
@@ -393,6 +467,17 @@ export function SpaceActivity({
                     {batch.length > 1 ? `${batch.length} коммита` : label(first)}
                   </small>
                   <h4>{first.title}</h4>
+                  {first.checks && (
+                    <p className="activity-checks">
+                      Проверки:{" "}
+                      {first.checks.state === "failure"
+                        ? `ошибки · ${first.checks.failed}`
+                        : first.checks.state === "success"
+                          ? `пройдены · ${first.checks.total}`
+                          : "выполняются"}{" "}
+                      · <code>{first.checks.sha.slice(0, 7)}</code>
+                    </p>
+                  )}
                   <div className="activity-primary-actions">
                     {batch.length > 1 ? (
                       <details
@@ -503,7 +588,7 @@ export function SpaceActivity({
             </div>
           );
         })}
-        {filtered.length > limit && (
+        {timeline.length > limit && (
           <button
             className="secondary activity-more"
             type="button"
@@ -512,10 +597,10 @@ export function SpaceActivity({
             Показать ещё
           </button>
         )}
-        {!!filtered.length && (
+        {!!timeline.length && (
           <p className="activity-footnote">
-            Коммиты основной ветки и последние изменения Issues / PR. Указан автор исходного
-            объекта.
+            Общие материалы и изменения пространства; коммиты, Issues и PR. У GitHub указан автор
+            исходного объекта.
           </p>
         )}
       </div>

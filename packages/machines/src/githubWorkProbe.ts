@@ -561,7 +561,29 @@ export async function githubWorkProbe(
       ] as const) {
         for (const v of list.slice(0, 30)) {
           const item = record(v, type);
+          const attention: NonNullable<GitHubActivitySource["attention"]> = [];
+          if (item.state === "open") {
+            if (
+              Array.isArray(v.assignees) &&
+              v.assignees.some((u: any) => u.id === access.identity.id)
+            )
+              attention.push({
+                kind: "assigned",
+                version: `assigned:${item.number}:${item.createdAt}`,
+              });
+            if (
+              type === "pr" &&
+              !v.draft &&
+              Array.isArray(v.requested_reviewers) &&
+              v.requested_reviewers.some((u: any) => u.id === access.identity.id)
+            )
+              attention.push({
+                kind: "review",
+                version: `review:${item.number}:${item.head?.sha}`,
+              });
+          }
           activity.push({
+            attention,
             kind: type,
             key: `${type}:${item.number}`,
             number: item.number,
@@ -574,6 +596,63 @@ export async function githubWorkProbe(
             ...(item.head ? { sha: item.head.sha } : {}),
           });
         }
+      }
+      // Bounded public CI summary on the five newest open PR heads. Unknown is not success.
+      for (const source of activity
+        .filter((v) => v.kind === "pr" && v.state === "open" && v.sha)
+        .slice(0, 5)) {
+        const sha = source.sha!;
+        const observations = await Promise.allSettled([
+          must(`${prefix}/commits/${sha}/check-runs?per_page=50`),
+          must(`${prefix}/commits/${sha}/status?per_page=50`),
+        ]);
+        const runs = observations[0]!.status === "fulfilled" ? observations[0]!.value : null;
+        const combined = observations[1]!.status === "fulfilled" ? observations[1]!.value : null;
+        if (
+          !Array.isArray(runs?.check_runs) ||
+          !Array.isArray(combined?.statuses) ||
+          runs.total_count > 50 ||
+          combined.total_count > 50 ||
+          combined.sha !== sha
+        )
+          continue;
+        const checks = [
+          ...runs.check_runs
+            .filter((v: any) => v.head_sha === sha)
+            .map((v: any) => ({ id: "run:" + v.id, state: v.conclusion ?? v.status })),
+          ...combined.statuses.map((v: any) => ({ id: "status:" + v.id, state: v.state })),
+        ];
+        if (!checks.length) continue;
+        const failed = checks.filter((v: any) =>
+          [
+            "failure",
+            "error",
+            "timed_out",
+            "action_required",
+            "startup_failure",
+            "cancelled",
+          ].includes(v.state),
+        );
+        const pending = checks.some(
+          (v: any) => !["success", "neutral", "skipped"].includes(v.state),
+        );
+        source.checks = {
+          sha,
+          total: checks.length,
+          failed: failed.length,
+          state: failed.length ? "failure" : pending ? "pending" : "success",
+        };
+        if (
+          failed.length &&
+          (source.author?.id === access.identity.id ||
+            source.attention?.some((v) => v.kind === "assigned"))
+        )
+          source.attention!.push({
+            kind: "checks",
+            version:
+              `checks:${sha}:` +
+              hash(failed.map((v: any) => `${v.id}:${v.state}`).sort()).slice(0, 32),
+          });
       }
       result.activity = activity.filter((v) => Number.isFinite(Date.parse(v.at)));
     } else if (q.kind === "list") {

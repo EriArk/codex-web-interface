@@ -136,7 +136,10 @@ export type GitHubWorkObservation = GitHubRepositoryAccess & {
     invitationId?: number;
   }[];
 };
+export type GitHubAttentionKind = "assigned" | "review" | "checks";
 export interface GitHubActivitySource {
+  attention?: { kind: GitHubAttentionKind; version: string; read?: boolean }[];
+  checks?: { sha: string; state: "success" | "pending" | "failure"; total: number; failed: number };
   kind: "commit" | "issue" | "pr";
   key: string;
   title: string;
@@ -149,6 +152,7 @@ export interface GitHubActivitySource {
   url: string;
 }
 export interface SpaceActivityPage {
+  viewerId?: number;
   projectId: string;
   repository: string;
   repositoryId: number;

@@ -32,6 +32,31 @@ export class Communication {
       CREATE TABLE IF NOT EXISTS result_ai_handoffs(id TEXT PRIMARY KEY,ownerId TEXT NOT NULL REFERENCES team_users(id),snapshotId TEXT NOT NULL REFERENCES shared_result_files(id),threadId TEXT NOT NULL,binding TEXT NOT NULL,dismissed INTEGER NOT NULL DEFAULT 0,createdAt INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS result_share_messages ON result_share_grants(kind,destinationId,messageId);
     `);
+    spaces.journal.results = (actor, spaceId) => {
+      spaces.access(actor, spaceId);
+      return this.db
+        .prepare(`SELECT g.id,g.messageId,g.ownerId,g.createdAt FROM result_share_grants g
+        WHERE g.kind='space' AND g.destinationId=? AND g.revoked=0 ORDER BY g.createdAt DESC LIMIT 100`)
+        .all(spaceId)
+        .flatMap((r) => {
+          const result = this.cards("space", spaceId, String(r.messageId)).find(
+            (c) => c.id === r.id && !c.revoked,
+          );
+          const person = this.team.registry.user(String(r.ownerId));
+          return result
+            ? [
+                {
+                  id: "result:" + String(r.id),
+                  kind: "result" as const,
+                  at: Number(r.createdAt),
+                  author: { id: person.id, name: person.name },
+                  title: "Опубликован результат",
+                  result,
+                },
+              ]
+            : [];
+        });
+    };
     this.chat = new CollaborationChat(
       { team, access: (actor, id) => this.access(actor, id) },
       "conversation",

@@ -9,6 +9,7 @@ import {
 } from "@codex-web/shared";
 import { ActivitySocial } from "./activity-social.js";
 import { CollaborationChat } from "./collaboration-chat.js";
+import { SpaceJournal } from "./space-journal.js";
 import type { TeamProjects } from "./team-projects.js";
 
 export type VerifiedSpaceProject = { personalProjectId: string; name: string; repository: string };
@@ -45,6 +46,7 @@ export class CollaborationSpaces {
   onSave?: (space: Space, previous: Space | null) => void;
   readonly chat: CollaborationChat;
   readonly social: ActivitySocial;
+  readonly journal: SpaceJournal;
   constructor(readonly team: TeamProjects) {
     team.db.exec(`
       CREATE TABLE IF NOT EXISTS collaboration_spaces(id TEXT PRIMARY KEY,data TEXT NOT NULL);
@@ -55,6 +57,7 @@ export class CollaborationSpaces {
     `);
     this.chat = new CollaborationChat(this);
     this.social = new ActivitySocial(this);
+    this.journal = new SpaceJournal(this);
     team.db.exec(
       "CREATE TABLE IF NOT EXISTS collaboration_issue_dispatches(id TEXT PRIMARY KEY,spaceId TEXT NOT NULL,recipient TEXT NOT NULL,value TEXT NOT NULL,seen INTEGER NOT NULL DEFAULT 0)",
     );
@@ -64,7 +67,7 @@ export class CollaborationSpaces {
     if (!row) throw missing();
     return JSON.parse(String(row.data));
   }
-  private save(space: Space) {
+  private save(space: Space, actor: string) {
     const old = this.team.db
       .prepare("SELECT data FROM collaboration_spaces WHERE id=?")
       .get(space.id);
@@ -76,7 +79,9 @@ export class CollaborationSpaces {
     this.team.db.prepare("DELETE FROM collaboration_space_people WHERE spaceId=?").run(space.id);
     for (const id of new Set([...space.members, ...space.invitations.map((i) => i.userId)]))
       this.team.db.prepare("INSERT INTO collaboration_space_people VALUES(?,?)").run(space.id, id);
-    this.onSave?.(space, old ? JSON.parse(String(old.data)) : null);
+    const previous = old ? JSON.parse(String(old.data)) : null;
+    this.journal.record(actor, space, previous);
+    this.onSave?.(space, previous);
   }
   private all(actor: string): Space[] {
     this.team.registry.active(actor);
@@ -117,6 +122,7 @@ export class CollaborationSpaces {
       pending: s.invitations.map((i) => this.person(i.userId)),
       unread: this.chat.unread(actor, s.id),
       activityAttention: this.social.attention(actor, s.id),
+      accessAttention: this.journal.attention(actor, s),
       issueDispatches: this.team.db
         .prepare(
           "SELECT value FROM collaboration_issue_dispatches WHERE spaceId=? AND recipient=? AND seen=0 ORDER BY rowid DESC LIMIT 50",
@@ -271,7 +277,7 @@ export class CollaborationSpaces {
         ],
       };
       space.projects[0]!.grants[input.userId] = input.access;
-      this.save(space);
+      this.save(space, actor);
       return { id: space.id };
     });
   }
@@ -322,7 +328,7 @@ export class CollaborationSpaces {
         explicitGrants: true,
       });
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -382,7 +388,7 @@ export class CollaborationSpaces {
       if (!input.accept) for (const p of space.projects) delete p.grants[actor];
       space.invitations = space.invitations.filter((i) => i.userId !== actor);
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -397,7 +403,7 @@ export class CollaborationSpaces {
         );
       space.title = input.title;
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -422,7 +428,7 @@ export class CollaborationSpaces {
       for (const invited of space.invitations) project.grants[invited.userId] = input.access;
       space.projects.push(project);
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -446,7 +452,7 @@ export class CollaborationSpaces {
       this.available(actor, verified.personalProjectId);
       project.copies[actor] = verified.personalProjectId;
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -464,7 +470,7 @@ export class CollaborationSpaces {
       if (space.projects[0]?.id === project.id) space.invitations = [];
       space.projects = space.projects.filter((p) => p.id !== project.id);
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -490,7 +496,7 @@ export class CollaborationSpaces {
       p.grants[input.userId] = input.access;
       p.requests = p.requests?.filter((u) => u !== input.userId);
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -506,7 +512,7 @@ export class CollaborationSpaces {
       if (!p || p.ownerId === actor) throw missing();
       p.requests = [...new Set([...(p.requests ?? []), actor])];
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -521,7 +527,7 @@ export class CollaborationSpaces {
       if (space.curatorId !== actor || input.userId === actor) throw missing();
       this.detach(space, input.userId);
       space.revision++;
-      this.save(space);
+      this.save(space, actor);
       return { ok: true };
     });
   }
@@ -556,7 +562,7 @@ export class CollaborationSpaces {
       } else {
         this.detach(space, actor);
         space.revision++;
-        this.save(space);
+        this.save(space, actor);
       }
       return { ok: true };
     });

@@ -147,7 +147,7 @@ for (const [engine, type] of [
       await page.setViewportSize(viewport);
       if (viewport.width === 390) await chat();
       await page.getByRole("button", { name: "Первая версия", exact: true }).click();
-      await expect(results.locator(".result-inspector pre")).toContainText("Original snapshot");
+      await expect(page.locator(".file-viewer-dialog")).toContainText("Original snapshot");
       const live = f.store.append(
         f.thread.id,
         "assistant.delta",
@@ -158,15 +158,17 @@ for (const [engine, type] of [
       await expect(
         page.locator(".message-body").filter({ hasText: `Продолжение ${viewport.width}.` }),
       ).toBeAttached();
-      await expect(results.locator(".result-inspector")).not.toContainText("Wrong later version");
-      await results.getByRole("button", { name: "Вернуться к результатам" }).click();
+      await expect(page.locator(".file-viewer-dialog")).not.toContainText("Wrong later version");
+      await page.getByRole("button", { name: "Закрыть просмотр" }).click();
       if (viewport.width === 390) await chat();
       await page.getByRole("button", { name: "Точное изображение", exact: true }).click();
-      await expect(results.locator(".result-inspector .download-image")).toBeVisible();
-      await expect(results.locator(".result-inspector-heading")).toContainText("exact.png");
+      await expect(page.locator(".file-viewer-dialog img")).toBeVisible();
+      await expect(page.locator(".file-viewer-heading")).toContainText("exact.png");
+      await page.getByRole("button", { name: "Закрыть просмотр" }).click();
       if (viewport.width === 390) await chat();
       await page.getByRole("button", { name: "Нет файла", exact: true }).click();
-      await expect(results.locator(".result-inspector [role=status]")).toContainText("не найдены");
+      await expect(page.locator(".file-viewer-dialog [role=status]")).toContainText("не найдены");
+      await page.getByRole("button", { name: "Закрыть просмотр" }).click();
       if (viewport.width === 390) await chat();
       await expect(editor).toHaveValue("Черновик остаётся здесь");
       await expect(page.getByRole("button", { name: "Удалить draft.txt" })).toBeAttached();
@@ -192,19 +194,11 @@ for (const [engine, type] of [
     assert.equal(navigations, 1);
     if (!process.env.ARTIFACT_LINKS_ONLY) {
       await page.getByRole("button", { name: "Архив", exact: true }).click();
-      await results
-        .locator(".result-inspector")
-        .getByRole("button", { name: "Скачать файл", exact: true })
-        .click();
-      const dialog = page.getByRole("dialog", { name: "Сохранить файл" });
-      await expect(dialog).toContainText("400 МБ");
-      assert.equal(
-        archiveGets,
-        0,
-        "large download must not fetch a browser blob before the download tap",
-      );
+      const viewer = page.locator(".file-viewer-dialog");
+      await expect(viewer).toBeVisible();
+      assert.equal(archiveGets, 0, "unsupported large binary is not preloaded");
       const downloadEvent = page.waitForEvent("download");
-      await dialog.getByRole("link", { name: "Скачать файл" }).click();
+      await viewer.getByRole("link", { name: "Скачать файл", exact: true }).click();
       const download = await downloadEvent;
       assert.equal(download.suggestedFilename(), "case.zip");
       assert.equal((await stat(await download.path())).size, 400 * 1024 * 1024);

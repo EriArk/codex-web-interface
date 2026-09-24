@@ -326,3 +326,135 @@ test("Space activity uses the viewer's checkout, coalesces reads, persists exact
   assert.equal(f.team.db.prepare("SELECT count(*) AS n FROM space_activity_index").get().n, 0);
   assert.equal(s.chat.unread(f.owner, id), 0);
 });
+
+test("Space journal is atomic, quiet, deduplicated and access notices remain recipient-local", async (t) => {
+  const f = await fixture(t),
+    s = f.spaces,
+    key = randomUUID(),
+    input = f.input("project");
+  const { id } = s.create(f.owner, key, input, f.project("altar"));
+  s.create(f.owner, key, input, f.project("altar"));
+  assert.equal(s.journal.list(f.owner, id).length, 2);
+  assert.throws(() => s.journal.list(f.friend, id));
+  s.answer(f.friend, id, randomUUID(), { revision: 1, accept: true }, f.project("friend-copy"));
+  const projectId = s.catalog(f.owner).spaces[0].projects[0].id;
+  assert.equal(s.journal.list(f.friend, id).filter((v) => v.kind === "joined").length, 1);
+  assert.equal(s.catalog(f.friend).spaces[0].accessAttention.length, 0);
+  const grant = { revision: 2, projectId, userId: f.friend, access: "direct" },
+    receipt = randomUUID();
+  s.grant(f.owner, id, receipt, grant);
+  s.grant(f.owner, id, receipt, grant);
+  const notice = s.catalog(f.friend).spaces[0].accessAttention[0];
+  assert.equal(notice.kind, "access-changed");
+  assert.equal(s.catalog(f.friend).spaces[0].accessAttention.length, 1);
+  assert.equal(s.catalog(f.owner).spaces[0].accessAttention.length, 0);
+  s.journal.read(f.owner, id, notice.id);
+  assert.equal(s.catalog(f.friend).spaces[0].accessAttention.length, 1);
+  s.journal.read(f.friend, id, notice.id);
+  assert.equal(s.catalog(f.friend).spaces[0].accessAttention.length, 0);
+  assert.equal(
+    s.chat.unread(f.friend, id),
+    0,
+    "ambient activity does not generate chat/bell noise",
+  );
+  s.removeProject(f.owner, id, randomUUID(), { revision: 3, projectId });
+  const visible = s.journal.list(f.friend, id);
+  assert(!visible.some((v) => v.projectId === projectId));
+  assert(visible.some((v) => v.kind === "project-removed"));
+  assert(
+    !JSON.stringify(visible).includes("altar"),
+    "removed repository cannot leak from a snapshot",
+  );
+  s.removeMember(f.owner, id, randomUUID(), { revision: 4, userId: f.friend });
+  assert.throws(() => s.journal.list(f.friend, id));
+});
+
+test("GitHub attention read receipts bind viewer, repository, source and version without native writes", async (t) => {
+  const f = await fixture(t),
+    s = f.spaces;
+  const { id } = s.create(f.owner, randomUUID(), f.input("project"), f.project("altar"));
+  const projectId = s.catalog(f.owner).spaces[0].projects[0].id;
+  let viewerId = 7,
+    version = "checks:head:run1",
+    notices = true;
+  const personal = async () => ({
+    runtime: {
+      sessions: {
+        project: () => ({
+          id: "altar",
+          name: "Altar",
+          machineId: "pc",
+          workingDirectory: "/fixture",
+        }),
+        catalog: {
+          machine: () => ({
+            id: "pc",
+            type: "local-linux",
+            name: "Local",
+            allowedRoots: ["/fixture"],
+          }),
+        },
+      },
+      projectWork: { context: { assertProject() {} } },
+    },
+  });
+  const calls = [];
+  const probe = async (_m, _r, req) => {
+    calls.push(req);
+    return {
+      repository: "example/altar",
+      repositoryId: 42,
+      identity: { id: viewerId, login: "Owner" },
+      access: "read",
+      query: req.query,
+      checkedAt: Date.now(),
+      activity:
+        req.query.kind === "activity"
+          ? [
+              {
+                kind: "pr",
+                key: "pr:2",
+                number: 2,
+                title: "PR",
+                author: { id: 7, login: "Owner" },
+                authorName: "Owner",
+                state: "open",
+                at: new Date().toISOString(),
+                url: "https://github.com/example/altar/pull/2",
+                attention: notices ? [{ kind: "checks", version }] : [],
+              },
+            ]
+          : undefined,
+    };
+  };
+  const a = new SpaceActivity(s, personal, probe);
+  const unread = async () =>
+    (await a.page(f.owner, id, projectId)).items[0].attention?.filter((v) => !v.read).length;
+  assert.equal(await unread(), 1);
+  await assert.rejects(a.readAttention(f.owner, id, projectId, 99, "pr:2", version));
+  await assert.rejects(a.readAttention(f.owner, id, projectId, 42, "pr:3", version));
+  await assert.rejects(a.readAttention(f.owner, id, projectId, 42, "pr:2", [version, "wrong"]));
+  assert.equal(await unread(), 1, "a mixed stale receipt batch does not acknowledge any source");
+  const app = Fastify();
+  registerCollaborationSpaces(app, f.team, () => f.owner, personal, s, probe);
+  t.after(() => app.close());
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/team/spaces/${id}/activity/github-read`,
+    payload: { projectId, repositoryId: 42, source: "pr:2", versions: [version] },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), { read: true });
+  assert.equal(await unread(), 0);
+  version = "checks:head:run2";
+  f.team.db.prepare("UPDATE space_activity_index SET checkedAt=0").run();
+  // The canonical cached payload has its own checkedAt too.
+  f.team.db.prepare("UPDATE space_activity_index SET data=json_set(data,'$.checkedAt',0)").run();
+  assert.equal(await unread(), 1, "new failed run has a new local acknowledgement");
+  notices = false;
+  f.team.db.prepare("UPDATE space_activity_index SET data=json_set(data,'$.checkedAt',0)").run();
+  assert.equal(await unread(), 0, "recovered check disappears without source mutation");
+  viewerId = 8;
+  await assert.rejects(unread(), { code: "ACTIVITY_UNAVAILABLE" });
+  assert(calls.every((v) => v.op === "observe"));
+});

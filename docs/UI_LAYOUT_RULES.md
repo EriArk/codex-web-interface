@@ -22,3 +22,11 @@ Project preparation: keep source selection, document editing, and final publicat
 Communication: use one lower “Общение” shortcut with unread count in both clients; remove Reports from that row. Keep the Space chat header shortcut separate. On tablets use conversation list plus chat; on phones show the selected conversation with an explicit return control. Preserve drafts under nested viewers. The Result destination picker has a compact protected title, bounded searchable choices, explicit public-room audience acknowledgement and aligned footer actions.
 
 Messenger follow-up: use quiet avatar/title/preview/time rows, separate Chats/People, one-tap personal conversations and explicit group creation. On phones the list gets the full content viewport until a conversation or group form is selected. Keep conversation settings out of the message area; preserve drafts during list/group/nested-view navigation. Message bubbles distinguish own/incoming sides with semantic theme surfaces, without invented presence indicators.
+
+Results direct viewing (24 September): a file title and image thumbnail are the
+primary open targets. Open the universal viewer immediately above the mounted
+feed, retaining its category and scroll. Do not add an action-only detail screen,
+a Preview tab, or a duplicate Preview button. Sharing/downloading stay together
+as equal-width actions on the original card. Long filenames wrap without changing
+peer control widths; keep keyboard-accessible open buttons and existing exact
+source navigation from messages.

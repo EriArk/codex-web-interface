@@ -172,7 +172,7 @@ if(parts[3]==='issues'&&parts.length===5){const value=s.issues.find(x=>x.number=
 if(parts[3]==='pulls'&&parts.length===5){answer(200,s.prs.find(x=>x.number===n));return;}
 if(parts[3]==='pulls'&&parts[5]==='reviews'){answer(200,[{user:{login:'Friend'},state:'COMMENTED',commit_id:'a'.repeat(40)}]);return;}
 if(parts[3]==='pulls'&&parts[5]==='requested_reviewers'){s.prs[0].requested_reviewers=body.reviewers.map(login=>({login}));changed(s.prs[0]);return;}
-if(parts[3]==='commits'){answer(200,parts[5]==='check-runs'?{check_runs:[{name:'Local verification',head_sha:parts[4],conclusion:'success'}]}:{statuses:[]});return;}
+if(parts[3]==='commits'){answer(200,parts[5]==='check-runs'?{total_count:1,check_runs:[{id:s.checkRun||9,name:'Local verification',head_sha:parts[4],conclusion:s.checkState||'success'}]}:{sha:parts[4],total_count:0,statuses:[]});return;}
 if(parts[3]==='collaborators'&&parts.length===4){answer(200,s.collaborators);return;}
 if(parts[3]==='collaborators'&&parts[5]==='permission'){const found=s.collaborators.find(v=>v.login.toLowerCase()===parts[4].toLowerCase());answer(found?200:404,found?{permission:found.permission,user:found}:{});return;}
 if(parts[3]==='collaborators'&&method==='PUT'){const found=s.collaborators.find(v=>v.login.toLowerCase()===parts[4].toLowerCase());if(found){found.permission=body.permission==='push'?'write':body.permission;changed(null);return;}const value={id:201,invitee:{id:12,login:parts[4]},permissions:body.permission};s.invitations.push(value);changed(value);return;}
@@ -699,4 +699,33 @@ test("empty repository uses a single seed then an expected-head atomic commit, b
     /GITHUB_WORK_CHANGED/,
   );
   assert.equal((await f.calls()).filter((v) => v.method !== "GET").length, 2);
+});
+
+test("activity attention uses numeric recipients and bounded head-specific checks", async (t) => {
+  const f = await fixture(t);
+  await f.save({ checkState: "failure" });
+  let value = await f.probe({ op: "observe", query: { kind: "activity" } });
+  assert.equal(value.activity.find((v) => v.kind === "issue").attention[0].kind, "assigned");
+  const pr = value.activity.find((v) => v.kind === "pr");
+  assert.equal(pr.checks.state, "failure");
+  assert.equal(pr.checks.sha, "a".repeat(40));
+  assert(pr.attention.some((v) => v.kind === "checks"));
+  const old = pr.attention.find((v) => v.kind === "checks").version;
+  await f.save({ checkRun: 10 });
+  value = await f.probe({ op: "observe", query: { kind: "activity" } });
+  assert.notEqual(
+    value.activity.find((v) => v.kind === "pr").attention.find((v) => v.kind === "checks").version,
+    old,
+  );
+  await f.save({ identity: { id: 999, login: "Owner" } });
+  value = await f.probe({ op: "observe", query: { kind: "activity" } });
+  assert(
+    value.activity.every((v) => !v.attention?.length),
+    "same login cannot impersonate numeric assignee/author",
+  );
+  await f.save({ identity: { id: 11, login: "Owner" }, checkState: "success" });
+  value = await f.probe({ op: "observe", query: { kind: "activity" } });
+  assert.equal(value.activity.find((v) => v.kind === "pr").checks.state, "success");
+  assert(!value.activity.find((v) => v.kind === "pr").attention.some((v) => v.kind === "checks"));
+  assert((await f.calls()).every((c) => c.method === "GET"));
 });

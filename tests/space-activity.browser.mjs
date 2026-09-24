@@ -312,6 +312,7 @@ try {
       repository: "https://github.com/example/altar",
     },
   );
+  hub.teamProjects.db.prepare("DELETE FROM space_journal").run();
   await login(page, "owner");
   const nav = await drawer(page);
   await nav.getByRole("button", { name: "Общие пространства", exact: true }).click();

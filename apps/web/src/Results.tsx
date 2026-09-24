@@ -9,10 +9,10 @@ import { ArtifactCapture } from "./ArtifactCapture";
 import type { ArtifactSelection } from "./ArtifactMarkdown";
 import { workspaceMediaUrl } from "./accountStorage.ts";
 import { DownloadLink } from "./DownloadLink";
+import { FileViewerDialog } from "./FileViewerDialog";
+import { ResultFilePreview } from "./ResultFilePreview";
 import { ResultFilters } from "./ResultFilters";
-import { ResultInspector } from "./ResultInspector";
 import { ResultShareButton } from "./ResultSharing";
-import { resultPreview } from "./resultPreview";
 import "./resultCategories.css";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
@@ -75,17 +75,14 @@ export function Results({
   showReasoning?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null),
-    [image, setImage] = useState<Result | null>(null),
-    [preview, setPreview] = useState<Result | null>(null),
     [inspected, setInspected] = useState<Result | null>(null),
     [revealNotice, setRevealNotice] = useState<string | null>(null),
     [inspecting, setInspecting] = useState(false);
-  const [initialPreview, setInitialPreview] = useState(false);
   const revealed = useRef<ArtifactSelection["request"] | null>(null);
   useEffect(() => {
-    onOverlayChange(!!image || !!preview);
+    onOverlayChange(inspecting);
     return () => onOverlayChange(false);
-  }, [image, preview, onOverlayChange]);
+  }, [inspecting, onOverlayChange]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Newly loaded result cards must be focused after rendering.
   useEffect(() => {
     if (visible && focusId)
@@ -95,8 +92,7 @@ export function Results({
           ?.scrollIntoView({ block: "center" }),
       );
   }, [focusId, visible, results]);
-  const inspect = (result: Result, openPreview = false) => {
-    setInitialPreview(openPreview);
+  const inspect = (result: Result) => {
     setRevealNotice(null);
     setInspected(result);
     setInspecting(true);
@@ -112,7 +108,6 @@ export function Results({
     if (revealed.current !== selection.request) {
       revealed.current = selection.request;
       setInspecting(true);
-      setInitialPreview(true);
     }
     setInspected(selection.item ?? null);
     setRevealNotice(selection.item ? null : selection.error || "Открываем результат…");
@@ -134,12 +129,10 @@ export function Results({
         showReasoning={showReasoning}
         category={category}
         counts={counts}
-        preview={inspecting}
         onChange={(next) => {
           setInspecting(false);
           onCategory(next);
         }}
-        onPreview={inspected ? () => setInspecting(true) : undefined}
       />
       {error && (
         <div className="results-error" role="status">
@@ -151,40 +144,29 @@ export function Results({
           )}
         </div>
       )}
-      <div className="result-preview-slot" hidden={!inspecting}>
-        {revealNotice && (
-          <div className="result-inspector">
-            <div className="result-inspector-heading">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Вернуться к результатам"
-                onClick={() => setInspecting(false)}
-              >
-                <Icon name="back" />
-              </button>
-              <strong>Результат</strong>
-            </div>
-            <p role="status">{revealNotice}</p>
-            {selection?.error && (
-              <button type="button" className="secondary" onClick={onRevealRetry}>
-                Повторить
-              </button>
-            )}
-          </div>
-        )}
-        {current && !revealNotice && (
-          <ResultInspector
-            key={current.id + ":" + initialPreview}
-            initialPreview={initialPreview}
+      {inspecting && revealNotice && (
+        <FileViewerDialog name="Результат" onClose={() => setInspecting(false)}>
+          <p role="status">{revealNotice}</p>
+          {selection?.error && (
+            <button type="button" className="secondary" onClick={onRevealRetry}>
+              Повторить
+            </button>
+          )}
+        </FileViewerDialog>
+      )}
+      {inspecting &&
+        current &&
+        !revealNotice &&
+        (current.type === "preview" ? (
+          <PreviewViewer result={current} onClose={() => setInspecting(false)} />
+        ) : (
+          <ResultFilePreview
+            key={current.id}
             result={current}
-            onRetry={onRetry}
             onClose={() => setInspecting(false)}
-            onExpand={() => (current.type === "image" ? setImage(current) : setPreview(current))}
           />
-        )}
-      </div>
-      <div className="pane-scroll" ref={ref} hidden={inspecting}>
+        ))}
+      <div className="pane-scroll" ref={ref}>
         {!error &&
           !results.some((r) => category === "all" || resultCategory(r.type) === category) && (
             <div className="empty-state">
@@ -256,7 +238,20 @@ export function Results({
                     />
                   </span>
                   <div>
-                    <h3>{r.title}</h3>
+                    <h3 aria-label={r.title}>
+                      {["file", "artifact", "image"].includes(r.type) && r.payload.url ? (
+                        <button
+                          type="button"
+                          className="result-title-open"
+                          onClick={() => inspect(r)}
+                          aria-label={`Открыть ${r.title}`}
+                        >
+                          {r.title}
+                        </button>
+                      ) : (
+                        r.title
+                      )}
+                    </h3>
                     {r.createdAt && (
                       <time>
                         {new Date(r.payload.capturedAt || r.createdAt).toLocaleString("ru", {
@@ -274,7 +269,9 @@ export function Results({
                     </span>
                   )}
                 </div>
-                <ResultShareButton result={r} />
+                {!["file", "artifact", "image"].includes(r.type) && (
+                  <ResultShareButton result={r} />
+                )}
                 {r.type === "reasoning" && (
                   <details className="result-reasoning-details">
                     <summary>
@@ -291,7 +288,7 @@ export function Results({
                   <button
                     type="button"
                     className="screenshot-preview"
-                    onClick={() => inspect(r, true)}
+                    onClick={() => inspect(r)}
                     aria-label="Открыть снимок"
                   >
                     <img
@@ -307,18 +304,9 @@ export function Results({
                   <button
                     type="button"
                     className="secondary result-demo-open"
-                    onClick={() => inspect(r, true)}
-                  >
-                    <Icon name="remote" /> Открыть демо <Icon name="chevron" size={16} />
-                  </button>
-                )}
-                {(r.type === "file" || r.type === "artifact") && r.payload.url && (
-                  <button
-                    type="button"
-                    className="secondary result-file-link"
                     onClick={() => inspect(r)}
                   >
-                    <Icon name="file" /> Открыть файл
+                    <Icon name="remote" /> Открыть демо <Icon name="chevron" size={16} />
                   </button>
                 )}
                 {r.type === "artifact" && !r.payload.url && r.payload.captureId && (
@@ -339,11 +327,7 @@ export function Results({
                 )}
                 {["file", "artifact", "image"].includes(r.type) && (
                   <div className="result-artifact-actions">
-                    {resultPreview(r).kind !== "card" && (
-                      <button type="button" className="secondary" onClick={() => inspect(r, true)}>
-                        Предпросмотр
-                      </button>
-                    )}
+                    <ResultShareButton result={r} />
                     {r.payload.url && (
                       <DownloadLink directDownload href={r.payload.url} name={r.title}>
                         Скачать
@@ -423,33 +407,6 @@ export function Results({
           </button>
         )}
       </div>
-      {preview && <PreviewViewer result={preview} onClose={() => setPreview(null)} />}
-      {image && (
-        <div className="image-viewer" role="dialog" aria-modal="true" aria-label="Просмотр снимка">
-          <div className="viewer-toolbar">
-            <span>{image.title}</span>
-            <DownloadLink
-              directDownload
-              className="secondary"
-              href={image.payload.url}
-              name={image.title}
-            >
-              Скачать
-            </DownloadLink>
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => setImage(null)}
-              aria-label="Закрыть снимок"
-            >
-              <Icon name="close" />
-            </button>
-          </div>
-          <div className="viewer-image">
-            <img src={workspaceMediaUrl(image.payload.url)} alt={image.title} />
-          </div>
-        </div>
-      )}
     </section>
   );
 }

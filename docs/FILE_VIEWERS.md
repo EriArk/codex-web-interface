@@ -43,3 +43,15 @@ Focused evidence: real STEP/IGES converter fixtures; source/CSRF/hash/cache/dele
 Private acceptance also used the owner's `t5_reader_case_v60_front.step` (8,304,446 bytes): 10,340 triangles, bounds approximately 96.84 × 137 × 18 mm. Owner model bytes are not committed. Browser emulation is not physical iPhone/iPad acceptance; real-device performance and the owner's broader DXF corpus remain to be checked in everyday use. Do not close #167 as physical acceptance on fixture evidence alone.
 
 Libraries: unmodified Three.js (MIT), dxf-viewer (MPL-2.0), occt-import-js (LGPL-2.1/OpenCascade upstream), fast-xml-parser and fflate (MIT), DejaVu font license in `public/fonts`. DXF measurement behaviour is adapted from the owner's MIT [DXF Viewer](https://github.com/EriArk/-DXF-Viewer); attribution retained under `docs/licenses`.
+
+
+### Direct Results entry — 24 September 2026
+
+File titles and image thumbnails now open this universal viewer directly. The
+intermediate Result inspector and duplicate Preview button/tab are removed.
+Closing preserves the mounted Results list, category, scroll and original chat
+draft. Share/download remain on the original card. Exact chat references open the
+same viewer without switching to a later artifact version; unsupported binaries
+retain direct download without preloading their body. Chromium and WebKit verify
+text/image opening, download bytes, unavailable source recovery, and chat draft /
+attachment continuity at phone/tablet/desktop widths.

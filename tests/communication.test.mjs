@@ -4,6 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { Artifacts } from "../apps/hub/dist/artifacts.js";
+import { CollaborationSpaces } from "../apps/hub/dist/collaboration-spaces.js";
 import {
   createTeamSnapshot,
   restoreTeamSnapshot,
@@ -379,5 +380,85 @@ test("one-tap direct conversations reuse identity; explicitly named two-person g
   assert.equal(
     (await f.request(f.thirdHeaders, "GET", `/api/team/conversations/${dm.id}`)).statusCode,
     404,
+  );
+});
+
+test("Activity projects only explicitly shared Space results and drops revoked materials", async (t) => {
+  const f = await communicationFixture();
+  t.after(f.close);
+  const spaces = new CollaborationSpaces(f.hub.teamProjects);
+  const { id } = spaces.create(
+    f.owner,
+    randomUUID(),
+    {
+      title: "Shared",
+      kind: "project",
+      userId: f.friend,
+      personalProjectId: "owner-project",
+      access: "collaborate",
+      requestedAccess: "collaborate",
+    },
+    {
+      personalProjectId: "owner-project",
+      name: "Project",
+      repository: "https://github.com/example/project",
+    },
+  );
+  spaces.answer(
+    f.friend,
+    id,
+    randomUUID(),
+    { revision: 1, accept: true },
+    {
+      personalProjectId: "friend-project",
+      name: "Copy",
+      repository: "https://github.com/example/project",
+    },
+  );
+  const runtime = f.runtimes.get("owner"),
+    thread = runtime.thread.id;
+  const artifacts = new Artifacts(runtime.sessions.config.hub.resultsPath, runtime.store);
+  const artifact = artifacts.putFile(
+    thread,
+    null,
+    "Shared.md",
+    "C:privatesource.md",
+    "text/markdown",
+    Buffer.from("Published content"),
+  );
+  const resultId = runtime.store.result(
+    thread,
+    null,
+    "private-result",
+    "file",
+    "Shared.md",
+    artifact,
+  );
+  const path = `/api/team/spaces/${id}/activity/local`;
+  const list = async (headers = f.friendHeaders) => ok(await f.request(headers, "GET", path)).items;
+  assert(!(await list()).some((v) => v.kind === "result"));
+  const snapshot = ok(
+    await f.request(f.headers, "POST", "/api/team/result-snapshots", {
+      client: "codex",
+      threadId: thread,
+      resultId,
+    }),
+  );
+  assert(!(await list()).some((v) => v.kind === "result"), "capture alone is private");
+  const input = { snapshotId: snapshot.id, destination: { kind: "space", id }, publicRoom: false },
+    key = randomUUID();
+  const grant = ok(await f.request(f.headers, "POST", "/api/team/result-shares", input, key));
+  ok(await f.request(f.headers, "POST", "/api/team/result-shares", input, key));
+  const result = (await list()).filter((v) => v.kind === "result");
+  assert.equal(result.length, 1);
+  assert.equal(result[0].result.id, grant.id);
+  assert.equal(JSON.stringify(result).includes("source.md"), false);
+  assert.equal((await f.request(f.thirdHeaders, "GET", path)).statusCode, 404);
+  ok(await f.request(f.headers, "DELETE", `/api/team/result-shares/${grant.id}`));
+  assert(!(await list()).some((v) => v.kind === "result"));
+  assert.equal(
+    (await f.request(f.friendHeaders, "GET", `/api/team/result-shares/${grant.id}/content`))
+      .statusCode,
+    410,
   );
 });

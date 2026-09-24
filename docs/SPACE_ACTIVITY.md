@@ -157,3 +157,60 @@ were exercised with disposable fixtures, not the owner's live chats.
   30 commits, 28 Issues, 30 PRs, correctly bound canonical URLs. No external writes.
 - Linux TypeScript and production builds. Release image and deployment evidence
   are recorded separately by the ordinary guarded updater.
+
+
+## Shared events and directed GitHub attention — 24 September 2026
+
+The same chronological feed now includes explicitly published Space Results and
+atomic collaboration changes: creation, join/leave, project add/remove, access
+request/change. Metadata changes are recorded in the same transaction and receipt
+as their source operation; retries cannot create a second event. Keep at most 500
+metadata events per Space and return 200 combined events. Private native turns,
+checks, Results and personal Work Reviews are never published automatically.
+Shared Result entries are a live projection of existing immutable share grants,
+not another file store; revoked grants disappear on refresh and all viewer/content
+requests reauthorize the grant and destination membership. Existing shared grants
+are included; historical membership changes from before this release are not
+invented. Removed projects leave a generic fact without a stale repository title.
+
+Project and author filters cover both sources; Hub people and GitHub identities
+use separate namespaces. Cached local events use the same bounded account-local
+Activity view. Source keys, mounted cards, selected filters and scroll anchors
+survive refresh. The shared Result opens the existing universal viewer above the
+feed. Access changes generate a recipient-only notice in the existing Notifications
+window; subsequent changes for the same recipient/project coalesce. Ordinary
+membership/project/Result entries remain quiet (the original publication may still
+count as an unread Space chat message).
+
+Canonical GitHub activity reads include numeric-identity assignments and requested
+reviewers. The five most recently updated open PRs also receive a bounded public
+CI summary for their exact head: check runs plus combined commit statuses, at most
+50 of each. Missing, failed or paginated reads are not treated as successful CI.
+Failed runs require attention only for the PR author or assignee. Team review
+requests are not guessed to belong to individual users. Native source reads still
+use each viewer's own checkout/account and the existing 60-second refresh floor.
+
+Opening Notifications serially refreshes the linked projects the viewer can read;
+closed Notifications do not poll GitHub. The observed recent source window remains
+bounded to 30 Issues and 30 PRs; this is not an exhaustive assigned-work search or a
+push notification subscription. Sources outside the latest observation lose cached
+attention/CI claims. A changed numeric GitHub viewer cannot reuse previous cached
+attention. One or two explicit buttons open the integrated GitHub viewer or mark
+that exact notification read. The latter persists only a bounded local receipt
+(user/Space/project/numeric repository/numeric viewer/source/version), never a
+GitHub acknowledgement, assignment, review or check mutation. A new failed run or
+PR head has a new version; unrelated comments do not resurrect an acknowledged
+request. The global bell retains its existing cheap local sources; native GitHub
+attention is discovered when its window opens.
+
+Focused verification: 26 backend/worker checks pass, including public-source
+projection, no publication on private capture, replay deduplication, revoked
+access/grants, numeric recipient identity, new CI attempts and local-only read
+receipts. Chromium/WebKit cover local/GitHub feed continuity, exact internal
+source inspection, Result viewing and notification acknowledgement. Four-theme
+phone/keyboard/tablet screenshots are inspected. The actual installed Windows
+GitHub worker is updated at idle with a verified backup and exercised read-only
+through Hub → SSH → Scheduled Task; matching release hashes are required.
+Physical-device acceptance remains pending. Private Work Review publication and
+an exhaustive GitHub event history remain separate scope; #218/#205/#197 are not
+claimed fully closed by this release.

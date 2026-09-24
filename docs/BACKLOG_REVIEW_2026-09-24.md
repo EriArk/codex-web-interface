@@ -45,3 +45,18 @@ It completes the freshly implemented idea → room → Project chain. Deliver on
 Do not create another Issue publisher or a generic arbitrary-write AI tool. Reuse Issue Drawer, normal Project setup and existing permission boundaries. The exact integration design and helper contract changes belong to the next approved implementation session. Wait for the owner's continuation before starting it.
 
 After that, propose **#202 + #213** as the next connected communication stage rather than repeatedly adding disconnected send/share buttons.
+
+
+## Activity/attention pass completed — 24 September
+
+After Prepare for Codex, communication/Result forwarding and managed checkout
+sync, the fourth recommended pass now includes shared Result and collaboration
+metadata events, exact-head CI summaries and directed GitHub assignment/review/CI
+attention in the existing Notifications surface. See [coverage and bounds](SPACE_ACTIVITY.md).
+It also includes the owner's requested direct file/image viewing in Results.
+Private Review publication and exhaustive GitHub history are not auto-enabled.
+
+Next proposed pass: **#214 — Codex scheduled messages**, **Высокое (`high`)**.
+Keep it chat-bound, with timezone/recurrence editing, cancellation, exact account /
+machine/thread binding, durable receipts and uncertain-send reconciliation.
+Wait for the owner's continuation before starting that pass.

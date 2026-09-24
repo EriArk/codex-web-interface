@@ -1,8 +1,9 @@
-import type { CollaborationSpace, SpaceActivityPage } from "@codex-web/shared";
+import type { CollaborationSpace, SpaceActivityPage, SpaceJournalEvent } from "@codex-web/shared";
 import { pageWorkspace, accountSessionStorage as storage } from "./accountStorage";
 
 export type ActivityView = {
   pages: SpaceActivityPage[];
+  local: SpaceJournalEvent[];
   project: string;
   author: string;
   limit: number;
@@ -13,6 +14,7 @@ export type ActivityView = {
 };
 const empty = (): ActivityView => ({
   pages: [],
+  local: [],
   project: "",
   author: "",
   limit: 20,
@@ -41,7 +43,7 @@ function entries(): Entry[] {
   }
 }
 export function readActivityView(scope: string): ActivityView {
-  return entries().find((v) => v.scope === scope)?.view ?? empty();
+  return { ...empty(), ...entries().find((v) => v.scope === scope)?.view };
 }
 export function saveActivityView(scope: string, view: ActivityView) {
   try {

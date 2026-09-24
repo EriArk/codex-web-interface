@@ -23,6 +23,7 @@ export type CollaborationSpace = {
   pending: CollaborationPerson[];
   unread: number;
   activityAttention?: ActivityAttention[];
+  accessAttention?: SpaceJournalEvent[];
   issueDispatches?: import("./issue-drawer.js").IssueDispatchNotice[];
 };
 export type CollaborationInvitation = {
@@ -81,4 +82,25 @@ export type ActivityDiscussionPage = {
   summary: ActivitySocialSummary;
   replies: ActivityReply[];
   more: boolean;
+};
+
+/** Shared metadata only. Personal work never enters this index implicitly. */
+export type SpaceJournalEvent = {
+  id: string;
+  at: number;
+  author: CollaborationPerson;
+  kind:
+    | "created"
+    | "joined"
+    | "left"
+    | "project-added"
+    | "project-removed"
+    | "access-changed"
+    | "access-requested"
+    | "result";
+  title: string;
+  projectId?: string;
+  projectName?: string;
+  subjectId?: string;
+  result?: import("./communication.js").SharedResultCard;
 };

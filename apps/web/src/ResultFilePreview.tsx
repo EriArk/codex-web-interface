@@ -7,7 +7,7 @@ import { ResultShareButton } from "./ResultSharing";
 import { resultPreview } from "./resultPreview";
 import type { Result } from "./types";
 
-/** Full viewers are mounted only by an explicit Preview action. */
+/** Full viewers are mounted only when a file/image is opened. */
 export function ResultFilePreview({ result, onClose }: { result: Result; onClose: () => void }) {
   const path = result.payload.url,
     mime = result.payload.mime,

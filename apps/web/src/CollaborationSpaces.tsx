@@ -7,11 +7,12 @@ import type {
   ProjectRules,
   TeamContact,
 } from "@codex-web/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityAttentionWindow } from "./ActivityDiscussion";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { BrainstormWindow } from "./Brainstorm";
 import { CommunicationNotices, useHumanConversations } from "./Communication";
+import { GitHubAttention } from "./GitHubAttention";
 import { IntakeButton } from "./IntakeWindow";
 import { Icon } from "./icons";
 import type { ProjectSetupSeed } from "./ProjectDialog";
@@ -61,6 +62,7 @@ export function SpaceBell({ spaces }: { spaces: SpacesController }) {
         sum +
         s.unread +
         (s.activityAttention?.length ?? 0) +
+        (s.accessAttention?.length ?? 0) +
         (s.issueDispatches?.length ?? 0) +
         s.projects.reduce((n, p) => n + (p.ownerId === pageWorkspace ? p.requests.length : 0), 0),
       0,
@@ -276,6 +278,12 @@ function SpaceWindowContent({
   useWorkspaceDialog(dialog);
   const target = spaces.window!;
   const receiptAction = useSharedAction();
+  const [githubCount, setGithubCount] = useState(0),
+    [githubBusy, setGithubBusy] = useState(true);
+  const githubStatus = useCallback((count: number, busy: boolean) => {
+    setGithubCount(count);
+    setGithubBusy(busy);
+  }, []);
   const conversations = useHumanConversations();
   const invitation =
     "id" in target ? spaces.catalog.invitations.find((i) => i.spaceId === target.id) : undefined;
@@ -345,20 +353,57 @@ function SpaceWindowContent({
         {target.kind === "invitations" && (
           <>
             <CommunicationNotices />
+            <GitHubAttention spaces={spaces.catalog.spaces} onCount={githubStatus} />
             {receiptAction.error && (
               <p className="notice" role="alert">
                 {receiptAction.error}
               </p>
             )}
-            {!conversations.items.some((c) => c.unread && !c.muted) &&
+            {!githubBusy &&
+              !githubCount &&
+              !conversations.items.some((c) => c.unread && !c.muted) &&
               spaces.catalog.invitations.length === 0 &&
               !spaces.catalog.spaces.some(
                 (s) =>
                   s.unread > 0 ||
                   !!s.activityAttention?.length ||
+                  !!s.accessAttention?.length ||
                   !!s.issueDispatches?.length ||
                   s.projects.some((p) => p.ownerId === pageWorkspace && p.requests.length),
               ) && <p>Новых уведомлений нет.</p>}
+            {spaces.catalog.spaces.flatMap((s) =>
+              (s.accessAttention ?? []).map((n) => (
+                <section className="space-card" key={n.id}>
+                  <strong>{n.projectName ?? s.title}</strong>
+                  <p>{n.title}</p>
+                  <div className="activity-notice-actions">
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() =>
+                        spaces.open({ kind: "project", id: s.id, projectId: n.projectId! })
+                      }
+                    >
+                      Открыть проект
+                    </button>
+                    <button
+                      className="secondary"
+                      type="button"
+                      disabled={receiptAction.busy}
+                      onClick={() =>
+                        void receiptAction.run(() =>
+                          sharedMutation(`/team/spaces/${s.id}/activity/local/read`, "POST", {
+                            eventId: n.id,
+                          }).then(() => spaces.refresh()),
+                        )
+                      }
+                    >
+                      Прочитано
+                    </button>
+                  </div>
+                </section>
+              )),
+            )}
             {spaces.catalog.spaces.flatMap((s) =>
               (s.issueDispatches ?? []).map((n) => {
                 const p = s.projects.find((p) => p.id === n.projectId);

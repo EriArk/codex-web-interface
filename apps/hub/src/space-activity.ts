@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { authorizeMachine, runProjectGitHub } from "@codex-web/machines";
 import {
   type ActivityGptHandoff,
+  type GitHubActivitySource,
   type GitHubWorkObservation,
   HubError,
   type SpaceActivityPage,
@@ -25,6 +26,11 @@ export class SpaceActivity {
       userId TEXT NOT NULL, spaceId TEXT NOT NULL REFERENCES collaboration_spaces(id) ON DELETE CASCADE,
       projectId TEXT NOT NULL, binding TEXT NOT NULL, checkedAt INTEGER NOT NULL, data TEXT NOT NULL,
       PRIMARY KEY(userId,spaceId,projectId))`);
+    spaces.team.db.exec(`CREATE TABLE IF NOT EXISTS github_attention_reads(
+      userId TEXT NOT NULL, spaceId TEXT NOT NULL REFERENCES collaboration_spaces(id) ON DELETE CASCADE,
+      projectId TEXT NOT NULL, repositoryId INTEGER NOT NULL, viewerId INTEGER NOT NULL,
+      source TEXT NOT NULL, version TEXT NOT NULL, at INTEGER NOT NULL,
+      PRIMARY KEY(userId,spaceId,projectId,repositoryId,viewerId,source,version))`);
     spaces.team.db.exec(`CREATE TABLE IF NOT EXISTS activity_gpt_handoffs (
       id TEXT PRIMARY KEY, userId TEXT NOT NULL, createdAt INTEGER NOT NULL, data TEXT NOT NULL)`);
   }
@@ -357,16 +363,76 @@ export class SpaceActivity {
     this.spaces.access(actor, spaceId);
     const key = JSON.stringify([actor, spaceId, projectId, source]);
     const existing = this.pending.get(key);
-    if (existing) return existing;
+    if (existing) return this.attentionState(actor, spaceId, await existing);
     if (this.pending.size + this.socialPending.size >= 12)
       throw new HubError(429, "ACTIVITY_BUSY", "Повтори чуть позже.");
     const task = this.read(actor, spaceId, projectId, source);
     this.pending.set(key, task);
     try {
-      return await task;
+      return this.attentionState(actor, spaceId, await task);
     } finally {
       this.pending.delete(key);
     }
+  }
+  private attentionState(
+    actor: string,
+    spaceId: string,
+    page: SpaceActivityPage,
+  ): SpaceActivityPage {
+    this.spaces.access(actor, spaceId);
+    const read = this.spaces.team.db
+      .prepare(
+        "SELECT source,version FROM github_attention_reads WHERE userId=? AND spaceId=? AND projectId=? AND repositoryId=? AND viewerId=?",
+      )
+      .all(actor, spaceId, page.projectId, page.repositoryId, page.viewerId ?? 0);
+    const keys = new Set(read.map((r) => String(r.source) + ":" + String(r.version)));
+    return {
+      ...page,
+      items: page.items.map((item) => ({
+        ...item,
+        attention: item.attention?.map((n) => ({
+          ...n,
+          read: keys.has(item.key + ":" + n.version),
+        })),
+      })),
+    };
+  }
+  async readAttention(
+    actor: string,
+    spaceId: string,
+    projectId: string,
+    repositoryId: number,
+    source: string,
+    version: string | string[],
+  ) {
+    const versions = Array.isArray(version) ? [...new Set(version)] : [version];
+    const page = await this.page(actor, spaceId, projectId);
+    if (
+      page.repositoryId !== repositoryId ||
+      !page.viewerId ||
+      !versions.length ||
+      versions.length > 3 ||
+      !versions.every((v) =>
+        page.items.some((i) => i.key === source && i.attention?.some((n) => n.version === v)),
+      )
+    )
+      throw missing();
+    const db = this.spaces.team.db;
+    for (const value of versions)
+      db.prepare("INSERT OR IGNORE INTO github_attention_reads VALUES(?,?,?,?,?,?,?,?)").run(
+        actor,
+        spaceId,
+        projectId,
+        repositoryId,
+        page.viewerId,
+        source,
+        value,
+        Date.now(),
+      );
+    db.prepare(
+      "DELETE FROM github_attention_reads WHERE userId=? AND rowid NOT IN (SELECT rowid FROM github_attention_reads WHERE userId=? ORDER BY at DESC LIMIT 2000)",
+    ).run(actor, actor);
+    return { read: true };
   }
   private async read(
     actor: string,
@@ -385,7 +451,7 @@ export class SpaceActivity {
       .get(actor, spaceId, projectId);
     const cached =
       row?.binding === c.binding ? (JSON.parse(String(row.data)) as SpaceActivityPage) : null;
-    const recent = cached && Date.now() - cached.checkedAt < 60000;
+    const recent = cached?.viewerId && Date.now() - cached.checkedAt < 60000;
     // Even a cached page/open rechecks the viewer's current native GitHub account and repository access.
     const value = (await this.probe(c.machine, c.root, {
       op: "observe",
@@ -404,7 +470,16 @@ export class SpaceActivity {
       throw missing();
     }
     // A repository recreated under the same name must never inherit old references.
-    const previous = cached?.repositoryId === value.repositoryId ? cached : null;
+    const previous =
+      cached?.repositoryId === value.repositoryId && cached.viewerId === value.identity.id
+        ? cached
+        : null;
+    if (recent && cached && !previous) {
+      db.prepare(
+        "DELETE FROM space_activity_index WHERE userId=? AND spaceId=? AND projectId=?",
+      ).run(actor, spaceId, projectId);
+      throw missing();
+    }
     if (source) {
       const item = previous?.items.find((v) => v.key === source);
       if (!item) throw missing();
@@ -412,9 +487,15 @@ export class SpaceActivity {
     }
     if (recent && previous) return previous;
     if (!value.activity) throw missing();
-    const items = new Map((previous?.items ?? []).map((item) => [item.key, item]));
+    const items = new Map<string, GitHubActivitySource>(
+      (previous?.items ?? []).map((item) => [
+        item.key,
+        { ...item, attention: [], checks: undefined },
+      ]),
+    );
     for (const item of value.activity) items.set(item.key, item);
     const result: SpaceActivityPage = {
+      viewerId: value.identity.id,
       projectId,
       repository: c.repository,
       repositoryId: value.repositoryId,

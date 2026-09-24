@@ -29,6 +29,15 @@ export function registerCollaborationSpaces(
         .parse(req.body).dispatchId,
     ),
   );
+  app.get("/api/team/spaces/:id/activity/local", (req, reply) =>
+    reply
+      .header("Cache-Control", "no-store")
+      .send({ items: spaces.journal.list(actor(req), id(req)) }),
+  );
+  app.post("/api/team/spaces/:id/activity/local/read", (req) => {
+    const body = z.object({ eventId: z.string().uuid() }).strict().parse(req.body);
+    return spaces.journal.read(actor(req), id(req), body.eventId);
+  });
   const activity = new SpaceActivity(spaces, personal, githubProbe);
   const githubAccess = new SpaceGitHubAccess(spaces, personal, githubProbe);
   app.addHook("onReady", async () => {
@@ -38,6 +47,20 @@ export function registerCollaborationSpaces(
     projectId: z.string().uuid(),
     repositoryId: z.number().int().positive(),
     source: z.string().regex(/^(commit:[a-f0-9]{40,64}|(?:pr|issue):[1-9][0-9]{0,9})$/),
+  });
+  app.post("/api/team/spaces/:id/activity/github-read", async (req) => {
+    const body = socialSource
+      .extend({ versions: z.array(z.string().min(1).max(180)).min(1).max(3) })
+      .strict()
+      .parse(req.body);
+    return activity.readAttention(
+      actor(req),
+      id(req),
+      body.projectId,
+      body.repositoryId,
+      body.source,
+      body.versions,
+    );
   });
   const socialReadLimit = { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } };
   app.post("/api/team/spaces/:id/activity/source", socialReadLimit, async (req, reply) => {

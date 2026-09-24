@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Owner-requested direct Result viewing (2026-09-24)
+
+- In Results, clicking a file title or image opens the universal viewer directly above the mounted feed. Remove separate Preview buttons/tabs and the intermediate action-only inspector. Keep sharing and downloading on the source card; preserve its category and scroll when closing the viewer.
+
 ## Owner-requested messenger interaction (2026-09-24)
 
 - Make “Общение” a familiar messenger: select a person to open a personal conversation directly; create a named group through a separate action. Use a chat list with previews and unread counts, phone list/chat navigation, and a two-pane tablet/desktop layout. Preserve themes, private membership checks and drafts.

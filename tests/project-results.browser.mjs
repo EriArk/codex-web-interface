@@ -83,9 +83,9 @@ for (const [engine, type] of [
     await pane.getByRole("button", { name: /^Файлы/ }).tap();
     await expect(pane.getByRole("heading", { name: "report.md", exact: true })).toBeVisible();
     await page.screenshot({ path: `.local/qa-project-results/${engine}-phone.png` });
-    await pane.getByRole("button", { name: "Открыть файл", exact: true }).tap();
-    await expect(pane.locator("pre")).toContainText("Сохранённый отчёт");
-    await pane.getByRole("button", { name: "Вернуться к результатам", exact: true }).tap();
+    await pane.getByRole("button", { name: "Открыть report.md", exact: true }).tap();
+    await expect(page.locator(".file-viewer-dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Закрыть просмотр", exact: true }).tap();
     await pane.getByRole("button", { name: /Экспортный чат/ }).tap();
     await expect(page.getByText("Отчёт из другого диалога", { exact: true })).toBeVisible();
     await expect(editor).toHaveValue("");

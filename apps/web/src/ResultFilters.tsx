@@ -1,6 +1,5 @@
 import type { ResultCategory, ResultCounts } from "@codex-web/shared";
 import { useEffect, useRef } from "react";
-import { Icon } from "./icons";
 export const resultLabels: Record<ResultCategory, string> = {
   all: "Все",
   images: "Изображения",
@@ -14,8 +13,6 @@ export function ResultFilters({
   category,
   counts,
   onChange,
-  preview,
-  onPreview,
   showLinks = false,
   showWork = true,
   showReasoning = false,
@@ -23,8 +20,6 @@ export function ResultFilters({
   category: ResultCategory;
   counts: ResultCounts;
   onChange: (category: ResultCategory) => void;
-  preview: boolean;
-  onPreview?: () => void;
   showLinks?: boolean;
   showWork?: boolean;
   showReasoning?: boolean;
@@ -42,7 +37,7 @@ export function ResultFilters({
     const resize = new ResizeObserver(reveal);
     resize.observe(nav);
     return () => resize.disconnect();
-  }, [category, preview]);
+  }, [category]);
   return (
     <nav ref={ref} className="result-filters" aria-label="Категории результатов">
       {(["files", "images", "links", "demos", "reasoning", "work"] as ResultCategory[])
@@ -53,19 +48,13 @@ export function ResultFilters({
           <button
             key={key}
             type="button"
-            aria-pressed={!preview && key === category}
+            aria-pressed={key === category}
             onClick={() => onChange(key)}
           >
             {resultLabels[key]}
             {counts[key] > 0 && <span className="result-filter-count">{counts[key]}</span>}
           </button>
         ))}
-      {onPreview && (
-        <button type="button" aria-pressed={preview} onClick={onPreview}>
-          <Icon name="remote" size={16} />
-          Предпросмотр
-        </button>
-      )}
     </nav>
   );
 }
