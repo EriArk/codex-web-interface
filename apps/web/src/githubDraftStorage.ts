@@ -72,25 +72,9 @@ export const githubDraftStorage = {
       }
     }
     await transaction<void>("readwrite", (store) => {
-      let count = 0,
-        total = 0;
-      const r = store.index("size").openKeyCursor();
-      r.onsuccess = () => {
-        const cursor = r.result;
-        if (cursor) {
-          if (cursor.primaryKey !== key) {
-            count++;
-            total += Number(cursor.key);
-          }
-          cursor.continue();
-          return;
-        }
-        if (count >= 32 || total + size > 64 * 1024 * 1024) {
-          store.transaction.abort();
-          return;
-        }
-        store.put({ key, value, size }, key);
-      };
+      // Browser storage quota is the actual boundary; do not invent a draft count or
+      // erase older pending work. A failed transaction preserves the previous value.
+      store.put({ key, value, size }, key);
     });
     if (
       revisions.get(key) === revision &&
@@ -115,7 +99,8 @@ window.addEventListener("private-session-ended", () => {
       if (
         key &&
         (key.startsWith("workspace-github-file-review:") ||
-          key.startsWith("workspace-file-copy:github:"))
+          key.startsWith("workspace-file-copy:") ||
+          key.startsWith("workspace-file-draft:"))
       )
         accountLocalStorage.removeItem(key);
   } catch {

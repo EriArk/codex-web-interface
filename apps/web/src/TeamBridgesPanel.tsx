@@ -10,6 +10,7 @@ import type {
   TeamLink,
 } from "@codex-web/shared";
 import { useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api } from "./api";
 import { SharedMarkdown as Markdown, MaterialContent } from "./SharedMaterialEditor";
@@ -312,7 +313,7 @@ function NewBridge({
         </label>
         <label>
           Что нужно согласовать
-          <textarea
+          <AutoTextarea
             required
             rows={4}
             maxLength={6000}
@@ -322,7 +323,7 @@ function NewBridge({
         </label>
         <label>
           Как поймём, что готово
-          <textarea
+          <AutoTextarea
             required
             rows={3}
             maxLength={4000}
@@ -388,7 +389,7 @@ function EditBridge({ bridge, done }: { bridge: TeamBridge; done: () => void }) 
         </label>
         <label>
           Что нужно согласовать
-          <textarea
+          <AutoTextarea
             required
             rows={4}
             maxLength={6000}
@@ -398,7 +399,7 @@ function EditBridge({ bridge, done }: { bridge: TeamBridge; done: () => void }) 
         </label>
         <label>
           Как поймём, что готово
-          <textarea
+          <AutoTextarea
             required
             rows={3}
             maxLength={4000}
@@ -933,7 +934,7 @@ function NewFinding({ detail, refresh }: { detail: TeamBridgeDetail; refresh: ()
         )}
         <label>
           Текст
-          <textarea
+          <AutoTextarea
             aria-label="Текст"
             rows={4}
             required

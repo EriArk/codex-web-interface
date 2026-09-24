@@ -1,3 +1,4 @@
+import { AutoTextarea } from "./AutoTextarea";
 import "./project-gpt.css";
 import type {
   BrainstormCard,
@@ -1084,7 +1085,7 @@ function CardEditor({
         )}
         <label>
           Текст
-          <textarea
+          <AutoTextarea
             rows={6}
             value={value.text}
             maxLength={16000}
@@ -1207,7 +1208,7 @@ function RoomSettings({
             </label>
             <label>
               Описание
-              <textarea
+              <AutoTextarea
                 rows={4}
                 maxLength={4000}
                 value={description}
@@ -1377,7 +1378,7 @@ function RoomConversion({
               <summary>Мои выводы для GPT проекта</summary>
               <label>
                 Личное резюме
-                <textarea
+                <AutoTextarea
                   value={summary}
                   maxLength={8000}
                   rows={5}

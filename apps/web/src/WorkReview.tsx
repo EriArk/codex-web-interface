@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -443,7 +444,7 @@ export default function WorkReviewPanel({
               {editing ? (
                 <div className="review-correction">
                   <label htmlFor="review-correction-text">Что исправить</label>
-                  <textarea
+                  <AutoTextarea
                     id="review-correction-text"
                     value={note}
                     maxLength={4000}

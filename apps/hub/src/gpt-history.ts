@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { GptConversation, GptFile, GptMessage, GptProject } from "@codex-web/shared";
 import { gptLinkedText } from "./gpt-links.js";
 import { gptSandboxFiles } from "./gpt-sandbox-files.js";
@@ -45,7 +46,11 @@ export function gptProjects(value: unknown): GptProject[] {
     return gptId(id) && name ? [{ id, name }] : [];
   });
 }
-export function gptHistory(value: unknown, conversationId?: string): GptMessage[] {
+export function gptHistory(
+  value: unknown,
+  conversationId?: string,
+  reuse?: (node: Json, build: () => GptMessage[]) => GptMessage[],
+): GptMessage[] {
   const data = record(value),
     mapping = record(data.mapping),
     nodes: Json[] = [],
@@ -59,127 +64,132 @@ export function gptHistory(value: unknown, conversationId?: string): GptMessage[
     id = text(node.parent);
   }
   return nodes.reverse().flatMap((node) => {
-    const message = record(node.message),
-      author = record(message.author),
-      content = record(message.content),
-      metadata = record(message.metadata);
-    // Only the visible conversation. Analysis/thoughts/tool internals are never sent to the client.
-    const generatedImage =
-      author.role === "tool" &&
-      message.channel === "final" &&
-      typeof metadata.image_gen_title === "string";
-    if (
-      (!["user", "assistant"].includes(author.role) && !generatedImage) ||
-      metadata.is_visually_hidden_from_conversation === true
-    )
-      return [];
-    if (
-      author.role === "assistant" &&
-      ((message.channel && !["final", "commentary"].includes(message.channel)) ||
-        (message.recipient && message.recipient !== "all") ||
-        metadata.tool_invoking_message === true)
-    )
-      return [];
-    // Some old native records omit channel: explicitly exclude private formats as well.
-    const privateTypes = new Set([
-      "thoughts",
-      "reasoning",
-      "reasoning_recap",
-      "tool_call",
-      "computer_output",
-    ]);
-    if (privateTypes.has(content.content_type)) return [];
-    const unsupported = new Set<"audio" | "video" | "interactive" | "other">();
-    const missing = (kind: unknown) => {
-      if (typeof kind === "string" && privateTypes.has(kind)) return;
-      unsupported.add(
-        typeof kind !== "string"
-          ? "other"
-          : /audio/.test(kind)
-            ? "audio"
-            : /video/.test(kind)
-              ? "video"
-              : /canvas|widget|interactive/.test(kind)
-                ? "interactive"
-                : "other",
-      );
-    };
-    if (
-      typeof content.content_type === "string" &&
-      content.content_type &&
-      !["text", "multimodal_text"].includes(content.content_type)
-    )
-      missing(content.content_type);
-    const parts = Array.isArray(content.parts) ? content.parts : [];
-    let body = generatedImage
-      ? ""
-      : gptLinkedText(
-          parts.filter((part: unknown) => typeof part === "string").join("\n"),
-          metadata,
-        ).slice(0, 500000);
-    const files = new Map<string, GptFile>();
-    const add = (file: Json) => {
-      if (!gptId(file.id)) return;
-      const mime = text(file.mime_type ?? file.mime) || "application/octet-stream";
-      files.set(file.id, {
-        id: file.id,
-        name: text(file.name) || "Изображение",
-        mime,
-        bytes: Number(file.size) || 0,
-        image: mime.startsWith("image/"),
-        url:
-          data.codex_native_assets && conversationId
-            ? `/api/gpt/native-assets/${encodeURIComponent(conversationId)}/${encodeURIComponent(text(message.id) || text(node.id))}/${encodeURIComponent(file.id)}`
-            : "/api/gpt/assets/" + encodeURIComponent(file.id),
-      });
-    };
-    for (const file of Array.isArray(metadata.attachments) ? metadata.attachments : [])
-      add(record(file));
-    for (const part of parts) {
-      if (typeof part === "string") continue;
-      const p = record(part);
-      if (p.content_type !== "image_asset_pointer") {
-        missing(p.content_type);
-        continue;
+    const build = (): GptMessage[] => {
+      const message = record(node.message),
+        author = record(message.author),
+        content = record(message.content),
+        metadata = record(message.metadata);
+      // Only the visible conversation. Analysis/thoughts/tool internals are never sent to the client.
+      const generatedImage =
+        author.role === "tool" &&
+        message.channel === "final" &&
+        typeof metadata.image_gen_title === "string";
+      if (
+        (!["user", "assistant"].includes(author.role) && !generatedImage) ||
+        metadata.is_visually_hidden_from_conversation === true
+      )
+        return [];
+      if (
+        author.role === "assistant" &&
+        ((message.channel && !["final", "commentary"].includes(message.channel)) ||
+          (message.recipient && message.recipient !== "all") ||
+          metadata.tool_invoking_message === true)
+      )
+        return [];
+      // Some old native records omit channel: explicitly exclude private formats as well.
+      const privateTypes = new Set([
+        "thoughts",
+        "reasoning",
+        "reasoning_recap",
+        "tool_call",
+        "computer_output",
+      ]);
+      if (privateTypes.has(content.content_type)) return [];
+      const unsupported = new Set<"audio" | "video" | "interactive" | "other">();
+      const missing = (kind: unknown) => {
+        if (typeof kind === "string" && privateTypes.has(kind)) return;
+        unsupported.add(
+          typeof kind !== "string"
+            ? "other"
+            : /audio/.test(kind)
+              ? "audio"
+              : /video/.test(kind)
+                ? "video"
+                : /canvas|widget|interactive/.test(kind)
+                  ? "interactive"
+                  : "other",
+        );
+      };
+      if (
+        typeof content.content_type === "string" &&
+        content.content_type &&
+        !["text", "multimodal_text"].includes(content.content_type)
+      )
+        missing(content.content_type);
+      const parts = Array.isArray(content.parts) ? content.parts : [];
+      let body = generatedImage
+        ? ""
+        : gptLinkedText(
+            parts.filter((part: unknown) => typeof part === "string").join("\n"),
+            metadata,
+          ).slice(0, 500000);
+      const files = new Map<string, GptFile>();
+      const add = (file: Json) => {
+        if (!gptId(file.id)) return;
+        const mime = text(file.mime_type ?? file.mime) || "application/octet-stream";
+        files.set(file.id, {
+          id: file.id,
+          name: text(file.name) || "Изображение",
+          mime,
+          bytes: Number(file.size) || 0,
+          image: mime.startsWith("image/"),
+          url:
+            data.codex_native_assets && conversationId
+              ? `/api/gpt/native-assets/${encodeURIComponent(conversationId)}/${encodeURIComponent(text(message.id) || text(node.id))}/${encodeURIComponent(file.id)}`
+              : "/api/gpt/assets/" + encodeURIComponent(file.id),
+        });
+      };
+      for (const file of Array.isArray(metadata.attachments) ? metadata.attachments : [])
+        add(record(file));
+      for (const part of parts) {
+        if (typeof part === "string") continue;
+        const p = record(part);
+        if (p.content_type !== "image_asset_pointer") {
+          missing(p.content_type);
+          continue;
+        }
+        const pointer = text(p.asset_pointer),
+          fileId = pointer.replace(/^(?:sediment|file-service):\/\//, "");
+        if (gptId(fileId))
+          add({ id: fileId, mime_type: "image/png", size: p.size_bytes, name: "Изображение" });
+        else missing("image");
       }
-      const pointer = text(p.asset_pointer),
-        fileId = pointer.replace(/^(?:sediment|file-service):\/\//, "");
-      if (gptId(fileId))
-        add({ id: fileId, mime_type: "image/png", size: p.size_bytes, name: "Изображение" });
-      else missing("image");
-    }
-    if (author.role === "assistant") {
-      const linked = gptSandboxFiles(
-        body,
-        conversationId ?? text(data.conversation_id ?? data.id),
-        text(message.id) || text(node.id),
-      );
-      body = linked.text;
-      for (const file of linked.files) files.set(file.id, file);
-    }
-    return body || files.size || unsupported.size
-      ? [
-          {
-            id: text(message.id) || text(node.id),
-            role: (generatedImage ? "assistant" : author.role) as "user" | "assistant",
-            text: body,
-            createdAt: Number(message.create_time) || 0,
-            ...(["search", "review", "code", "image", "tool"].includes(metadata.codex_activity)
-              ? { activity: metadata.codex_activity as GptMessage["activity"] }
-              : {}),
-            ...(author.role === "assistant"
-              ? {
-                  phase:
-                    message.channel === "commentary" ? ("commentary" as const) : ("final" as const),
-                  complete:
-                    message.status === "finished_successfully" && metadata.is_complete !== false,
-                }
-              : {}),
-            files: [...files.values()],
-            ...(unsupported.size ? { unsupported: [...unsupported] } : {}),
-          },
-        ]
-      : [];
+      if (author.role === "assistant") {
+        const linked = gptSandboxFiles(
+          body,
+          conversationId ?? text(data.conversation_id ?? data.id),
+          text(message.id) || text(node.id),
+        );
+        body = linked.text;
+        for (const file of linked.files) files.set(file.id, file);
+      }
+      return body || files.size || unsupported.size
+        ? [
+            {
+              id: text(message.id) || text(node.id),
+              role: (generatedImage ? "assistant" : author.role) as "user" | "assistant",
+              text: body,
+              createdAt: Number(message.create_time) || 0,
+              ...(["search", "review", "code", "image", "tool"].includes(metadata.codex_activity)
+                ? { activity: metadata.codex_activity as GptMessage["activity"] }
+                : {}),
+              ...(author.role === "assistant"
+                ? {
+                    phase:
+                      message.channel === "commentary"
+                        ? ("commentary" as const)
+                        : ("final" as const),
+                    complete:
+                      message.status === "finished_successfully" && metadata.is_complete !== false,
+                  }
+                : {}),
+              files: [...files.values()],
+              ...(unsupported.size ? { unsupported: [...unsupported] } : {}),
+            },
+          ]
+        : [];
+    };
+    return reuse ? reuse(node, build) : build();
   });
 }
 
@@ -225,4 +235,48 @@ export function gptProjectConversations(value: unknown): GptConversation[] {
   return (Array.isArray(data.items) ? data.items : []).flatMap(
     (row) => gptCatalog(record(row).conversations).items,
   );
+}
+
+/** Account-local normalization: only changed public nodes rebuild links, files and text.
+ * Every read still walks the canonical branch, including edits/regenerations in its middle. */
+export class GptHistoryNormalizer {
+  private chats = new Map<
+    string,
+    { nodes: Map<string, { signature: string; items: WeakRef<GptMessage>[] }>; bytes: number }
+  >();
+  normalize(value: unknown, conversationId: string) {
+    const previous = this.chats.get(conversationId),
+      nodes = new Map<string, { signature: string; items: WeakRef<GptMessage>[] }>();
+    let bytes = 0;
+    const native = record(value).codex_native_assets === true;
+    const items = gptHistory(value, conversationId, (node, build) => {
+      const id = text(node.id) || text(node.message?.id);
+      // Cache only a digest of incoming content; private native metadata is never retained.
+      const signature = createHash("sha256")
+        .update(JSON.stringify([native, id, node.message]))
+        .digest("hex");
+      const old = previous?.nodes.get(id);
+      const saved =
+        old?.signature === signature ? old.items.map((item) => item.deref()) : undefined;
+      const result = saved?.every((item): item is GptMessage => !!item) ? saved : build();
+      for (const item of result) {
+        for (const file of item.files) Object.freeze(file);
+        Object.freeze(item.files);
+        if (item.unsupported) Object.freeze(item.unsupported);
+        Object.freeze(item);
+      }
+      bytes += 256;
+      nodes.set(id, { signature, items: result.map((item) => new WeakRef(item)) });
+      return result;
+    });
+    this.chats.delete(conversationId);
+    this.chats.set(conversationId, { nodes, bytes });
+    let total = [...this.chats.values()].reduce((n, c) => n + c.bytes, 0);
+    for (const [id, chat] of this.chats) {
+      if (this.chats.size <= 32 && total <= 4 * 1024 ** 2) break;
+      this.chats.delete(id);
+      total -= chat.bytes;
+    }
+    return items;
+  }
 }

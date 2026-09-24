@@ -409,7 +409,7 @@ try {
         assert.equal(operation.receipt.input.files[0].path, "new-folder/.gitkeep");
         // IndexedDB persists an actual large review beyond the old localStorage quota.
         await gh.getByRole("button", { name: "Редактировать файл", exact: true }).click();
-        const large = "Large UTF-8 line αβγ\n".repeat(30000);
+        const large = "Large UTF-8 line αβγ\n".repeat(180000);
         await expect(editor.locator(".cm-content")).toBeVisible();
         await page.evaluate((text) => window.setFixtureEditorText(text), large);
         await editor.getByRole("button", { name: "Проверить изменения", exact: true }).click();
@@ -458,7 +458,7 @@ try {
         };
       });
       assert.deepEqual(quota, {
-        refused: true,
+        refused: false,
         kept: "original",
         revoked: true,
         journalCleared: true,

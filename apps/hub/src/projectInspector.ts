@@ -1,5 +1,7 @@
-import { posix, win32 } from "node:path";
-import { inspectProject, readProjectFile } from "@codex-web/machines";
+import { createReadStream } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { join, posix, win32 } from "node:path";
+import { copyProjectFile, inspectProject } from "@codex-web/machines";
 import { type CachedProjectGit, HubError, type ProjectGit } from "@codex-web/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -144,13 +146,37 @@ export function registerProjectInspector(app: FastifyInstance, sessions: Session
         op: "file",
         path: q.path,
       })) as { path: string };
-      // This reader decodes a link once. Escape literal '%' in filesystem names.
-      return readProjectFile(
-        machine,
-        project.workingDirectory,
-        validated.path.replaceAll("%", "%25"),
-        { rejectSymlinks: true },
-      );
+      // Transfer through disk with checksum verification; preview limits never cap downloads.
+      const directory = join(sessions.config.hub.resultsPath, "file-downloads");
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const temp = await mkdtemp(join(directory, "read-")),
+        target = join(temp, "content");
+      try {
+        const result = await copyProjectFile(
+          machine,
+          project.workingDirectory,
+          validated.path.replaceAll("%", "%25"),
+          target,
+          sessions.config.hub.storage.attachmentBytes,
+        );
+        const current = context(req);
+        if (
+          current.project.workingDirectory !== project.workingDirectory ||
+          current.machine.id !== machine.id
+        )
+          throw new HubError(409, "FILE_SCOPE_CHANGED", "Рабочая копия изменилась.");
+        if (reply.raw.destroyed) throw new Error("DOWNLOAD_CANCELLED");
+        const stream = createReadStream(target);
+        stream.once("close", () => {
+          void rm(temp, { recursive: true, force: true });
+        });
+        reply.raw.once("close", () => stream.destroy());
+        reply.header("Content-Length", result.bytes).header("ETag", '"' + result.sha256 + '"');
+        return stream;
+      } catch (error) {
+        await rm(temp, { recursive: true, force: true });
+        throw error;
+      }
     });
     const name = posix.basename(q.path);
     return reply

@@ -168,3 +168,24 @@ test("private ZIP lifecycle: exact request replay, immutable ready bytes, cancel
   h.store.db.exec("UPDATE project_file_archives SET updatedAt=0");
   assert.equal((await call("GET")).statusCode, 404);
 });
+
+test("project download streams ZIP and STEP beyond preview size, preserves bytes and cleans staging", async (t) => {
+  const f = await handoffFixture();
+  t.after(() => f.close());
+  const root = await fs.mkdtemp(join(tmpdir(), "large-download-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  f.sessions.config.projects[0].workingDirectory = root;
+  f.sessions.config.machines[0].type = "local-linux";
+  const project = f.sessions.config.projects[0].id;
+  for (const name of ["data.zip", "model.step"]) {
+    const bytes = Buffer.alloc(33 * 1024 * 1024, 65);
+    await fs.writeFile(join(root, name), bytes);
+    const response = await f.app.inject({
+      url: `/api/projects/${project}/files/content?path=${name}`,
+      headers: f.headers,
+    });
+    assert.equal(response.statusCode, 200, response.statusCode === 200 ? "ok" : response.body);
+    assert.equal(response.rawPayload.length, bytes.length);
+    assert.ok(response.rawPayload.equals(bytes));
+  }
+});

@@ -26,9 +26,9 @@ import { z } from "zod";
 import { GptHistoryCache, type GptHistorySnapshot } from "./gpt-cache.js";
 import { GptDeletions } from "./gpt-deletions.js";
 import {
+  GptHistoryNormalizer,
   gptCatalog,
   gptCompletion,
-  gptHistory,
   gptId,
   gptProjectConversations,
   gptProjects,
@@ -104,6 +104,7 @@ export class GptService {
   private readonly historyBackoff = new GptReadBackoff();
   private readonly historyReads = new Map<string, Promise<Json>>();
   readonly historyCache: GptHistoryCache;
+  private readonly historyNormalizer = new GptHistoryNormalizer();
   resultIndex(id: string, snapshot: GptHistorySnapshot) {
     snapshot.results ??= new GptResultIndex(
       id,
@@ -451,7 +452,7 @@ export class GptService {
       Math.min(128 * 1024 * 1024, config.hub.storage.artifactBytes),
     );
     this.historyCache = new GptHistoryCache(
-      async (id) => gptHistory(await this.readConversation(id), id),
+      async (id) => this.historyNormalizer.normalize(await this.readConversation(id), id),
       Date.now,
       new GptHistoryDisk(join(this.root, this.native ? "native-history" : "history")),
     );
@@ -1546,7 +1547,10 @@ export class GptService {
             if (!current.nativeId) this.update(jobId, { nativeId: native.nativeId });
             const history = await this.readConversation(native.nativeId);
             if (this.stopped || done) return;
-            this.historyCache.seed(native.nativeId, gptHistory(history, native.nativeId));
+            this.historyCache.seed(
+              native.nativeId,
+              this.historyNormalizer.normalize(history, native.nativeId),
+            );
             const completion = gptCompletion(history, current.text, current.createdAt);
             if (!completion.complete || this.job(jobId).status === "cancelled") return;
             const assets = [
@@ -1563,7 +1567,10 @@ export class GptService {
               assets: JSON.stringify(assets),
             });
             // This exact fresh read already confirmed completion; retain it after status invalidation.
-            this.historyCache.seed(native.nativeId, gptHistory(history, native.nativeId));
+            this.historyCache.seed(
+              native.nativeId,
+              this.historyNormalizer.normalize(history, native.nativeId),
+            );
             this.observedHistory = { id: native.nativeId, value: history, checkedAt: Date.now() };
             done = true;
             streamController.abort();
@@ -1712,7 +1719,7 @@ export class GptService {
       .run(Date.now(), jobId);
     try {
       const raw = await this.json("/conversation?id=" + encodeURIComponent(job.nativeId));
-      const messages = gptHistory(raw, job.nativeId);
+      const messages = this.historyNormalizer.normalize(raw, job.nativeId);
       const user = messages.find(
         (m) =>
           m.role === "user" && m.text === job.text && m.createdAt * 1000 >= job.createdAt - 10000,
@@ -1747,9 +1754,9 @@ export class GptService {
       return this.native.workspace.client.media({ conversationId, messageId, fileId: key });
     }
     const raw = await this.json("/conversation?id=" + encodeURIComponent(conversationId));
-    const message = gptHistory(raw, conversationId).find(
-      (m) => m.id === messageId && m.role === "assistant",
-    );
+    const message = this.historyNormalizer
+      .normalize(raw, conversationId)
+      .find((m) => m.id === messageId && m.role === "assistant");
     const file = message?.files.find((f) => f.id === key);
     const node = Object.values(raw.mapping ?? {}).find(
       (n: any) => (n.message?.id ?? n.id) === messageId,

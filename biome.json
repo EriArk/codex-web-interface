@@ -1,12 +1,6 @@
 {
   "files": {
-    "includes": [
-      "apps/**",
-      "packages/**",
-      "tests/**",
-      "!**/dist/**",
-      "!apps/web/public/vendor/**"
-    ]
+    "includes": ["apps/**", "packages/**", "tests/**", "!**/dist", "!apps/web/public/vendor"]
   },
   "formatter": {
     "indentStyle": "space",
@@ -15,7 +9,15 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": ["AutoTextarea"]
+          }
+        }
+      }
     }
   },
   "assist": {

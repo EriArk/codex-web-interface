@@ -7,6 +7,7 @@ import type {
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AutoTextarea } from "./AutoTextarea";
 import { pageWorkspace, accountLocalStorage as storage, workspaceUrl } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
 import { DownloadLink } from "./DownloadLink";
@@ -527,7 +528,7 @@ export function SpaceChat({
           >
             <Icon name="plus" />
           </button>
-          <textarea
+          <AutoTextarea
             aria-label="Сообщение участникам"
             placeholder={compactComposer ? "Сообщение…" : "Сообщение участникам…"}
             rows={2}

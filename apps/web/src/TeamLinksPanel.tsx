@@ -1,6 +1,7 @@
 import type { SharedProject, TeamContact, TeamLink, TeamLinkPolicy } from "@codex-web/shared";
 import { teamLinkProposalSchema } from "@codex-web/shared";
 import { useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api } from "./api";
 import { sharedMutation, useSharedAction } from "./sharedRequests";
@@ -213,7 +214,7 @@ export function TeamLinksPanel({
           <TeamContactPicker value={contact} onChange={setContact} disabled={busy || !!proposal} />
           <label>
             Для чего связываем проекты
-            <textarea
+            <AutoTextarea
               value={purpose}
               maxLength={1000}
               disabled={busy || !!proposal}

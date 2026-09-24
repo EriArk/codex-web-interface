@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { workspaceMediaUrl } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -188,7 +189,7 @@ export function MessageQueue({
                     });
                 }}
               >
-                <textarea
+                <AutoTextarea
                   aria-label="Изменить сообщение в очереди"
                   value={text}
                   onChange={(e) => setText(e.target.value)}

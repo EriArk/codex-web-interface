@@ -90,13 +90,10 @@ export function ViewerEditButton({
           if (!response.ok || !response.body) throw Error("Не удалось прочитать исходный файл.");
           const reader = response.body.getReader(),
             chunks: Uint8Array<ArrayBuffer>[] = [];
-          let size = 0;
           try {
             while (true) {
               const part = await reader.read();
               if (part.done) break;
-              size += part.value.length;
-              if (size > 2 * 1024 * 1024) throw Error("Редактор поддерживает текст до 2 МБ.");
               chunks.push(new Uint8Array(part.value));
             }
           } finally {

@@ -611,3 +611,31 @@ recovery-gateway hashes were checked against source and backups retained. Native
 service/reader methods were updated while idle without restarting generation.
 The Hub circuit breaker follows the guarded engine release; physical phone
 acceptance remains pending.
+
+
+## Incremental Hub history processing and persistence (24 September)
+
+Canonical native reads reuse normalized public messages by exact node-content
+fingerprint. The canonical parent chain is still traversed on each read: edits in
+older messages, changed attachments, regenerated branches and disappearing nodes
+must replace the right content. Private nodes cache only a digest, never their
+payload. Weak references avoid retaining a second copy of message bodies beyond
+history-cache eviction; the bounded account-local normalization index stores
+signatures only. Frozen unchanged public messages reuse cached hashes and existing
+Results projections.
+
+Disk snapshot v2 has an atomic base plus a bounded suffix journal. Changed tails
+and freshness-only updates do not rewrite the full chat. The journal binds the
+exact base revision and snapshot generation; partial final append is ignored and
+compacted on the next write, while a mismatched base cannot mix branches. After
+64 entries or 8 MiB of deltas, write an atomic new base. Existing v1 snapshots
+remain readable and migrate on refresh. Both base and journal count toward private
+disk retention; deletion removes both. Write failure never discards in-memory
+answers or authorizes replay of a send.
+
+This optimizes Hub normalization, hashing and disk writes. The pinned native
+upstream history endpoint still returns a canonical full graph; this pass does
+not invent an unsupported remote cursor or change native dispatch/recovery.
+Focused tests cover stable node identity, older edits, hidden nodes, late files,
+branch shortening, restart, partial journal writes and legacy migration, plus
+existing browser incremental history/Results continuity in Chromium and WebKit.

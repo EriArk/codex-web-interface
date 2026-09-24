@@ -11,6 +11,7 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -288,7 +289,7 @@ export function ProjectCorePanel({
               {coreFields.map((field) => (
                 <label className="core-field" key={field}>
                   <span>{coreLabels[field]}</span>
-                  <textarea
+                  <AutoTextarea
                     aria-label={coreLabels[field]}
                     value={values[field]}
                     placeholder={

@@ -128,10 +128,13 @@ test("stale saves, binary, oversized files and unsafe paths are refused", async 
   await fs.writeFile(join(root, "binary.txt"), Buffer.from([0, 1]));
   await assert.rejects(probe(root, { op: "read", path: "binary.txt" }), /FILE_ENCODING/);
   await fs.writeFile(join(root, "huge.txt"), "");
-  await fs.truncate(join(root, "huge.txt"), 2 * 1024 * 1024 + 1);
+  await fs.truncate(
+    join(root, "huge.txt"),
+    Math.floor((await import("node:buffer")).constants.MAX_STRING_LENGTH / 6) + 1,
+  );
   await assert.rejects(probe(root, { op: "read", path: "huge.txt" }), /FILE_TEXT_SIZE/);
   await fs.truncate(join(root, "huge.txt"), 128 * 1024 * 1024 + 1);
-  await assert.rejects(probe(root, { op: "stat", path: "huge.txt" }), /FILE_TREE_LARGE/);
+  assert.equal((await probe(root, { op: "stat", path: "huge.txt" })).size, 128 * 1024 * 1024 + 1);
   await fs.symlink(join(root, "a.txt"), join(root, "link.txt"));
   await assert.rejects(probe(root, { op: "read", path: "link.txt" }), /FILE_PATH/);
 });
@@ -234,4 +237,30 @@ test("Hub manual grants bind session, project, root and relock while allowing ac
   assert.equal((await post("/access", { unlock: false, capability })).statusCode, 200);
   assert.equal((await post("", body)).statusCode, 403);
   assert.equal(await fs.readFile(join(root, "new.txt"), "utf8"), "created");
+});
+
+test("local text larger than 2 MiB round-trips exactly, retains fingerprints and configured quota", async (t) => {
+  const root = await fixture(t),
+    text = "large text αβ\r\n".repeat(240000);
+  const created = await mutate(root, { op: "create", path: "large.txt", text, bom: true });
+  const read = await probe(root, { op: "read", path: "large.txt" });
+  assert.equal(read.text, text);
+  assert.equal(read.bom, true);
+  assert.equal(read.fingerprint, created.fingerprint);
+  const saved = await mutate(root, {
+    op: "save",
+    path: "large.txt",
+    text: text + "tail",
+    bom: true,
+    fingerprint: read.fingerprint,
+  });
+  assert.equal(
+    (await probe(root, { op: "read", path: "large.txt" })).fingerprint,
+    saved.fingerprint,
+  );
+  assert.equal(await fs.readFile(join(root, "large.txt"), "utf8"), "\ufeff" + text + "tail");
+  await assert.rejects(
+    probe(root, { op: "read", path: "large.txt" }, undefined, undefined, 1024),
+    /FILE_TEXT_SIZE/,
+  );
 });

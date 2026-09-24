@@ -1,5 +1,6 @@
 import type { GptJob, GptModels, NotebookLink, ScheduledTask } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -151,7 +152,7 @@ function ScheduleEditor({
       </label>
       <label>
         Что должен делать ChatGPT
-        <textarea
+        <AutoTextarea
           value={draft.prompt}
           maxLength={100000}
           disabled={!task.canEdit || mutation.busy || task.eventDriven}
@@ -407,7 +408,7 @@ function NewSchedule({
       </label>
       <label>
         Поручение
-        <textarea
+        <AutoTextarea
           value={draft.prompt}
           disabled={submitted}
           maxLength={50000}

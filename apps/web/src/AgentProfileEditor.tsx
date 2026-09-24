@@ -12,6 +12,7 @@ import {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountSessionStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -126,7 +127,7 @@ export function AgentProfileEditor({
           </details>
           <label>
             Дополнительные правила
-            <textarea
+            <AutoTextarea
               aria-label="Дополнительные правила агента"
               rows={5}
               maxLength={4000}

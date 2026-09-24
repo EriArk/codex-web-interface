@@ -9,12 +9,17 @@ export async function fileToolsProbe(
   },
   receiptRoot?: string,
   upload?: FileImport,
+  textLimit?: number,
 ): Promise<FileSnapshot & { entries?: FileArchiveEntry[] }> {
   const fs = await import("node:fs/promises"),
     paths = await import("node:path"),
     crypto = await import("node:crypto"),
     os = await import("node:os"),
     streams = await import("node:fs");
+  textLimit = Math.min(
+    textLimit ?? Infinity,
+    Math.floor((await import("node:buffer")).constants.MAX_STRING_LENGTH / 6),
+  );
   const fail = (code: string): never => {
     throw Error(code);
   };
@@ -90,7 +95,6 @@ export async function fileToolsProbe(
         }
       } else {
         size += st.size;
-        if (size > 128 * 1024 * 1024) fail("FILE_TREE_LARGE");
         let read = 0;
         for await (const bytes of streams.createReadStream(file)) {
           bounded();
@@ -195,7 +199,7 @@ export async function fileToolsProbe(
   if (request.op === "stat") return { path: request.path, ...(await fingerprint(full)) };
   const textFile = async () => {
     const st = await fs.stat(full);
-    if (!st.isFile() || st.size > 2 * 1024 * 1024) fail("FILE_TEXT_SIZE");
+    if (!st.isFile() || st.size > textLimit) fail("FILE_TEXT_SIZE");
     const reader = await fs.open(
       full,
       streams.constants.O_RDONLY | (streams.constants.O_NOFOLLOW ?? 0),
@@ -211,14 +215,14 @@ export async function fileToolsProbe(
         const { bytesRead } = await reader.read(chunk);
         if (!bytesRead) break;
         size += bytesRead;
-        if (size > 2 * 1024 * 1024) fail("FILE_TEXT_SIZE");
+        if (size > textLimit) fail("FILE_TEXT_SIZE");
         chunks.push(chunk.subarray(0, bytesRead));
       }
       bytes = Buffer.concat(chunks, size);
     } finally {
       await reader.close();
     }
-    if (bytes.length > 2 * 1024 * 1024) fail("FILE_TEXT_SIZE");
+    if (bytes.length > textLimit) fail("FILE_TEXT_SIZE");
     if (bytes.includes(0)) fail("FILE_ENCODING");
     const bom = bytes.subarray(0, 3).equals(Buffer.from([239, 187, 191]));
     let text: string;
@@ -227,7 +231,7 @@ export async function fileToolsProbe(
     } catch {
       return fail("FILE_ENCODING");
     }
-    if (Buffer.byteLength(text, "utf8") > 2 * 1024 * 1024) fail("FILE_TEXT_SIZE");
+    if (Buffer.byteLength(text, "utf8") > textLimit) fail("FILE_TEXT_SIZE");
     const after = await fs.stat(full);
     if (
       st.mtimeMs !== after.mtimeMs ||
@@ -401,7 +405,7 @@ export async function fileToolsProbe(
     }
     if (
       (request.op === "save" || request.op === "create") &&
-      Buffer.byteLength(request.text ?? "", "utf8") > 2 * 1024 * 1024
+      Buffer.byteLength(request.text ?? "", "utf8") > textLimit
     )
       fail("FILE_TEXT_SIZE");
     if (
@@ -457,7 +461,7 @@ export async function fileToolsProbe(
         request.bom ? Buffer.from([239, 187, 191]) : Buffer.alloc(0),
         Buffer.from(request.text ?? "", "utf8"),
       ]);
-      if (bytes.length > 2 * 1024 * 1024) fail("FILE_TEXT_SIZE");
+      if (bytes.length > textLimit) fail("FILE_TEXT_SIZE");
       if (Buffer.from(request.text ?? "", "utf8").toString("utf8") !== request.text)
         fail("FILE_ENCODING");
       const f = await fs.open(temp, "wx", before ? (await fs.stat(full)).mode : 0o666);

@@ -107,3 +107,14 @@ The agreed order is **6 -> 2 -> 4 -> 1 -> 5** from the remaining-work list:
 Installation/maintenance consolidation (old item 3) is not in this queue.
 The next proposed stage is **2, GPT history**, **Высокое (`high`)**. Wait for
 continuation before starting it. Converter work remains deferred.
+
+
+## GPT history and input/file follow-up (24 September)
+
+Stage **2** is implemented with incremental Hub normalization and disk journals,
+shared 4-to-8-line multiline inputs and owner-requested file-limit alignment.
+Native upstream full-graph reads remain; see GPT_NATIVE_LINUX.md and FILE_EDITOR.md
+for exact behavior, boundaries and verification.
+
+Next proposed stage is **4: remaining Activity and Notifications coverage**,
+**Высокое (`high`)**, followed by **1 -> 5**. Wait for the owner's continuation.

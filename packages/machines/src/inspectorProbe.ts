@@ -81,7 +81,7 @@ export async function inspectorProbe(
   if (request.op === "file") {
     const file = await scoped(request.path),
       stat = await fs.stat(file);
-    if (!stat.isFile() || stat.size > 33554432) fail();
+    if (!stat.isFile()) fail();
     return { path: relative(file) };
   }
   if (request.op === "directory") {

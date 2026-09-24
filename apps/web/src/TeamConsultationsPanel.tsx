@@ -8,6 +8,7 @@ import type {
 } from "@codex-web/shared";
 import { teamConsultRequestSchema } from "@codex-web/shared";
 import { useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api } from "./api";
 import { SharedMarkdown as Markdown } from "./SharedMaterialEditor";
@@ -400,7 +401,7 @@ function NewConsultation({
       </label>
       <label>
         Вопрос и общий контекст
-        <textarea
+        <AutoTextarea
           value={question}
           maxLength={12000}
           rows={6}

@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { workspaceUrl } from "./accountStorage.ts";
 import { FilePreview } from "./FilePreview";
 import { FileViewerDialog } from "./FileViewerDialog";
+import { ViewerEditButton } from "./ViewerEditButton";
 import "./download.css";
 
 export function isDownloadUrl(value: string | undefined): value is string {
@@ -171,7 +172,14 @@ export function DownloadLink({
             const part = await reader.read();
             if (part.done) break;
             size += part.value.length;
-            if (size > 32 * 1024 * 1024) throw Error("Файл превышает 32 МБ.");
+            if (size > 32 * 1024 * 1024) {
+              if (!controller.signal.aborted)
+                setDirect({
+                  name: fileName(response.headers.get("content-disposition"), name, mime || ""),
+                  bytes: Math.max(size, Number(response.headers.get("content-length")) || 0),
+                });
+              return;
+            }
             chunks.push(new Uint8Array(part.value));
           }
         } finally {
@@ -312,6 +320,7 @@ export function DownloadLink({
           )}
           {direct && (
             <div className="download-actions">
+              <ViewerEditButton name={direct.name} source={href} />
               <p>
                 {new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(
                   direct.bytes / 1024 / 1024,

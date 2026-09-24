@@ -1,5 +1,6 @@
 import { type ProjectGpt, type ProjectRules, projectRuleLabels } from "@codex-web/shared";
 import { useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { api } from "./api";
 import { useSharedAction } from "./sharedRequests";
 
@@ -35,7 +36,7 @@ export function ProjectRulesEditor({
       })}
       <label>
         Свои пожелания
-        <textarea
+        <AutoTextarea
           aria-label="Свои правила проекта"
           rows={3}
           maxLength={4000}

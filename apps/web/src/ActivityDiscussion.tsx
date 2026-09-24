@@ -7,6 +7,7 @@ import type {
 } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { ActivitySourceWindow } from "./ActivitySourceWindow";
+import { AutoTextarea } from "./AutoTextarea";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { useSharedAction } from "./sharedRequests";
@@ -250,7 +251,7 @@ export function ActivityDiscussion({
                   ))}
               </select>
             </label>
-            <textarea
+            <AutoTextarea
               aria-label="Короткий ответ"
               rows={3}
               maxLength={2000}

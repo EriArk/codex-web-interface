@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AutoTextarea } from "./AutoTextarea";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { api } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -385,7 +386,7 @@ export function SharedMaterialEditor({
               coreFields.map((field) => (
                 <label key={field}>
                   {coreLabels[field]}
-                  <textarea
+                  <AutoTextarea
                     value={c.value[field]}
                     maxLength={3000}
                     onChange={(e) =>
@@ -398,7 +399,7 @@ export function SharedMaterialEditor({
               <>
                 <label>
                   Описание
-                  <textarea
+                  <AutoTextarea
                     value={c.description}
                     maxLength={6000}
                     onChange={(e) => change({ ...c, description: e.target.value })}
@@ -472,7 +473,7 @@ export function SharedMaterialEditor({
                             }
                           />
                         </label>
-                        <textarea
+                        <AutoTextarea
                           aria-label={`Пункт ${n + 1} раздела ${index + 1}`}
                           value={point.text}
                           maxLength={1000}
@@ -605,7 +606,7 @@ export function SharedMaterialEditor({
             ) : (
               <label>
                 Текст
-                <textarea
+                <AutoTextarea
                   aria-label="Текст"
                   value={c.body}
                   maxLength={65536}
@@ -669,7 +670,7 @@ export function SharedMaterialEditor({
                 </label>
                 <label>
                   Замечания
-                  <textarea
+                  <AutoTextarea
                     maxLength={6000}
                     value={c.feedback}
                     onChange={(e) => change({ ...c, feedback: e.target.value })}

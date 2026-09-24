@@ -1,5 +1,6 @@
 import type { SharedReportDraft } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { SharedMarkdown } from "./SharedMaterialEditor";
@@ -187,7 +188,7 @@ export function SharedReportBuilder({
                   </label>
                   <label>
                     Текст отчёта
-                    <textarea
+                    <AutoTextarea
                       aria-label="Текст отчёта"
                       rows={14}
                       maxLength={32000}

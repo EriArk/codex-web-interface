@@ -1,3 +1,4 @@
+import { constants as bufferLimits } from "node:buffer";
 import { spawn } from "node:child_process";
 import { type FileImport, type FileRequest, HubError, type MachineConfig } from "@codex-web/shared";
 import { authorizeMachine } from "./authority.js";
@@ -14,6 +15,7 @@ export async function runFileTools(
   },
   localReceiptRoot?: string,
   upload?: FileImport,
+  textLimit?: number,
 ): Promise<Awaited<ReturnType<typeof fileToolsProbe>>> {
   await verifyProjectRoot(machine, root);
   authorizeMachine(machine);
@@ -25,7 +27,7 @@ export async function runFileTools(
     );
   if (machine.type === "local-linux") {
     try {
-      return await fileToolsProbe(root, request, localReceiptRoot, upload);
+      return await fileToolsProbe(root, request, localReceiptRoot, upload, textLimit);
     } catch (error) {
       throw fileToolsError(
         (error as NodeJS.ErrnoException).code ?? (error instanceof Error ? error.message : ""),
@@ -87,7 +89,8 @@ export async function runFileTools(
     );
     child.stdout.on("data", (b: Buffer) => {
       size += b.length;
-      if (size > (request.op === "archive" ? 50 * 1024 * 1024 : 16777216)) finish(false);
+      if (size > (request.op === "archive" ? 50 * 1024 * 1024 : bufferLimits.MAX_STRING_LENGTH))
+        finish(false);
       else chunks.push(b);
     });
     child.stderr.on("data", () => {});
@@ -95,7 +98,7 @@ export async function runFileTools(
     child.on("error", () => finish(false));
     child.on("close", (code) => finish(code === 0));
     child.stdin.end(
-      `(${fileToolsProbe.toString()})(${JSON.stringify(root)},${JSON.stringify(request)},undefined,${JSON.stringify(upload)}).then(value=>process.stdout.write(JSON.stringify(value))).catch(e=>process.stdout.write(JSON.stringify({error:e.code||e.message})));`,
+      `(${fileToolsProbe.toString()})(${JSON.stringify(root)},${JSON.stringify(request)},undefined,${JSON.stringify(upload)},${JSON.stringify(textLimit)}).then(value=>process.stdout.write(JSON.stringify(value))).catch(e=>process.stdout.write(JSON.stringify({error:e.code||e.message})));`,
     );
   });
 }
@@ -110,7 +113,8 @@ export function fileToolsError(code: string) {
     FILE_PATH: "Этот путь недоступен для файловых операций.",
     FILE_ENCODING:
       "Редактор поддерживает текст UTF-8. Этот файл имеет другую кодировку или содержит двоичные данные.",
-    FILE_TEXT_SIZE: "Этот файл слишком велик для редактора (до 2 МБ). Его можно скачать.",
+    FILE_TEXT_SIZE:
+      "Файл превышает доступный размер текстового транспорта или квоту хранилища. Его можно скачать.",
     FILE_TREE_LARGE: "Слишком много файлов для одной операции. Выбери отдельную вложенную папку.",
     FILE_UNKNOWN:
       "Операция ещё не подтверждена. Обнови содержимое папки перед следующим действием.",

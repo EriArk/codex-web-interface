@@ -13,6 +13,7 @@ import type {
 } from "@codex-web/shared";
 import { githubWorkInputSchema } from "@codex-web/shared";
 import { useEffect, useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { pageWorkspace, accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api } from "./api";
 import { CopyButton } from "./CopyButton";
@@ -612,7 +613,7 @@ export function TeamGitHubPanel({
                 {["issue-create", "comment"].includes(draft.kind) && (
                   <label>
                     Текст для GitHub
-                    <textarea
+                    <AutoTextarea
                       required
                       aria-label="Текст для GitHub"
                       rows={7}

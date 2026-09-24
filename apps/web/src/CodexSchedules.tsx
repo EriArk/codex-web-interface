@@ -1,6 +1,7 @@
 import type { CodexSchedule, CodexScheduleInput, CodexScheduleList } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { Icon } from "./icons";
@@ -192,7 +193,7 @@ export function CodexScheduleWindow({
           <fieldset disabled={busy} className="schedule-editor">
             <label>
               Сообщение
-              <textarea
+              <AutoTextarea
                 rows={5}
                 maxLength={12000}
                 value={draft.text}

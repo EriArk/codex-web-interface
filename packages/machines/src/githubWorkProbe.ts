@@ -115,7 +115,7 @@ export async function githubWorkProbe(
           env,
           windowsHide: true,
           timeout: 25000,
-          maxBuffer: 16 * 1024 * 1024,
+          maxBuffer: 160 * 1024 * 1024,
           encoding: "utf8",
         },
         (error, output) => resolve({ code: error ? 1 : 0, output }),
@@ -339,9 +339,9 @@ export async function githubWorkProbe(
       (manual ? repositoryFilePath(f.path) : preparationPath(f.path)) &&
         ((manual && f.content === null && sha(f.previous)) ||
           (typeof f.content === "string" &&
-            f.content.length <= (manual ? 2796204 : 131072) &&
+            f.content.length <= (manual ? 139810136 : 131072) &&
             Buffer.from(f.content, "base64").toString("base64") === f.content &&
-            (!manual || Buffer.byteLength(f.content, "base64") <= 2 * 1024 * 1024))) &&
+            (!manual || Buffer.byteLength(f.content, "base64") <= 100 * 1024 * 1024))) &&
         (f.previous === null || sha(f.previous)),
     );
   };
@@ -663,7 +663,7 @@ export async function githubWorkProbe(
             !value.submodule_git_url &&
             Number.isSafeInteger(value.size),
         );
-        if (value.size <= 2 * 1024 * 1024 && value.encoding !== "base64") {
+        if (value.size <= 100 * 1024 * 1024 && value.encoding !== "base64") {
           const blob = await must(`${prefix}/git/blobs/${value.sha}`);
           valid(blob.sha === value.sha && blob.size === value.size && blob.encoding === "base64");
           value.content = blob.content;
@@ -674,7 +674,7 @@ export async function githubWorkProbe(
           sha: value.sha,
           bytes: value.size,
           content:
-            value.size <= 2 * 1024 * 1024 &&
+            value.size <= 100 * 1024 * 1024 &&
             value.encoding === "base64" &&
             typeof value.content === "string"
               ? value.content.replace(/\s/g, "")
@@ -1019,7 +1019,7 @@ export async function githubWorkProbe(
 
       valid(
         v.files.reduce((n, f) => n + (f.content?.length ?? 0), 0) <=
-          (v.kind === "repository-file" ? 2796204 : 131072) &&
+          (v.kind === "repository-file" ? 139810136 : 131072) &&
           new Set(
             v.files.map((f) => (v.kind === "repository-file" ? f.path : f.path.toLowerCase())),
           ).size === v.files.length &&
@@ -1133,7 +1133,7 @@ export async function githubWorkProbe(
       .slice(0, 5000)) {
       const target = path.join(stateRoot, name),
         stat = await fs.lstat(target);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8 * 1024 * 1024) continue;
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 320 * 1024 * 1024) continue;
       let seed: any;
       try {
         seed = JSON.parse(await fs.readFile(target, "utf8"));
@@ -1159,7 +1159,7 @@ export async function githubWorkProbe(
   const read = async (): Promise<Saved | null> => {
     try {
       const s = await fs.lstat(file);
-      if (!s.isFile() || s.isSymbolicLink() || s.size > 8 * 1024 * 1024) fail("GITHUB_WORK_PATH");
+      if (!s.isFile() || s.isSymbolicLink() || s.size > 320 * 1024 * 1024) fail("GITHUB_WORK_PATH");
       return JSON.parse(await fs.readFile(file, "utf8"));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -1280,7 +1280,7 @@ export async function githubWorkProbe(
       for (const name of files) {
         const p = path.join(stateRoot, name),
           stat = await fs.lstat(p);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8 * 1024 * 1024)
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 320 * 1024 * 1024)
           fail("GITHUB_WORK_PATH");
         const prior = JSON.parse(await fs.readFile(p, "utf8")) as Saved;
         if (

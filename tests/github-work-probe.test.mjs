@@ -1100,9 +1100,9 @@ test("directory deletion checks full immutable tree and exact HEAD", async (t) =
   );
 });
 
-test("manual GitHub text supports 2 MiB through durable receipts and rejects excess", async (t) => {
+test("manual GitHub text exceeds 2 MiB through durable receipts and rejects GitHub ceiling excess", async (t) => {
   const f = await fixture(t),
-    content = Buffer.alloc(2 * 1024 * 1024, "x").toString("base64");
+    content = Buffer.alloc(4 * 1024 * 1024, "x").toString("base64");
   await f.save({
     preparation: true,
     refs: { main: f.sha },
@@ -1122,7 +1122,7 @@ test("manual GitHub text supports 2 MiB through durable receipts and rejects exc
       {
         path: "large.txt",
         previous: view.repositoryFiles.file.sha,
-        content: Buffer.alloc(2 * 1024 * 1024, "y").toString("base64"),
+        content: Buffer.alloc(4 * 1024 * 1024, "y").toString("base64"),
       },
     ],
   };
@@ -1132,7 +1132,7 @@ test("manual GitHub text supports 2 MiB through durable receipts and rejects exc
   await assert.rejects(
     f.prepare({
       ...input,
-      files: [{ ...input.files[0], content: Buffer.alloc(2 * 1024 * 1024 + 1).toString("base64") }],
+      files: [{ ...input.files[0], content: "A".repeat(139810140) }],
     }),
     /GITHUB_WORK_REQUEST/,
   );

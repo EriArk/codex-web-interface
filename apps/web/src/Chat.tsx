@@ -14,6 +14,7 @@ import remarkGfm from "remark-gfm";
 import { AccessPicker } from "./AccessPicker";
 import { type ArtifactRequest, artifactSource, useArtifactComponents } from "./ArtifactMarkdown";
 import { AttachmentList, useAttachments } from "./AttachmentPicker";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountSessionStorage as sessionStorage, workspaceMediaUrl } from "./accountStorage.ts";
 import { api } from "./api";
 import { ComposerOptions, useTurnSettings } from "./ComposerOptions";
@@ -974,7 +975,7 @@ export function Chat({
               }
             />
           </div>
-          <textarea
+          <AutoTextarea
             ref={composer}
             onPaste={(e) => {
               if (e.clipboardData.files.length) {

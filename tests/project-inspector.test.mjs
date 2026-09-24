@@ -57,7 +57,10 @@ test("project browsing bounds pages, hides credentials, rejects parent paths and
     await assert.rejects(inspectorProbe(project, { op: "file", path }));
   await writeFile(join(project, "large.bin"), "");
   await truncate(join(project, "large.bin"), 33554433);
-  await assert.rejects(inspectorProbe(project, { op: "file", path: "large.bin" }));
+  assert.equal(
+    (await inspectorProbe(project, { op: "file", path: "large.bin" })).path,
+    "large.bin",
+  );
   const linked = join(root, "linked");
   await symlink(project, linked);
   await assert.rejects(list(linked));

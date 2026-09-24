@@ -217,3 +217,39 @@ blob fallback, directory move/deletion and exact-step recovery in a disposable
 branch. Its final tree matched its starting tree; the branch was removed with
 an exact-tip CAS. Windows worker/probe backups and hashes accompany release
 verification. Physical-device acceptance remains pending.
+
+
+## File ceilings aligned with transfers (24 September, supersedes 2 MiB limits)
+
+- Direct GitHub text read/review/save allows 100 MiB, matching the regular GitHub
+  file ceiling ([GitHub documentation](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github)).
+  Contents responses with empty content use the exact blob SHA. Base64/JSON,
+  private receipts, Hub admission and installed Windows worker budgets match this
+  size; uncertain writes still reconcile without replay. The existing multi-file
+  transaction total shares the same byte budget. Larger files require an explicit
+  LFS workflow, not silently changing a normal commit.
+- Local text editing no longer has the separate 2 MiB check. Its read/save budget
+  follows configured attachment storage, bounded by Node's actual JSON string
+  capacity (allowing six-byte JSON escaping). This is a text-transport resource
+  bound, not a ZIP/STEP transfer cap. Binary/non-UTF8 files stay out of text editing.
+- Editable copies have no artificial 2 MiB browser check. Every editor draft now
+  uses private IndexedDB, with legacy localStorage read-through. Removed the
+  32-draft/64-MiB application quota; browser storage errors preserve older work.
+- Project downloads use checksum-verified disk staging and streams, governed by
+  configured attachment storage instead of the former 32 MiB preview-buffer cap.
+  The path validator no longer rejects large regular files. Streaming transfer
+  accepts the caller's storage quota rather than imposing its 512 MiB default.
+  File fingerprints no longer reject a source just because it exceeds 128 MiB.
+- Automatic viewer loading still switches to browser download for large files;
+  this never turns into a failed download. Text files retain an Edit action.
+  Existing ZIP uploads and STEP uploads use the format-independent chunk path.
+
+Remaining processing budgets are intentionally separate: STEP/IGES conversion
+still accepts 32 MiB input and bounded mesh output; ZIP *creation* still uses its
+32 MiB/2000-entry snapshot budget. Neither limits uploading/downloading an existing
+ZIP or STEP. Archive/Office viewer work remains the later selected stage.
+
+Verification includes local >2 MiB UTF8/BOM/CRLF save and fingerprints, GitHub
+4 MiB read/write/receipt and >100 MiB rejection, 33 MiB ZIP/STEP downloads, restored
+large browser drafts, and installed Hub->SSH->Scheduled Task preparation/status.
+Physical-device acceptance and a full 100 MiB live GitHub commit are not claimed.

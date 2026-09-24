@@ -9,7 +9,6 @@ import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { accountLocalStorage } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
 import { FileCopySave } from "./FileCopySave";
 import { FileEditorPreview } from "./FileEditorPreview";
@@ -79,7 +78,7 @@ export default function FileEditor({
       );
     return text.match(/\r\n|\r|\n/)?.[0] ?? "\n";
   };
-  const storage = copy?.source.startsWith("github:") ? githubDraftStorage : accountLocalStorage;
+  const storage = githubDraftStorage;
   const persist = async () => {
     if (!baseline.current || !editor.current) return false;
     try {
@@ -198,7 +197,6 @@ export default function FileEditor({
         return api<FileSnapshot>(`${url}?op=read&path=${encodeURIComponent(path)}`, {
           signal: controller.signal,
         });
-      if (copy.file.size > 2 * 1024 * 1024) throw Error("Редактор поддерживает текст до 2 МБ.");
       const bytes = await copy.file.arrayBuffer();
       const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       if (text.includes("\0"))

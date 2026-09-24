@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AutoTextarea } from "./AutoTextarea";
 import {
   accountLocalStorage as localStorage,
   accountSessionStorage as sessionStorage,
@@ -746,7 +747,7 @@ export function ProjectWorkPanel({
                 disabled={busy}
                 onChange={(e) => change({ title: e.target.value })}
               />
-              <textarea
+              <AutoTextarea
                 className="plan-description"
                 aria-label="Описание плана"
                 placeholder="Контекст и цель…"
@@ -808,7 +809,7 @@ export function ProjectWorkPanel({
                           />
                           <span>{item.checked && <Icon name="check" size={14} />}</span>
                         </label>
-                        <textarea
+                        <AutoTextarea
                           aria-label="Пункт плана"
                           rows={1}
                           maxLength={1000}

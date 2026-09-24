@@ -19,6 +19,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as localStorage, pageWorkspace } from "./accountStorage.ts";
 import { ApiError, api, messageOf } from "./api";
 import { CaptureNote } from "./CaptureNote";
@@ -1115,7 +1116,7 @@ function NotebookEditor({
                   </Markdown>
                 </div>
               ) : (
-                <textarea
+                <AutoTextarea
                   className="notebook-body"
                   aria-label={isTask ? "Описание задачи" : "Текст заметки"}
                   placeholder="Запиши важное…"

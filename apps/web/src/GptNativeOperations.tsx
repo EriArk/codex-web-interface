@@ -1,6 +1,7 @@
 import type { GptMessage, GptOperation } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { GptVersions } from "./GptVersions";
@@ -118,7 +119,7 @@ function Editor({
               : "ChatGPT создаст новый вариант этого ответа той же моделью. Исходный вариант сохранится."}
         </p>
         {draft.action !== "regenerate" && (
-          <textarea
+          <AutoTextarea
             aria-label={
               draft.action === "fork" ? "Первое сообщение новой ветки" : "Изменённое сообщение"
             }

@@ -55,8 +55,7 @@ async function transferFile(
   limit: number,
   nativeLink: boolean,
 ) {
-  if (!Number.isSafeInteger(limit) || limit < 0 || limit > ARTIFACT_FILE_LIMIT)
-    throw new Error("INVALID_TRANSFER_LIMIT");
+  if (!Number.isSafeInteger(limit) || limit < 0) throw new Error("INVALID_TRANSFER_LIMIT");
   await verifyProjectRoot(machine, root);
   const path = nativeLink
     ? codexArtifactPath(machine, root, input)

@@ -16,6 +16,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type ArtifactRequest, artifactSource, useArtifactComponents } from "./ArtifactMarkdown";
+import { AutoTextarea } from "./AutoTextarea";
 import {
   accountLocalStorage as localStorage,
   accountSessionStorage as sessionStorage,
@@ -2167,7 +2168,7 @@ export function GptWorkspace({
                 >
                   {uploading ? <span className="spinner" /> : <Icon name="plus" />}
                 </button>
-                <textarea
+                <AutoTextarea
                   ref={composer}
                   aria-label="Сообщение GPT"
                   placeholder={

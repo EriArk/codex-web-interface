@@ -7,6 +7,7 @@ import type {
   ProjectDiff,
 } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as localStorage } from "./accountStorage.ts";
 import { api, messageOf } from "./api";
 import { CollapsibleCode } from "./CollapsibleCode";
@@ -703,7 +704,7 @@ export default function ProjectDelivery({
                         </label>
                         <label className="delivery-field">
                           Описание
-                          <textarea
+                          <AutoTextarea
                             rows={4}
                             value={draft.body}
                             maxLength={20000}

@@ -65,3 +65,12 @@ new-path fields in a separate inset form with equal-width Cancel/Continue keys.
 Use short visible labels with full accessible names so phone button text never
 spills into a neighbor. The common commit review lists every affected path and
 keeps deletion/addition labels aligned; a rename is one reviewed operation.
+
+
+## Multiline fields (24 September)
+
+All product textareas use `AutoTextarea`: 4 visual lines initially, one-line growth
+through 8, then inner scrolling. A hidden measuring twin preserves the live input's
+selection and surrounding scroll. Controlled draft restores, hidden-to-visible
+windows, responsive width and loaded fonts trigger remeasurement. CodeMirror is a
+full document editor and keeps its workspace-sized viewport.

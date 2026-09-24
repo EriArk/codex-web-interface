@@ -8,6 +8,7 @@ import {
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ActivitySourceWindow } from "./ActivitySourceWindow";
+import { AutoTextarea } from "./AutoTextarea";
 import { ApiError, api, messageOf } from "./api";
 import { githubDraftStorage as storage } from "./githubDraftStorage";
 import "./space-activity.css";
@@ -472,7 +473,7 @@ function GitHubFiles({
                           return "Не текст UTF-8";
                         }
                       })()
-                    : "Для редактирования доступны текстовые файлы до 2 МБ."}
+                    : "Для редактирования доступны текстовые файлы до 100 МиБ."}
                 </pre>
               </>
             )}
@@ -491,8 +492,8 @@ function GitHubFiles({
             onSaved={() => {}}
             reviewSave={async (file) => {
               const bytes = await file.arrayBuffer();
-              if (bytes.byteLength > 2 * 1024 * 1024) {
-                throw Error("Прямое сохранение GitHub поддерживает текст до 2 МБ.");
+              if (bytes.byteLength > 100 * 1024 * 1024) {
+                throw Error("Прямое сохранение GitHub поддерживает текст до 100 МиБ.");
               }
               const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes),
                 oldText = decode(edit.snapshot.file!.content!);
@@ -985,7 +986,7 @@ function GitHubFileReview({
               </label>
               <label>
                 Описание
-                <textarea
+                <AutoTextarea
                   aria-label="Описание PR"
                   maxLength={16000}
                   rows={6}

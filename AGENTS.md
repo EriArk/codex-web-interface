@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested input growth and file limit alignment (2026-09-24)
+
+- Use the shared `AutoTextarea` for multiline inputs: four visible lines, growing one visual line at a time to eight, then internal scroll. Recompute for restored drafts, wrapped lines, width/font/theme changes; preserve selection and parent scroll. Full document editors remain document workspaces.
+- Do not add arbitrary per-extension transfer limits. Separate automatic preview/parser budgets from upload/download/editor capabilities. Align external-service ceilings with their documented endpoint limits, and account for base64/JSON overhead throughout Hub and installed PC helpers. Preserve storage quotas, resource bounds, exact fingerprints and uncertain-operation receipts.
+
 ## Owner-requested unrestricted manual file work (2026-09-24)
 
 - Manual file editing, upload and management remain available while Codex tasks

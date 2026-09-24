@@ -7,6 +7,7 @@ import type {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActivitySourceWindow } from "./ActivitySourceWindow";
 import { messageCode } from "./ArtifactMarkdown";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { ApiError, api, messageOf } from "./api";
 import { CopyButton } from "./CopyButton";
@@ -472,7 +473,7 @@ export function IssueDrawerWindow({
                 </label>
                 <label>
                   Текст
-                  <textarea
+                  <AutoTextarea
                     aria-label="Текст Issue"
                     rows={10}
                     value={form.body}

@@ -10,6 +10,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivitySourceWindow } from "./ActivitySourceWindow";
 import type { ArtifactRequest } from "./ArtifactMarkdown";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { ApprovalCard, MessageText } from "./Chat";
@@ -446,7 +447,7 @@ export function IntakeWindow({
             <p className="muted">
               Проверь интерпретацию, план, открытые вопросы и критерии проверки.
             </p>
-            <textarea
+            <AutoTextarea
               aria-label="Пакет для работы"
               value={review.text}
               maxLength={6000}
@@ -595,7 +596,7 @@ export function IntakeWindow({
           }}
         />
         <div className="intake-input">
-          <textarea
+          <AutoTextarea
             aria-label="Сообщение для разбора"
             value={draft}
             maxLength={12000}

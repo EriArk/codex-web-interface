@@ -1,3 +1,4 @@
+import { constants as bufferLimits } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { authorizeMachine, runFileTools, verifyProjectRoot } from "@codex-web/machines";
@@ -15,6 +16,10 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
       ? sessions.config.hub.resultsPath
       : dirname(sessions.config.hub.databasePath),
     "file-operations",
+  );
+  const textLimit = Math.min(
+    sessions.config.hub.storage.attachmentBytes,
+    Math.floor(bufferLimits.MAX_STRING_LENGTH / 6),
   );
   const grants = new Map<string, { scope: string; expires: number }>();
   const scope = (req: FastifyRequest) => {
@@ -100,55 +105,69 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
       .parse(req.query);
     if (q.op === "read" && !editableFile(q.path))
       throw new HubError(400, "FILE_FORMAT", "Для этого формата доступен просмотр или скачивание.");
-    const value = await runFileTools(c.machine, c.project.workingDirectory, q, receiptRoot);
+    const value = await runFileTools(
+      c.machine,
+      c.project.workingDirectory,
+      q,
+      receiptRoot,
+      undefined,
+      textLimit,
+    );
     current(req, expected);
     return { ...value, checkout: expected };
   });
-  app.post("/api/projects/:id/file-tools", { bodyLimit: 13 * 1024 * 1024 }, async (req) => {
-    const c = context(req);
-    const expected = checkout(req);
-    const b = z
-      .object({
-        op: z.enum(["save", "create", "mkdir", "copy", "move", "delete"]),
-        path,
-        target: path.optional(),
-        fingerprint: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/)
-          .optional(),
-        targetFingerprint: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/)
-          .optional(),
-        text: z
-          .string()
-          .max(2 * 1024 * 1024)
-          .optional(),
-        bom: z.boolean().optional(),
-        id: z.string().uuid(),
-        capability: z.string().uuid(),
-      })
-      .strict()
-      .parse(req.body);
-    const grant = grants.get(b.capability);
-    if (!grant || grant.expires < Date.now() || grant.scope !== scope(req))
-      throw new HubError(403, "FILE_LOCKED", "Разблокируй файлы для этой рабочей копии.");
-    if ((b.op === "save" || b.op === "create") && !editableFile(b.path))
-      throw new HubError(400, "FILE_FORMAT", "Выбери текстовый файл с поддерживаемым расширением.");
-    sessions.authorizeExecution();
-    const release = sessions.beginManualFileOperation(c.project.id);
-    try {
-      const { capability: _, ...operation } = b;
-      const value = await runFileTools(
-        c.machine,
-        c.project.workingDirectory,
-        operation,
-        receiptRoot,
-      );
-      current(req, expected);
-      return { ...value, checkout: expected };
-    } finally {
-      release();
-    }
-  });
+  app.post(
+    "/api/projects/:id/file-tools",
+    { bodyLimit: Math.min(bufferLimits.MAX_STRING_LENGTH, textLimit * 6 + 65536) },
+    async (req) => {
+      const c = context(req);
+      const expected = checkout(req);
+      const b = z
+        .object({
+          op: z.enum(["save", "create", "mkdir", "copy", "move", "delete"]),
+          path,
+          target: path.optional(),
+          fingerprint: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          targetFingerprint: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          text: z.string().max(textLimit).optional(),
+          bom: z.boolean().optional(),
+          id: z.string().uuid(),
+          capability: z.string().uuid(),
+        })
+        .strict()
+        .parse(req.body);
+      const grant = grants.get(b.capability);
+      if (!grant || grant.expires < Date.now() || grant.scope !== scope(req))
+        throw new HubError(403, "FILE_LOCKED", "Разблокируй файлы для этой рабочей копии.");
+      if ((b.op === "save" || b.op === "create") && !editableFile(b.path))
+        throw new HubError(
+          400,
+          "FILE_FORMAT",
+          "Выбери текстовый файл с поддерживаемым расширением.",
+        );
+      sessions.authorizeExecution();
+      const release = sessions.beginManualFileOperation(c.project.id);
+      try {
+        const { capability: _, ...operation } = b;
+        const value = await runFileTools(
+          c.machine,
+          c.project.workingDirectory,
+          operation,
+          receiptRoot,
+          undefined,
+          textLimit,
+        );
+        current(req, expected);
+        return { ...value, checkout: expected };
+      } finally {
+        release();
+      }
+    },
+  );
 }

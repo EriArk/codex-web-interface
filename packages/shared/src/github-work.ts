@@ -31,7 +31,7 @@ export const repositoryFileInput = z
         z
           .object({
             path: repositoryFilePathSchema,
-            content: z.string().max(2796204).nullable(),
+            content: z.string().max(139810136).nullable(),
             previous: z
               .string()
               .regex(/^[a-f0-9]{40}$/)

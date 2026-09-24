@@ -1,6 +1,7 @@
 import type { GptModels, NotebookLink, ProjectPreparation as Package } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActivitySourceTarget, ActivitySourceWindow } from "./ActivitySourceWindow";
+import { AutoTextarea } from "./AutoTextarea";
 import { accountLocalStorage as storage } from "./accountStorage";
 import { api, messageOf } from "./api";
 import { gptCache } from "./gptCache";
@@ -263,7 +264,7 @@ export function ProjectPreparation({
             </div>
             <label>
               Согласованная идея и пожелания
-              <textarea
+              <AutoTextarea
                 rows={5}
                 maxLength={8000}
                 value={brief}
@@ -409,7 +410,7 @@ export function ProjectPreparation({
                         )}
                         <label>
                           {f.previous ? "Будет" : "Содержимое"}
-                          <textarea
+                          <AutoTextarea
                             aria-label={`Содержимое файла ${n + 1}`}
                             spellCheck={false}
                             rows={10}
@@ -508,7 +509,7 @@ export function ProjectPreparation({
                         </label>
                         <label>
                           Описание Issue
-                          <textarea
+                          <AutoTextarea
                             rows={6}
                             value={issue.body}
                             readOnly={!editable}

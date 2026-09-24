@@ -30,6 +30,7 @@ export type GptHistorySnapshot = {
   refreshMessage?: string;
 };
 export class GptHistoryCache {
+  private hashes = new WeakMap<GptMessage, { fingerprint: string; bytes: number }>();
   private entries = new Map<string, GptHistorySnapshot>();
   private nextLineage = 0;
   private pending = new Map<string, Promise<GptHistorySnapshot>>();
@@ -96,9 +97,20 @@ export class GptHistoryCache {
     let from = Math.min(previous?.items.length ?? 0, items.length),
       bytes = 0;
     const stable = items.map((message, index) => {
-      const serialized = JSON.stringify(message),
-        fingerprint = digest(serialized);
-      bytes += serialized.length * 2 + 160;
+      let hashed = this.hashes.get(message);
+      if (!hashed) {
+        const serialized = JSON.stringify(message);
+        hashed = { fingerprint: digest(serialized), bytes: serialized.length * 2 + 160 };
+        if (
+          Object.isFrozen(message) &&
+          Object.isFrozen(message.files) &&
+          message.files.every(Object.isFrozen) &&
+          (!message.unsupported || Object.isFrozen(message.unsupported))
+        )
+          this.hashes.set(message, hashed);
+      }
+      const { fingerprint } = hashed;
+      bytes += hashed.bytes;
       fingerprints.push(fingerprint);
       const unchanged = previous?.fingerprints[index] === fingerprint;
       if (!unchanged) from = Math.min(from, index);
@@ -107,7 +119,11 @@ export class GptHistoryCache {
           ? previous!.prefixes[index + 1]!
           : digest(prefixes[index]! + fingerprint),
       );
-      return unchanged ? previous!.items[index]! : structuredClone(message);
+      return unchanged
+        ? previous!.items[index]!
+        : this.hashes.has(message)
+          ? message
+          : structuredClone(message);
     });
     const revision = prefixes.at(-1)!;
     const changed = previous?.revision !== revision;
@@ -144,7 +160,14 @@ export class GptHistoryCache {
     this.entries.set(id, value);
     // An unchanged poll updates freshness in memory, not the whole disk snapshot.
     if (persist && (changed || checkedAt - value.persistedAt >= 3600000)) {
-      this.disk?.write(id, value.items, checkedAt);
+      this.disk?.write(
+        id,
+        value.items,
+        checkedAt,
+        previous ? from : 0,
+        previous?.revision,
+        revision,
+      );
       value.persistedAt = checkedAt;
     }
     this.trim();
