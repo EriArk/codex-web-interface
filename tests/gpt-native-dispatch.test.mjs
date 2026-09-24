@@ -361,7 +361,7 @@ test("native Stop keeps receipt pending until exact-turn canonical read and idle
   assert.equal((await ledger.reconcile(input, reader)).state, "cancelled");
   assert.equal(ledger.pending(), false);
 });
-test("native dispatch intention survives disconnect and restart without replay; changed keys/payloads and manual takeover are blocked", async (t) => {
+test("unknown dispatch survives restart without replay while manual recovery remains reachable", async (t) => {
   const f = receipts(t);
   let ledger = f.open();
   let sends = 0;
@@ -392,10 +392,13 @@ test("native dispatch intention survives disconnect and restart without replay; 
     statePath: join(f.root, "manual.json"),
     canary: ledger,
   });
-  await assert.rejects(
-    service.request({ operation: "beginManual", userId, leaseId: randomUUID() }),
-    /PENDING_DISPATCH/,
-  );
+  const leaseId = randomUUID();
+  assert.equal((await service.request({ operation: "beginManual", userId, leaseId })).manual, true);
+  assert.equal(ledger.pending(), true);
+  assert.equal(sends, 1);
+  await assert.rejects(service.request({ operation: "readModels", userId }), /MANUAL_RECOVERY/);
+  await service.request({ operation: "endManual", userId, leaseId });
+  assert.equal(ledger.pending(), true);
   await ledger.reconcile(input, reader);
   assert.equal(ledger.pending(), false);
   assert.equal(
@@ -741,9 +744,93 @@ test("temporary native read failures preserve confirmed delivery and public outp
       f.db.prepare("SELECT uncertainSince FROM gpt_native_receipts").get().uncertainSince,
       null,
     );
+    f.client.reconcileDispatch = reconcile;
+    await worker.reconcile(f.id);
   }
   f.client.reconcileDispatch = reconcile;
   f.state.readState = "completed";
   assert.equal((await worker.reconcile(f.id)).status, "completed");
   assert.equal(f.state.sends, 1);
+});
+
+test("three failed confirmations pause only that chat, survive restart and never replay its send", async (t) => {
+  const f = queue(t),
+    worker = f.open();
+  await worker.run(f.id);
+  const waiting = randomUUID();
+  f.db
+    .prepare(
+      "INSERT INTO gpt_jobs SELECT ?,fingerprint,nativeId,text,files,model,effort,'queued',answer,assets,createdAt,updatedAt,'',NULL,0 FROM gpt_jobs WHERE id=?",
+    )
+    .run(waiting, f.id);
+  f.state.fail = true;
+  for (let i = 0; i < 3; i++) await assert.rejects(worker.reconcile(f.id));
+  const paused = f.db.prepare("SELECT status,error,answer FROM gpt_jobs WHERE id=?").get(f.id);
+  assert.equal(paused.status, "unknown");
+  assert.equal(paused.error, "NATIVE_CHAT_PAUSED");
+  assert.equal(paused.answer, "Public progress");
+  assert.equal(
+    f.db.prepare("SELECT status FROM gpt_jobs WHERE id=?").get(waiting).status,
+    "failed",
+  );
+  assert.equal(worker.canPoll(f.id), false);
+  assert.equal(f.open().canPoll(f.id), false);
+  assert.equal(worker.canPoll("another-job"), true);
+  assert.equal(f.state.sends, 1);
+  f.state.fail = false;
+  f.state.readState = "completed";
+  await worker.reconcile(f.id);
+  assert.equal(worker.canPoll(f.id), true);
+  assert.equal(f.state.sends, 1);
+});
+
+test("uncertain conversation actions and new-chat receipts do not block unrelated chats", async (t) => {
+  const f = receipts(t),
+    ledger = f.open();
+  t.after(() => ledger.close());
+  const other = randomUUID();
+  ledger.db
+    .prepare("INSERT INTO operation_receipts VALUES(?,?,?,? ,NULL,'unknown')")
+    .run(randomUUID(), "hash", JSON.stringify({ conversationId }), "{}");
+  assert.equal(ledger.blocksDispatch(conversationId), true);
+  assert.equal(ledger.blocksDispatch(other), false);
+  assert.equal(ledger.blocksDispatch(null), false);
+  ledger.db
+    .prepare("INSERT INTO library_receipts VALUES(?,?,?,?,'unknown')")
+    .run(
+      randomUUID(),
+      "hash",
+      JSON.stringify({ kind: "thread", id: other, action: "rename" }),
+      "{}",
+    );
+  assert.equal(ledger.blocksDispatch(other), true);
+  assert.equal(ledger.blocksDispatch(randomUUID()), false);
+});
+
+test("an unresolved new-chat receipt does not cancel other new-chat drafts", async (t) => {
+  const f = queue(t),
+    worker = f.open();
+  await worker.run(f.id);
+  worker.creationKeys.add(f.id);
+  f.db.prepare("UPDATE gpt_jobs SET nativeId=NULL WHERE id=?").run(f.id);
+  const payload = JSON.parse(
+    f.db.prepare("SELECT payload FROM gpt_native_receipts WHERE jobId=?").get(f.id).payload,
+  );
+  payload.conversationId = null;
+  f.db
+    .prepare("UPDATE gpt_native_receipts SET payload=? WHERE jobId=?")
+    .run(JSON.stringify(payload), f.id);
+  const waiting = randomUUID();
+  f.db
+    .prepare(
+      "INSERT INTO gpt_jobs SELECT ?,fingerprint,NULL,text,files,model,effort,'queued',answer,assets,createdAt,updatedAt,'',NULL,0 FROM gpt_jobs WHERE id=?",
+    )
+    .run(waiting, f.id);
+  f.state.fail = true;
+  for (let i = 0; i < 3; i++) await assert.rejects(worker.reconcile(f.id));
+  assert.equal(worker.canPoll(f.id), false);
+  assert.equal(
+    f.db.prepare("SELECT status FROM gpt_jobs WHERE id=?").get(waiting).status,
+    "queued",
+  );
 });

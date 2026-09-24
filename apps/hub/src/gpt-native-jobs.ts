@@ -52,6 +52,9 @@ export class NativeGptJobs {
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS gpt_native_preparations(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id))",
     );
+    store.db.exec(
+      "CREATE TABLE IF NOT EXISTS gpt_native_read_health(jobId TEXT PRIMARY KEY REFERENCES gpt_jobs(id), failures INTEGER NOT NULL DEFAULT 0, paused INTEGER NOT NULL DEFAULT 0, nextAt INTEGER NOT NULL DEFAULT 0)",
+    );
     for (const column of ["retryAt", "attempts"])
       if (
         !store.db
@@ -77,6 +80,37 @@ export class NativeGptJobs {
     if (!row || !(this.allowed.has(String(row.nativeId)) || this.creationKeys.has(id)))
       fail("INVALID_CANARY");
     return row;
+  }
+  canPoll(id: string) {
+    const r = this.store.db
+      .prepare("SELECT paused,nextAt FROM gpt_native_read_health WHERE jobId=?")
+      .get(id);
+    return !r || (!r.paused && Number(r.nextAt) <= Date.now());
+  }
+  private readFailed(id: string, code: string) {
+    if (
+      [
+        "NATIVE_BUSY",
+        "NATIVE_MANUAL_RECOVERY",
+        "NATIVE_RATE_LIMITED",
+        "NATIVE_QUEUE_FULL",
+      ].includes(code)
+    )
+      return;
+    const db = this.store.db;
+    db.prepare(
+      "INSERT INTO gpt_native_read_health(jobId,failures,nextAt) VALUES(?,1,?) ON CONFLICT(jobId) DO UPDATE SET failures=failures+1,nextAt=excluded.nextAt",
+    ).run(id, Date.now() + 30000);
+    db.prepare("UPDATE gpt_native_read_health SET paused=1 WHERE jobId=? AND failures>=3").run(id);
+    if (db.prepare("SELECT 1 FROM gpt_native_read_health WHERE jobId=? AND paused=1").get(id)) {
+      db.prepare(
+        "UPDATE gpt_jobs SET status='unknown',error='NATIVE_CHAT_PAUSED',updatedAt=? WHERE id=? AND status IN ('running','unknown')",
+      ).run(Date.now(), id);
+      // Following accepted drafts in this same chat must not remain poised to send.
+      db.prepare(
+        "UPDATE gpt_jobs SET status='failed',error='NATIVE_CHAT_PAUSED_UNSENT',updatedAt=? WHERE status='queued' AND nativeId IS NOT NULL AND nativeId = (SELECT nativeId FROM gpt_jobs WHERE id=?)",
+      ).run(Date.now(), id);
+    }
   }
   private project(id: string): string | undefined {
     // The normal Store owns this association. Minimal isolated test Stores can omit it.
@@ -140,7 +174,7 @@ export class NativeGptJobs {
       if (
         this.store.db
           .prepare(
-            "SELECT 1 FROM gpt_jobs WHERE id!=? AND (status='preparing' OR status IN ('running','unknown') AND nativeId IS ?) LIMIT 1",
+            "SELECT 1 FROM gpt_jobs WHERE id!=? AND (status='preparing' OR status IN ('running','unknown') AND nativeId IS ? AND nativeId IS NOT NULL) LIMIT 1",
           )
           .get(id, row.nativeId == null ? null : String(row.nativeId))
       )
@@ -230,7 +264,7 @@ export class NativeGptJobs {
         );
         const retry =
           preparing &&
-          attempts < 3 &&
+          attempts < 1 &&
           error instanceof Error &&
           /^(NATIVE_RATE_LIMITED|NATIVE_READ_UNAVAILABLE|NATIVE_TIMEOUT|NATIVE_HISTORY_HEADERS_TIMEOUT|NATIVE_HISTORY_BODY_TIMEOUT|NATIVE_BUSY|NATIVE_MANUAL_RECOVERY|NATIVE_DISCONNECTED|NATIVE_UNAVAILABLE|NATIVE_WINDOW_CHANGED|NATIVE_WINDOW_AMBIGUOUS)$/.test(
             error.message,
@@ -389,6 +423,7 @@ export class NativeGptJobs {
       )
         fail("SUBMISSION_MISMATCH");
     } catch (error) {
+      this.readFailed(id, error instanceof Error ? error.message : "NATIVE_READ_UNAVAILABLE");
       // Delivery was already proved. A temporary history outage does not undo
       // that proof or turn an ongoing long task into an uncertain submission.
       if (
@@ -404,13 +439,14 @@ export class NativeGptJobs {
       markUncertain();
       this.store.db
         .prepare(
-          "UPDATE gpt_jobs SET status='unknown',error='NATIVE_RECONCILE_REQUIRED',updatedAt=? WHERE id=? AND status!='completed'",
+          "UPDATE gpt_jobs SET status='unknown',error=CASE WHEN error='NATIVE_CHAT_PAUSED' THEN error ELSE 'NATIVE_RECONCILE_REQUIRED' END,updatedAt=? WHERE id=? AND status!='completed'",
         )
         .run(Date.now(), id);
       throw error;
     }
     // A temporary missing page must not erase already observed public output.
     if (result.state !== "unknown") {
+      this.store.db.prepare("DELETE FROM gpt_native_read_health WHERE jobId=?").run(id);
       this.store.db
         .prepare("UPDATE gpt_native_receipts SET uncertainSince=NULL WHERE jobId=?")
         .run(id);
@@ -469,9 +505,10 @@ export class NativeGptJobs {
       markUncertain();
       this.store.db
         .prepare(
-          "UPDATE gpt_jobs SET status='unknown',error='NATIVE_RECONCILE_REQUIRED',updatedAt=? WHERE id=? AND status!='completed'",
+          "UPDATE gpt_jobs SET status='unknown',error=CASE WHEN error='NATIVE_CHAT_PAUSED' THEN error ELSE 'NATIVE_RECONCILE_REQUIRED' END,updatedAt=? WHERE id=? AND status!='completed'",
         )
         .run(Date.now(), id);
+      this.readFailed(id, "NATIVE_UNCONFIRMED");
     }
     return { status: String(this.row(id).status), userMessageId: payload.userMessageId as string };
   }

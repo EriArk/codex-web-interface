@@ -83,16 +83,19 @@ test("selection uses native exact-ID navigation and preserves nonempty native dr
   const f = fixture();
   f.elements['button[aria-label="Stop"]'] = [];
   await f.run({ operation: "selectConversation" });
-  assert.deepEqual(f.actions[0], {
-    type: "windows.show_thread",
-    windowId: "current",
-    kind: "chatgpt",
-    threadId: "chat",
-  });
+  assert.deepEqual(
+    f.actions.find((a) => a.type === "windows.show_thread"),
+    {
+      type: "windows.show_thread",
+      windowId: "current",
+      kind: "chatgpt",
+      threadId: "chat",
+    },
+  );
   f.actions.length = 0;
   f.editor.textContent = "unsent";
   await assert.rejects(f.run({ operation: "selectConversation" }), /DRAFT_PRESENT/);
-  assert.equal(f.actions.length, 0);
+  assert.equal(f.actions.filter((a) => a.type !== "app.get_summary").length, 0);
 });
 
 test("new Chat preparation preserves Work mode and native drafts", async () => {
@@ -244,4 +247,41 @@ test("new Chat local alias requires the exact canonical route and matching nativ
   f.state.window.route.pathname = "/c/chat";
   f.state.window.route.threadId = "different";
   await assert.rejects(f.run(), /SELECTED_CHAT_MISMATCH/);
+});
+
+test("a foreign native draft survives navigation and does not block the target chat", async () => {
+  for (const attachment of [false, true]) {
+    const f = fixture();
+    f.state.window.thread.id = "other";
+    f.state.window.route.threadId = "other";
+    f.editor.textContent = attachment ? "" : "preserved source draft";
+    f.editor.closest = () => ({
+      querySelectorAll: () => (attachment ? [{ getAttribute: () => "Remove source.png" }] : []),
+    });
+    const targetEditor = { getClientRects: () => [1], textContent: "" };
+    const load = async () => ({
+      M9: {
+        appActions: {
+          runInPrimaryWindow: async ({ action }) => {
+            if (action.type === "windows.show_thread") {
+              f.state.window.thread.id = action.threadId;
+              f.state.window.route.threadId = action.threadId;
+              f.elements['[role="textbox"][contenteditable="true"]'] = [targetEditor];
+            }
+            return f.state;
+          },
+        },
+      },
+    });
+    const result = await nativeControl(
+      { ...f.request, operation: "selectConversation" },
+      f.read,
+      load,
+      f.runtime,
+    );
+    assert.equal(result.selected, true);
+    assert.equal(result.hasDraft, false);
+    assert.equal(f.editor.textContent, attachment ? "" : "preserved source draft");
+    assert.equal(f.clicks(), 0);
+  }
 });

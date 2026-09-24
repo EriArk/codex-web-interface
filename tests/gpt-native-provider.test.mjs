@@ -85,11 +85,45 @@ test("native model catalog stays readable during an unrelated unresolved mutatio
     .prepare("INSERT INTO gpt_native_library VALUES(?,'thread',?,?,'unknown')")
     .run(randomUUID(), randomUUID(), JSON.stringify({ action: "rename", name: "Renamed" }));
   const status = await service.connection();
-  assert.equal(status.canSend, false);
-  assert.equal(status.state, "degraded");
-  assert.notEqual(status.message, "GPT на связи.");
+  assert.equal(status.canSend, true);
+  assert.equal(status.state, "healthy");
   assert.ok((await service.models()).models.length, "cold tablet can fetch native choices");
   assert.equal(f.state.sends, 0);
+});
+
+test("a paused chat and unrelated uncertain mutation leave another send usable", async (t) => {
+  const f = setup(t),
+    service = f.open(),
+    stuck = randomUUID();
+  service.enqueue(stuck, f.input);
+  await until(() => service.job(stuck).status === "running" && !service.working);
+  f.client.reconcileDispatch = async () => {
+    throw Error("NATIVE_HISTORY_HEADERS_TIMEOUT");
+  };
+  for (let i = 0; i < 3; i++) {
+    f.store.db.prepare("UPDATE gpt_native_read_health SET nextAt=0").run();
+    await service.pump();
+  }
+  assert.match(service.job(stuck).error, /остановлены/);
+  let reads = 0;
+  const other = nativeWorkspaceFixture();
+  f.workspace.conversations.add(other.conversationId);
+  f.client.prepareDispatch = other.client.prepareDispatch;
+  f.client.dispatchText = other.client.dispatchText;
+  f.client.reconcileDispatch = (key, id) => {
+    assert.equal(id, other.conversationId, "paused chat is no longer read automatically");
+    reads++;
+    return other.client.reconcileDispatch(key, id);
+  };
+  f.store.db
+    .prepare("INSERT INTO gpt_native_library VALUES(?,'thread',?,?,'unknown')")
+    .run(randomUUID(), f.conversationId, JSON.stringify({ action: "rename", name: "Pending" }));
+  const next = randomUUID();
+  service.enqueue(next, other.input);
+  await until(() => service.job(next).status === "running" && !service.working);
+  assert.equal(other.state.sends, 1);
+  assert.equal(f.state.sends, 1);
+  assert.ok(reads > 0);
 });
 
 test("shared authenticated GPT routes use native catalog, pins, history and per-model presets", async (t) => {
@@ -363,10 +397,12 @@ test("routine native delivery reconciliation is silent; prolonged uncertainty re
   f.store.db
     .prepare("UPDATE gpt_native_receipts SET uncertainSince=? WHERE jobId=?")
     .run(Date.now() - 60000, key);
+  f.store.db.prepare("UPDATE gpt_native_read_health SET nextAt=0 WHERE jobId=?").run(key);
   await service.pump();
   assert.match(service.job(key).error, /доставку/);
   assert.equal(f.state.sends, 1);
   f.client.reconcileDispatch = original;
+  f.store.db.prepare("UPDATE gpt_native_read_health SET nextAt=0 WHERE jobId=?").run(key);
   await service.pump();
   assert.equal(service.job(key).error, "");
   assert.equal(service.job(key).status, "running");
@@ -455,7 +491,7 @@ test("preparation recovery is bounded and never retries account or settings erro
     f.store.db.prepare("UPDATE gpt_native_preparations SET retryAt=0 WHERE jobId=?").run(key);
     await service.pump();
   }
-  assert.equal(attempts, 4);
+  assert.equal(attempts, 2);
   assert.equal(service.job(key).status, "failed");
   assert.equal(f.state.sends, 0);
 });

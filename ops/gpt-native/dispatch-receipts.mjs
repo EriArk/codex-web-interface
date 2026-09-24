@@ -31,9 +31,22 @@ export class NativeDispatchReceipts {
  hash(x){return createHash('sha256').update(JSON.stringify(x)).digest('hex');}
  close(){this.db.close();}
  pending(){return !!this.db.prepare("SELECT 1 FROM operation_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM workspace_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM project_creations WHERE projectId IS NULL AND state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM project_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM library_receipts WHERE state='unknown' LIMIT 1").get() || !!this.db.prepare("SELECT 1 FROM receipts WHERE state NOT IN ('completed','cancelled','checked') LIMIT 1").get();}
- blocksDispatch(conversationId){
-  if(this.db.prepare("SELECT 1 FROM operation_receipts WHERE state='unknown' LIMIT 1").get()||this.db.prepare("SELECT 1 FROM workspace_receipts WHERE state='unknown' LIMIT 1").get()||this.db.prepare("SELECT 1 FROM project_receipts WHERE state='unknown' LIMIT 1").get()||this.db.prepare("SELECT payload FROM library_receipts WHERE state='unknown'").all().some(row=>{const r=JSON.parse(row.payload);return r.kind!=='thread'||r.action!=='delete'||r.id===conversationId;})||this.db.prepare("SELECT 1 FROM project_creations WHERE projectId IS NULL AND state='unknown' LIMIT 1").get())return true;
-  return this.db.prepare("SELECT payload,state FROM receipts WHERE state NOT IN ('completed','cancelled','checked')").all().some(x=>JSON.parse(x.payload).conversationId===conversationId);
+ blocksDispatch(conversationId,projectId){
+  const pending=table=>this.db.prepare("SELECT payload FROM "+table+" WHERE state='unknown'").all().map(row=>JSON.parse(row.payload));
+  if(conversationId&&pending('operation_receipts').some(r=>r.conversationId===conversationId))return true;
+  if(conversationId&&pending('workspace_receipts').some(r=>r.input?.conversationId===conversationId))return true;
+  if(projectId&&pending('project_receipts').some(r=>r.projectId===projectId))return true;
+  if(pending('library_receipts').some(r=>r.kind==='thread'?conversationId&&r.id===conversationId:projectId&&r.id===projectId))return true;
+  return !!conversationId&&this.db.prepare("SELECT payload,state FROM receipts WHERE state NOT IN ('completed','cancelled','checked')").all().some(x=>JSON.parse(x.payload).conversationId===conversationId);
+ }
+ async assertDispatch(r,reader){
+  if(this.blocksDispatch(r.conversationId,r.projectId))fail('PENDING_DISPATCH');
+  const projectChanges=this.db.prepare("SELECT 1 FROM project_receipts WHERE state='unknown' UNION ALL SELECT 1 FROM library_receipts WHERE state='unknown' AND json_extract(payload,'$.kind')='project' LIMIT 1").get();
+  if(projectChanges&&r.conversationId){
+   const history=await reader.readConversation(r);
+   if(history.conversationId!==r.conversationId)fail('CONVERSATION_MISMATCH');
+   if(this.blocksDispatch(r.conversationId,history.projectId))fail('PENDING_DISPATCH');
+  }
  }
  validate(r){
   if(r.projectId!=null&&!/^g-p-[a-zA-Z0-9-]{1,80}$/.test(r.projectId))fail('INVALID_PROJECT');
@@ -69,7 +82,7 @@ export class NativeDispatchReceipts {
  }
  async prepare(r,reader){
   this.validate(r);
-  if(this.blocksDispatch(r.conversationId))fail('PENDING_DISPATCH');
+  await this.assertDispatch(r,reader);
   await reader.selectConversation(r);
   // The native completion action does not need a mounted visual composer.
   // Model and effort are passed directly to the native completion action.
@@ -96,7 +109,7 @@ export class NativeDispatchReceipts {
   if(uploaded.length!==(r.attachments??[]).length||uploaded.some(x=>!x.result))fail('UPLOAD_MISMATCH');
   const hash=this.hash(r),old=this.db.prepare('SELECT * FROM receipts WHERE key=?').get(r.key);
   if(old){if(old.hash!==hash)fail('KEY_CONFLICT');return {state:old.state==='completed'?'completed':'unknown',userMessageId:r.userMessageId};}
-  if(this.blocksDispatch(r.conversationId))fail('PENDING_DISPATCH');
+  await this.assertDispatch(r,reader);
   // This commit survives renderer/supervisor/Hub loss. Never invoke the writer twice.
   this.db.exec('BEGIN IMMEDIATE');
   try{

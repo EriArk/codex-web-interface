@@ -1,6 +1,6 @@
 import {watchHubSession,gptSessionAllowed} from './session-watch.mjs';
 import {teamConnection} from './team-connection.mjs';
-import {nativeRecoveryBinding} from './native-recovery.mjs';
+import {nativeRecoveryBinding,beginNativeRecovery} from './native-recovery.mjs';
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -136,7 +136,7 @@ server.on('upgrade',async(req,socket,head)=>{
  if(binding.native){
   if(state.resuming){socket.end('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n');return}
   state.opening++;
-  try{adapter=nativeClient(binding);leaseId=randomUUID();await adapter.manual('beginManual',leaseId);}
+  try{adapter=nativeClient(binding);leaseId=randomUUID();await beginNativeRecovery(adapter,leaseId,()=>socket.destroyed);}
   catch{await adapter?.manual('endManual',leaseId).catch(()=>{});socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');return}
   finally{state.opening--;}
   if(socket.destroyed){await adapter.manual('endManual',leaseId).catch(()=>{});return}

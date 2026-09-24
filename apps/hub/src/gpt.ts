@@ -161,6 +161,38 @@ export class GptService {
       !!this.nativeLibrary?.blocked()
     );
   }
+  private nativeChatBlocked(nativeId: string | null, projectId?: string) {
+    if (!this.native) return this.nativeBlocked();
+    const db = this.store.db;
+    return (
+      !!(
+        nativeId &&
+        (db
+          .prepare(
+            "SELECT 1 FROM gpt_native_operations WHERE nativeId=? AND state IN ('preparing','running','unknown') LIMIT 1",
+          )
+          .get(nativeId) ||
+          db
+            .prepare(
+              "SELECT 1 FROM gpt_native_library WHERE kind='thread' AND id=? AND state='unknown' LIMIT 1",
+            )
+            .get(nativeId))
+      ) ||
+      !!(
+        projectId &&
+        (db
+          .prepare(
+            "SELECT 1 FROM gpt_project_operations WHERE projectId=? AND state IN ('pending','unknown') LIMIT 1",
+          )
+          .get(projectId) ||
+          db
+            .prepare(
+              "SELECT 1 FROM gpt_native_library WHERE kind='project' AND id=? AND state='unknown' LIMIT 1",
+            )
+            .get(projectId))
+      )
+    );
+  }
   nativeCounts() {
     const a = this.operations.counts(),
       b = this.projectContent.counts(),
@@ -240,7 +272,7 @@ export class GptService {
       };
     const operations = this.nativeCounts();
     const blocked = this.nativeBlocked();
-    if (blocked && value.canSend)
+    if (blocked && value.canSend && !this.native)
       value = {
         ...value,
         state: operations.unknown || this.nativeLibrary?.blocked() ? "degraded" : "busy",
@@ -980,11 +1012,17 @@ export class GptService {
       createdAt: Number(row.createdAt),
       updatedAt: Number(row.updatedAt),
       error:
-        typeof row.error === "string" && row.error.startsWith("NATIVE_")
-          ? row.status === "unknown"
-            ? ""
-            : "Отправка не подготовлена. Текст и файлы сохранены."
-          : row.error,
+        row.error === "NATIVE_CHAT_PAUSED"
+          ? "Проверки этого чата остановлены после повторных ошибок. Сообщение могло быть отправлено; автоматического повтора не будет. Другие чаты доступны."
+          : row.error === "NATIVE_CHAT_PAUSED_UNSENT"
+            ? "Отправка остановлена из-за сбоя этого чата. Сообщение не отправлялось; его можно вернуть в черновик."
+            : row.error === "NATIVE_DRAFT_PRESENT"
+              ? "В этом чате GPT уже есть нативный черновик. Сохрани или убери его через подключение к GPT; другие чаты доступны."
+              : typeof row.error === "string" && row.error.startsWith("NATIVE_")
+                ? row.status === "unknown"
+                  ? ""
+                  : "Отправка не подготовлена. Текст и файлы сохранены."
+                : row.error,
     };
   }
   job(jobId: string) {
@@ -1138,12 +1176,12 @@ export class GptService {
         "GPT_NATIVE_INPUT",
         "Сообщение превышает текущий предел нового подключения (32 КБ). Черновик сохранён.",
       );
-    if (this.nativeBlocked())
+    if (this.nativeChatBlocked(value.nativeId, value.projectId))
       throw error(
         "GPT_NATIVE_BUSY",
         "Сначала дождись завершения или проверь изменение ветки GPT. Черновик сохранён.",
       );
-    if (this.libraryBusy)
+    if (this.libraryBusy && !this.native)
       throw error("GPT_LIBRARY_BUSY", "Обновляем список чатов. Повтори отправку через секунду.");
     if (value.projectId) {
       if (value.nativeId)
@@ -1171,7 +1209,9 @@ export class GptService {
       throw error("GPT_QUEUE_FULL", "Очередь заполнена.");
     if (
       this.jobs().some(
-        (job) => job.status === "unknown" && (!this.native || job.nativeId === value.nativeId),
+        (job) =>
+          job.status === "unknown" &&
+          (!this.native || (value.nativeId !== null && job.nativeId === value.nativeId)),
       )
     )
       throw error(
@@ -1278,14 +1318,7 @@ export class GptService {
     return this.job(jobId);
   }
   private async pumpNative() {
-    if (
-      !this.native ||
-      !this.nativeJobs ||
-      this.stopped ||
-      this.working ||
-      this.libraryBusy ||
-      this.nativeBlocked()
-    )
+    if (!this.native || !this.nativeJobs || this.stopped || this.working || this.libraryBusy)
       return;
     this.working = true;
     this.completion = new Promise((resolve) => {
@@ -1296,16 +1329,27 @@ export class GptService {
       // Give a ready independent chat priority over background history checks.
       // Its own persisted receipt still blocks it; old-provider jobs never migrate.
       const eligible = this.store.db.prepare(
-        "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE p.provider='native' AND j.status='queued' AND NOT EXISTS(SELECT 1 FROM gpt_native_preparations wait WHERE wait.jobId=j.id AND wait.retryAt>?) AND NOT EXISTS(SELECT 1 FROM gpt_jobs busy WHERE busy.status IN ('running','unknown') AND busy.nativeId IS j.nativeId) ORDER BY j.createdAt LIMIT 1",
+        "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id WHERE p.provider='native' AND j.status='queued' AND NOT EXISTS(SELECT 1 FROM gpt_native_preparations wait WHERE wait.jobId=j.id AND wait.retryAt>?) AND NOT EXISTS(SELECT 1 FROM gpt_jobs busy WHERE busy.status IN ('running','unknown') AND busy.nativeId IS j.nativeId AND j.nativeId IS NOT NULL) ORDER BY j.createdAt LIMIT 20",
       );
-      let next = eligible.get(Date.now());
+      const nextReady = () =>
+        (eligible.all(Date.now()) as { id: string }[]).find((row) => {
+          const job = this.job(row.id);
+          const projectId = this.store.db
+            .prepare("SELECT projectId FROM gpt_project_jobs WHERE jobId=?")
+            .get(row.id)?.projectId;
+          return !this.nativeChatBlocked(job.nativeId, projectId ? String(projectId) : undefined);
+        });
+      let next = nextReady();
       retry = !!this.store.db.prepare("SELECT 1 FROM gpt_jobs WHERE status='queued' LIMIT 1").get();
-      const pending = this.store.db
+      const pendingAll = this.store.db
         .prepare(
-          "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id JOIN gpt_native_receipts r ON r.jobId=j.id WHERE p.provider='native' AND j.status IN ('running','unknown') ORDER BY j.updatedAt LIMIT 2",
+          "SELECT j.id FROM gpt_jobs j JOIN gpt_job_providers p ON p.jobId=j.id JOIN gpt_native_receipts r ON r.jobId=j.id LEFT JOIN gpt_native_read_health h ON h.jobId=j.id WHERE p.provider='native' AND j.status IN ('running','unknown') AND COALESCE(h.paused,0)=0 ORDER BY j.updatedAt LIMIT 20",
         )
         .all();
-      if (pending.length) retry = true;
+      const pending = pendingAll
+        .filter((row) => this.nativeJobs!.canPoll(String(row.id)))
+        .slice(0, 2);
+      if (pendingAll.length) retry = true;
       for (const row of next ? [] : pending) {
         retry = true;
         let refreshed = false;
@@ -1319,7 +1363,7 @@ export class GptService {
         this.invalidateNativeJob(String(row.id), refreshed);
       }
       if (this.jobs().some((j) => j.status === "preparing")) return;
-      next = eligible.get(Date.now());
+      next = nextReady();
       if (!next) return;
       retry = true;
       // Preparation validates the bound account and the selected model itself.
@@ -1387,7 +1431,7 @@ export class GptService {
           .get(id)?.uncertainSince ?? Date.now(),
       );
       this.store.db
-        .prepare("UPDATE gpt_jobs SET error=? WHERE id=?")
+        .prepare("UPDATE gpt_jobs SET error=? WHERE id=? AND error!='NATIVE_CHAT_PAUSED'")
         .run(
           Date.now() - since >= 45000
             ? "Не удалось подтвердить доставку сообщения. Проверь историю перед новой отправкой."

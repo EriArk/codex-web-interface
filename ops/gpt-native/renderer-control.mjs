@@ -36,9 +36,10 @@ export async function nativeControl(request, read, load = () => import('app://-/
   // Selection only navigates the bound account. Dispatch preparation reads the
   // canonical parent afterwards; do not make navigation fetch the same graph.
   deadline = Date.now() + 5000;
-  // Do not navigate away from a nonempty native draft.
+  // Drafts belong to their native conversation. Navigation uses the app's own
+  // draft store; never clear a foreign composer to prepare an unrelated chat.
   const draft=controls();
-  if (draft.editors.some(e=>e.textContent?.trim())||draft.attachments.length) fail('DRAFT_PRESENT');
+  if (matches(await summary())&&(draft.editors.some(e=>e.textContent?.trim())||draft.attachments.length)) fail('DRAFT_PRESENT');
   await action(request.conversationId===null?{type:'windows.show_home',windowId:'current'}:{type:'windows.show_thread',windowId:'current',kind:'chatgpt',threadId:request.conversationId});
   while (!matches(await summary())) {
    if (Date.now() >= deadline) fail('NAVIGATION_UNCONFIRMED');
@@ -75,6 +76,7 @@ export async function nativeControl(request, read, load = () => import('app://-/
   return {conversationId:request.conversationId,userMessageId:request.userMessageId,stopIssued:true,confirmed:false};
  }
  const ui = controls();
+ if(request.operation==='selectConversation'&&(ui.editors.some(e=>e.textContent?.trim())||ui.attachments.length))fail('DRAFT_PRESENT');
  return {conversationId:request.conversationId,selected:true,composerReady:ui.editors.length === 1,
   hasDraft:ui.editors.some(e=>!!e.textContent?.trim())||ui.attachments.length>0,attachmentCount:ui.attachments.length,stopAvailable:ui.stop.length === 1,
   sendAvailable:ui.send.length === 1};

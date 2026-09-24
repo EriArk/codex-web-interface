@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Owner-requested GPT fault isolation (2026-09-24)
+
+- A failed or uncertain chat must not block unrelated GPT chats. Scope mutation and dispatch guards to the exact conversation/project while retaining account and receipt validation.
+- Bound automatic recovery: after three consecutive failed dispatch confirmations, stop background checks for that job and preserve its receipt, text and partial answer. Stop unsent followers in that same chat; never treat all new chats with a null native ID as one conversation.
+- Never replay uncertain sends or keep pushing a broken conversation. The owner prefers to submit again manually after checking what actually arrived. Explicit recovery must remain reachable without clearing uncertain receipts or stopping native responses.
+
 ## Owner-requested direct Result viewing (2026-09-24)
 
 - In Results, clicking a file title or image opens the universal viewer directly above the mounted feed. Remove separate Preview buttons/tabs and the intermediate action-only inspector. Keep sharing and downloading on the source card; preserve its category and scroll when closing the viewer.

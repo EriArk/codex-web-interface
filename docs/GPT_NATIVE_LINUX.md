@@ -572,3 +572,42 @@ no longer reports the misleading healthy connection message.
 Four focused checks cover old-receipt migration/restart, unrelated sends, deletion
 reconciliation and cold model loading during an unresolved mutation. The permanent
 fix follows the guarded engine release; live recovery is recorded separately.
+
+
+### Conversation isolation and bounded confirmation recovery (2026-09-24)
+
+The reported failure combined a native draft refusal with an older uncertain
+receipt. Account/model reads were healthy; the old receipt timed out reading
+history. The recovery tunnel returned 503 because manual recovery rejected every
+pending receipt. This evidence does not establish an upstream account ban.
+
+Native navigation preserves foreign conversation drafts through the app's own
+navigation actions; the selected target's draft still prevents dispatch. Unknown
+conversation mutations block only that conversation. Project mutations remain
+scoped to their project, checked against canonical history when necessary.
+Independent new-chat receipts do not share a null conversation lock. Actual
+in-flight adapter operations remain serialized.
+
+The Hub persists per-job confirmation health. Failed reads wait 30 seconds;
+three consecutive failures pause automatic reconciliation, including after a
+restart. Busy/manual-recovery/rate-limit/queue-full responses do not count as
+conversation failures. Existing receipts and partial public output remain.
+Queued followers in the same known conversation become unsent failures with
+recoverable text; unrelated and new-chat drafts remain intact. A successful
+explicit reconciliation clears the pause. Preparation has at most one retry;
+submission itself is never retried. Account-wide availability remains separate.
+
+Manual recovery can acquire a lease despite uncertain receipts. Acquisition
+waits at most 20 seconds for confirmed local BUSY using one lease ID; ambiguous
+errors are not retried. It neither cancels generation nor clears receipts.
+
+Verification: 67 focused tests cover provider scheduling, native controls,
+receipt isolation, lost acknowledgements, restart persistence, new-chat isolation
+and recovery lease admission. TypeScript compilation passed. On the installed
+native client a disposable unsent home draft survived navigation to an existing
+chat and back; only the exact probe text was removed, with no submission. The
+recovery tunnel delivered frames after the repair. Installed native adapter and
+recovery-gateway hashes were checked against source and backups retained. Native
+service/reader methods were updated while idle without restarting generation.
+The Hub circuit breaker follows the guarded engine release; physical phone
+acceptance remains pending.

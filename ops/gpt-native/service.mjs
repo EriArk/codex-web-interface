@@ -84,7 +84,9 @@ export class NativeReadService {
       if (input.operation !== 'resumeManual' && !uuid(input.leaseId)) fail('INVALID_REQUEST');
       const previous = new Set(this.leases);
       if (input.operation === 'beginManual') {
-        if(this.canary?.pending())fail('PENDING_DISPATCH');
+        // Recovery must remain reachable when a receipt cannot be reconciled.
+        // The service writer lock above excludes an in-flight adapter operation;
+        // the lease blocks new ones without clearing receipts or stopping responses.
         if (this.leases.size >= 8 && !this.leases.has(input.leaseId)) fail('BUSY');
         this.leases.add(input.leaseId);
       } else if (input.operation === 'endManual') this.leases.delete(input.leaseId);
