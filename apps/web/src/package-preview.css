@@ -1,0 +1,205 @@
+.package-viewer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 240px;
+  min-width: 0;
+  overflow: hidden;
+}
+.package-tools,
+.office-tools {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(140px, 220px);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.office-tools {
+  grid-template-columns: minmax(0, 1fr) 90px minmax(140px, 220px);
+}
+.package-tools > *,
+.office-tools > * {
+  min-width: 0;
+  margin: 0;
+}
+.package-tools input,
+.office-tools input,
+.office-tools select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  font: inherit;
+}
+.package-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.package-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.package-scroll > p {
+  padding: 12px;
+}
+.archive-list {
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+.archive-entry {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+.archive-entry > span {
+  overflow-wrap: anywhere;
+}
+.archive-entry small {
+  display: block;
+  opacity: 0.7;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.package-pages {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px auto 44px;
+  gap: 8px;
+  padding: 6px 10px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.package-pages output {
+  min-width: 44px;
+  text-align: center;
+}
+.package-viewer .icon-button {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: var(--window-key);
+  color: var(--window-key-ink);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--window-key-shadow);
+}
+.office-document {
+  box-sizing: border-box;
+  width: min(100%, 850px);
+  min-height: 100%;
+  padding: 24px 32px;
+  margin: 0 auto;
+  background: var(--surface);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.office-document p {
+  white-space: pre-wrap;
+}
+.office-image {
+  display: block;
+  max-width: 100%;
+  max-height: 600px;
+  height: auto;
+  object-fit: contain;
+  margin: 16px auto;
+}
+.office-table-scroll {
+  overflow: auto;
+  max-width: 100%;
+}
+.office-table-scroll table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+.office-table-scroll td,
+.office-table-scroll th {
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  min-width: 80px;
+  max-width: 400px;
+  overflow-wrap: anywhere;
+}
+.office-sheet thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.office-sheet tbody th {
+  min-width: 32px;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+}
+.office-formula summary {
+  min-height: 44px;
+  min-width: 44px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.office-formula code {
+  white-space: pre-wrap;
+}
+.office-notes {
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  flex: none;
+}
+.office-notes summary {
+  min-height: 44px;
+  align-content: center;
+  padding: 0 12px;
+  cursor: pointer;
+}
+.office-notes p {
+  margin: 0;
+  padding: 8px 12px;
+  max-height: 100px;
+  overflow: auto;
+}
+@media (max-width: 600px) {
+  .package-tools {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .office-tools {
+    grid-template-columns: minmax(0, 1fr) 90px;
+  }
+  .package-tools input,
+  .office-tools input {
+    grid-column: 1 / -1;
+  }
+  .office-document {
+    padding: 16px;
+  }
+}
+
+.package-summary {
+  padding: 10px 12px;
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+}

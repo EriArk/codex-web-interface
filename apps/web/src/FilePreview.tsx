@@ -12,6 +12,7 @@ const ModelPreview = lazy(() => import("./ModelFilePreview"));
 const DxfPreview = lazy(() => import("./DxfFilePreview"));
 
 const PdfPreview = lazy(() => import("./PdfFilePreview"));
+const PackagePreview = lazy(() => import("./PackageFilePreview"));
 function FileCard({ file }: { file: File }) {
   const type = file.name.match(/\.([a-z0-9]{1,10})$/i)?.[1]?.toUpperCase() || "Файл";
   return (
@@ -109,7 +110,11 @@ export function FilePreview({
   return (
     <PreviewBoundary file={file}>
       <div className="file-preview" data-kind={kind}>
-        {kind === "image" && full ? (
+        {kind === "package" ? (
+          <Suspense fallback={<p role="status">Открываю файл…</p>}>
+            <PackagePreview key={file.name + file.lastModified} file={file} />
+          </Suspense>
+        ) : kind === "image" && full ? (
           <ImageViewport url={objectUrl} name={file.name} />
         ) : kind === "technical" ? (
           <Suspense fallback={<p role="status">Открываю просмотрщик…</p>}>

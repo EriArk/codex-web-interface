@@ -22,7 +22,7 @@ export function ProjectFilePreview({
   const [file, setFile] = useState<File | null>(null),
     [url, setUrl] = useState("");
   const [error, setError] = useState("");
-  const explicit = ["technical", "pdf", "html", "audio", "video"].includes(
+  const explicit = ["technical", "pdf", "html", "audio", "video", "package"].includes(
     previewKind({ name: path, type: "", size: size ?? 0 }),
   );
   useEffect(() => {

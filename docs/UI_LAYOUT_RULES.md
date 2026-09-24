@@ -81,3 +81,10 @@ source action to inspect the PR internally. Notifications have a compact GitHub
 heading/refresh key and equal-width Open/Read actions. Preserve cached cards and
 the last observed scroll position during refresh and parent-window transitions;
 do not measure a scroller after its parent layout has already collapsed.
+
+Archive/Office viewing: keep folder/sheet navigation, search and text scale in an
+explicit toolbar grid. File rows have a stable icon/name/chevron layout; metadata
+is secondary. Preserve the parent archive beneath a nested viewer. Render dense
+spreadsheet grids in their own horizontal/vertical scroller and paginate long
+content; never let cell widths stretch the surrounding dialog. Hide unused page
+navigation for a single page. Keep format caveats in one quiet disclosure.

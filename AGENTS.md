@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Owner-requested viewer scope (2026-09-24)
+
+- PowerPoint/presentation viewers are not wanted. The archive/Office pass covers ZIP, Word DOCX and Excel XLSX; keep other originals downloadable.
+
+
 ## Owner-requested input growth and file limit alignment (2026-09-24)
 
 - Use the shared `AutoTextarea` for multiline inputs: four visible lines, growing one visual line at a time to eight, then internal scroll. Recompute for restored drafts, wrapped lines, width/font/theme changes; preserve selection and parent scroll. Full document editors remain document workspaces.

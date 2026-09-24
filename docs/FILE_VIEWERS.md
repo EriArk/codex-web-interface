@@ -22,7 +22,10 @@ Entry points: Files, Git (working copy or exact index blob), Results, authorized
 | GLB/glTF | Worker, embedded geometry | glTF 2 triangles, no required extensions/sparse accessors, textures or external buffers; metres per glTF |
 | MP3/WAV/OGG/M4A, MP4/WebM | Native controls, no autoplay | Explicit open, 32 MiB; playback depends on browser codecs |
 | DXF | dxf-viewer worker with bundled font, layers/mono, rulers and draggable ΔX/ΔY guides | 2 MiB / 20,000 entity markers, 20 seconds, 32 MiB prepared scene; unknown units remain unknown |
-| Archives, executables, Office files, unknown binary | Download | No misleading generic preview |
+| ZIP | Folder navigation, search, nested universal viewer, member download/editable text copy | 32 MiB input/member, 5,000 entries, CRC and local/central identity checks; stored/deflate only |
+| DOCX | Reflowing text, headings, bold/italic runs, tables, embedded PNG/JPEG | Worker; content view rather than Word page-layout reproduction |
+| XLSX | Named sheets, sparse row/column coordinates, search, cached values and inspectable formulas | Worker; no formula execution or remote resources |
+| Other archives, legacy Office, PowerPoint, executables, unknown binary | Download | No misleading generic preview |
 
 3D uses orbit/pan/zoom, named axial views, fit/reset and wireframe. Bounds are measured before presentation normalization. DXF supports the upstream renderer's arcs, polylines, splines, blocks, text and supported other entities; warnings identify incomplete renderings. Snap guides target bounded entity vertices/centres; they are inspection guides, not CAD metrology or edits. Screen rasterization and shading are approximate; originals retain exact bytes.
 
@@ -55,3 +58,50 @@ same viewer without switching to a later artifact version; unsupported binaries
 retain direct download without preloading their body. Chromium and WebKit verify
 text/image opening, download bytes, unavailable source recovery, and chat draft /
 attachment continuity at phone/tablet/desktop widths.
+
+
+### ZIP, Word and Excel content viewers — 24 September 2026
+
+Owner scope correction: PowerPoint is not wanted. Do not add presentation viewers
+as part of this stage. ZIP, DOCX and XLSX use the same lazy universal workspace
+from Files, Results and authorized attachment links. A ZIP member opens above its
+mounted archive; returning preserves folder, search and scroll. Text members use
+the existing copy editor, with an explicit save destination, never an inferred
+writable path from the archive name. Downloads retain original member bytes.
+
+Each parse/extraction runs in a disposable browser worker with a 15-second deadline;
+close/source replacement terminates it. Archive indexing never inflates all members.
+Selected deflate entries expand in 1 KiB compressed chunks with actual output-size
+and CRC checks. Duplicate names and mismatched local/central records are rejected;
+unsafe names, symlinks, encryption and unsupported compression are listed but not
+opened. ZIP64, multipart archives, RAR/7z and legacy Office remain download-only.
+These are preview/parser budgets, not upload/download or manual-editor ceilings.
+
+Office reads only requested internal ZIP parts, up to 64 MiB expanded in total,
+8 MiB per XML/image part, 150,000 XML tags and depth 80. DTD/entity declarations and
+invalid XML are rejected. React renders structured text, never document HTML.
+External relationships, macros, embedded programs and remote resources are never
+executed/fetched. Media are bounded embedded PNG/JPEG blobs revoked on close.
+
+Word content reflows in the active theme; numbering, page breaks, complex layouts,
+styles and drawings are not reproduced. Large Word tables show up to 100 rows and
+50 columns with an explicit partial-content notice. Excel preserves sheet order,
+sparse coordinates, inline/shared strings and saved formula values; formulas are
+inspectable but never calculated. Numeric values remain as stored (including date
+serials); number formats, charts and cell styling are not reproduced. Rendering
+uses 100-item pages; the parse budget is 100 sheets, 50,000 cells, 5,000 rows/sheet
+and 256 columns, with partial-content disclosure. This is viewing, not an Office
+editor or converter. User-requested conversion remains deferred.
+
+Focused tests: ZIP exact bytes/Unicode/CRC/local identity/expansion/encryption/
+traversal/duplicate/count limits; DOCX formatting/tables/media; XLSX relationship
+order/sparse coordinates/cached formulas; XML entities/corruption/depth rejection.
+Chromium and WebKit check nested viewing, text copy-editor availability, download,
+folder and draft preservation, search, sheet/page selection and malformed files.
+Phone, keyboard-constrained phone, compact/wide tablet screenshots cover all four
+themes. Physical-device acceptance remains pending. No Hub/Windows helper contract
+changes are required: bytes arrive through existing authenticated file routes.
+
+Implementation uses the existing [fflate streaming API](https://github.com/101arrowz/fflate)
+and [fast-xml-parser](https://github.com/NaturalIntelligence/fast-xml-parser), without
+new dependencies or public conversion services.

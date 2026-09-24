@@ -6,6 +6,7 @@ export type PreviewKind =
   | "technical"
   | "audio"
   | "video"
+  | "package"
   | "card";
 export type TechnicalFormat =
   | "step"
@@ -35,6 +36,15 @@ const technicalMime: Record<string, TechnicalFormat> = {
 };
 /** Full viewers and cheap list thumbnails are deliberately separate capabilities. */
 export const filePreviewHandlers = [
+  {
+    kind: "package",
+    extensions: /\.(zip|docx|xlsx)$/i,
+    mime: /^application\/(zip|x-zip-compressed|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet))$/,
+    maxBytes: 32 * MiB,
+    thumbnail: false,
+    mobile: true,
+    isolation: "worker",
+  },
   {
     kind: "technical",
     extensions: /\.(stp|step|igs|iges|stl|dxf|svg|obj|3mf|glb|gltf)$/i,
@@ -109,7 +119,8 @@ export function technicalFormat(file: Pick<File, "name" | "type">): TechnicalFor
   return technicalMime[file.type] ?? null;
 }
 export function previewCapability(file: Pick<File, "name" | "type" | "size">) {
-  if (/\.(exe|dll|com|msi|zip|7z|rar|bin|iso)$/i.test(file.name)) return null;
+  if (/\.(exe|dll|com|msi|7z|rar|bin|iso|doc|xls|ppt|pptx|docm|xlsm|pptm)$/i.test(file.name))
+    return null;
   const handler = filePreviewHandlers.find(
     (h) => h.extensions.test(file.name) || h.mime.test(file.type),
   );

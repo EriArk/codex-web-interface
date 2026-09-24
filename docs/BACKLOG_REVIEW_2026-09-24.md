@@ -133,3 +133,17 @@ Extend the universal file workspace with bounded archive inspection and document
 viewing, preserving original downloads, editor entry points and private source
 boundaries. User-facing conversion remains deferred. Then **5 — help/shortcuts**.
 Wait for the owner's continuation before beginning the next stage.
+
+
+## Archive/Office continuation — 24 September
+
+Stage **1** adds ZIP folders/search/member viewing and DOCX/XLSX content viewers
+inside the universal workspace. PowerPoint was explicitly excluded by the owner.
+The exact supported content, parser budgets and fidelity boundaries are recorded
+in FILE_VIEWERS.md. Originals remain downloadable; archive text members open the
+common copy editor. No converter or Office editor is implied by this viewer pass.
+
+Next proposed stage: **5 — contextual in-app help and shortcuts**, **Среднее
+(`medium`)**. Add concise context-specific help and a discoverable shortcut list
+using existing themed windows, without introductory tours or workflow gates.
+Wait for the owner's continuation before beginning it.

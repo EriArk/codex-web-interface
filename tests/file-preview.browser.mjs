@@ -60,7 +60,7 @@ const samples = [
     ),
     "html",
   ],
-  ["archive.zip", Buffer.from("PK no inline viewer"), "card"],
+  ["archive.zip", Buffer.from("PK broken archive"), "failed-archive"],
   ["broken.pdf", Buffer.from("malformed PDF"), "failed-pdf"],
   ["long.txt", Buffer.from("  exact spaces\n".repeat(7000)), "bounded"],
 ];
@@ -189,8 +189,10 @@ try {
               ).toBeVisible();
             } else await expect(page.frameLocator("iframe.file-html").locator("svg")).toBeVisible();
           }
-          if (file.kind === "card")
-            await expect(page.locator(".file-type-card")).toContainText("ZIP");
+          if (file.kind === "failed-archive")
+            await expect(
+              page.getByText("Архив повреждён или его формат не поддерживается."),
+            ).toBeVisible();
           if (file.kind === "failed-pdf")
             await expect(page.locator(".file-preview-fallback")).toBeVisible({ timeout: 20000 });
           assert.equal(
