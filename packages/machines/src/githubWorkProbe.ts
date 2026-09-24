@@ -752,13 +752,16 @@ export async function githubWorkProbe(
     } else if (q.kind === "activity") {
       // Default-branch commits and recent Issues/PRs only; no repository event
       // stream, private native work, patches or comment bodies in the index.
-      const commitResponse = await http(`${prefix}/commits?per_page=30`);
+      // Independent index reads share one authenticated repository/identity snapshot.
+      const [commitResponse, issues, pulls] = await Promise.all([
+        http(`${prefix}/commits?per_page=30`),
+        access.issues
+          ? must(`${prefix}/issues?state=all&sort=updated&direction=desc&per_page=30`)
+          : Promise.resolve([]),
+        must(`${prefix}/pulls?state=all&sort=updated&direction=desc&per_page=30`),
+      ]);
       if (![200, 409].includes(commitResponse.status)) fail("GITHUB_WORK_UNAVAILABLE");
       const commits = commitResponse.status === 409 ? [] : commitResponse.value;
-      const issues = access.issues
-        ? await must(`${prefix}/issues?state=all&sort=updated&direction=desc&per_page=30`)
-        : [];
-      const pulls = await must(`${prefix}/pulls?state=all&sort=updated&direction=desc&per_page=30`);
       if (![commits, issues, pulls].every(Array.isArray)) fail("GITHUB_WORK_DATA");
       const activity: GitHubActivitySource[] = commits.slice(0, 30).map((v: any) => {
         if (!/^[a-f0-9]{40,64}$/.test(v.sha) || typeof v.commit?.message !== "string")
@@ -822,7 +825,8 @@ export async function githubWorkProbe(
       const checkSources = activity
         .filter((v) => v.kind === "pr" && v.state === "open" && v.sha)
         .slice(0, 5);
-      for (const source of new Set([...reviewSources, ...checkSources])) {
+      const sources = [...new Set([...reviewSources, ...checkSources])];
+      const observeSource = async (source: GitHubActivitySource) => {
         const sha = source.sha!;
         const observations = await Promise.allSettled([
           checkSources.includes(source)
@@ -842,7 +846,7 @@ export async function githubWorkProbe(
           current.value?.head?.sha !== sha ||
           (current.value.merged_at ? "merged" : current.value.state) !== source.state
         )
-          continue;
+          return;
         const reviews = observations[2]!.status === "fulfilled" ? observations[2]!.value : null;
         if (Array.isArray(reviews)) {
           // REST reviews are chronological. A full first page cannot establish latest decisions.
@@ -900,14 +904,14 @@ export async function githubWorkProbe(
           combined.total_count > 50 ||
           combined.sha !== sha
         )
-          continue;
+          return;
         const checks = [
           ...runs.check_runs
             .filter((v: any) => v.head_sha === sha)
             .map((v: any) => ({ id: "run:" + v.id, state: v.conclusion ?? v.status })),
           ...combined.statuses.map((v: any) => ({ id: "status:" + v.id, state: v.state })),
         ];
-        if (!checks.length) continue;
+        if (!checks.length) return;
         const failed = checks.filter((v: any) =>
           [
             "failure",
@@ -938,7 +942,15 @@ export async function githubWorkProbe(
               `checks:${sha}:` +
               hash(failed.map((v: any) => `${v.id}:${v.state}`).sort()).slice(0, 32),
           });
-      }
+      };
+      // Two PRs at a time, at most six read-only GitHub calls. Keep each exact-head
+      // recheck after its observations; never parallelize or replay mutations here.
+      let nextSource = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(2, sources.length) }, async () => {
+          while (nextSource < sources.length) await observeSource(sources[nextSource++]!);
+        }),
+      );
       result.activity = activity.filter((v) => Number.isFinite(Date.parse(v.at)));
     } else if (q.kind === "list") {
       // Quoted plain words cannot inject repo/org/author qualifiers or escape the bound repository.

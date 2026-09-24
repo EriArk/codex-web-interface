@@ -139,7 +139,7 @@ async function fixture(t) {
     `#!/usr/bin/env node
 const fs=require('node:fs'),p=process.env.GH_WORK_FIXTURE,s=JSON.parse(fs.readFileSync(p,'utf8')),args=process.argv.slice(2),method=args[args.indexOf('--method')+1],endpoint=args.find(x=>x==='graphql'||x==='user'||x.startsWith('user/')||x.startsWith('users/')||x.startsWith('repos/')||x.startsWith('search/issues')),body=args.includes('--input')?JSON.parse(fs.readFileSync(0,'utf8')):undefined;
 fs.appendFileSync(p.replace('github.json','calls.jsonl'),JSON.stringify({method,endpoint,body})+'\\n');
-const answer=(status,value)=>{process.stdout.write('HTTP/2.0 '+status+' Test\\r\\nContent-Type: application/json\\r\\n\\r\\n'+(value==null?'':JSON.stringify(value)));if(status>=400)process.exitCode=1;};
+const answer=(status,value)=>{if(s.activityDelay){Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,150);fs.appendFileSync(p.replace('github.json','calls.jsonl'),JSON.stringify({end:endpoint})+'\\n');}process.stdout.write('HTTP/2.0 '+status+' Test\\r\\nContent-Type: application/json\\r\\n\\r\\n'+(value==null?'':JSON.stringify(value)));if(status>=400)process.exitCode=1;};
 const persist=()=>fs.writeFileSync(p,JSON.stringify(s));
 const changed=value=>{persist();if(s.replyLostAt===raw){s.replyLostAt=null;persist();process.exitCode=1;return;}if(s.drop || s.dropEndpoint===raw){s.dropEndpoint=null;s.unavailable=true;s.drop=false;persist();process.exitCode=1;return;}answer(value==null?204:201,value);};
 const base='repos/Owner/Project',raw=endpoint?.split('?')[0],parts=raw?.split('/')||[],n=Number(parts[4]);
@@ -1283,4 +1283,44 @@ test("recent closed PR reviews do not crowd out the existing open-PR CI window",
   assert(open.attention.some((v) => v.kind === "checks"));
   assert.equal(open.reviews, undefined);
   assert.equal(page.activity.filter((v) => v.reviews).length, 5);
+});
+
+test("activity overlaps independent reads with a bounded PR pool and rechecks each head afterwards", async (t) => {
+  const f = await fixture(t);
+  const prs = Array.from({ length: 5 }, (_, i) => f.issue(i + 2, "pr"));
+  await f.save({ prs, activityDelay: true, reviews: [], checkState: "failure" });
+  const page = await f.probe({ op: "observe", query: { kind: "activity" } });
+  assert.equal(page.activity.filter((v) => v.checks?.state === "failure").length, 5);
+  const calls = await f.calls();
+  let running = 0,
+    peak = 0;
+  const started = new Set(),
+    ended = new Set();
+  for (const call of calls) {
+    if (call.end) {
+      running--;
+      ended.add(call.end);
+      continue;
+    }
+    assert.equal(call.method, "GET");
+    running++;
+    peak = Math.max(peak, running);
+    started.add(call.endpoint);
+    const detail = call.endpoint.match(/pulls\/(\d+)$/);
+    if (detail)
+      assert(
+        ended.has(`repos/Owner/Project/pulls/${detail[1]}/reviews?per_page=100`),
+        "head recheck must follow that PR's review read",
+      );
+  }
+  assert.equal(running, 0);
+  assert(peak >= 3 && peak <= 6, `bounded concurrency: ${peak}`);
+  const indexes = [
+    "commits?per_page=30",
+    "issues?state=all&sort=updated&direction=desc&per_page=30",
+    "pulls?state=all&sort=updated&direction=desc&per_page=30",
+  ].map((x) => "repos/Owner/Project/" + x);
+  const lastStart = Math.max(...indexes.map((x) => calls.findIndex((c) => c.endpoint === x)));
+  const firstEnd = Math.min(...indexes.map((x) => calls.findIndex((c) => c.end === x)));
+  assert(lastStart < firstEnd, "all three index reads start before the first completes");
 });

@@ -31,13 +31,16 @@ export function GitHubAttention({
     source: ActivitySourceTarget;
   } | null>(null);
   const scope = JSON.stringify(
-    spaces.map((s) => [
-      s.id,
-      s.revision,
-      s.projects
-        .filter((p) => p.access !== "none" && p.personalProjectId)
-        .map((p) => [p.id, p.personalProjectId, p.repository]),
-    ]),
+    [...spaces]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((s) => [
+        s.id,
+        s.revision,
+        s.projects
+          .filter((p) => p.access !== "none" && p.personalProjectId)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map((p) => [p.id, p.personalProjectId, p.repository]),
+      ]),
   );
   const [initial] = useState(() => readAttentionView(scope));
   const initialScope = useRef(scope);
@@ -83,6 +86,7 @@ export function GitHubAttention({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Refresh is an explicit finite user-triggered read.
   useEffect(() => {
     let live = true;
+    const controller = new AbortController();
     const epoch = ++generation.current;
     const scopes = JSON.parse(scope) as [string, number, [string, string, string][]][];
     const allowed = new Set(
@@ -94,57 +98,72 @@ export function GitHubAttention({
     setBusy(true);
     setError("");
     void (async () => {
-      for (const [id, revision, projects] of scopes)
-        for (const [projectId, copy, repository] of projects) {
-          if (!live) return;
-          const key = JSON.stringify([id, revision, projectId, copy, repository]);
-          try {
-            const old = pagesRef.current[key];
-            const page = await api<SpaceActivityPage>(`/team/spaces/${id}/activity`, {
-              method: "POST",
-              body: {
-                projectId,
-                ...(old?.versions
-                  ? { known: { repositoryId: old.repositoryId, versions: old.versions } }
-                  : {}),
-              },
-            });
-            if (live && generation.current === epoch)
-              setPages((current) => {
-                const merged = mergeActivityPage(current[key], page);
-                return {
-                  ...current,
-                  [key]: {
-                    ...merged,
-                    items: merged.items.map((source) => ({
-                      ...source,
-                      attention: source.attention?.map((n) =>
-                        acknowledged.current.has(readKey(merged, source.key, n.version))
-                          ? { ...n, read: true }
-                          : n,
-                      ),
-                    })),
-                  },
-                };
+      const requests = scopes.flatMap(([id, revision, projects]) =>
+        projects.map(([projectId, copy, repository]) => ({
+          id,
+          revision,
+          projectId,
+          copy,
+          repository,
+        })),
+      );
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(2, requests.length) }, async () => {
+          while (live && next < requests.length) {
+            const { id, revision, projectId, copy, repository } = requests[next++]!;
+            const key = JSON.stringify([id, revision, projectId, copy, repository]);
+            try {
+              const old = pagesRef.current[key];
+              const page = await api<SpaceActivityPage>(`/team/spaces/${id}/activity`, {
+                method: "POST",
+                signal: controller.signal,
+                body: {
+                  projectId,
+                  ...(old?.versions
+                    ? { known: { repositoryId: old.repositoryId, versions: old.versions } }
+                    : {}),
+                },
               });
-          } catch (e) {
-            if (live) {
-              if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
-                setPages((old) =>
-                  Object.fromEntries(Object.entries(old).filter(([k]) => k !== key)),
-                );
-                setTarget((old) =>
-                  old?.space.id === id && old.source.projectId === projectId ? null : old,
-                );
+              if (live && generation.current === epoch)
+                setPages((current) => {
+                  const merged = mergeActivityPage(current[key], page);
+                  return {
+                    ...current,
+                    [key]: {
+                      ...merged,
+                      items: merged.items.map((source) => ({
+                        ...source,
+                        attention: source.attention?.map((n) =>
+                          acknowledged.current.has(readKey(merged, source.key, n.version))
+                            ? { ...n, read: true }
+                            : n,
+                        ),
+                      })),
+                    },
+                  };
+                });
+            } catch (e) {
+              if (live) {
+                if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
+                  setPages((old) =>
+                    Object.fromEntries(Object.entries(old).filter(([k]) => k !== key)),
+                  );
+                  setTarget((old) =>
+                    old?.space.id === id && old.source.projectId === projectId ? null : old,
+                  );
+                }
+                setError(messageOf(e));
               }
-              setError(messageOf(e));
             }
           }
-        }
-      if (live) setBusy(false);
+        }),
+      );
+      if (live && generation.current === epoch) setBusy(false);
     })();
     return () => {
       live = false;
+      controller.abort();
     };
   }, [scope, refresh]);
   const notices = spaces

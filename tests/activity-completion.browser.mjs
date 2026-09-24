@@ -354,6 +354,48 @@ try {
   releaseGithub();
   githubHold = false;
   await expect(win.getByRole("button", { name: "Обновить события GitHub" })).toBeEnabled();
+  // A slow repository cannot prevent an independent completed project from appearing.
+  const multiCalls = [],
+    releases = new Map();
+  let holdMulti = true;
+  await context.route("http://activity.test/api/team/spaces/space/activity", async (route) => {
+    const { projectId } = route.request().postDataJSON();
+    multiCalls.push(projectId);
+    if (holdMulti) await new Promise((resolve) => releases.set(projectId, resolve));
+    await route
+      .fulfill({
+        json: {
+          projectId,
+          repositoryId: 42,
+          repository: "example/project",
+          viewerId: 7,
+          checkedAt: Date.now(),
+          items: [
+            { ...source, title: projectId, attention: [{ kind: "assigned", version: "new" }] },
+          ],
+        },
+      })
+      .catch(() => {});
+  });
+  await page.goto("http://activity.test/?multi=1");
+  await expect.poll(() => multiCalls.length).toBe(2);
+  assert.deepEqual(multiCalls, ["project0", "project1"]);
+  releases.get("project1")();
+  await expect(win.getByText("project1", { exact: true })).toBeVisible();
+  await expect.poll(() => multiCalls.length).toBe(3);
+  await win.getByRole("button", { name: "Порядок", exact: true }).click();
+  await page.waitForTimeout(200);
+  assert.equal(multiCalls.length, 3, "catalog reordering must not restart requests");
+  await win.getByRole("button", { name: "Лента", exact: true }).click();
+  releases.get("project0")();
+  releases.get("project2")();
+  await page.waitForTimeout(200);
+  assert.equal(multiCalls.length, 3, "closing stops queued project reads");
+  holdMulti = false;
+  await win.getByRole("button", { name: "Уведомления", exact: true }).click();
+  await expect(win.getByText("project1", { exact: true })).toBeVisible();
+  await expect(win.getByRole("button", { name: "Обновить события GitHub" })).toBeEnabled();
+  await expect(win.locator(".space-card")).toHaveCount(4);
   assert.deepEqual(errors, []);
   console.log(engine + " activity completion browser passed");
 } finally {

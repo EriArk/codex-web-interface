@@ -256,3 +256,37 @@ GitHub probe was replaced at idle with a verified backup and matching SHA-256;
 actual Hub → SSH → Scheduled Task read-only acceptance returned 88 sources and
 five exact-head review observations. No collaborator messages or GitHub mutations
 were sent as verification.
+
+
+## Notification read latency repair (2026-09-24)
+
+Owner report: the Notifications window remained on the GitHub loading line.
+Live Hub logs showed successful requests taking 3.47 s and 14.70 s, serially.
+The installed Windows pipeline independently took 11.31 s for the CodexWeb
+repository. This observation establishes excessive waiting, not an indefinitely
+hung native task or a GitHub access ban.
+
+GitHubAttention now processes at most two project reads concurrently, publishes
+each completed page immediately, and aborts browser waits on close/scope change.
+It stops scheduling further projects after close; already accepted read-only PC
+work may finish. Catalog ordering is canonicalized so a reorder does not discard
+or restart the scope. Existing account-local cache, delta merge, exact read-version
+acknowledgements, revocation and internal source windows are retained.
+
+The PC probe now overlaps three independent index GETs and observes at most two
+PRs concurrently (at most six GitHub GETs). Each PR's head/state is rechecked only
+after its own review/check reads. No mutations, native sends, retries, broader
+source selection or API limits were changed. The Scheduled Task remains serial
+for complete jobs; this change does not parallelize Git writes.
+
+Installed githubWorkProbe.js was replaced only while CodexWebDelivery was Ready
+and had no unresponded request files, with an exact old hash and backup. Through
+Hub -> SSH -> Scheduled Task, the same repository then completed in 7.27 s,
+returning 88 sources and five head-bound review observations as before. These are
+single live samples, not a guaranteed latency or a synthetic benchmark.
+
+Eight focused worker/Activity tests cover bounded overlap, exact-head review
+ordering, unavailable observations and existing authorization. Chromium/WebKit
+cover an independently completed notification while another repository waits,
+no restart on reorder, stopping queued reads on close, reopening, cached scroll,
+read acknowledgements and revocation. Physical-device acceptance remains pending.

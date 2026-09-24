@@ -40,7 +40,18 @@ const space: CollaborationSpace = {
 function App() {
   const dialog = useRef<HTMLDialogElement>(null);
   useWorkspaceDialog(dialog);
-  const [notices, setNotices] = useState(false);
+  const multi = new URLSearchParams(location.search).has("multi");
+  const [notices, setNotices] = useState(multi),
+    [reverse, setReverse] = useState(false);
+  const projects = multi
+    ? Array.from({ length: 4 }, (_, i) => ({
+        ...space.projects[0]!,
+        id: "project" + i,
+        personalProjectId: "copy" + i,
+        name: "Project " + i,
+      }))
+    : space.projects;
+  const current = { ...space, projects: reverse ? [...projects].reverse() : projects };
   return (
     <dialog
       ref={dialog}
@@ -53,11 +64,18 @@ function App() {
           {notices ? "Лента" : "Уведомления"}
         </button>
       </header>
+      {multi && (
+        <button type="button" onClick={() => setReverse((v) => !v)}>
+          Порядок
+        </button>
+      )}
       <div className="space-dialog-body">
         {notices ? (
           <div>
-            <GitHubAttention spaces={[space]} onCount={() => {}} />
+            <GitHubAttention spaces={[current]} onCount={() => {}} />
           </div>
+        ) : multi ? (
+          <p>Лента закрыта</p>
         ) : (
           <SpaceActivity space={space} onProject={() => {}} onDiscuss={() => {}} />
         )}
