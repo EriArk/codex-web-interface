@@ -56,7 +56,13 @@ export const AutoTextarea = forwardRef<
   useLayoutEffect(() => {
     const field = input.current;
     if (!field) return;
-    const observer = new ResizeObserver(measure);
+    // Height changes from measurement must not run inside ResizeObserver delivery.
+    // WebKit otherwise reports a resize loop when themes or the viewport change.
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
     observer.observe(field);
     let active = true;
     void document.fonts.ready.then(() => {
@@ -67,6 +73,7 @@ export const AutoTextarea = forwardRef<
     return () => {
       active = false;
       observer.disconnect();
+      cancelAnimationFrame(frame);
       document.fonts.removeEventListener("loadingdone", fonts);
     };
   }, [measure]);

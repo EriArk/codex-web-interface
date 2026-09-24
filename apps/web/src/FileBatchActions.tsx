@@ -1,4 +1,4 @@
-import type { FileRequest, FileSnapshot } from "@codex-web/shared";
+import type { FileMergePlan, FileRequest, FileSnapshot } from "@codex-web/shared";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { accountLocalStorage as storage } from "./accountStorage";
@@ -15,6 +15,8 @@ type Item = {
   error?: string;
   collision?: boolean;
   replacement?: FileSnapshot;
+  mergeTarget?: FileSnapshot;
+  retained?: boolean;
 };
 type Batch = { op: Operation; folder: string; items: Item[] };
 const title = { copy: "Копирование", move: "Перемещение", delete: "Удаление" };
@@ -51,6 +53,7 @@ export function FileBatchActions({
     [opened, setOpened] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [page, setPage] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null),
     current = useRef<Batch | null>(null),
     running = useRef(false),
@@ -84,10 +87,11 @@ export function FileBatchActions({
         value &&
         ["copy", "move", "delete"].includes(value.op) &&
         Array.isArray(value.items) &&
-        value.items.length <= 100 &&
+        value.items.length <= 10000 &&
         value.items.every(
           (item) =>
-            item.request.op === value.op &&
+            (item.request.op === value.op ||
+              (value.op === "move" && item.request.op === "prune")) &&
             typeof item.request.path === "string" &&
             /^[a-f0-9-]{36}$/.test(item.request.id ?? "") &&
             /^[a-f0-9]{64}$/.test(item.request.fingerprint ?? "") &&
@@ -198,15 +202,36 @@ export function FileBatchActions({
         if (!active.current || paused.current) break;
         if (only ? item.request.id !== only : item.status !== "ready") continue;
         if (!["ready", "pending"].includes(item.status)) continue;
+        if (
+          item.request.op === "prune" &&
+          current.current!.items.some(
+            (child) =>
+              child !== item &&
+              child.request.path.startsWith(item.request.path + "/") &&
+              !["done", "skipped"].includes(child.status),
+          )
+        )
+          continue;
         // Write the exact operation before sending. Pending items are checked only explicitly.
         patch(item.request.id!, { status: "pending", error: undefined });
         try {
-          await api<FileSnapshot>(url, { method: "POST", body: { ...item.request, capability } });
+          const result = await api<FileSnapshot>(url, {
+            method: "POST",
+            body: {
+              ...item.request,
+              capability,
+              ...(item.status === "pending" ? { checkOnly: true } : {}),
+            },
+          });
           if (!active.current) return;
-          patch(item.request.id!, { status: "done", error: undefined });
-          completed.current(item.request);
+          patch(item.request.id!, { status: "done", error: undefined, retained: result.retained });
+          if (!result.retained) completed.current(item.request);
         } catch (e) {
           if (!active.current) return;
+          if (item.status === "pending" && e instanceof ApiError && e.code === "FILE_NOT_STARTED") {
+            patch(item.request.id!, { status: "ready", error: undefined });
+            break;
+          }
           const definitive =
             e instanceof ApiError &&
             e.status >= 400 &&
@@ -216,7 +241,7 @@ export function FileBatchActions({
             definitive &&
             e instanceof ApiError &&
             ["FILE_EXISTS", "FILE_TARGET_CHANGED"].includes(e.code);
-          let replacement: FileSnapshot | undefined;
+          let replacement: FileSnapshot | undefined, mergeTarget: FileSnapshot | undefined;
           if (collision && item.request.target && item.request.target !== item.request.path) {
             const old = await api<FileSnapshot>(
               `${url}?op=stat&path=${encodeURIComponent(item.request.target)}`,
@@ -231,12 +256,20 @@ export function FileBatchActions({
               old.checkout === checkout
             )
               replacement = old;
+            if (
+              source?.kind === "directory" &&
+              source.fingerprint === item.request.fingerprint &&
+              old?.kind === "directory" &&
+              old.checkout === checkout
+            )
+              mergeTarget = old;
           }
           patch(item.request.id!, {
             status: definitive ? "error" : "pending",
             error: messageOf(e),
             collision,
             replacement,
+            mergeTarget,
           });
           if (!definitive) break;
         }
@@ -267,17 +300,82 @@ export function FileBatchActions({
         request: {
           ...item.request,
           id: crypto.randomUUID(),
-          target: [current.current.folder, name].filter(Boolean).join("/"),
+          target: [item.request.target?.split("/").slice(0, -1).join("/"), name]
+            .filter(Boolean)
+            .join("/"),
           targetFingerprint: undefined,
         },
         status: "ready",
         error: undefined,
         collision: false,
+        replacement: undefined,
+        mergeTarget: undefined,
       });
     } catch (e) {
       setError(messageOf(e));
     }
   };
+  const merge = async (item: Item) => {
+    if (running.current || !item.mergeTarget || !current.current) return;
+    running.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const query = new URLSearchParams({
+        op: "merge-plan",
+        path: item.request.path,
+        target: item.request.target!,
+        fingerprint: item.request.fingerprint!,
+        targetFingerprint: item.mergeTarget.fingerprint,
+        transfer: current.current.op,
+      });
+      const plan = await api<FileMergePlan>(`${url}?${query}`, { timeoutMs: 135000 });
+      if (!active.current) return;
+      if (plan.checkout !== checkout) throw Error("Рабочая копия изменилась. Открой файлы заново.");
+      const items: Item[] = plan.merge.map(({ request, destination, kind }) => ({
+        request: {
+          ...request,
+          id: crypto.randomUUID(),
+          guards: [...(item.request.guards ?? []), ...(request.guards ?? [])],
+        },
+        status: destination ? "error" : "ready",
+        collision: !!destination,
+        replacement: kind === "file" && destination?.kind === "file" ? destination : undefined,
+        error: destination ? "Выбери действие для совпадающего файла или папки." : undefined,
+      }));
+      const index = current.current.items.findIndex(
+        (entry) => entry.request.id === item.request.id,
+      );
+      const next = [...current.current.items];
+      if (items.length) next.splice(index, 1, ...items);
+      else
+        next[index] = {
+          ...item,
+          status: "done",
+          collision: false,
+          mergeTarget: undefined,
+          error: undefined,
+        };
+      if (next.length > 10000)
+        throw Error("Слишком много элементов для одной операции. Выбери вложенную папку.");
+      save({ ...current.current, items: next });
+      setPage(Math.floor(index / 100));
+    } catch (e) {
+      if (!active.current) return;
+      if (e instanceof ApiError && e.code === "FILE_TARGET_CHANGED") {
+        const target = await api<FileSnapshot>(
+          `${url}?op=stat&path=${encodeURIComponent(item.request.target!)}`,
+        ).catch(() => undefined);
+        if (active.current && target?.kind === "directory" && target.checkout === checkout)
+          patch(item.request.id!, { mergeTarget: target });
+      }
+      if (active.current) setError(messageOf(e));
+    } finally {
+      running.current = false;
+      if (active.current) setBusy(false);
+    }
+  };
+  const visiblePage = Math.min(page, Math.max(0, Math.ceil((batch?.items.length ?? 0) / 100) - 1));
   return (
     <>
       <section className="file-batch-controls" aria-label="Выбор и групповые действия">
@@ -419,17 +517,22 @@ export function FileBatchActions({
                 : `Папка назначения: ${batch.folder || "Корень проекта"}`}
             </p>
             <div className="file-batch-items">
-              {batch.items.map((item) => (
+              {batch.items.slice(visiblePage * 100, (visiblePage + 1) * 100).map((item) => (
                 <section
                   key={item.request.id}
                   className="file-batch-item"
                   aria-label={item.request.path}
                 >
                   <strong>{item.request.path}</strong>
+                  {item.request.op === "prune" && (
+                    <small>Убрать папку, только если она опустела</small>
+                  )}
                   {item.request.target && <small>→ {item.request.target}</small>}
                   <p role="status">
                     {item.status === "done"
-                      ? "Готово"
+                      ? item.retained
+                        ? "Папка сохранена: в ней остались файлы"
+                        : "Готово"
                       : item.status === "skipped"
                         ? "Пропущено"
                         : item.error ||
@@ -476,55 +579,88 @@ export function FileBatchActions({
                       </button>
                     </form>
                   )}
-                  {item.collision && item.replacement && (
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={busy}
-                      onClick={() => {
-                        try {
-                          patch(item.request.id!, {
-                            request: {
-                              ...item.request,
-                              id: crypto.randomUUID(),
-                              targetFingerprint: item.replacement!.fingerprint,
-                            },
-                            status: "ready",
-                            error: undefined,
-                            collision: false,
-                            replacement: undefined,
-                          });
-                        } catch (e) {
-                          setError(messageOf(e));
-                        }
-                      }}
-                    >
-                      Заменить выбранную версию
-                    </button>
-                  )}
-                  {["ready", "error"].includes(item.status) && (
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={busy}
-                      onClick={() => {
-                        try {
-                          patch(item.request.id!, {
-                            status: "skipped",
-                            error: undefined,
-                            collision: false,
-                          });
-                        } catch (e) {
-                          setError(messageOf(e));
-                        }
-                      }}
-                    >
-                      Пропустить
-                    </button>
-                  )}
+                  <div className="file-batch-pair">
+                    {item.collision && item.mergeTarget && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => void merge(item)}
+                      >
+                        Объединить папки
+                      </button>
+                    )}
+                    {item.collision && item.replacement && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          try {
+                            patch(item.request.id!, {
+                              request: {
+                                ...item.request,
+                                id: crypto.randomUUID(),
+                                targetFingerprint: item.replacement!.fingerprint,
+                              },
+                              status: "ready",
+                              error: undefined,
+                              collision: false,
+                              replacement: undefined,
+                              mergeTarget: undefined,
+                            });
+                          } catch (e) {
+                            setError(messageOf(e));
+                          }
+                        }}
+                      >
+                        Заменить выбранную версию
+                      </button>
+                    )}
+                    {["ready", "error"].includes(item.status) && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          try {
+                            patch(item.request.id!, {
+                              status: "skipped",
+                              error: undefined,
+                              collision: false,
+                            });
+                          } catch (e) {
+                            setError(messageOf(e));
+                          }
+                        }}
+                      >
+                        Пропустить
+                      </button>
+                    )}
+                  </div>
                 </section>
               ))}
             </div>
+            {batch.items.length > 100 && (
+              <nav className="file-batch-pair" aria-label="Страницы операции">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={visiblePage === 0}
+                  onClick={() => setPage(visiblePage - 1)}
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={(visiblePage + 1) * 100 >= batch.items.length}
+                  onClick={() => setPage(visiblePage + 1)}
+                >
+                  Далее · {visiblePage + 1}/{Math.ceil(batch.items.length / 100)}
+                </button>
+              </nav>
+            )}
             {error && (
               <p className="notice" role="alert">
                 {error}

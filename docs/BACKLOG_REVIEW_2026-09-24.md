@@ -168,3 +168,21 @@ Next proposed pass: end-to-end automated verification of **file -> editor ->
 integrated GitHub -> shared materials**, including interrupted saves and retained
 drafts, with **Высокое (`high`)**. Wait for continuation. Keep physical-device
 acceptance separate and deferred until the owner is available.
+
+
+## Owner-prioritized folder merge — 24 September
+
+The owner prioritized folder merging and deferred the other remaining functional
+extensions. Files now merges existing folders during copy/move with per-file
+replace/keep-both/skip, durable expanded plans, exact version/directory guards,
+non-replaying recovery and empty-only source cleanup. See FILE_EDITOR.md for the
+behavior and verification. Existing copy/cut/paste/rename/delete and multiselect
+remain available. The WebKit resize-notification loop exposed by theme-switching
+acceptance exposed an obsolete composer height hook competing with AutoTextarea.
+Both clients now use only the shared four-to-eight-line policy, with observer
+measurement scheduled outside ResizeObserver delivery.
+
+Next proposed step: owner acceptance of the completed Files workflows on phone/
+tablet when convenient, with focused fixes as needed, **Среднее (`medium`)**.
+No new functional expansion is started without continuation; archive manipulation,
+conversion, additional Office fidelity and installer consolidation remain deferred.

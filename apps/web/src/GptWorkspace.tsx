@@ -50,7 +50,6 @@ import { ResultFeed } from "./ResultFeed";
 import { uploadFile } from "./uploadFile";
 import { useCompletionPosition } from "./useCompletionPosition";
 import { useGptHistory } from "./useGptHistory";
-import { useGrowingComposer } from "./useGrowingComposer";
 import { useProjectDrawer } from "./useProjectDrawer";
 import { useProjectSwipe } from "./useProjectSwipe";
 import { useThreadReviews, WorkReviewLink } from "./WorkReviewLink";
@@ -786,7 +785,6 @@ export function GptWorkspace({
     onNotebook?.({ ...notebookContext(), mode, allProjects: true });
   };
   const composer = useRef<HTMLTextAreaElement>(null);
-  useGrowingComposer(composer, text);
   // Enqueueing is durable on the Hub and does not depend on rendering history here.
   const sendReady = ready && !!model;
   const preparingSend =

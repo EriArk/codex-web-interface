@@ -32,7 +32,6 @@ import { NativePlan } from "./NativePlan";
 import { clearAcknowledgedSend, matchesPendingSend } from "./pendingSend";
 import { TurnDetails } from "./TurnDetails";
 import { useCompletionPosition } from "./useCompletionPosition";
-import { useGrowingComposer } from "./useGrowingComposer";
 import "./taskBoundary.css";
 import { ElicitationCard } from "./ElicitationCard";
 import type { Approval, Message, Result, TurnSettings } from "./types";
@@ -458,7 +457,6 @@ export function Chat({
       setTimeout(() => target?.classList.remove("message-focus"), 2000);
     });
   }, [focusTurn, focusMessage, visible]);
-  useGrowingComposer(composer, draft);
   const saveDraft = (value: string) => {
     setDraft(value);
     try {

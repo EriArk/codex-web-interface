@@ -94,3 +94,10 @@ single shared dialog. Keep topic selection and the keyboard reference in two
 explicit tabs, with a independently scrolling body and a fixed reachable Close.
 Preserve the parent window, focus and draft. Modal geometry must override general
 workspace-window theme/mobile rules. No automatic tours, banners or setup gates.
+
+Folder merge review: show exact source/destination paths on each entry. Keep the
+alternate-name form on its own row and equal-width Replace/Skip or Merge/Skip
+choices beneath it. Keep progress and continuation within the existing operation
+window, retain a fixed reachable footer/Close at keyboard height, and paginate
+large plans instead of mounting thousands of cards. Cleanup describes empty-folder
+removal; retained folders must not be displayed as deleted.

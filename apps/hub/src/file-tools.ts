@@ -42,6 +42,11 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
     return { project, machine: sessions.catalog.machine(project.machineId) };
   };
   const path = z.string().min(1).max(2048);
+  const fingerprint = z.string().regex(/^[a-f0-9]{64}$/);
+  const guards = z
+    .array(z.object({ path, identity: fingerprint }).strict())
+    .max(256)
+    .optional();
   const checkout = (req: FastifyRequest) => {
     const c = context(req);
     return createHash("sha256")
@@ -100,7 +105,14 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
     const c = context(req);
     const expected = checkout(req);
     const q = z
-      .object({ path, op: z.enum(["read", "stat"]) })
+      .object({
+        path,
+        op: z.enum(["read", "stat", "merge-plan"]),
+        target: path.optional(),
+        fingerprint: fingerprint.optional(),
+        targetFingerprint: fingerprint.optional(),
+        transfer: z.enum(["copy", "move"]).optional(),
+      })
       .strict()
       .parse(req.query);
     if (q.op === "read" && !editableFile(q.path))
@@ -124,7 +136,7 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
       const expected = checkout(req);
       const b = z
         .object({
-          op: z.enum(["save", "create", "mkdir", "copy", "move", "delete"]),
+          op: z.enum(["save", "create", "mkdir", "copy", "move", "delete", "prune"]),
           path,
           target: path.optional(),
           fingerprint: z
@@ -135,6 +147,8 @@ export function registerFileTools(app: FastifyInstance, sessions: Sessions) {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          guards,
+          checkOnly: z.boolean().optional(),
           text: z.string().max(textLimit).optional(),
           bom: z.boolean().optional(),
           id: z.string().uuid(),

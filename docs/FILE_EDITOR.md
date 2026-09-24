@@ -18,7 +18,7 @@ Files additionally supports creating files/folders, renaming, copying, moving an
 
 After unlocking Files, **Выбрать несколько** exposes touch checkboxes. Up to 100 entries can be selected across folders, sorting, filters and pages; **Выбрать на странице** adds only loaded entries. The filename still opens its file/folder. Relocking, closing Files, or changing Project clears this transient selection. Selecting a folder includes its contents; selected descendants are excluded from the execution list to avoid acting twice.
 
-**Копировать** and **Вырезать** capture current source fingerprints, then **Вставить сюда** opens a review for the current destination folder. **Удалить** opens a source list and requires **Подтвердить удаление**, including folder contents. The queue executes authenticated file operations sequentially, reports each result, and refreshes the list without losing the conversation. Conflicts offer another name, skipping, or **Заменить выбранную версию** when both entries are files. Replacement binds the exact inspected destination fingerprint; any detected change requires a new choice. The complete source is staged and verified before replacement, and a moved source is removed only after verification. Copying to the source's own name requires another name. Folder merging/replacement is not supported.
+**Копировать** and **Вырезать** capture current source fingerprints, then **Вставить сюда** opens a review for the current destination folder. **Удалить** opens a source list and requires **Подтвердить удаление**, including folder contents. The queue executes authenticated file operations sequentially, reports each result, and refreshes the list without losing the conversation. Conflicts offer another name, skipping, or **Заменить выбранную версию** when both entries are files. Replacement binds the exact inspected destination fingerprint; any detected change requires a new choice. The complete source is staged and verified before replacement, and a moved source is removed only after verification. Copying to the source's own name requires another name. Existing folders offer **Объединить папки**, with recursive conflict choices and a durable per-entry queue (see the folder merge section below). Replacing an entire existing directory is not offered.
 
 Before each request, account-local storage records its exact ID, source fingerprint and destination. A transport/unknown result stops the queue; after reopening or reload, **Проверить результат** uses that same operation identity, including moves whose source has disappeared. Successful entries are not rerun. Definitive conflicts remain individually actionable; changed sources require a new selection and review. **Остановить после текущего** and closing the review stop before the next entry; an already sent filesystem operation is not interrupted. Cancelling remaining entries cannot erase an unresolved pending receipt. Failure to persist recovery metadata blocks the write. Batches are not filesystem transactions: completed entries remain completed if a later one fails or is cancelled.
 
@@ -253,3 +253,44 @@ Verification includes local >2 MiB UTF8/BOM/CRLF save and fingerprints, GitHub
 4 MiB read/write/receipt and >100 MiB rejection, 33 MiB ZIP/STEP downloads, restored
 large browser drafts, and installed Hub->SSH->Scheduled Task preparation/status.
 Physical-device acceptance and a full 100 MiB live GitHub commit are not claimed.
+
+
+## Folder merging — 24 September 2026
+
+Copy/Cut -> Paste into an existing folder offers **Объединить папки** beside
+Keep Both/Skip. Planning is read-only and bound to the observed source and target
+fingerprints. It recursively combines matching directories and presents every
+file/type collision; file replacement still requires the exact inspected version.
+Keep Both changes the name inside that entry's actual destination directory.
+Target-only entries stay untouched. Empty/new subtrees retain ordinary copy/move
+semantics. No extension-specific upload or file-size restriction was added.
+
+The expanded plan, individual UUIDs, directory identities, fingerprints, choices
+and completion states are saved in account-local storage before dispatch. A storage
+failure prevents dispatch. The existing tree budget (10,000 entries/time bound)
+applies; the UI displays 100 entries per page. Operations stay sequential and
+Close/Stop pauses after the current request. Completed entries are not repeated.
+
+Move cleanup uses separate receipted, identity-bound **empty-directory removal**
+steps after the relevant children have resolved. It never recursively deletes a
+merged source directory: skipped files and newly arrived content keep that source
+folder, visibly marked as retained. Incomplete/uncertain children block cleanup.
+Replacing a planned directory with a different directory stops affected operations.
+These checks do not claim filesystem transactions against external writers.
+
+Explicit recovery sends `checkOnly`, which cannot start a new filesystem mutation.
+Completed child receipts remain readable after source ancestors have been removed.
+No receipt returns "not started" and makes the entry ready for explicit execution;
+a durable uncertain receipt stays uncertain and is not replayed. Partial failures
+do not roll back or erase already completed work. Logout/scope changes retain the
+existing private-account and checkout boundaries.
+
+The self-contained file probe travels from Hub over SSH for each request. This
+release changes that probe and the Hub contract together; it does not replace an
+installed Scheduled Task/Companion module. Actual Hub -> SSH -> Windows acceptance
+covers recursive move/replace/skip, empty folders, retained sources, target-only
+files and recovery after removal of source parents. Linux tests additionally cover
+stale plans, replaced directories, interrupted receipt commits and authorization.
+Chromium/WebKit exercise nested Keep Both, replacement/skip, response loss/reload,
+check-only recovery, drafts and all four themes at phone, keyboard, tablet and
+wide sizes. Physical-device acceptance remains deferred.

@@ -1,4 +1,10 @@
-import type { FileArchiveEntry, FileImport, FileRequest, FileSnapshot } from "@codex-web/shared";
+import type {
+  FileArchiveEntry,
+  FileImport,
+  FileMergeEntry,
+  FileRequest,
+  FileSnapshot,
+} from "@codex-web/shared";
 
 // Self-contained: sent to the configured Node over the existing SSH connection.
 export async function fileToolsProbe(
@@ -10,7 +16,7 @@ export async function fileToolsProbe(
   receiptRoot?: string,
   upload?: FileImport,
   textLimit?: number,
-): Promise<FileSnapshot & { entries?: FileArchiveEntry[] }> {
+): Promise<FileSnapshot & { entries?: FileArchiveEntry[]; merge?: FileMergeEntry[] }> {
   const fs = await import("node:fs/promises"),
     paths = await import("node:path"),
     crypto = await import("node:crypto"),
@@ -42,7 +48,7 @@ export async function fileToolsProbe(
     p = parent;
   }
   const base = await fs.realpath(root);
-  const scoped = async (value: string, missing = false) => {
+  const scoped = async (value: string, missing = false, receiptLookup = false) => {
     if (
       !value ||
       value.length > 2048 ||
@@ -71,7 +77,14 @@ export async function fileToolsProbe(
       try {
         if ((await fs.lstat(p)).isSymbolicLink()) fail("FILE_PATH");
       } catch (e) {
-        if (!(missing && p === full && (e as NodeJS.ErrnoException).code === "ENOENT")) throw e;
+        if (
+          !(
+            missing &&
+            (p === full || receiptLookup) &&
+            (e as NodeJS.ErrnoException).code === "ENOENT"
+          )
+        )
+          throw e;
       }
     }
     return full;
@@ -119,6 +132,74 @@ export async function fileToolsProbe(
       size,
     };
   };
+  // Stable across child writes, but bound to this actual directory, not just its name.
+  const directoryIdentity = async (full: string) => {
+    const st = await fs.lstat(full);
+    if (!st.isDirectory() || st.isSymbolicLink()) fail("FILE_PATH");
+    return hash(JSON.stringify([st.dev, st.ino, st.birthtimeMs]));
+  };
+  if (request.op === "merge-plan") {
+    if (!request.target || !["copy", "move"].includes(request.transfer ?? "")) fail("FILE_REQUEST");
+    const source = await scoped(request.path),
+      target = await scoped(request.target!);
+    const relative = paths.relative(source, target),
+      reverse = paths.relative(target, source);
+    const contains = (rel: string) =>
+      !rel || (!rel.startsWith(".." + paths.sep) && rel !== ".." && !paths.isAbsolute(rel));
+    if (contains(relative) || contains(reverse)) fail("FILE_PATH");
+    const before = await fingerprint(source),
+      old = await fingerprint(target);
+    if (before.kind !== "directory" || old.kind !== "directory") fail("FILE_REQUEST");
+    if (before.fingerprint !== request.fingerprint) fail("FILE_CHANGED");
+    if (old.fingerprint !== request.targetFingerprint) fail("FILE_TARGET_CHANGED");
+    const merge: FileMergeEntry[] = [];
+    const visit = async (from: string, to: string, guards: NonNullable<FileRequest["guards"]>) => {
+      bounded();
+      const a = await scoped(from),
+        b = await scoped(to);
+      const identity = await directoryIdentity(a);
+      const next = [
+        ...guards,
+        { path: from, identity },
+        { path: to, identity: await directoryIdentity(b) },
+      ];
+      if (next.length > 256) fail("FILE_TREE_LARGE");
+      for (const name of (await fs.readdir(a)).sort()) {
+        const path = from + "/" + name,
+          target = to + "/" + name;
+        const source = await fingerprint(await scoped(path));
+        let destination: FileSnapshot | undefined;
+        try {
+          destination = { path: target, ...(await fingerprint(await scoped(target))) };
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        }
+        if (source.kind === "directory" && destination?.kind === "directory") {
+          await visit(path, target, next);
+        } else {
+          merge.push({
+            request: {
+              op: request.transfer!,
+              path,
+              target,
+              fingerprint: source.fingerprint,
+              guards: next,
+            },
+            kind: source.kind,
+            destination,
+          });
+        }
+        if (merge.length > 10000) fail("FILE_TREE_LARGE");
+      }
+      if (request.transfer === "move")
+        merge.push({ request: { op: "prune", path: from, fingerprint: identity, guards: next } });
+      if (merge.length > 10000) fail("FILE_TREE_LARGE");
+    };
+    await visit(request.path, request.target!, request.guards ?? []);
+    if ((await fingerprint(source)).fingerprint !== before.fingerprint) fail("FILE_CHANGED");
+    if ((await fingerprint(target)).fingerprint !== old.fingerprint) fail("FILE_TARGET_CHANGED");
+    return { path: request.path, ...before, merge };
+  }
   if (request.op === "archive") {
     if (!request.paths?.length || request.paths.length > 100) fail("FILE_REQUEST");
     const entries: FileArchiveEntry[] = [],
@@ -180,7 +261,7 @@ export async function fileToolsProbe(
     };
   }
   // A completed move/delete receipt remains readable when its source no longer exists.
-  const full = await scoped(request.path, !["read", "stat"].includes(request.op));
+  const full = await scoped(request.path, !["read", "stat"].includes(request.op), true);
   if (request.op === "import-check") {
     if (!(await fs.stat(paths.dirname(full))).isDirectory()) fail("FILE_PATH");
     try {
@@ -295,9 +376,10 @@ export async function fileToolsProbe(
     hash(base),
   );
   await fs.mkdir(state, { recursive: true, mode: 0o700 });
+  const { checkOnly, ...signedRequest } = request;
   const receipt = paths.join(state, request.id + ".json"),
     signature = hash(
-      JSON.stringify(importing ? [request, upload!.bytes, upload!.sha256] : request),
+      JSON.stringify(importing ? [signedRequest, upload!.bytes, upload!.sha256] : signedRequest),
     );
   const savedText = await fs.readFile(receipt, "utf8").catch((e) => {
     if (e.code === "ENOENT") return null;
@@ -315,7 +397,7 @@ export async function fileToolsProbe(
       const current = await textFile().catch(() => null);
       if (current && current.text === request.text && current.bom === !!request.bom) return current;
     }
-    if (importing) {
+    if (importing && !checkOnly) {
       try {
         const result = await importedFile(full);
         await fs.unlink(upload!.path).catch(() => {});
@@ -331,6 +413,17 @@ export async function fileToolsProbe(
     } else fail("FILE_UNKNOWN");
   }
   const lock = paths.join(state, "lock");
+  if (checkOnly) {
+    // Never dispatch a mutation from a status check, including after a lost request.
+    const locked = await fs.lstat(lock).then(
+      () => true,
+      (e) => {
+        if (e.code === "ENOENT") return false;
+        throw e;
+      },
+    );
+    return fail(locked ? "FILE_UNKNOWN" : "FILE_NOT_STARTED");
+  }
   let handle: Awaited<ReturnType<typeof fs.open>>;
   try {
     handle = await fs.open(lock, "wx", 0o600);
@@ -378,6 +471,42 @@ export async function fileToolsProbe(
     await fs.chmod(to, st.mode & 0o777);
   };
   try {
+    for (const guard of request.guards ?? []) {
+      if ((await directoryIdentity(await scoped(guard.path))) !== guard.identity)
+        fail("FILE_CHANGED");
+    }
+    if (request.op === "prune") {
+      if ((await directoryIdentity(await scoped(request.path))) !== request.fingerprint)
+        fail("FILE_CHANGED");
+      await fs.writeFile(receipt, JSON.stringify({ signature }), {
+        flag: "wx",
+        mode: 0o600,
+        flush: true,
+      });
+      receiptStarted = true;
+      let retained = false;
+      try {
+        // Atomic empty-directory removal; never recursively remove leftover or new files.
+        effectsPossible = true;
+        await fs.rmdir(full);
+      } catch (e) {
+        if (!["ENOTEMPTY", "EEXIST"].includes((e as NodeJS.ErrnoException).code ?? "")) throw e;
+        retained = true;
+      }
+      const result: FileSnapshot = {
+        path: request.path,
+        kind: "directory",
+        size: 0,
+        fingerprint: "",
+        retained,
+      };
+      await fs.writeFile(receipt + ".tmp", JSON.stringify({ signature, result }), {
+        mode: 0o600,
+        flush: true,
+      });
+      await fs.rename(receipt + ".tmp", receipt);
+      return result;
+    }
     const creating =
       request.op === "create" || request.op === "mkdir" || (importing && !request.fingerprint);
     const before = creating ? null : await fingerprint(full);
