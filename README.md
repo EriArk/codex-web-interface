@@ -237,7 +237,7 @@ Altar Collaboration
 Lazar
 └── AltarAppsReborn
 
-Lev
+neflores
 └── World
 ```
 
@@ -269,8 +269,8 @@ So Collaboration Spaces have an **Activity Timeline**.
 Instead of:
 
 ```text
-Lev pushed
-Lev pushed
+neflores pushed
+neflores pushed
 CI started
 CI finished
 commit
@@ -281,7 +281,7 @@ commit
 you can get something closer to:
 
 ```text
-Lev · World
+neflores · World
 
 Updated location-system API
 3 commits · PR #42 · checks passed
