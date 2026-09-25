@@ -1,85 +1,422 @@
-# Codex Web Interface
+# CodexWeb
 
-Private Codex/GPT workspace for iPhone, iPad and desktop. The browser talks to a Linux Hub; Codex and project files stay on the configured execution machine. The current installation includes owner-enabled [private team workspace](docs/TEAM_WORKSPACE.md) functionality; registration of additional members remains closed pending independent-account and isolation acceptance. See [the current issue and plan audit](docs/ISSUE_AUDIT_2026-09-20.md) for what is installed, unfinished and planned.
+**A private, self-hosted AI development workspace for your own projects, machines and accounts.**
 
-## Available now
+CodexWeb lets you work with native Codex, consumer ChatGPT, project files, GitHub, generated results, collaborators and Remote Desktop from one browser/PWA interface. It is built around a simple idea: **the Project is the center of the workflow; machines and AI runtimes are implementation details underneath it.**
 
-- Authenticated access: initial personal enrollment uses a private single-use setup link; the migrated owner uses their login and existing password, preserving native accounts and workflow. Member invitation/setup remains a separate admission step.
-- Automatic discovery of real Windows Codex projects and conversations; create a project or choose an existing folder from the website.
-- Continue the same native thread, with streaming, resume, approvals, questions and interrupt.
-- Live model discovery, native Work/Plan mode and model-specific reasoning effort, saved per thread.
-- File and image attachments with preview/removal before sending. Up to eight files, 25 MiB each, 64 MiB per message.
-- Latest 20 chat messages on open; an explicit button loads 20 more without moving the reading position.
-- Results for file changes, checks, plans and Remote screenshots; detailed commands in Activity.
-- Manual Remote Desktop through Guacamole: phone trackpad, tablet touch/stylus, pinch zoom and controls over the full landscape screen.
-- Dedicated single-view phone shell, adaptive wide layout, PWA manifest and four shared themes.
-- Real consumer ChatGPT projects/chats, durable sends, files/images, editing/regeneration and native project instructions/files.
-- Tasks, Notes, executable Plans, Reports, Project Core, current-chat rotation, Review/Delivery and bounded project consultations.
-- Files/Git with README/releases, system diagnostics, private device terminals and configured GUI previews.
-- Native dictation with waveform/timer, system or background read-aloud, account usage/resets and six settings categories.
-- Native work progress, context/diff, live command output, content search, ChatGPT schedules and bounded saved Canvas access. See the documented native limitations below.
-- Independent web gateway and persistent execution engine, with guarded updates, private snapshots and recovery.
+The main target is iPad/iPhone/desktop use without spending the day inside a remote Windows desktop.
+
+## What it feels like
+
+A normal project can move through a flow like this:
+
+```text
+idea / Brainstorm
+        ↓
+   Project GPT
+        ↓
+ Prepare for Codex
+        ↓
+    Codex Work
+        ↓
+Files / Results / Review
+        ↓
+ Git / GitHub / PR
+        ↓
+Activity / collaborators / Intake
+```
+
+You can stay in the web app for most of that loop. Remote Desktop is there when you really need to touch the actual GUI.
+
+## The mental model
+
+CodexWeb deliberately separates a few things that are easy to blur together:
+
+- **Codex** is the implementation agent. It works against a real project checkout and can edit/build/run through the configured execution machine.
+- **Project GPT** is your private project companion for discussion, architecture, impact analysis and preparation. It does not silently become another code worker.
+- **Project Intake** is a persistent read-only Codex lane for studying incoming Issues, PRs, Activity and feedback before handing reviewed work to the normal Project Work chat.
+- **Results** are durable outputs: files, images, previews, generated artifacts and other things worth keeping separate from the conversation.
+- **GitHub** is the engineering source of truth for repositories, commits, Issues, PRs and Reviews.
+- **Collaboration Spaces** connect real users and real Projects without inventing a fake shared code project.
+- **Brainstorm Rooms** are intentionally pre-project: board, chat, voice and a private room GPT, with an explicit path into a real Project later.
+
+That separation is the core of the product.
+
+## What is implemented
+
+### Codex workspace
+
+- Discover and open real projects and native Codex conversations.
+- Continue the same native thread with streaming output, questions, approvals and interrupt.
+- Native model/mode/reasoning controls and project-aware conversation rotation.
+- File/image attachments with durable staging and recovery.
+- Live work progress, command output, diffs, context and bounded history.
+- Chat-bound one-time and recurring **Codex schedules** with timezone handling, queueing and no-blind-replay recovery.
+- Project-specific behavior profiles and optional personal `CODEXWEB.md` rules without taking ownership of the user's `AGENTS.md`.
+
+### Project workspace
+
+Projects are more than folder shortcuts. A Project can carry:
+
+- Project Core;
+- Notes and Tasks;
+- Plans and ordinary Reports;
+- Review and Delivery state;
+- Results and generated artifacts;
+- Project GPT;
+- Project Intake;
+- Issue Drawer;
+- repository identity and GitHub state;
+- the user's exact machine/checkout/chat bindings.
+
+**Prepare for Codex** turns settled Project GPT discussion into a reviewed package of docs/references/Issues, publishes it through explicit GitHub operations, then hands the exact result back to the Project without automatically starting implementation.
+
+### Files and Git
+
+The Files/Git workspace has grown into a real working surface rather than a read-only inspector.
+
+Local/project files support:
+
+- CodeMirror editing;
+- search, line numbers, undo/redo and draft recovery;
+- upload/download;
+- create, rename, copy, move and delete;
+- multi-select batch operations;
+- explicit collision handling;
+- folder merge with per-file decisions;
+- private ZIP download of selected files/folders;
+- durable operation receipts and recovery after lost acknowledgements.
+
+The integrated GitHub file view can also edit the repository **without mutating the local checkout**:
+
+- open and edit text files;
+- create files/folders;
+- rename/delete files or directories;
+- create a branch;
+- commit reviewed changes;
+- open a pull request;
+- recover uncertain branch/commit/PR operations without blindly repeating them.
+
+GitHub permissions and branch protection remain authoritative.
+
+### Universal file viewer
+
+The same themed viewer is reused from Files, Git, Results and authorized shared files.
+
+Current viewer families include:
+
+- images;
+- PDF;
+- text/code/JSON/YAML/TOML/XML/CSV;
+- Markdown;
+- isolated HTML;
+- sanitized SVG;
+- STEP/STP and IGES/IGS;
+- STL, OBJ, 3MF and GLB/glTF;
+- DXF with layers and inspection guides;
+- audio/video supported by the browser;
+- ZIP navigation;
+- DOCX content viewing;
+- XLSX sheet/formula-value inspection.
+
+These are inspection tools, not claims of full CAD/Office editing fidelity. Original bytes remain downloadable.
+
+### Consumer ChatGPT / GPT
+
+CodexWeb can connect a private per-user consumer ChatGPT runtime on the Hub and expose the useful parts of that account inside the workspace:
+
+- chats and projects;
+- model / effort selection;
+- attachments and generated media;
+- durable sends and recovery;
+- history and Results projection;
+- Project GPT and Brainstorm GPT bindings;
+- native account operations supported by the pinned adapter.
+
+Hub/browser history uses bounded incremental projections so unchanged messages, Results, scroll state, drafts and loaded images stay stable instead of being rebuilt on every refresh.
+
+The native provider is intentionally version-pinned and fail-closed. It is not a generic proxy for undocumented account internals.
+
+### Collaboration Spaces
+
+CodexWeb supports a small trusted team while keeping each person's private workspace separate.
+
+A Space can contain:
+
+- several users;
+- several real CodexWeb Projects;
+- per-Project access policy;
+- each participant's own checkout and AI accounts;
+- one human Space chat;
+- GitHub collaboration;
+- a shared Activity view.
+
+For full/direct access, GitHub Write can be granted through the owner's verified GitHub identity and accepted through the participant's own verified account. There is no owner-account fallback.
+
+Participant working copies support managed provenance and safe upstream synchronization. Clean copies can be explicitly fast-forwarded or reconciled; conflicts and dirty work stop automatic mutation instead of being overwritten.
+
+### Activity and attention
+
+The Space Activity view is a compact collaboration timeline built from real sources rather than AI-written status reports.
+
+It includes meaningful GitHub/project events such as commits, PRs, Issues, review state and supported shared-work events. It can:
+
+- group related commits;
+- filter by Project / author;
+- reopen exact sources in the internal GitHub viewer;
+- retain scroll/filter/cache state;
+- attach lightweight reactions;
+- hold short exact-source discussions;
+- route addressed replies/review requests to Notifications;
+- hand exact bounded evidence to Project GPT or Project Intake.
+
+**Activity is for awareness. Notifications are for things that need attention.**
+
+### Communication and Result sharing
+
+Outside a Space, users can have private direct conversations and small group chats with:
+
+- files/images;
+- mentions;
+- unread state;
+- mobile messenger-style navigation.
+
+A Result can be captured as an immutable shared material and granted to a person, group, Space or Brainstorm room without exposing the sender's private filesystem path or source conversation.
+
+A shared Result can also be prepared for one of the sender's own GPT conversations without automatically sending a message.
+
+### Brainstorm Rooms
+
+Brainstorm is the place for ideas that are not Projects yet.
+
+A room supports:
+
+- a shared board;
+- notes, links, files/images/PDF references and simple drawings;
+- groups and links between cards;
+- search and board filtering;
+- common chat;
+- lightweight voice;
+- one private persistent GPT per user × room;
+- immutable snapshots;
+- export;
+- reviewed conversion into a normal Project.
+
+Turning a room into a Project reuses the ordinary Project setup flow and can carry selected shared context into the participants' own Project GPTs.
+
+### Mobile, Remote and everyday UX
+
+CodexWeb is designed as a PWA, not a desktop UI squeezed into a phone.
+
+It includes:
+
+- dedicated phone / tablet / wide layouts;
+- preserved drafts and mounted workspaces across popups/views;
+- four visual themes;
+- contextual F1/help plus a searchable in-app guide;
+- Ctrl/Cmd+Enter send shortcuts;
+- dictation and read-aloud;
+- push/in-app attention;
+- device terminals and diagnostics;
+- Guacamole-backed Remote Desktop with touch and trackpad-style controls.
+
+Remote is intentionally a fallback for hands-on work, not the primary development interface.
+
+## Architecture
+
+The browser never talks directly to Codex, SSH, GitHub credentials or Remote Desktop services.
+
+```text
+                         Browser / PWA
+                              │
+                         HTTPS / WSS
+                              │
+                    ┌─────────▼─────────┐
+                    │     Linux Hub     │
+                    │                   │
+                    │ Web/API gateway   │
+                    │ auth + CSRF       │
+                    │ project registry  │
+                    │ private runtimes  │
+                    │ SQLite + artifacts│
+                    │ queues + receipts │
+                    │ collaboration     │
+                    │ GPT orchestration │
+                    └──────┬─────┬──────┘
+                           │     │
+                  trusted  │     │ private
+                  machine  │     │ provider
+                           │     │
+              ┌────────────▼─┐ ┌─▼────────────────┐
+              │ Windows/Linux│ │ ChatGPT runtime  │
+              │ execution    │ │ per user on Hub │
+              │              │ └──────────────────┘
+              │ native Codex │
+              │ project files│
+              │ git / gh     │
+              └──────┬───────┘
+                     │
+                RDP/VNC via guacd
+```
+
+### Windows execution
+
+Windows stays a normal user machine.
+
+The Hub reaches it over trusted LAN/Tailnet using system SSH. Codex runs through the logged-in local Companion / private local IPC path rather than a public Codex listener. Fixed helpers perform bounded file/Git/GitHub operations. RDP/VNC is reachable only through the Hub's Remote gateway.
+
+### Linux execution
+
+Projects can also run directly on the Hub or another configured Linux execution target through the same Project model.
+
+### Multi-user isolation
+
+Each authenticated user gets a separate private runtime namespace for things such as:
+
+- Codex/GPT bindings and queues;
+- private SQLite state;
+- artifacts/results;
+- machine configuration;
+- drafts and personal settings;
+- private conversations.
+
+Shared Team/Space state is stored separately. Being an installation administrator does **not** automatically make another user's private chats/files/Remote session readable through the product.
+
+## Reliability and safety model
+
+A lot of CodexWeb's code exists for the boring cases that happen after a request was sent but before the browser got an answer.
+
+The project follows a few strict rules:
+
+- **Exact identity over guessing.** User, Project, checkout, repository, branch, conversation and source object are bound explicitly.
+- **No blind replay.** If an external mutation may have happened, its state becomes unknown and is reconciled before another write.
+- **Durable receipts.** Important file, GitHub, AI and scheduling operations record intent/identity so reloads and restarts can recover safely.
+- **Revision/fingerprint checks.** File and GitHub writes detect stale source/destination state instead of silently overwriting newer work.
+- **Authorization is rechecked around asynchronous work.**
+- **GitHub remains authoritative** for repository permissions, branch protection, PRs and Issues.
+- **Only the Linux Hub is Internet-facing.** Windows SSH/Remote, guacd, native AI runtimes and storage stay private.
+- **Guarded updates and backups** keep source verification, deployment and real-device acceptance as separate states.
+
+See [Security](docs/SECURITY.md), [Maintenance](docs/MAINTENANCE.md) and [Verification](docs/VERIFICATION.md).
 
 ## Deployment
 
-Choose your own hostname and Linux runtime directory. Supported deployment, first login and updates are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md); snapshot/restore and diagnostics are in [docs/MAINTENANCE.md](docs/MAINTENANCE.md). The default branch contains the working product; [RELEASES.md](docs/RELEASES.md) records verified source/image baselines.
+CodexWeb is currently an operator-managed private installation, not a one-click public SaaS package.
 
-```text
-Safari / PWA → HTTPS / Cloudflare Tunnel → Linux Hub
-                                              ├─ SSH → Windows bridge → local named pipe → Codex stdio
-                                              └─ guacd → LAN-only VNC / RDP
-```
+The normal shape is:
 
-Use RDP where the Windows edition supports hosting it, or a configured VNC provider. Restrict SSH and Remote inbound rules to the Hub's LAN/Tailnet address. No Codex web listener runs on Windows.
+1. Linux Hub with HTTPS.
+2. One or more explicitly configured/enrolled execution machines.
+3. System SSH between Hub and remote machines.
+4. Optional RDP/VNC + `guacd` for Remote.
+5. Optional private consumer ChatGPT runtime.
+6. Git/GitHub authenticated on the user's own execution environment where GitHub workflows are needed.
 
-A local-only Companion runs in the logged-in Windows session. This is the owner-approved workaround for the installed Codex sandbox runner failing when launched directly in Windows SSH Session 0. It exposes a named pipe, not a network port. See [D17](docs/DECISIONS.md#d17--early-local-only-companion-for-windows-session-0).
+Start with [Deployment](docs/DEPLOYMENT.md). For adding another trusted user/machine, see [Friend quick start](docs/FRIEND_QUICKSTART.md) and [Windows enrollment](docs/WINDOWS_ENROLLMENT.md).
 
-## Development on the Linux server
+Do not expose Windows SSH/RDP/VNC, `guacd`, Codex App Server or SQLite directly to the Internet.
 
-Node 24.18.x, pnpm 11.13.1 and system OpenSSH are required. SQLite is provided by Node. Build and browser-test workloads run on Linux.
+## Development
+
+Requirements:
+
+- Node.js 24.18.x
+- pnpm 11.13.1
+- system OpenSSH for real remote-machine work
+- Chromium/WebKit tooling for browser regression tests
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm test
+
+pnpm build
 pnpm typecheck
 pnpm lint
+pnpm test
+
 HUB_CONFIG=/absolute/path/config.yaml pnpm start
 ```
 
-Copy [config.example.yaml](config.example.yaml) outside the repository and fill in the machine/project paths. The optional remote password is supplied through the environment; website passwords are never set in an environment file.
+For loopback development, use `publicBaseUrl: http://127.0.0.1:8780` and disable secure cookies. Non-loopback deployments require HTTPS.
 
-For loopback development, use publicBaseUrl `http://127.0.0.1:8780` and secureCookies `false`. Non-loopback deployments require HTTPS.
+Copy [config.example.yaml](config.example.yaml) outside the repository and keep secrets out of Git.
 
-## Repository
+## Repository layout
 
-| Directory | Purpose |
+| Path | Purpose |
 | --- | --- |
-| apps/hub | Authentication, SQLite, normalized sessions/results, upload and Remote APIs |
-| apps/web | React mobile/wide PWA with semantic theme tokens |
-| packages/shared | Validated configuration and stable client contracts |
-| packages/codex | App Server JSONL RPC framing, cancellation and timeouts |
-| packages/machines | System SSH/local process transports and attachment staging |
-| ops | Linux container deployment and Windows setup |
-| scripts | Explicit opt-in smoke and isolated browser checks |
-| tests | Automated regression checks |
+| `apps/web` | React PWA: Codex/GPT UI, project workspace, viewers, Files/Git, collaboration, Brainstorm and mobile layouts |
+| `apps/hub` | Fastify Hub: auth, private runtimes, SQLite, queues, Results, GPT, collaboration, schedules, storage and Remote APIs |
+| `packages/shared` | Validated shared contracts and schemas |
+| `packages/codex` | Native Codex App Server framing/compatibility layer |
+| `packages/machines` | Local/SSH machine operations, file/Git/GitHub helpers and project inspectors |
+| `ops` | Linux deployment, native GPT runtime, Windows Companion/helpers and speech setup |
+| `tests` | Node integration/regression tests plus Chromium/WebKit product flows |
+| `docs` | Product contracts, feature notes, verification records, deployment/security docs and historical audits |
 
-## Verification and remaining scope
+The test suite intentionally mixes pure contract tests, real Hub/browser fixtures and bounded real-machine probes. Browser emulation is not treated as proof of physical iPhone/iPad behavior.
 
-[docs/VERIFICATION.md](docs/VERIFICATION.md) records real Windows checks separately from simulated browser fixtures. Mobile Chromium/WebKit checks do not substitute for testing Safari and standalone mode on a physical iPhone/iPad.
+## Current boundaries
 
-Native Codex project discovery and bounded external history are implemented. [Sync and Remote behavior](docs/SYNC_AND_REMOTE.md) explains the desktop saved-folder limitation and continuation semantics. Notes, Files/Git and generated artifact Results are implemented. Additional execution machines and selected project-root enforcement are prerequisites of the current team milestone. The local Linux transport exists; broad second-machine acceptance is tracked separately from configured device terminals.
+CodexWeb is already large, but it is deliberately not trying to become everything:
 
-[Roadmap](docs/ROADMAP.md) distinguishes implemented personal features, installed owner-enabled team functionality, pending member admission and physical acceptance. Further changes are developed and verified with isolated state before guarded updates. The full Canvas editor, global search through every native GPT conversation and a distributable separate-Hub installer are not part of this pass.
+- It is a **private personal/small-team tool**, not a public multi-tenant service.
+- It is not VS Code in a browser: no general LSP/debugger/extension ecosystem.
+- Remote Desktop remains an escape hatch, not the main workflow.
+- CAD/Office/archive viewers are for inspection; they are not full editors/converters. PowerPoint viewing is intentionally not part of the current viewer set.
+- Native ChatGPT history is incrementally projected inside CodexWeb, but the upstream canonical native graph is still read as a whole.
+- Managed collaboration copies do not yet provision a complete isolated test-service stack automatically.
+- A polished standalone one-click Hub installer is still later work.
+- Physical iPhone/iPad/PWA/audio/gesture acceptance remains separate from Chromium/WebKit regression coverage.
+- The repository evolves quickly; an open GitHub issue may describe a larger ideal end-state even when most of the feature already exists.
 
-Read [AGENTS.md](AGENTS.md), [decisions](docs/DECISIONS.md), [architecture](docs/ARCHITECTURE.md), [mobile UX](docs/MOBILE.md) and [security](docs/SECURITY.md) before substantial changes.
+For the freshest implementation-vs-remainder review, see [the latest backlog review](docs/BACKLOG_REVIEW_2026-09-24.md) and [Roadmap](docs/ROADMAP.md).
 
-### Optional GPT and interactive design demos
+## Documentation map
 
-The Codex/GPT switch can connect a separately signed-in private ChatGPT browser on the Linux Hub. It shows the real account's conversations and projects, sends text/files/images, selects native models and power, and retrieves generated images. The protected original interface remains available for other native controls. See [installation and boundaries](ops/gpt/README.md).
+If you only want to use the product:
 
-Self-contained HTML designs can appear as interactive Results from native HTML resources, HTML file changes, assistant HTML blocks or local project-file links. See [the artifact contract](docs/CODEX_INTEGRATION.md#interactive-html-result-contract). Previews run in an isolated frame and do not require a public Windows development server.
+- [In-app guide contract](docs/USER_GUIDE.md)
+- [Mobile / iPhone UX](docs/MOBILE.md)
+- [Workspace](docs/WORKSPACE.md)
 
-Background read-aloud setup, limits and local voice attribution: [ops/speech/README.md](ops/speech/README.md).
+Projects and AI:
 
-Native ChatGPT schedules, saved Canvas versions and extended OpenAI MCP forms are documented in [Native workspace](docs/NATIVE_WORKSPACE.md), including current native availability and guarded installation requirements.
+- [Project behavior profiles](docs/PROJECT_AGENT_PROFILES.md)
+- [Prepare for Codex](docs/PROJECT_PREPARATION.md)
+- [Project Intake](docs/PROJECT_INTAKE.md)
+- [Issue Drawer](docs/ISSUE_DRAWER.md)
+- [Codex schedules](docs/CODEX_SCHEDULES.md)
+- [Conversation bindings](docs/CONVERSATION_BINDINGS.md)
+
+Files, viewers and delivery:
+
+- [Writable Files / editor](docs/FILE_EDITOR.md)
+- [File viewers / technical formats](docs/FILE_VIEWERS.md)
+- [Project Review](docs/PROJECT_REVIEW.md)
+- [Project Delivery](docs/PROJECT_DELIVERY.md)
+
+Collaboration:
+
+- [Collaboration Spaces](docs/COLLABORATION_SPACES.md)
+- [Activity Timeline](docs/SPACE_ACTIVITY.md)
+- [GitHub Write in Spaces](docs/SPACE_GITHUB_WRITE.md)
+- [Managed checkout sync](docs/CHECKOUT_SYNC.md)
+- [Communication / Result sharing](docs/COMMUNICATION.md)
+- [Brainstorm Rooms](docs/BRAINSTORM.md)
+
+Operations:
+
+- [Deployment](docs/DEPLOYMENT.md)
+- [Security](docs/SECURITY.md)
+- [Maintenance](docs/MAINTENANCE.md)
+- [Verification](docs/VERIFICATION.md)
+- [Native ChatGPT integration](docs/GPT_NATIVE_LINUX.md)
+
+## Project philosophy
+
+The shortest version is:
+
+> **Use AI as part of a real development workflow, not as a separate chat tab.**
+
+CodexWeb tries to keep the useful things connected — project context, discussion, implementation, files, results, GitHub and people — while keeping authority explicit and recovery conservative.
