@@ -36,3 +36,34 @@ These fixes are in the Hub/browser. Windows setup probe/worker and wire contract
 4. Confirm the real member can complete project review/creation, sharing, participant Write acceptance and their independent working copy. Physical-device acceptance remains pending.
 
 Private machine IDs, transport configuration and account metadata are retained only in the ignored audit cache, not this document.
+
+## Offline diagnostic package follow-up
+
+After the reported reboot, Hub SSH still timed out and the enrolled Tailscale
+peer retained the same offline last-seen timestamp. A recipient-run package was
+prepared instead of changing the enrollment or trusting an unpinned address.
+
+`ops/windows/Test-CodexWebConnection.ps1` reads an adjacent
+`diagnostic-target.json` containing only the approved Hub IPv4, Windows SID and
+machine GUID (never repository credentials, pairing tokens or private keys).
+The personalized package is generated into the ignored export cache, not Git.
+It writes a text summary and a JSON technical report on the recipient's desktop;
+there is no automatic upload. Full Tailscale JSON, auth URLs, credentials and
+raw subprocess stderr are excluded.
+
+`Start-ConnectionDiagnostic.ps1 -RepairExistingServices` offers interactive
+Windows elevation and only starts stopped, already installed Tailscale/sshd
+services on the exact bound Windows user and PC. Running services and scheduled
+tasks are untouched. Before starting sshd it verifies that Windows Firewall is
+enabled and the existing explicit service boundary excludes all sources other
+than the approved Hub. Missing/disabled components, wrong network/login,
+unverifiable boundaries and different Windows identity remain findings for
+manual follow-up; no new enrollment, key replacement, firewall opening or
+startup-policy change is performed.
+
+Windows PowerShell 5.1 syntax checks and `tests/member-connection-diagnostic.ps1`
+pass with synthetic services/firewall/Tailscale/tasks: no access mutation on a
+wrong identity or without elevation, no restart of running services, no SSH
+start without the exact private boundary, and no sensitive report fields. The
+personalized ZIP is verified by extraction/CRC and includes file hashes.
+Actual execution on the recipient's PC and restored incoming SSH remain pending.
