@@ -1,5 +1,14 @@
 # AGENTS.md
 
+## Owner-requested location-independent chat downloads (2026-09-26)
+
+- Explicit public assistant file links are downloadable regardless of directory,
+  including hidden scratch folders and exports outside the checkout. Do not apply
+  automatic file-change discovery exclusions to these explicit exports.
+- Keep native source-message/turn identity, the actor's own machine and account,
+  immutable captured bytes, authenticated downloads, quotas and bounded transfers.
+  Browser-supplied paths and user message text do not authorize artifact capture.
+
 ## Owner-requested complete in-app help (2026-09-24)
 
 - Settings' question-mark button opens the full guide with categories/subcategories,

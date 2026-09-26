@@ -152,7 +152,7 @@ async function fixture() {
     },
   };
 }
-test("artifact discovery requires explicit output evidence and excludes secret-like paths", () => {
+test("explicit file links are location-independent; automatic discovery remains conservative", () => {
   assert.deepEqual(
     artifactSources({
       type: "agentMessage",
@@ -165,7 +165,7 @@ test("artifact discovery requires explicit output evidence and excludes secret-l
       type: "agentMessage",
       text: "[report](report.md) [model](thing.custom) [secret](credentials.json) [env](.env) [auth](auth.json) [web](https://qa.test/file.pdf) ![img](inline.png)",
     }),
-    ["report.md", "thing.custom"],
+    ["report.md", "thing.custom", "credentials.json", ".env", "auth.json"],
   );
   assert.deepEqual(
     artifactSources({
@@ -421,6 +421,118 @@ test("artifact retry acknowledges a slow transfer without blocking HTTP and shar
     assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 0);
   } finally {
     release();
+    await f.close();
+  }
+});
+
+test("explicit checkout cache export survives old-history discovery, exact reveal and authenticated download", async () => {
+  const f = await handoffFixture();
+  try {
+    const captures = f.sessions.catalog.artifacts;
+    const bytes = Buffer.from("PK fixture archive bytes");
+    const paths = [];
+    captures.read = async (_machine, _root, path) => {
+      paths.push(path);
+      return bytes;
+    };
+    const item = {
+      id: "cache-export",
+      type: "agentMessage",
+      text: "[ZIP](C:/Project/.cache/member-support/diagnostic.zip)",
+    };
+    f.sessions.catalog.message(f.thread, { turnId: "cache-turn", item }, 0);
+    await captures.close();
+    const row = f.store.db
+      .prepare("SELECT * FROM artifact_captures WHERE name='diagnostic.zip'")
+      .get();
+    assert.equal(row.status, "captured");
+    assert.equal(paths.length, 1);
+    const reveal = await f.app.inject({
+      method: "POST",
+      url: `/api/threads/${f.thread.id}/results/reveal`,
+      headers: f.headers,
+      payload: {
+        source: "C:/Project/.cache/member-support/diagnostic.zip",
+        messageId: item.id,
+        turnId: "cache-turn",
+      },
+    });
+    assert.equal(reveal.statusCode, 200);
+    const url = reveal.json().payload.url;
+    assert.equal((await f.app.inject({ url })).statusCode, 401);
+    const download = await f.app.inject({ url, headers: f.headers });
+    assert.equal(download.statusCode, 200);
+    assert.deepEqual(download.rawPayload, bytes);
+    assert.match(download.headers["content-disposition"], /attachment;.*diagnostic.zip/);
+    f.sessions.catalog.message(f.thread, { turnId: "cache-turn", item }, 0);
+    await captures.close();
+    assert.equal(paths.length, 1);
+    const wrong = await f.app.inject({
+      method: "POST",
+      url: `/api/threads/${f.thread.id}/results/reveal`,
+      headers: f.headers,
+      payload: {
+        source: "C:/Project/.cache/member-support/diagnostic.zip",
+        messageId: "other",
+        turnId: "cache-turn",
+      },
+    });
+    assert.equal(wrong.statusCode, 404);
+  } finally {
+    await f.close();
+  }
+});
+
+test("explicit hidden and external exports preserve exact bytes; user text and implicit changes do not export them", async () => {
+  const f = await fixture();
+  try {
+    const files = [
+      join(f.source, ".cache", "report.zip"),
+      join(f.root, ".outside", "report.zip"),
+      join(f.source, ".env"),
+      join(f.source, "credentials.json"),
+    ];
+    for (const [i, source] of files.entries()) {
+      await mkdir(join(source, ".."), { recursive: true });
+      const bytes = Buffer.from("synthetic export fixture " + i);
+      await writeFile(source, bytes);
+      f.generated.observe(f.thread, "turn", {
+        id: "implicit-" + i,
+        type: "fileChange",
+        changes: [{ path: source }],
+      });
+      f.generated.observe(f.thread, "turn", {
+        id: "user-" + i,
+        type: "userMessage",
+        text: `[File](${source})`,
+      });
+      assert.equal(f.store.db.prepare("SELECT count(*) n FROM artifact_captures").get().n, i);
+      const link = source.replace(".cache", "%2Ecache");
+      f.generated.observe(f.thread, "turn", {
+        id: "explicit-" + i,
+        type: "agentMessage",
+        text: `[File](${link})`,
+      });
+      await f.generated.close();
+      const result = resolveResultReference(f.store, f.thread, machine, f.source, {
+        source: link,
+        messageId: "explicit-" + i,
+        turnId: "turn",
+      });
+      assert.deepEqual(f.artifacts.get(result.payload.url.split("/").at(-1)).data, bytes);
+    }
+    assert.equal(
+      f.store.db.prepare("SELECT count(*) n FROM artifact_captures").get().n,
+      files.length,
+    );
+    assert.deepEqual(
+      artifactSources({
+        type: "fileChange",
+        changes: [{ path: ".cache/image.png" }, { path: ".private/report.pdf" }],
+      }),
+      [],
+    );
+  } finally {
     await f.close();
   }
 });

@@ -54,7 +54,9 @@ export function artifactSources(item: Record<string, unknown>): string[] {
       if (generatedTypes.test(path) && !["delete", "remove"].includes(kind)) paths.push(path);
     }
   }
-  return [...new Set(paths)].filter((p) => !secretPath.test(p)).slice(0, 8);
+  return [...new Set(paths)]
+    .filter((p) => item.type === "agentMessage" || !secretPath.test(p))
+    .slice(0, 8);
 }
 type Capture = {
   id: string;
@@ -179,7 +181,10 @@ export class GeneratedArtifacts {
       } catch {
         continue;
       }
-      if (secretPath.test(path)) continue;
+      // Explicit public assistant links are user-requested exports, including
+      // hidden folders and locations outside the checkout. File-change events
+      // remain conservative automatic discovery. Browser input never adds paths.
+      if (item.type !== "agentMessage" && secretPath.test(path)) continue;
       const id = createHash("sha256")
         .update(JSON.stringify([thread.id, turnId, item.id, path]))
         .digest("hex");
