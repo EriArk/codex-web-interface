@@ -1,5 +1,15 @@
 # Roadmap
 
+## Latest issue audit (2026-09-26)
+
+The [complete issue audit](ISSUE_AUDIT_2026-09-26.md) covers all 129 issues (74 open,
+55 closed) against current code and owner decisions. Many entries in the historical
+sequence below have since shipped. The proposed next stage is **#220 GPT read/write
+isolation**, reasoning **Высокое (`high`)**, followed by #229 persistent Codex runtime
+and grouped navigation work. This is a proposal awaiting owner continuation, not an
+instruction to start all stages. Neflores diagnostics are paused at the owner's request.
+Source/UI/engine installation status and physical acceptance are distinguished in the audit.
+
 ## Current owner-approved sequence (2026-09-23)
 
 Latest owner choice: first optimize GPT history/Results, then Brainstorm. [Incremental Hub/browser history and Results](GPT_INCREMENTAL_HISTORY.md) are implemented and verified; native canonical graph ingestion remains unchanged and #188 is not declared fully closed. The confirmed **Очень высокое (`xhigh`)** Brainstorm stage now implements rooms, board/chat, private room GPT, bounded voice and snapshot-to-project handoff; see [scope, recovery and verification](BRAINSTORM.md). Physical-device acceptance remains pending. The focused usability follow-up fixes cross-device Project wizard recovery and voice cancellation/participant turnover. Physical-device acceptance remains separate. Board organization now includes named groups, directed idea links, persistent local search/filtering and exact target navigation. The owner-requested correction adds direct touch/mouse positioning, drag/tap connections and drawing surfaces that keep their gestures separate from scrolling. Physical-device acceptance of these gestures remains pending. The [24 September backlog review](BACKLOG_REVIEW_2026-09-24.md) is complete: the catalog has 64 open issues, many covering implemented or partial foundations. The approved **Prepare for Codex (#201)** stage now provides reviewed documentation/reference packages, exact file collision choices, isolated GitHub branch/commit/PR receipts, reused Issue Drawer publication and an explicit private Codex plan handoff; see [preparation flow and limits](PROJECT_PREPARATION.md). Independent conversations and immutable Result sharing (#202/#213) are now implemented with [audience, recovery, viewer and GPT handoff limits](COMMUNICATION.md). Managed participant checkout synchronization (#198) now includes exact observed provenance, explicit fast-forward/clean merge, conflict preview and a confirmed Codex investigation handoff; see [implemented behavior and optional test-service remainder](CHECKOUT_SYNC.md). The same stage refines Communication into a themed messenger with one-tap contacts and separate group creation. Optional isolated test services remain deferred. The next proposed stage is Activity/attention completion (#218/#205/#197), **Высокое (`high`)**. Wait for the owner's continuation before starting it. Further access downgrade/removal work is deferred. The historical sequence below describes completed preceding stages, not a request to restart them.
