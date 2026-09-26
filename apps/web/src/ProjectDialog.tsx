@@ -7,6 +7,13 @@ import { Icon } from "./icons";
 import type { Machine, Project } from "./types";
 import "./project-setup.css";
 
+function repositoryAddress(value: string) {
+  const match =
+    /^(?:https:\/\/github\.com\/|git@github\.com:)?([A-Za-z0-9][A-Za-z0-9-]{0,99})\/([A-Za-z0-9_.-]{1,100}?)(?:\.git)?\/?$/i.exec(
+      value.trim(),
+    );
+  return match && ![".", ".."].includes(match[2]!) ? { owner: match[1]!, name: match[2]! } : null;
+}
 const draftKey = "codex-project-setup-draft-v1";
 const folderName = (value: string) =>
   value
@@ -122,6 +129,7 @@ function ProjectDialogContent({
     generation = useRef(0),
     folderGeneration = useRef(0),
     repoGeneration = useRef(0),
+    repoController = useRef<AbortController | null>(null),
     attempt = useRef<{ body: string; key: string }>(
       restored.current?.attempt ?? { body: "", key: "" },
     );
@@ -269,15 +277,27 @@ function ProjectDialogContent({
       clearInterval(timer);
     };
   }, [open, operationId, operationState]);
-  const loadRepos = async (page = 1) => {
-    if (!machine || repoBusy) return;
+  useEffect(() => {
+    if (open)
+      return () => {
+        repoGeneration.current++;
+        repoController.current?.abort();
+      };
+    setRepoBusy(false);
+  }, [open]);
+  const loadRepos = async (page = 1, search = repoSearch) => {
+    if (!machine) return;
     const serial = ++repoGeneration.current,
       mid = machine.id;
+    const controller = new AbortController();
+    repoController.current?.abort();
+    repoController.current = controller;
     setRepoBusy(true);
     setRepoError("");
     try {
       const value = await api<{ login: string; repositories: SetupRepository[]; hasMore: boolean }>(
-        `/machines/${encodeURIComponent(mid)}/github-repositories?search=${encodeURIComponent(repoSearch)}&page=${page}`,
+        `/machines/${encodeURIComponent(mid)}/github-repositories?search=${encodeURIComponent(search)}&page=${page}`,
+        { signal: controller.signal },
       );
       if (serial !== repoGeneration.current) return;
       setRepos((old) => (page === 1 ? value.repositories : [...old, ...value.repositories]));
@@ -287,8 +307,7 @@ function ProjectDialogContent({
         ...old,
         repository: {
           ...old.repository,
-          owner:
-            old.repository.mode === "create" ? value.login : old.repository.owner || value.login,
+          owner: old.repository.mode === "create" ? value.login : old.repository.owner,
         },
       }));
     } catch (e) {
@@ -674,11 +693,19 @@ function ProjectDialogContent({
                   className={input.repository.mode === mode ? "selected" : ""}
                   disabled={locked}
                   onClick={() => {
+                    repoGeneration.current++;
+                    repoController.current?.abort();
+                    setRepoBusy(false);
+                    setRepoError("");
+                    setRepoSearch("");
+                    setRepos([]);
+                    setMore(false);
                     setRepository({
                       mode: mode as "none" | "create" | "connect",
-                      name: input.repository.name || folderName(input.name),
+                      owner: "",
+                      name: mode === "create" ? folderName(input.name) : "",
                     });
-                    if (mode !== "none") void loadRepos();
+                    if (mode !== "none") void loadRepos(1, "");
                   }}
                 >
                   <Icon name={icon as "folder"} />
@@ -745,14 +772,32 @@ function ProjectDialogContent({
                       className="setup-repo-search"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        void loadRepos();
+                        const address = repositoryAddress(repoSearch);
+                        if (address) {
+                          repoGeneration.current++;
+                          repoController.current?.abort();
+                          setRepoBusy(false);
+                          setRepoError("");
+                          setRepos([]);
+                          setMore(false);
+                          setRepository(address);
+                        } else void loadRepos();
                       }}
                     >
                       <input
                         aria-label="Найти репозиторий"
                         value={repoSearch}
-                        onChange={(e) => setRepoSearch(e.target.value)}
-                        placeholder="Найти репозиторий…"
+                        onChange={(e) => {
+                          repoGeneration.current++;
+                          repoController.current?.abort();
+                          setRepoBusy(false);
+                          setRepoError("");
+                          setRepos([]);
+                          setMore(false);
+                          setRepoSearch(e.target.value);
+                          setRepository({ owner: "", name: "" });
+                        }}
+                        placeholder="Поиск, ссылка или владелец/репозиторий"
                       />
                       <button
                         type="submit"
@@ -763,6 +808,12 @@ function ProjectDialogContent({
                         <Icon name="search" />
                       </button>
                     </form>
+                    {input.repository.owner && input.repository.name && (
+                      <p className="setup-review">
+                        <Icon name="repository" size={18} /> {input.repository.owner}/
+                        {input.repository.name}
+                      </p>
+                    )}
                     <div className="setup-repo-list">
                       {repos.map((repo) => (
                         <button
@@ -817,7 +868,13 @@ function ProjectDialogContent({
                 <p>
                   <Icon name="repository" size={16} />
                   {operation.input.repository.owner}/{operation.input.repository.name} ·{" "}
-                  {operation.input.repository.visibility === "private" ? "Приватный" : "Публичный"}
+                  {(
+                    operation.input.repository.mode === "connect" && operation.inspection.remote
+                      ? operation.inspection.remote.private
+                      : operation.input.repository.visibility === "private"
+                  )
+                    ? "Приватный"
+                    : "Публичный"}
                 </p>
               )}
               <ol>
@@ -898,7 +955,7 @@ function ProjectDialogContent({
             disabled={
               busy ||
               restoringOperation ||
-              repoBusy ||
+              (input.repository.mode !== "none" && repoBusy) ||
               !machine ||
               machine.canCreateProjects === false ||
               !input.name.trim() ||

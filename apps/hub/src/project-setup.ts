@@ -162,6 +162,15 @@ export function registerProjectSetup(
       .all()
       .map((row) => JSON.parse(String(row.value))),
   }));
+  const readProbe: typeof probe = async (machine, request) => {
+    try {
+      return await probe(machine, request);
+    } catch (error) {
+      if (error instanceof HubError && error.code === "SETUP_UNAVAILABLE")
+        throw new HubError(error.statusCode, error.code, setupMessage(error.code, request.op));
+      throw error;
+    }
+  };
   app.get("/api/machines/:id/github-repositories", async (req) => {
     const { id } = z.object({ id: z.string().min(1).max(100) }).parse(req.params),
       q = z
@@ -171,7 +180,7 @@ export function registerProjectSetup(
         })
         .strict()
         .parse(req.query);
-    return probe(sessions.catalog.machine(id), { op: "repositories", ...q });
+    return readProbe(sessions.catalog.machine(id), { op: "repositories", ...q });
   });
   app.post("/api/project-setup/prepare", async (req) => {
     const id = z.string().uuid().parse(req.headers["idempotency-key"]),
@@ -192,12 +201,12 @@ export function registerProjectSetup(
     }
     if (preparing.size >= 2) throw new HubError(429, "SETUP_BUSY", setupMessage("SETUP_BUSY"));
     const job = (async () => {
-      const inspection = (await probe(sessions.catalog.machine(input.machineId), {
+      const inspection = (await readProbe(sessions.catalog.machine(input.machineId), {
         op: "inspect",
         input: machineInput(input),
       })) as SetupInspection;
       if (!inspection?.fingerprint || !Array.isArray(inspection.steps))
-        throw new HubError(503, "SETUP_UNAVAILABLE", setupMessage("SETUP_UNAVAILABLE"));
+        throw new HubError(503, "SETUP_UNAVAILABLE", setupMessage("SETUP_UNAVAILABLE", "inspect"));
       return put({
         id,
         input,

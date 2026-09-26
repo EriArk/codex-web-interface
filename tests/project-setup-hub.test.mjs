@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { agentTemplate } from "../packages/shared/dist/index.js";
+import { agentTemplate, HubError } from "../packages/shared/dist/index.js";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
 const input = {
@@ -233,4 +233,59 @@ test("advanced setup keeps helper contract unchanged and applies profile once af
   await f.app.inject(request);
   assert.equal(seen.length, 1);
   assert.deepEqual(seen[0].rules.agentProfile, profile);
+});
+
+test("failed setup reads do not claim a saved creation, and recovery retains exact creation receipts", async (t) => {
+  let available = false,
+    applies = 0;
+  const f = await handoffFixture(undefined, undefined, {
+    projectSetupProbe: async (_m, request) => {
+      if (request.op === "apply") applies++;
+      if (!available || request.op === "apply")
+        throw new HubError(
+          503,
+          "SETUP_UNAVAILABLE",
+          "Настройка проекта не ответила. Состояние операции сохранено.",
+        );
+      return request.op === "inspect" ? inspection : null;
+    },
+  });
+  t.after(() => f.close());
+  const key = randomUUID(),
+    prepare = {
+      method: "POST",
+      url: "/api/project-setup/prepare",
+      headers: { ...f.headers, "idempotency-key": key },
+      payload: input,
+    };
+  for (const req of [
+    { url: "/api/machines/pc/github-repositories", headers: f.headers },
+    prepare,
+  ]) {
+    const result = await f.app.inject(req);
+    assert.equal(result.statusCode, 503);
+    assert.match(result.body, /Создание ещё не запускалось/);
+    assert.doesNotMatch(result.body, /Состояние операции сохранено/);
+  }
+  assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM project_setup_operations").get().n, 0);
+  assert.equal(applies, 0);
+  available = true;
+  assert.equal((await f.app.inject(prepare)).json().id, key);
+  await f.app.inject({
+    method: "POST",
+    url: `/api/project-setup/${key}/execute`,
+    headers: f.headers,
+    payload: {},
+  });
+  await until(
+    async () =>
+      (await f.app.inject({ url: `/api/project-setup/${key}`, headers: f.headers })).json()
+        .state === "unknown",
+  );
+  const receipt = (
+    await f.app.inject({ url: `/api/project-setup/${key}`, headers: f.headers })
+  ).json();
+  assert.match(receipt.error, /Состояние операции сохранено/);
+  assert.equal(receipt.id, key);
+  assert.equal(applies, 1);
 });

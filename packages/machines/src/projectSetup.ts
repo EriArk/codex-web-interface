@@ -34,7 +34,14 @@ const messages: Record<string, string> = {
   OPERATION_CONFLICT: "Эта операция уже сохранена с другими параметрами.",
   SETUP_UNAVAILABLE: "Настройка проекта не ответила. Состояние операции сохранено.",
 };
-export const setupMessage = (code: string) => messages[code] ?? messages.SETUP_UNAVAILABLE!;
+export const setupMessage = (code: string, op: SetupProbeRequest["op"] = "apply") => {
+  if (
+    (!messages[code] || code === "SETUP_UNAVAILABLE") &&
+    (op === "repositories" || op === "inspect")
+  )
+    return "Не удалось связаться с помощником настройки на выбранном компьютере. Проверь, что компьютер включён и подключён. Создание ещё не запускалось.";
+  return messages[code] ?? messages.SETUP_UNAVAILABLE!;
+};
 export async function runProjectSetup(
   machine: MachineConfig,
   request: SetupProbeRequest,
@@ -47,11 +54,15 @@ export async function runProjectSetup(
       return await setupProbe(request);
     } catch (e) {
       const code = e instanceof Error ? e.message : "SETUP_UNAVAILABLE";
-      throw new HubError(409, messages[code] ? code : "SETUP_UNAVAILABLE", setupMessage(code));
+      throw new HubError(
+        409,
+        messages[code] ? code : "SETUP_UNAVAILABLE",
+        setupMessage(code, request.op),
+      );
     }
   }
   if (!machine.codex.activityNode || !machine.ssh)
-    throw new HubError(503, "SETUP_UNAVAILABLE", setupMessage("SETUP_UNAVAILABLE"));
+    throw new HubError(503, "SETUP_UNAVAILABLE", setupMessage("SETUP_UNAVAILABLE", request.op));
   const script = `$ErrorActionPreference='Stop'; $worker=Join-Path $env:LOCALAPPDATA 'CodexWeb/project-setup/ProjectSetupWorker.cjs'; if(-not (Test-Path -LiteralPath $worker)){exit 2}; & ${quotePowerShell(machine.codex.activityNode)} $worker request; exit $LASTEXITCODE`;
   const child = spawn(
     "ssh",
@@ -89,14 +100,14 @@ export async function runProjectSetup(
           throw new HubError(
             409,
             messages[result.code] ? result.code : "SETUP_UNAVAILABLE",
-            setupMessage(result.code),
+            setupMessage(result.code, request.op),
           );
         resolve(result.value);
       } catch (e) {
         reject(
           e instanceof HubError
             ? e
-            : new HubError(503, "SETUP_UNAVAILABLE", setupMessage("SETUP_UNAVAILABLE")),
+            : new HubError(503, "SETUP_UNAVAILABLE", setupMessage("SETUP_UNAVAILABLE", request.op)),
         );
       }
     };
