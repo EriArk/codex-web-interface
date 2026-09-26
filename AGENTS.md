@@ -1,5 +1,18 @@
 # AGENTS.md
 
+## Owner-requested save continuity everywhere (2026-09-26)
+
+- Every file-saving entry uses the common DownloadLink flow, including universal
+  viewers, editor snapshots/copies, extracted ZIP entries, room exports and PC
+  enrollment bundles. Do not add raw download anchors or delayed synthetic clicks
+  in feature components. Local bytes remain exact immutable File snapshots.
+- System sharing starts on a fresh tap after preparation. Closing or cancelling
+  retains the mounted parent, draft and scroll. Standalone browser fallback must
+  open separately without the download attribute that iOS can consume in the PWA.
+- Test nested viewer saving as well as source-card saving; a mocked Web Share API
+  or desktop WebKit test is not physical iPhone acceptance.
+
+
 ## Owner-requested location-independent chat downloads (2026-09-26)
 
 - Explicit public assistant file links are downloadable regardless of directory,

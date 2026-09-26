@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { DownloadLink } from "./DownloadLink";
 import { FilePreview } from "./FilePreview";
 import { FileViewerDialog } from "./FileViewerDialog";
 
@@ -23,9 +24,9 @@ export function FileEditorPreview({ file, onClose }: { file: File; onClose: () =
             К редактору
           </button>
           {url && (
-            <a className="secondary" href={url} download={file.name}>
+            <DownloadLink preparedFile={file} directDownload>
               Скачать черновик
-            </a>
+            </DownloadLink>
           )}
         </>
       }

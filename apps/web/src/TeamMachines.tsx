@@ -2,6 +2,7 @@ import type { MachineEnrollment, TeamUser } from "@codex-web/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { accountSessionStorage as sessionStorage } from "./accountStorage";
 import { api, messageOf } from "./api";
+import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
 import "./team.css";
 
@@ -32,6 +33,7 @@ function savedAttempt(): EnrollmentAttempt | null {
 export function TeamMachines({ visible }: { visible: boolean }) {
   const [attempt, setAttempt] = useState<EnrollmentAttempt | null>(savedAttempt);
   const running = useRef(false);
+  const [bundle, setBundle] = useState<File | null>(null);
   const [items, setItems] = useState<MachineEnrollment[]>([]),
     [reviews, setReviews] = useState<MachineEnrollment[]>([]);
   const [active, setActive] = useState<string[]>([]),
@@ -94,6 +96,7 @@ export function TeamMachines({ visible }: { visible: boolean }) {
   };
   const clearAttempt = () => {
     setCreated(null);
+    setBundle(null);
     setAttempt(null);
     try {
       sessionStorage.removeItem(attemptKey);
@@ -109,6 +112,7 @@ export function TeamMachines({ visible }: { visible: boolean }) {
     ) {
       setAttempt(null);
       setCreated(null);
+      setBundle(null);
       try {
         sessionStorage.removeItem(attemptKey);
       } catch {}
@@ -141,15 +145,8 @@ export function TeamMachines({ visible }: { visible: boolean }) {
       `/team/machines/${selected.enrollment.id}/bundle`,
       { method: "POST", body: { token: selected.token } },
     );
-    const bytes = Uint8Array.from(atob(archive.base64), (c) => c.charCodeAt(0)),
-      url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = archive.filename;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const bytes = Uint8Array.from(atob(archive.base64), (c) => c.charCodeAt(0));
+    setBundle(new File([bytes], archive.filename, { type: "application/zip" }));
     setNotice(
       "Распакуй архив на своём Windows ПК и открой Connect.cmd. Мастер запросит подтверждение Windows и поможет войти в аккаунты.",
     );
@@ -207,6 +204,11 @@ export function TeamMachines({ visible }: { visible: boolean }) {
             )}
         </form>
       )}
+      {visible && bundle && (
+        <DownloadLink key={bundle.lastModified} preparedFile={bundle} directDownload initiallyOpen>
+          Скачать установщик
+        </DownloadLink>
+      )}
       <ul className="team-people">
         {items.map((item) => (
           <li key={item.id}>
@@ -258,6 +260,16 @@ export function TeamMachines({ visible }: { visible: boolean }) {
       {reviews.length > 0 && (
         <div>
           <h3>Подтвердить компьютеры</h3>
+          {visible && bundle && (
+            <DownloadLink
+              key={bundle.lastModified}
+              preparedFile={bundle}
+              directDownload
+              initiallyOpen
+            >
+              Скачать установщик
+            </DownloadLink>
+          )}
           <ul className="team-people">
             {reviews.map((item) => (
               <li key={item.id}>

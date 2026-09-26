@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { workspaceUrl } from "./accountStorage";
-import { isDownloadUrl } from "./DownloadLink";
+import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { FilePreview } from "./FilePreview";
 import { FileViewerDialog } from "./FileViewerDialog";
 import { ResultShareButton } from "./ResultSharing";
@@ -92,15 +92,9 @@ export function ResultFilePreview({ result, onClose }: { result: Result; onClose
         <>
           <ResultShareButton result={result} />
           {isDownloadUrl(path) ? (
-            <a
-              className="secondary"
-              href={workspaceUrl(path)}
-              download={title}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <DownloadLink href={path} name={title} mime={mime} directDownload>
               Скачать файл
-            </a>
+            </DownloadLink>
           ) : null}
         </>
       }

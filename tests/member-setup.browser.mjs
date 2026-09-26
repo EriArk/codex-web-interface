@@ -82,13 +82,22 @@ for (const [engine, type] of [
       await dialog.getByLabel("Название компьютера").fill("Friend-PC");
       const download = page.waitForEvent("download");
       await dialog.getByRole("button", { name: "Подключить Windows ПК", exact: true }).click();
+      await page
+        .getByRole("dialog", { name: "Сохранить файл", exact: true })
+        .getByRole("link", { name: "Скачать через браузер" })
+        .click();
       assert.equal((await download).suggestedFilename(), "CodexWeb-Connect.zip");
       const enrollment = hub.enrollments.list(friend.id)[0];
       await page.reload();
       await expect(dialog).toBeVisible();
       const again = page.waitForEvent("download");
       await dialog.getByRole("button", { name: "Скачать установщик ещё раз", exact: true }).click();
+      await page
+        .getByRole("dialog", { name: "Сохранить файл", exact: true })
+        .getByRole("link", { name: "Скачать через браузер" })
+        .click();
       await again;
+      await page.getByRole("button", { name: "Закрыть сохранение", exact: true }).click();
       assert.equal(hub.enrollments.list(friend.id).length, 1);
       assert.equal(hub.enrollments.list(friend.id)[0].id, enrollment.id);
       for (const [width, theme] of [

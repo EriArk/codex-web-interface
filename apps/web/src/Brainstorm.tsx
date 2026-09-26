@@ -1,3 +1,4 @@
+import { DownloadLink } from "./DownloadLink";
 import { AutoTextarea } from "./AutoTextarea";
 import "./project-gpt.css";
 import type {
@@ -1473,13 +1474,13 @@ function RoomConversion({
               {conversion.snapshot.cards.length} материалов · {conversion.snapshot.messages.length}{" "}
               сообщений
             </p>
-            <a
-              className="secondary"
-              href={workspaceUrl(`/api/team/brainstorm-conversions/${conversion.id}/export`)}
-              download
+            <DownloadLink
+              href={`/api/team/brainstorm-conversions/${conversion.id}/export`}
+              name={conversion.title + ".zip"}
+              directDownload
             >
               Скачать архив комнаты
-            </a>
+            </DownloadLink>
             {conversion.projectId ? (
               <p>Проект создан. Ссылка находится на доске комнаты.</p>
             ) : (

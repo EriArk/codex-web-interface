@@ -9,11 +9,46 @@ import { useWorkspaceDialog } from "./useWorkspaceDialog";
 import { ViewerEditButton } from "./ViewerEditButton";
 import "./download.css";
 
+function standalone() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+/** iOS may handle `download` in the PWA itself even with target=_blank.
+ * Unsupported/large files explicitly leave saving to a separate browser context. */
+function BrowserDownload({
+  href,
+  name,
+  className = "secondary",
+  children,
+}: {
+  href: string;
+  name: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      className={className}
+      href={href}
+      download={standalone() ? undefined : name}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  );
+}
+
 export function isDownloadUrl(value: string | undefined): value is string {
   if (
     value &&
     /^\/api\/projects\/[a-zA-Z0-9_-]+\/file-archives\/[a-f0-9-]{36}\/content$/.test(value)
   )
+    return true;
+  if (value && /^\/api\/team\/brainstorm-conversions\/[a-zA-Z0-9_-]+\/export$/.test(value))
     return true;
   if (isFileSource(value)) return true;
   if (value && /^\/api\/threads\/[a-zA-Z0-9_-]+\/commands\/[^/?#]+\?[^#]+$/.test(value)) {
@@ -79,8 +114,13 @@ export function DownloadLink({
   onEdit,
   editLabel = "Редактировать",
   sourceRevision = 0,
+  preparedFile,
+  initiallyOpen = false,
 }: {
   href?: string;
+  /** Exact immutable local bytes, e.g. an editor snapshot or extracted archive entry. */
+  preparedFile?: File;
+  initiallyOpen?: boolean;
   name?: string;
   mime?: string;
   children: ReactNode;
@@ -91,7 +131,7 @@ export function DownloadLink({
   editLabel?: string;
   sourceRevision?: number;
 }) {
-  const [open, setOpen] = useState(false),
+  const [open, setOpen] = useState(initiallyOpen),
     [file, setFile] = useState<File | null>(null),
     [objectUrl, setObjectUrl] = useState(""),
     [error, setError] = useState(""),
@@ -108,7 +148,7 @@ export function DownloadLink({
       editRequest.current?.abort();
       editRequest.current = null;
     };
-  }, [open, href]);
+  }, [open, href, preparedFile]);
   useEffect(() => {
     const saved = (event: Event) => {
       if ((event as CustomEvent).detail?.source === href) setRetry((v) => v + 1);
@@ -118,7 +158,7 @@ export function DownloadLink({
   }, [href]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly starts a fresh bounded download.
   useEffect(() => {
-    if (!open) {
+    if (!open && !preparedFile) {
       setFile(null);
       setObjectUrl("");
       setDirect(null);
@@ -132,6 +172,12 @@ export function DownloadLink({
     setDirect(null);
     void (async () => {
       try {
+        if (preparedFile) {
+          url = URL.createObjectURL(new Blob([preparedFile], { type: "application/octet-stream" }));
+          setObjectUrl(url);
+          setFile(preparedFile);
+          return;
+        }
         if (!isDownloadUrl(href)) throw Error("Ссылка на файл недоступна.");
         if (/^\/api\/artifacts\/[a-zA-Z0-9_-]+$/.test(href)) {
           const head = await fetch(workspaceUrl(href), {
@@ -219,7 +265,7 @@ export function DownloadLink({
       controller.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [open, href, name, mime, retry, sourceRevision]);
+  }, [open, href, name, mime, retry, sourceRevision, preparedFile]);
   const shareable =
     !!file &&
     typeof navigator.share === "function" &&
@@ -234,7 +280,7 @@ export function DownloadLink({
     return () => {
       shareRequest.current++;
     };
-  }, [open, href]);
+  }, [open, href, preparedFile]);
   const share = () => {
     if (!file || sharing) return;
     const request = ++shareRequest.current;
@@ -255,17 +301,12 @@ export function DownloadLink({
   // Do not navigate to a raw attachment: iOS may replace the PWA with unclosable Quick Look.
   const systemSave =
     typeof navigator.share === "function" && typeof navigator.canShare === "function";
-  if (directDownload && !systemSave)
-    return isDownloadUrl(href) ? (
-      <a
-        className={className}
-        href={workspaceUrl(href)}
-        download={name}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
+  const downloadHref = preparedFile ? objectUrl : isDownloadUrl(href) ? workspaceUrl(href) : "";
+  if (directDownload && !systemSave && !initiallyOpen && !standalone())
+    return downloadHref ? (
+      <BrowserDownload className={className} href={downloadHref} name={preparedFile?.name || name}>
         {children}
-      </a>
+      </BrowserDownload>
     ) : null;
   return (
     <>
@@ -283,16 +324,10 @@ export function DownloadLink({
             <button type="button" className="secondary" disabled={sharing} onClick={share}>
               Сохранить / поделиться
             </button>
-          ) : (file || direct) && isDownloadUrl(href) ? (
-            <a
-              className="secondary"
-              href={workspaceUrl(href)}
-              download={direct?.name || file?.name || name}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+          ) : (file || direct) && downloadHref ? (
+            <BrowserDownload href={downloadHref} name={direct?.name || file?.name || name}>
               Скачать через браузер
-            </a>
+            </BrowserDownload>
           ) : null}
           {error && <p role="alert">{error}</p>}
           {error && (
@@ -344,16 +379,10 @@ export function DownloadLink({
                   <button type="button" className="secondary" disabled={sharing} onClick={share}>
                     Сохранить / поделиться
                   </button>
-                ) : isDownloadUrl(href) ? (
-                  <a
-                    className="secondary"
-                    href={workspaceUrl(href)}
-                    download={file?.name || name}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                ) : downloadHref ? (
+                  <BrowserDownload href={downloadHref} name={file?.name || name}>
                     Скачать файл
-                  </a>
+                  </BrowserDownload>
                 ) : null}
               </>
             }
@@ -381,15 +410,9 @@ export function DownloadLink({
                   )}{" "}
                   МБ · Сохранение через загрузки браузера
                 </p>
-                <a
-                  className="secondary"
-                  href={workspaceUrl(href!)}
-                  download={direct.name}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <BrowserDownload href={workspaceUrl(href!)} name={direct.name}>
                   Скачать файл
-                </a>
+                </BrowserDownload>
               </div>
             )}
             {error && <p role="alert">{error}</p>}

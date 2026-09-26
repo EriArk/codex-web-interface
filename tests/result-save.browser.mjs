@@ -5,8 +5,10 @@ import { join, resolve } from "node:path";
 import { chromium, expect, webkit } from "@playwright/test";
 import react from "../apps/web/node_modules/@vitejs/plugin-react/dist/index.js";
 import { build } from "../apps/web/node_modules/vite/dist/node/index.js";
+import { zip } from "./package-fixtures.mjs";
 import { handoffFixture } from "./handoff-fixture.mjs";
 
+const archive = zip({ "entry.md": "# Archive entry\n" });
 const dir = await mkdtemp(join(tmpdir(), "result-save-"));
 await mkdir(".local/qa-result-save", { recursive: true });
 try {
@@ -57,10 +59,22 @@ try {
             ),
           });
         });
+        await page.route("**/api/artifacts/zip", (route) =>
+          route.fulfill({
+            headers: {
+              "content-type": "application/zip",
+              "content-disposition": 'attachment; filename="diagnostics.zip"',
+            },
+            body: archive,
+          }),
+        );
+        await page.route("**/api/team/brainstorm-conversions/room-export/export", (route) =>
+          route.fulfill({ headers: { "content-type": "application/zip" }, body: archive }),
+        );
         await page.addInitScript(() => {
           window.shared = [];
           window.shareMode = "cancel";
-          Object.defineProperty(navigator, "standalone", { value: true });
+          Object.defineProperty(navigator, "standalone", { configurable: true, value: true });
           Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
           Object.defineProperty(navigator, "share", {
             configurable: true,
@@ -77,6 +91,15 @@ try {
           });
         });
         await page.goto(origin + "/tests/fixtures/result-save.html");
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          await Promise.all(
+            Array.from(document.images, (image) => {
+              image.loading = "eager";
+              return image.decode().catch(() => {});
+            }),
+          );
+        });
         const initial = page.url();
         const source = page.getByRole("button", { name: "Скачать", exact: true }).nth(4);
         await source.scrollIntoViewIfNeeded();
@@ -140,8 +163,86 @@ try {
             await close.tap();
           }
         }
+        // The actual universal viewer used by chat references previously bypassed safe saving.
+        for (const [entry, action, parentClose, filename, bytes] of [
+          ["Открыть ZIP результата", "Скачать файл", "Закрыть просмотр", "diagnostics.zip", null],
+          [
+            "Открыть черновик",
+            "Скачать черновик",
+            "Закрыть просмотр",
+            "edited.md",
+            "# Saved draft\n",
+          ],
+          [
+            "Открыть копию",
+            "Скачать копию",
+            "Закрыть сохранение копии",
+            "edited.md",
+            "# Saved draft\n",
+          ],
+        ]) {
+          await page.getByRole("button", { name: entry, exact: true }).click();
+          await page.getByRole("button", { name: action, exact: true }).click();
+          await expect(share).toBeEnabled();
+          await expect(close).toBeInViewport();
+          await share.click();
+          await expect.poll(() => page.evaluate(() => window.shared.at(-1)?.name)).toBe(filename);
+          assert.deepEqual(
+            await page.evaluate(() => window.shared.at(-1).bytes),
+            Array.from(filename === "diagnostics.zip" ? archive : Buffer.from(bytes)),
+          );
+          assert.equal(await page.evaluate(() => window.shared.at(-1).active), true);
+          await close.click();
+          await expect(page.getByRole("button", { name: action, exact: true })).toBeVisible();
+          await page.getByRole("button", { name: parentClose, exact: true }).click();
+          assert.equal(page.url(), initial);
+          assert.equal(context.pages().length, 1);
+          await expect(page.getByRole("textbox", { name: "Черновик" })).toHaveValue("Мой черновик");
+        }
+        await page.getByRole("button", { name: "Локальный ZIP", exact: true }).click();
+        await share.click();
+        await expect
+          .poll(() => page.evaluate(() => window.shared.at(-1)?.name))
+          .toBe("installer.zip");
+        await close.click();
+        await page.getByRole("button", { name: "Архив комнаты", exact: true }).click();
+        await share.click();
+        await expect
+          .poll(() => page.evaluate(() => window.shared.at(-1).bytes))
+          .toEqual(Array.from(archive));
+        await close.click();
+        await page.getByRole("button", { name: "Открыть ZIP результата", exact: true }).click();
+        await page.getByRole("button", { name: /entry.md/ }).click();
+        await expect(page.locator("dialog[open]")).toHaveCount(2);
+        await page
+          .locator("dialog[open]")
+          .last()
+          .getByRole("button", { name: "Скачать", exact: true })
+          .click();
+        await share.click();
+        await expect.poll(() => page.evaluate(() => window.shared.at(-1)?.name)).toBe("entry.md");
+        assert.deepEqual(
+          await page.evaluate(() => window.shared.at(-1).bytes),
+          Array.from(Buffer.from("# Archive entry\n")),
+        );
+        await close.click();
+        await page.getByRole("button", { name: "Закрыть просмотр", exact: true }).last().click();
+        await expect(page.getByRole("button", { name: /entry.md/ })).toBeVisible();
+        await page.getByRole("button", { name: "Закрыть просмотр", exact: true }).click();
+        // Standalone fallback deliberately avoids the download attribute that iOS can
+        // consume in the app's own window despite target=_blank.
+        await page.evaluate(() =>
+          Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false }),
+        );
+        await source.tap();
+        const fallback = dialog.getByRole("link", { name: "Скачать через браузер" });
+        await expect(fallback).toBeVisible();
+        await expect(fallback).not.toHaveAttribute("download");
+        await expect(fallback).toHaveAttribute("target", "_blank");
+        await close.click();
         // Desktop without file sharing retains direct browser downloads.
         await page.evaluate(() => {
+          Object.defineProperty(navigator, "standalone", { configurable: true, value: false });
           Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
           Object.defineProperty(navigator, "canShare", { configurable: true, value: undefined });
         });

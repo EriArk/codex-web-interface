@@ -8,7 +8,7 @@ import {
 import { ArtifactCapture } from "./ArtifactCapture";
 import type { ArtifactSelection } from "./ArtifactMarkdown";
 import { workspaceMediaUrl } from "./accountStorage.ts";
-import { DownloadLink } from "./DownloadLink";
+import { DownloadLink, isDownloadUrl } from "./DownloadLink";
 import { FileViewerDialog } from "./FileViewerDialog";
 import { ResultFilePreview } from "./ResultFilePreview";
 import { ResultFilters } from "./ResultFilters";
@@ -351,9 +351,12 @@ export function Results({
                       components={{
                         pre: CollapsibleCode,
                         table: MarkdownTable,
-                        a: ({ node: _node, ...props }) => (
-                          <a {...props} target="_blank" rel="noopener noreferrer" />
-                        ),
+                        a: ({ node: _node, ...props }) =>
+                          isDownloadUrl(props.href) ? (
+                            <DownloadLink href={props.href}>{props.children}</DownloadLink>
+                          ) : (
+                            <a {...props} target="_blank" rel="noopener noreferrer" />
+                          ),
                       }}
                     >
                       {r.payload.text ?? ""}

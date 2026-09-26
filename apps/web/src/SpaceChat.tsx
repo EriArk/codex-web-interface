@@ -339,21 +339,11 @@ export function SpaceChat({
             ))}
             {m.files.map((f) =>
               onFile ? (
-                <a
+                <button
+                  type="button"
                   className="space-chat-file"
-                  href={workspaceUrl(`/api${path}/files/${f.id}`)}
                   key={f.id}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download={f.name}
-                  onClick={
-                    onFile
-                      ? (e) => {
-                          e.preventDefault();
-                          onFile(f);
-                        }
-                      : undefined
-                  }
+                  onClick={() => onFile(f)}
                 >
                   {f.mime.startsWith("image/") ? (
                     <img
@@ -371,7 +361,7 @@ export function SpaceChat({
                   <span>
                     {f.name} <small>{Math.max(1, Math.ceil(f.bytes / 1024))} КБ</small>
                   </span>
-                </a>
+                </button>
               ) : (
                 <div key={f.id} className="space-chat-file-actions">
                   <DownloadLink href={`/api${path}/files/${f.id}`} name={f.name} mime={f.mime}>

@@ -1,5 +1,6 @@
 /* biome-ignore-all lint/suspicious/noArrayIndexKey: Immutable document coordinates are stable; page/search changes remount the content pane. */
 import { useEffect, useRef, useState } from "react";
+import { DownloadLink } from "./DownloadLink";
 import { FilePreview } from "./FilePreview";
 import { FileViewerDialog } from "./FileViewerDialog";
 import { Icon } from "./icons";
@@ -73,9 +74,9 @@ function ExtractedFile({ file, onClose }: { file: File; onClose: () => void }) {
       file={file}
       onClose={onClose}
       actions={
-        <a className="secondary" href={url} download={file.name}>
+        <DownloadLink preparedFile={file} directDownload>
           Скачать
-        </a>
+        </DownloadLink>
       }
     >
       {url && <FilePreview file={file} objectUrl={url} full />}

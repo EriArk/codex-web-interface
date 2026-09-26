@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, messageOf } from "./api";
+import { DownloadLink } from "./DownloadLink";
 import { Icon } from "./icons";
 import { ProjectFileUpload } from "./ProjectFileUpload";
 import { useWorkspaceDialog } from "./useWorkspaceDialog";
@@ -24,15 +25,12 @@ export function FileCopySave({
     [folder, setFolder] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [grant, setGrant] = useState<{ capability: string; checkout: string } | null>(null),
-    [download, setDownload] = useState("");
+    [grant, setGrant] = useState<{ capability: string; checkout: string } | null>(null);
   const live = useRef(true),
     binding = useRef<{ project: string; capability: string } | null>(null);
   useEffect(() => {
     live.current = true;
     const abort = new AbortController();
-    const url = URL.createObjectURL(new Blob([file], { type: "application/octet-stream" }));
-    setDownload(url);
     void api<{ projects: typeof projects }>("/projects", { signal: abort.signal })
       .then((v) => {
         if (!abort.signal.aborted) setProjects(v.projects.filter((p) => !p.unassigned));
@@ -43,7 +41,6 @@ export function FileCopySave({
     return () => {
       live.current = false;
       abort.abort();
-      URL.revokeObjectURL(url);
       const b = binding.current;
       if (b)
         void api(`/projects/${encodeURIComponent(b.project)}/file-tools/access`, {
@@ -142,11 +139,9 @@ export function FileCopySave({
         )}
       </div>
       <footer className="file-copy-actions">
-        {download && (
-          <a className="secondary" href={download} download={file.name}>
-            Скачать копию
-          </a>
-        )}
+        <DownloadLink preparedFile={file} directDownload>
+          Скачать копию
+        </DownloadLink>
         <button
           className="primary"
           type="button"
